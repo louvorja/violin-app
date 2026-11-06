@@ -11,8 +11,12 @@
     <div class="install">
       <LjAlert v-if="reasonText" variant="info" :text="reasonText" />
 
+      <LinuxDownloadOptions
+        v-if="channel === 'desktop' && desktopDownload.platform === 'linux'"
+        :version="desktopDownload.version"
+      />
       <a
-        v-if="channel === 'desktop'"
+        v-else-if="channel === 'desktop'"
         class="install__download"
         :href="desktopDownload.url"
         :target="desktopDownload.direct ? undefined : '_blank'"
@@ -59,6 +63,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { LjAlert, LjButton, LjDialog, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
+import LinuxDownloadOptions from "@/components/LinuxDownloadOptions.vue";
 import { desktopDownloadLabel } from "@/helpers/DesktopDownload";
 import { useAppInstall } from "@/composables/useAppInstall";
 

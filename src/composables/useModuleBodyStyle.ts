@@ -10,7 +10,7 @@
  * Escuta MODULE_FORMAT_CHANGED e USERDATA_PATCH para refletir ao vivo.
  * Retorna estilos prontos para aplicar no template do módulo.
  *
-* Uso:
+ * Uso:
  *   const { rootStyle, textStyle, alertStyle, bgImage, imageStyle, container } = useModuleBodyStyle("timer");
  */
 import { ref, computed, type CSSProperties } from "vue";
@@ -18,6 +18,7 @@ import UserData from "@/helpers/UserData";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useContainerSize } from "@/composables/useContainerSize";
+import { useStoredImageUrl } from "@/composables/useStoredImageUrl";
 import { FONT, resolveFont } from "@/config/Fonts";
 import {
   horizontalTextAlign,
@@ -50,9 +51,7 @@ export function useModuleBodyStyle(moduleId: string) {
     return v == null ? manifestDefault : v;
   }
 
-  const font = computed(() =>
-    resolveFont(read<string>("font", ""), FONT.PROJECTION.FALLBACK)
-  );
+  const font = computed(() => resolveFont(read<string>("font", ""), FONT.PROJECTION.FALLBACK));
   const font_color = computed(() => read<string>("font_color", "#FFFFFF"));
   const font_size = computed(() => read<number>("font_size", 50));
   const text_shadow = computed(() => read<boolean>("text_shadow", false));
@@ -78,6 +77,8 @@ export function useModuleBodyStyle(moduleId: string) {
     read<string>("text_background_color", "transparent")
   );
   const text_background_opacity = computed(() => read<number>("text_background_opacity", 100));
+  const text_padding_x = computed(() => read<number>("text_padding_x", 0));
+  const text_padding_y = computed(() => read<number>("text_padding_y", 0));
   const text_border_enabled = computed(() => read<boolean>("text_border_enabled", false));
   const text_border_color = computed(() => read<string>("text_border_color", "#FFFFFF"));
   const text_border_opacity = computed(() => read<number>("text_border_opacity", 100));
@@ -93,6 +94,8 @@ export function useModuleBodyStyle(moduleId: string) {
       enabled: text_background_enabled.value,
       color: text_background_color.value,
       opacity: text_background_opacity.value,
+      paddingX: text_padding_x.value,
+      paddingY: text_padding_y.value,
       borderEnabled: text_border_enabled.value,
       borderColor: text_border_color.value,
       borderOpacity: text_border_opacity.value,
@@ -106,10 +109,18 @@ export function useModuleBodyStyle(moduleId: string) {
   //   justifyContent → eixo vertical (main axis)
   //   alignItems     → eixo horizontal (cross axis)
   const alignItems = computed(() =>
-    horizontal_align.value === "start" ? "flex-start" : horizontal_align.value === "end" ? "flex-end" : "center"
+    horizontal_align.value === "start"
+      ? "flex-start"
+      : horizontal_align.value === "end"
+        ? "flex-end"
+        : "center"
   );
   const justifyContent = computed(() =>
-    vertical_align.value === "start" ? "flex-start" : vertical_align.value === "end" ? "flex-end" : "center"
+    vertical_align.value === "start"
+      ? "flex-start"
+      : vertical_align.value === "end"
+        ? "flex-end"
+        : "center"
   );
 
   /** Estilos do container do body (fundo + padding + alinhamento). */
@@ -162,7 +173,7 @@ export function useModuleBodyStyle(moduleId: string) {
   const alertStyle = computed<CSSProperties>(() => ({ color: alert_color.value }));
 
   /** Imagem de fundo (opcional). */
-  const bgImage = computed(() => image.value || "");
+  const bgImage = useStoredImageUrl(image);
 
   /** Estilos da imagem de fundo (opacidade + object-fit). */
   const imageStyle = computed<CSSProperties>(() => ({

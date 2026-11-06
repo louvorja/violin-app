@@ -48,23 +48,22 @@ export async function translateText(
   const input = text?.trim();
   if (!input) return null;
   const diagnostic = beginLibrasTranslationDiagnostic(input, context);
-  const controller = new AbortController();
   let response: Response | undefined;
 
   try {
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
     response = await fetchWithTimeout(TRANSLATE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: input }),
-      signal: controller.signal,
       timeout: REQUEST_TIMEOUT,
       source: "libras-translate",
       thirdParty: true,
+      diagnostic: {
+        endpoint: "libras.translate",
+        requestId: diagnostic?.attributes.request_id as string | undefined,
+        operationId: diagnostic?.attributes.operation_id as string | undefined,
+      },
     });
-
-    clearTimeout(timer);
 
     if (!response.ok) {
       $dev.write(`[libras] translate HTTP ${response.status}`);
@@ -76,7 +75,7 @@ export async function translateText(
     return gloss || null;
   } catch (e) {
     $dev.write(`[libras] translate erro:`, (e as Error).message);
-    reportLibrasRequestFailure(diagnostic, e, input, response, controller.signal.aborted);
+    reportLibrasRequestFailure(diagnostic, e, input, response);
     return null;
   }
 }
@@ -374,6 +373,7 @@ export async function isBundleCached(token: string, region?: string): Promise<bo
 async function downloadBundleRaw(token: string, region?: string): Promise<ArrayBuffer | null> {
   const regionPath = region || "BR";
   const normalized = normalizeToken(token);
+  const operationId = createLibrasOperationId();
 
   // Tokens para tentar: primeiro o original, depois o normalizado (se diferente)
   const candidates = normalized !== token.toUpperCase() ? [token, normalized] : [token];
@@ -382,16 +382,17 @@ async function downloadBundleRaw(token: string, region?: string): Promise<ArrayB
     for (let attempt = 0; attempt <= BUNDLE_RETRY_MAX; attempt++) {
       try {
         const url = `${BUNDLE_URL}/${regionPath}/${encodeURIComponent(candidate)}`;
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
         const response = await fetchWithTimeout(url, {
-          signal: controller.signal,
           timeout: REQUEST_TIMEOUT,
           source: "libras-bundle",
           thirdParty: true,
+          diagnostic: {
+            endpoint: "libras.bundle",
+            operationId,
+            attempt,
+            fallback: candidate === token ? "primary" : "normalized",
+          },
         });
-        clearTimeout(timer);
 
         if (response.ok) return response.arrayBuffer();
 

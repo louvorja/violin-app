@@ -11,6 +11,7 @@ export type CustomizationType =
   | "color"
   | "font-size"
   | "border-spacing"
+  | "padding"
   | "v-align"
   | "h-align"
   | "image"

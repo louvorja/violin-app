@@ -110,6 +110,30 @@ test("álbum curto segue o tema, compartilha ações por hover e cabe no celular
   ).toBe(false);
 });
 
+test("álbum pelo teclado: abre na primeira faixa, ↓ escolhe e Esc fecha", async ({ page }) => {
+  await start(page);
+  const dialog = await openAlbum(page, 9876503, [
+    music(993001, 1),
+    music(993002, 2),
+    music(993003, 3),
+  ]);
+  const active = dialog.locator("tr.lj-music-row--active");
+  await expect(dialog.locator(".album-tracks")).toBeFocused();
+  await expect(active).toContainText("Música 1");
+  await page.keyboard.press("ArrowDown");
+  await expect(active).toContainText("Música 2");
+
+  // O Esc é da camada de cima: fecha o álbum.
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  expect(
+    await page.evaluate(async () => {
+      const appData = (await import("/src/helpers/AppData.ts")).default;
+      return appData.get("modules.album.show", false);
+    })
+  ).toBe(false);
+});
+
 test("álbum longo rola com cabeçalho fixo e álbum vazio mostra orientação", async ({ page }) => {
   await start(page);
   const dialog = await openAlbum(

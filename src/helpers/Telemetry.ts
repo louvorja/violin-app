@@ -34,6 +34,10 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { classifyLocalEnvironmentError } from "@/helpers/LocalEnvironmentErrors";
 import { failureDetails } from "@/helpers/ReliabilityDiagnostics";
 import packageJson from "@root/package.json";
+import { TelemetryBuffer } from "@/helpers/TelemetryBuffer";
+import { TelemetryBoot } from "@/helpers/TelemetryBoot";
+import { TelemetryIncidents } from "@/helpers/TelemetryIncidents";
+import { telemetryActionSource } from "@/helpers/TelemetryAction";
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY ?? "";
 const HOST = import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com";
@@ -68,6 +72,26 @@ const _pendingFailureLogs: Array<{
 const _pendingSpans = new Map<string, PerformanceSpan>();
 const _responsivenessContext = createResponsivenessContext();
 const _breadcrumbs: Array<{ at: string; event: string; properties?: Record<string, unknown> }> = [];
+const _actionBreadcrumbs: typeof _breadcrumbs = [];
+const _eventBuffer = new TelemetryBuffer();
+const _boot = new TelemetryBoot(
+  () =>
+    typeof window === "undefined"
+      ? undefined
+      : windowRole() === "main"
+        ? window.localStorage
+        : window.sessionStorage,
+  (event, properties) => captureEvent(event, properties)
+);
+const _incidents = new TelemetryIncidents(
+  (event, properties) => captureEvent(event, properties),
+  randomId
+);
+let _summaryTimer: ReturnType<typeof setInterval> | null = null;
+let _replayCooldownUntil = 0;
+let _replayStartTimer: ReturnType<typeof setTimeout> | null = null;
+let _incidentReplayPending = false;
+const _logWindows = new Map<string, { at: number; suppressed: number }>();
 const _explicitErrors = new WeakMap<object, number>();
 const DUPLICATE_CAPTURE_WINDOW_MS = 5_000;
 const MAX_BREADCRUMBS = 150;
@@ -274,7 +298,7 @@ function diagnostic(
   }
   try {
     const logger = (_ph as PostHogWithLogs | null)?.logger?.[level];
-    logger?.(safeMessage, safeDetails);
+    if (level === "warn" || level === "error") logger?.(safeMessage, safeDetails);
   } catch {
     // Logs estruturados são best-effort e não podem impedir o bootstrap.
   }
@@ -403,10 +427,12 @@ function captureResultDetails(result: CaptureResult | undefined): Record<string,
 function baseContext(): Record<string, unknown> {
   return {
     app_version: _appVersion,
+    app_commit: import.meta.env.VITE_APP_COMMIT || undefined,
     app_build:
-      typeof document !== "undefined"
+      import.meta.env.VITE_APP_BUILD ||
+      (typeof document !== "undefined"
         ? document.querySelector<HTMLMetaElement>('meta[name="louvorja-build"]')?.content
-        : undefined,
+        : undefined),
     app_version_source: _appVersionSource,
     sdk_version: _sdkVersion,
     ...runtimeContext(),
@@ -445,10 +471,14 @@ function replayLinkProperties(): Record<string, unknown> {
   }
 }
 
-function stopErrorReplay(): void {
+function stopErrorReplay(resetBudget = false): void {
+  if (_replayStartTimer) clearTimeout(_replayStartTimer);
+  _replayStartTimer = null;
   if (_errorReplayTimer) clearTimeout(_errorReplayTimer);
   _errorReplayTimer = null;
+  if (_errorReplayStartedAt) _replayCooldownUntil = Date.now() + 5 * 60_000;
   _errorReplayStartedAt = 0;
+  if (resetBudget) _replayCooldownUntil = 0;
   try {
     _ph?.stopSessionRecording();
   } catch {
@@ -459,7 +489,11 @@ function stopErrorReplay(): void {
 function startErrorReplay(): void {
   if (!_ph || windowRole() !== "main" || !isEnabled()) return;
   const now = Date.now();
-  if (_errorReplayStartedAt && now - _errorReplayStartedAt >= REPLAY_MAX_MS) stopErrorReplay();
+  if (now < _replayCooldownUntil) return;
+  if (_errorReplayStartedAt && now - _errorReplayStartedAt >= REPLAY_MAX_MS) {
+    stopErrorReplay();
+    return;
+  }
   if (!_errorReplayStartedAt) {
     _errorReplayStartedAt = now;
     try {
@@ -476,7 +510,30 @@ function startErrorReplay(): void {
   }
   if (_errorReplayTimer) clearTimeout(_errorReplayTimer);
   const untilCap = REPLAY_MAX_MS - (now - _errorReplayStartedAt);
-  _errorReplayTimer = setTimeout(stopErrorReplay, Math.min(REPLAY_AFTER_ERROR_MS, untilCap));
+  _errorReplayTimer = setTimeout(
+    () => stopErrorReplay(),
+    Math.min(REPLAY_AFTER_ERROR_MS, untilCap)
+  );
+}
+
+function scheduleErrorReplay(): void {
+  if (_replayStartTimer) return;
+  _replayStartTimer = setTimeout(() => {
+    _replayStartTimer = null;
+    startErrorReplay();
+  }, 0);
+}
+
+function requestIncidentReplay(): void {
+  _incidentReplayPending = true;
+  if (!_ph) return;
+  if (windowRole() === "main") {
+    _incidentReplayPending = false;
+    scheduleErrorReplay();
+  } else if (_mainSessionId) {
+    _incidentReplayPending = false;
+    Broadcast.send(BROADCAST_TYPE.TELEMETRY_ERROR_SEEN, {});
+  }
 }
 
 function announceMainSession(sessionId: string | undefined): void {
@@ -511,7 +568,10 @@ function connectSessionBus(posthog: PostHog): void {
         if (message.type !== BROADCAST_TYPE.TELEMETRY_SESSION) return;
         const sessionId = (message.payload as Partial<TelemetrySessionPayload> | undefined)
           ?.session_id;
-        if (typeof sessionId === "string" && sessionId) _mainSessionId = sessionId;
+        if (typeof sessionId === "string" && sessionId) {
+          _mainSessionId = sessionId;
+          if (_incidentReplayPending) requestIncidentReplay();
+        }
       },
       { replay: false }
     );
@@ -525,7 +585,7 @@ function connectSessionBus(posthog: PostHog): void {
 
 function onRealException(isMainWindow: boolean, capture: CaptureResult): void {
   if (isMainWindow) {
-    setTimeout(startErrorReplay, 0);
+    scheduleErrorReplay();
     return;
   }
   if (!_mainSessionId) return;
@@ -642,28 +702,96 @@ function safeError(error: unknown): Error {
   return safe;
 }
 
-export function breadcrumb(event: string, properties: Record<string, unknown> = {}): void {
+export function breadcrumb(
+  event: string,
+  properties: Record<string, unknown> = {},
+  kind: "action" | "diagnostic" = "action"
+): void {
   if (!isEnabled()) return;
-  _breadcrumbs.push({
+  const buffer = kind === "action" ? _actionBreadcrumbs : _breadcrumbs;
+  const previous = buffer.at(-1);
+  if (
+    kind === "diagnostic" &&
+    previous?.event === event &&
+    Date.now() - Date.parse(previous.at) < 5000
+  ) {
+    previous.at = new Date().toISOString();
+    previous.properties = serializableProperties(properties);
+    return;
+  }
+  buffer.push({
     at: new Date().toISOString(),
     event,
-    properties: serializableProperties(properties),
+    properties: serializableProperties(
+      kind === "action" ? { action_source: telemetryActionSource(), ...properties } : properties
+    ),
   });
-  if (_breadcrumbs.length > MAX_BREADCRUMBS)
-    _breadcrumbs.splice(0, _breadcrumbs.length - MAX_BREADCRUMBS);
-  _ph?.addExceptionStep(event, serializableProperties(properties));
+  const limit = kind === "action" ? 40 : MAX_BREADCRUMBS;
+  if (buffer.length > limit) buffer.splice(0, buffer.length - limit);
+  _ph?.addExceptionStep(event, buffer.at(-1)?.properties);
 }
 
-export function track(event: string, properties: Record<string, unknown> = {}): void {
+function recentBreadcrumbs(): typeof _breadcrumbs {
+  const cutoff = Date.now() - 5 * 60_000;
+  const actions = _actionBreadcrumbs.filter((item) => Date.parse(item.at) >= cutoff).slice(-30);
+  const diagnostics = _breadcrumbs
+    .filter((item) => Date.parse(item.at) >= cutoff)
+    .slice(-(50 - actions.length));
+  return [...actions, ...diagnostics].sort((a, b) => a.at.localeCompare(b.at));
+}
+
+function incidentContext(): Record<string, unknown> {
+  return {
+    ...baseContext(),
+    ..._runtimeContext,
+    ..._boot.snapshot(),
+    breadcrumbs: recentBreadcrumbs(),
+  };
+}
+
+function captureEvent(event: string, properties: Record<string, unknown>): void {
   if (!isEnabled()) return;
-  const enriched = { ...baseContext(), ...serializableProperties(properties) };
-  breadcrumb(event, properties);
+  const enriched = {
+    ...baseContext(),
+    ...serializableProperties(properties),
+    ...(properties.incident_id && windowRole() !== "main" && _mainSessionId
+      ? { $session_id: _mainSessionId }
+      : {}),
+  };
   if (_ph) _ph.capture(event, enriched);
   // `init()` é assíncrono (import dinâmico do SDK + resolução da versão); a
   // navegação inicial do router dispara antes dele terminar. Sem fila, esse
   // primeiro `route_changed` — e qualquer evento disparado nesse intervalo —
   // desaparecia em silêncio.
   else if (_pendingEvents.length < 50) _pendingEvents.push({ event, properties: enriched });
+}
+
+/** Routine events keep complete counters without competing with errors for SDK capacity. */
+export function flushDiagnostics(): void {
+  if (!isEnabled() || !_ph) return;
+  const rows = _eventBuffer.flush();
+  if (rows.length)
+    captureEvent("telemetry_activity_summary", { max_interval_ms: 60_000, groups: rows });
+  _incidents.expire();
+}
+
+function startDiagnosticFlush(): void {
+  if (_summaryTimer || typeof window === "undefined") return;
+  _summaryTimer = setInterval(flushDiagnostics, 60_000);
+}
+
+export function track(event: string, properties: Record<string, unknown> = {}): void {
+  if (!isEnabled()) return;
+  startDiagnosticFlush();
+  const safe = serializableProperties(properties);
+  if (event === "app_boot_stage") _boot.record(safe.stage, safe.duration_ms);
+  const incident = _incidents.observe(event, safe, incidentContext, requestIncidentReplay);
+  if (!incident) return;
+  const keep = _eventBuffer.record(event, safe);
+  if (keep || (event !== "network_request" && event !== "diagnostic_log_repeated"))
+    breadcrumb(event, safe, "diagnostic");
+  if (!keep) return;
+  captureEvent(event, incident);
 }
 
 export function captureException(error: unknown, properties: Record<string, unknown> = {}): void {
@@ -691,11 +819,11 @@ export function captureException(error: unknown, properties: Record<string, unkn
     return;
   }
   const enriched = {
-    ...baseContext(),
+    ...incidentContext(),
     ...errorProperties(sanitized),
     ...replayLinkProperties(),
     ...serializableProperties(properties),
-    breadcrumbs: _breadcrumbs.slice(-50),
+    breadcrumbs: recentBreadcrumbs(),
   };
   if (_ph) _ph.captureException(sanitized, enriched);
   else if (_pendingExceptions.length < 20)
@@ -865,6 +993,13 @@ export function setRuntimeContext(context: {
   playback_id?: string | null;
   presentation_revision?: number | null;
 }): void {
+  if (
+    _runtimeContext.playback_id &&
+    context.playback_id !== undefined &&
+    context.playback_id !== _runtimeContext.playback_id
+  ) {
+    _incidents.closePlayback(_runtimeContext.playback_id, "playback_replaced");
+  }
   const next: typeof _runtimeContext = { ..._runtimeContext };
   if (context.playback_id === null) delete next.playback_id;
   else if (typeof context.playback_id === "string" && context.playback_id.trim()) {
@@ -1340,6 +1475,28 @@ export function log(
   if (!isEnabled()) return;
   const safeMessage = sanitizeString(message);
   const attributes = { ...baseContext(), ...serializableProperties(properties) };
+  if (["warn", "error", "fatal"].includes(level) && _ph) {
+    const key = JSON.stringify([
+      level,
+      safeMessage,
+      properties.playback_id,
+      properties.incident_id,
+      properties.stage,
+      properties.phase,
+      properties.reason,
+      properties.metric_name,
+    ]);
+    const previous = _logWindows.get(key);
+    const now = Date.now();
+    if (previous && now - previous.at < 60_000) {
+      previous.suppressed++;
+      _eventBuffer.record("diagnostic_log_repeated", { source: level, stage: safeMessage });
+      startDiagnosticFlush();
+      return;
+    }
+    if (_logWindows.size >= 128 && !previous) _logWindows.delete(_logWindows.keys().next().value!);
+    _logWindows.set(key, { at: now, suppressed: 0 });
+  }
   const ph = _ph as PostHogWithLogs | null;
   if (!ph) {
     if (["warn", "error", "fatal"].includes(level) && _pendingFailureLogs.length < 20) {
@@ -1386,6 +1543,10 @@ export function log(
 export function installGlobalHandlers(): void {
   if (_installed || typeof window === "undefined") return;
   _installed = true;
+  window.addEventListener("pagehide", flushDiagnostics);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushDiagnostics();
+  });
   const consoleState = console as typeof console & {
     __louvorjaTelemetryConsoleBridge?: ConsoleTelemetryBridge;
   };
@@ -1608,6 +1769,14 @@ export function setEnabled(enabled: boolean): void {
   $userdata.set(KEYS.OPTIONS.TELEMETRY, enabled);
   if (!enabled) {
     _breadcrumbs.length = 0;
+    _actionBreadcrumbs.length = 0;
+    _eventBuffer.clear();
+    _incidents.clear();
+    _boot.clear();
+    _logWindows.clear();
+    _incidentReplayPending = false;
+    if (_summaryTimer) clearInterval(_summaryTimer);
+    _summaryTimer = null;
     _pendingExceptions.length = 0;
     _pendingEvents.length = 0;
     _pendingMetrics.length = 0;
@@ -1616,7 +1785,7 @@ export function setEnabled(enabled: boolean): void {
     _pendingSpans.clear();
     _responsivenessContext.clear();
     _responsivenessCleanup?.();
-    stopErrorReplay();
+    stopErrorReplay(true);
     _ph?.opt_out_capturing();
     return;
   }
@@ -1860,6 +2029,11 @@ async function _init(): Promise<void> {
           });
           return null;
         }
+        capture.properties = {
+          ...incidentContext(),
+          source: "sdk.autocapture",
+          ...capture.properties,
+        };
         normalizeOwnProtocolExceptionFrames(capture.properties);
         onRealException(isMainWindow, capture);
       }
@@ -1869,7 +2043,18 @@ async function _init(): Promise<void> {
       // exact SDK field; user-provided nested token fields remain redacted.
       const ingestionToken =
         typeof capture.properties?.token === "string" ? capture.properties.token : undefined;
-      capture.properties = serializableProperties(capture.properties);
+      // O rrweb já aplicou as máscaras de session_recording antes de comprimir
+      // o Replay. Seus lotes têm limites próprios no SDK: cortar uma string
+      // gzip, a árvore DOM ou a lista de eventos torna a gravação ilegível.
+      // Sanitizamos os metadados, preservando apenas esse payload do SDK.
+      const replayData =
+        capture.event === "$snapshot" ? capture.properties?.$snapshot_data : undefined;
+      capture.properties = serializableProperties(
+        replayData === undefined
+          ? capture.properties
+          : { ...capture.properties, $snapshot_data: undefined }
+      );
+      if (replayData !== undefined) capture.properties.$snapshot_data = replayData;
       if (ingestionToken) capture.properties.token = ingestionToken;
       if (capture.$set) capture.$set = serializableProperties(capture.$set);
       if (capture.$set_once) capture.$set_once = serializableProperties(capture.$set_once);
@@ -1898,6 +2083,8 @@ async function _init(): Promise<void> {
   posthog.opt_in_capturing({ captureEventName: false });
   posthog.register({
     ..._environmentContext,
+    app_build: baseContext().app_build,
+    app_commit: baseContext().app_commit,
     app_version: version,
     app_version_source: _appVersionSource,
     sdk_version: sdkVersion,
@@ -1905,9 +2092,10 @@ async function _init(): Promise<void> {
     window_role: windowRole(),
     window_feature: windowFeature(),
     window_route: routePath(),
-    telemetry_schema_version: 2,
+    telemetry_schema_version: 3,
   });
   connectSessionBus(posthog);
+  if (_incidentReplayPending) requestIncidentReplay();
   // `capture()` returning undefined only means that the SDK did not return a
   // payload to the caller. This hook is the stronger signal that the event
   // passed consent/bot filters and reached the SDK's request pipeline.
@@ -2095,6 +2283,8 @@ setNetworkTimingReporter((timing) => {
   histogram("louvorja.http.client.duration", timing.duration_ms, {
     source: timing.source,
     outcome: timing.outcome,
+    status: timing.status || 0,
+    failure_kind: timing.failure_kind || "none",
     window_role: windowRole(),
   });
 });
@@ -2122,6 +2312,7 @@ export default {
   resetId,
   track,
   breadcrumb,
+  flushDiagnostics,
   captureException,
   log,
   startPerformance,

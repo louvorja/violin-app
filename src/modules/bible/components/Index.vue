@@ -592,19 +592,16 @@ function _registerBibleHotkeys(): void {
     context: "bible",
     description: "hotkeys.bible_prev_verse",
     group: "bible",
-    label: "←",
   });
   Hotkeys.register("ArrowRight", _hotkeyNext, {
     context: "bible",
     description: "hotkeys.bible_next_verse",
     group: "bible",
-    label: "→",
   });
   Hotkeys.register("Delete", _hotkeyClean, {
     context: "bible",
     description: "hotkeys.bible_clear",
     group: "bible",
-    label: "Del",
   });
   _hotkeysRegistered = true;
 }
@@ -823,7 +820,8 @@ async function selVerse(event: MouseEvent | null, num: number | string): Promise
   if (!Number.isSafeInteger(num) || num < 1 || typeof verses.value[String(num)] !== "string")
     return;
 
-  if (event?.ctrlKey) {
+  // No Mac o Ctrl+clique é o clique direito: lá quem soma versículos é o Command.
+  if (event?.ctrlKey || event?.metaKey) {
     const index = bible.verses.indexOf(num);
     if (index === -1) {
       bible.verses.push(num);

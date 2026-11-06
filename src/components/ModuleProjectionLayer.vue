@@ -13,8 +13,14 @@
   de fundo não tem query para ler.
 -->
 <template>
-  <DrawProjection v-if="isDraw" :text="text" :reference="reference" :active="active" />
-  <NameDrawProjection v-else-if="isNameDraw" :text="text" :reference="reference" :active="active" />
+  <DrawProjection
+    v-if="isDraw"
+    :text="text"
+    :reference="reference"
+    :active="active"
+    :mode="drawMode"
+    :wheel="drawWheel"
+  />
   <div
     v-else
     ref="container"
@@ -25,10 +31,9 @@
       padding: `${border_spacing_px}px`,
     }"
   >
-    <img
+    <ModuleBackgroundMedia
       v-if="image"
       :src="image"
-      alt=""
       :style="{
         position: 'absolute',
         inset: 0,
@@ -89,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import Broadcast from "@/helpers/Broadcast";
@@ -98,8 +103,9 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { FONT, resolveFont } from "@/config/Fonts";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import DrawProjection from "@/modules/draw/components/DrawProjection.vue";
-import NameDrawProjection from "@/modules/name_draw/components/NameDrawProjection.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import { useContainerSize } from "@/composables/useContainerSize";
+import { useStoredImageUrl } from "@/composables/useStoredImageUrl";
 import {
   horizontalTextAlign,
   moduleCustomizationDefault,
@@ -121,12 +127,13 @@ const moduleId = computed(() => props.moduleId);
 const text = ref("");
 const extra = ref(""); // referência, "Sorteado:", etc.
 const reference = ref([]); // draw envia string[] de sorteados (chips)
+const drawMode = ref("number");
+const drawWheel = ref(null);
 const active = ref(false);
 const color = ref("");
 
-// Módulo draw/name_draw têm layout dedicado que monta chips.
+// O Sorteio tem layout dedicado que monta os chips dos já sorteados.
 const isDraw = computed(() => moduleId.value === ModuleEnum.DRAW);
-const isNameDraw = computed(() => moduleId.value === ModuleEnum.NAME_DRAW);
 
 // Tick force re-read do UserData quando broadcast chega.
 const _tick = ref(0);
@@ -158,6 +165,8 @@ const background_color = computed(() => ud("background_color", "#000000"));
 const text_background_color = computed(() => ud("text_background_color", "transparent"));
 const text_background_enabled = computed(() => ud("text_background_enabled", false));
 const text_background_opacity = computed(() => ud("text_background_opacity", 100));
+const text_padding_x = computed(() => ud("text_padding_x", 0));
+const text_padding_y = computed(() => ud("text_padding_y", 0));
 const text_border_enabled = computed(() => ud("text_border_enabled", false));
 const text_border_color = computed(() => ud("text_border_color", "#FFFFFF"));
 const text_border_opacity = computed(() => ud("text_border_opacity", 100));
@@ -173,6 +182,8 @@ const textBox = computed(() =>
     enabled: text_background_enabled.value,
     color: text_background_color.value,
     opacity: text_background_opacity.value,
+    paddingX: text_padding_x.value,
+    paddingY: text_padding_y.value,
     borderEnabled: text_border_enabled.value,
     borderColor: text_border_color.value,
     borderOpacity: text_border_opacity.value,
@@ -183,7 +194,7 @@ const textBox = computed(() =>
 const border_spacing = computed(() => ud("border_spacing", 10));
 const vertical_align = computed(() => ud("vertical_align", "center"));
 const horizontal_align = computed(() => ud("horizontal_align", "center"));
-const image = computed(() => ud("image", ""));
+const image = useStoredImageUrl(() => ud("image", ""));
 const image_opacity = computed(() => ud("image_opacity", 100));
 const image_fit = computed(() => ud("image_fit", "cover"));
 
@@ -225,25 +236,14 @@ const transitionKey = computed(() =>
   isLive.value ? `live:${active.value}` : `${text.value}|${extra.value}`
 );
 
-const EMPTY_ICONS = {
-  bible: "📖",
-  message_board: "📋",
-  draw: "🎲",
-  name_draw: "👥",
-  counter: "🔢",
-  clock: "🕐",
-  stopwatch: "⏱",
-  timer: "⏳",
-};
-const emptyIcon = computed(() => EMPTY_ICONS[moduleId.value] || "🖥");
-const emptyHint = computed(() => "Aguardando…");
-
 useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload) => {
   if (!payload || payload.module !== moduleId.value) return;
   text.value = payload.text || "";
-  if (isDraw.value || isNameDraw.value) {
+  if (isDraw.value) {
     reference.value = Array.isArray(payload.reference) ? payload.reference : [];
     extra.value = "";
+    drawMode.value = payload.mode === "names" ? "names" : "number";
+    drawWheel.value = payload.wheel ?? null;
   } else {
     extra.value = payload.reference || payload.extra || "";
   }

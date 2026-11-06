@@ -116,15 +116,31 @@
       "shadow_blur": "Desfoque da sombra",
       "text_bg_color": "Cor de fundo do texto",
       "text_bg_opacity": "Transparência do fundo",
+      "text_padding_x": "Espaçamento horizontal",
+      "text_padding_y": "Espaçamento vertical",
       "text_border_toggle": "Borda no texto",
       "text_border_color": "Cor da borda",
       "text_border_opacity": "Transparência da borda",
       "text_border_radius": "Cantos arredondados",
       "text_border_width": "Espessura da borda",
       "text_bg_toggle": "Fundo no texto",
-      "image": "Imagem de fundo",
+      "image": "Imagem/GIF/vídeo de fundo",
+      "saved_image": "Imagem salva",
       "transparency": "Transparência",
       "adjust": "Ajuste da imagem",
+      "media_placeholder": "Caminho da imagem, GIF, vídeo ou URL",
+      "choose_file": "Escolher arquivo",
+      "choose_media": "Escolher da biblioteca",
+      "remove_image": "Remover fundo",
+      "media_picker_title": "Escolher fundo",
+      "media_picker_search": "Buscar mídia...",
+      "media_picker_media": "Biblioteca de Mídia",
+      "media_picker_background": "Projeção de Fundo",
+      "media_picker_empty": "Nenhum item compatível.",
+      "media_picker_grid": "Miniaturas",
+      "media_picker_list": "Lista",
+      "media_picker_video": "Vídeo",
+      "media_picker_image": "Imagem",
       "border": "Borda",
       "vertical": "Alinhamento vertical",
       "horizontal": "Alinhamento horizontal",
@@ -182,6 +198,8 @@
       "projection_font": "Fonte de Projeção:",
       "show_liturgy_sidebar": "Exibir liturgia na lateral da tela",
       "start_with_os": "Iniciar com o sistema operacional",
+      "show_startup_tips": "Mostrar dicas ao iniciar",
+
       "clock_projection_on_boot": "Projetar o relógio ao iniciar",
       "clock_projection_on_boot_hint": "Abre o relógio em tela cheia no monitor de retorno ao iniciar o programa.",
       "themes": {
@@ -322,6 +340,7 @@
       "title": "Imagem de Fundo",
       "color": "Cor do Fundo:",
       "select": "Selecionar imagem",
+      "select_library": "Escolher da biblioteca",
       "no_image": "Nenhuma imagem configurada",
       "position": "Ajuste:"
     },
@@ -401,11 +420,12 @@
       "permission_liturgy": "Liturgia",
       "permission_announce": "Anúncios",
       "permission_chat": "Chat",
+      "permission_draw": "Sorteio",
+      "permission_keyboard": "Teclas de atalho",
       "permission_online_videos": "Vídeos Online",
       "permission_background_sound": "Som de fundo",
       "permission_volume": "Volume",
       "permission_media_library": "Biblioteca de Mídia",
-      "permission_keyboard": "Teclas de atalho",
       "select_all": "Selecionar todas",
       "deselect_all": "Desmarcar todas",
       "app_dialog_title": "Violin Remote",
@@ -682,30 +702,57 @@
         "protect_denied_install": "O navegador negou a proteção. Instale o app para liberá-la. Toque para ver como.",
         "protect_denied": "O navegador negou a proteção. Use o site com frequência e tente de novo."
       },
-      "folder": "Pasta de dados",
-      "restart_required": "Reinicie o aplicativo para concluir a mudança de todos os dados para esta pasta.",
+      "folder": "Acervo do LouvorJA",
+      "restart_required": "As novas pastas serão usadas na próxima abertura. Reinicie o aplicativo para concluir a alteração; os arquivos de origem serão preservados.",
+      "restart_required_move": "As novas pastas serão usadas na próxima abertura. Reinicie o aplicativo para concluir: cada arquivo é copiado e conferido, e depois apagado da pasta antiga.",
       "folder_fallback": "Não consegui escrever em {dir}; os dados estão na pasta do programa. Escolha outra pasta ou libere o acesso.",
-      "folder_fallback_notice": "Sem acesso a {dir}. Seus dados estão sendo guardados na pasta do programa até você liberar o acesso ou escolher outra pasta em Sincronizar Arquivos → Armazenamento.",
+      "folder_fallback_notice": "Sem acesso a {dir}, onde estão seus dados. O LouvorJA abriu sem eles. Clique aqui para ver o que fazer.",
+      "prepare_failed_notice": "Não foi possível trazer seus dados para esta versão. Eles continuam intactos, e o LouvorJA abriu sem eles. Clique aqui para ver o que fazer.",
+      "recovery": {
+        "title": "Seus dados não foram abertos",
+        "unavailable": "Seus dados estão em {dir}, e o LouvorJA não conseguiu abrir essa pasta. Se ela fica num disco externo ou de rede, reconecte-o. Se o sistema pediu permissão para acessar a pasta, permita. Depois clique em Tentar de novo.",
+        "failed": "A preparação dos seus dados para esta versão não terminou. Nada foi apagado: eles continuam na pasta antiga, e o LouvorJA tenta de novo a cada abertura. Enquanto isso, o que for feito agora fica separado.",
+        "attempts": "Aberturas sem sucesso até agora: {n}.",
+        "retry_hint": "Feche outras janelas do LouvorJA que estejam abertas e clique em Tentar de novo.",
+        "reset_hint": "Se continuar falhando, Começar do zero abre o LouvorJA com preferências, listas e liturgias vazias. Nada é apagado: os dados antigos ficam guardados, e as músicas baixadas continuam disponíveis.",
+        "retry": "Tentar de novo",
+        "reset": "Começar do zero",
+        "reset_confirm": "Começar do zero? O LouvorJA vai reiniciar com preferências, listas e liturgias vazias. Os dados antigos não são apagados: ficam guardados na pasta recovery do LouvorJA, e as músicas baixadas continuam disponíveis.",
+        "older_title": "Uma versão anterior foi usada",
+        "older_text": "Em {when}, uma versão anterior do LouvorJA foi aberta neste computador. O que foi feito nela, como preferências, listas e liturgias, ficou na pasta antiga, que esta versão não lê mais. Quer trazer de volta?",
+        "keep": "Manter como está",
+        "reimport": "Trazer de volta",
+        "reimport_confirm": "Trazer de volta o que foi feito na versão anterior? O LouvorJA vai reiniciar e copiar a pasta antiga de novo. O que foi feito nesta versão desde a atualização fica guardado numa pasta de recuperação, fora de uso."
+      },
       "open_folder": "Abrir pasta",
       "change_folder": "Alterar pasta…",
       "classic": {
-        "title": "Acervo da versão clássica",
-        "hint": "Se você já usa o LouvorJA antigo neste computador, o app pode tocar as músicas direto da pasta dele — sem baixar tudo de novo. Nada é gravado nem apagado lá.",
+        "title": "Acervo do LouvorJA Classic",
+        "hint": "Opcional: use músicas e imagens do Classic sem baixar de novo. Essa pasta será apenas consultada; novos downloads vão para o acervo do LouvorJA acima.",
         "none": "Nenhuma pasta configurada.",
         "unavailable": "A pasta configurada não está acessível agora. O acervo volta sozinho quando ela aparecer.",
-        "enabled": "Usar o acervo da versão clássica",
+        "enabled": "Usar também o acervo do Classic",
         "detect": "Procurar automaticamente",
         "choose": "Escolher pasta...",
-        "import": "Trazer para minha pasta",
+        "import": "Copiar para o acervo do LouvorJA",
         "remove": "Parar de usar",
         "not_found": "Não encontramos a instalação da versão clássica. Deseja escolher a pasta manualmente?",
-        "invalid": "Não encontramos o acervo nessa pasta. Escolha a pasta onde o LouvorJA antigo foi instalado.",
+        "invalid": "Não encontramos um acervo Classic válido nessa pasta.",
         "applied": "Acervo da versão clássica em uso.",
-        "import_confirm": "Trazer as músicas e imagens da versão clássica para a pasta deste app. Copiar mantém os arquivos onde estão; mover os retira de lá, e o programa antigo deixa de encontrá-los.",
+        "import_confirm": "Copiar músicas e imagens do Classic para o acervo do LouvorJA? Os arquivos de origem serão mantidos e nenhum arquivo existente será substituído.",
         "import_done": "Arquivos copiados.",
         "import_failed": "Não foi possível copiar os arquivos.",
         "import_copy": "Copiar",
-        "import_move": "Mover"
+        "import_move": "Mover",
+        "choose_found": "Encontramos estas pastas. Escolha a que deseja usar:",
+        "use_folder": "Usar esta pasta",
+        "not_found_hint": "Nenhuma pasta Classic foi encontrada. Você pode escolher a pasta manualmente.",
+        "detect_failed": "Não foi possível procurar o acervo Classic.",
+        "language": "Idioma do acervo Classic",
+        "choose_language": "Selecione o idioma",
+        "destination_exists": "Já existe um arquivo diferente no destino. Escolha outra pasta ou resolva o conflito antes de copiar.",
+        "overlapping": "A pasta do Classic e a pasta do acervo do LouvorJA devem ser separadas.",
+        "symbolic_link": "Esta pasta contém atalhos de arquivos que não podem ser copiados com segurança."
       },
       "media_size": "Mídia (áudio, imagens)",
       "canva_size": "Exportações do Canva",
@@ -722,7 +769,8 @@
       "clear_files": "Limpar mídia (áudio/imagens)",
       "clear_canva": "Limpar exportações do Canva",
       "refresh": "Recarregar",
-      "clear_cache_confirm": "Limpar todo o cache de banco? O programa vai baixar tudo de novo na próxima abertura.",
+      "clear_cache_confirm": "Limpar o cache do banco? O programa busca o catálogo de novo na internet quando precisar; a cópia atual fica guardada até lá, para continuar funcionando sem internet.",
+      "clear_cache_offline": "Sem internet, o cache do banco não foi limpo: o catálogo ficaria indisponível até a conexão voltar.",
       "clear_files_confirm": "Apagar TODOS os arquivos de mídia baixados? Esta ação não pode ser desfeita. As exportações do Canva são mantidas.",
       "clear_canva_confirm": "Apagar os arquivos exportados do Canva? Eles são o cache que deixa projetar sem internet — na próxima projeção cada design será exportado de novo, e isso gasta exportações da sua cota do Canva.",
       "clear_canva_done": "{n} arquivo(s) do Canva removidos do cache.",
@@ -731,8 +779,57 @@
       "restore_db_confirm": "Restaurar o banco de dados para os JSONs originais do programa? Os dados baixados/atualizados pela internet serão perdidos.",
       "restore_db_done": "Banco de dados restaurado.",
       "restore_db_error": "Falha ao restaurar o banco de dados.",
-      "move_confirm": "Mover o conteúdo atual para a nova pasta?",
-      "change_failed": "Falha ao alterar a pasta de mídia."
+      "change_failed": "Não foi possível salvar a configuração de armazenamento.",
+      "setup_title": "Onde guardar seus arquivos",
+      "setup_hint": "Escolha as pastas do acervo e dos vídeos antes dos primeiros downloads. Você poderá alterá-las depois em Armazenamento.",
+      "loading_locations": "Carregando pastas…",
+      "media_folder": "Acervo do LouvorJA",
+      "media_hint": "Músicas e imagens baixadas pelo aplicativo.",
+      "videos_folder": "Vídeos baixados",
+      "videos_hint": "Os vídeos podem ficar em outra pasta ou unidade.",
+      "profile_folder": "Dados pessoais",
+      "profile_hint": "Preferências, listas, arquivos pessoais e dados de acesso ficam separados do acervo. Esta pasta é gerenciada pelo aplicativo e não pode ser alterada aqui.",
+      "existing_files": "Arquivos da pasta atual",
+      "copy_existing": "Copiar os arquivos atuais para a nova pasta",
+      "reuse_existing": "Usar somente os arquivos que já estão no destino",
+      "copy_hint": "A cópia será feita ao reiniciar. Os arquivos de origem serão mantidos e arquivos diferentes no destino não serão substituídos.",
+      "reuse_hint": "Os arquivos atuais ficarão onde estão. O aplicativo passará a ler e baixar nesta nova pasta após reiniciar.",
+      "move_existing": "Mover: copiar, conferir e apagar a pasta antiga",
+      "move_hint": "Ao reiniciar, os arquivos são copiados e conferidos um a um; só então saem da pasta antiga. Arquivos diferentes no destino não são substituídos, e nesse caso nada é apagado.",
+      "move_confirm": "Mover os arquivos? Ao reiniciar, o LouvorJA copia e confere cada arquivo e depois apaga a pasta antiga. Isso não pode ser desfeito pelo aplicativo.",
+      "use_default": "Usar a pasta padrão",
+      "default_is": "Pasta padrão nesta máquina:",
+      "repair": {
+        "title": "Recuperação",
+        "hint": "Se o aplicativo estiver se comportando de forma estranha, tente na ordem: reparar, começar do zero e, só em último caso, o reset total. Todas reiniciam o LouvorJA.",
+        "repair": "Reparar o aplicativo",
+        "repair_hint": "Refaz caches internos e reinstala as ferramentas de vídeo. Não perde nada.",
+        "repair_confirm": "Reparar o aplicativo? O LouvorJA vai reiniciar, refazer os caches internos e reinstalar as ferramentas de vídeo ao fundo. Preferências, listas, liturgias, favoritos, músicas e vídeos ficam como estão.",
+        "reset": "Começar do zero",
+        "reset_hint": "Abre como recém-instalado e guarda uma cópia de segurança do que havia. Músicas e vídeos ficam.",
+        "reset_confirm": "Começar do zero? O LouvorJA vai reiniciar com preferências, listas e liturgias vazias. Nada é apagado: os dados atuais ficam guardados na pasta recovery do LouvorJA (as três últimas cópias), e as músicas e vídeos baixados continuam disponíveis.",
+        "wipe": "Reset total",
+        "wipe_hint": "Apaga os dados do aplicativo sem guardar cópia. Para quando nada mais resolver.",
+        "wipe_title": "Reset total",
+        "wipe_text": "O LouvorJA vai reiniciar como recém-instalado e apagar, sem cópia de segurança: preferências, listas, liturgias, favoritos, histórico, caches, as cópias de recuperação e o que sobrou de versões antigas. Isso não pode ser desfeito.",
+        "wipe_media": "Apagar também as músicas baixadas (acervo)",
+        "wipe_media_shared": "O acervo é compartilhado com outras contas deste computador e não pode ser apagado por aqui.",
+        "wipe_videos": "Apagar também os vídeos baixados",
+        "wipe_confirm": "Apagar e reiniciar",
+        "failed": "Não foi possível pedir a recuperação."
+      },
+      "restart_now": "Reiniciar agora",
+      "saved": "Configuração salva.",
+      "setup_continue": "Salvar e continuar",
+      "save_locations": "Salvar alterações",
+      "locations_unavailable": "Não foi possível carregar as pastas de armazenamento.",
+      "shared_hint": "Esta pasta é usada por mais de um perfil. A limpeza automática fica desativada para preservar os arquivos dos outros usuários.",
+      "read_only_hint": "Pasta disponível somente para leitura nesta sessão. Outro usuário pode estar gravando nela, ou sua conta não tem permissão para gravar.",
+      "cancel_pending": "Cancelar alteração agendada",
+      "apply_failed": "A alteração de pastas não foi concluída. Os caminhos atuais foram mantidos.",
+      "file_count": "{count} arq.",
+      "catalog_size": "Músicas (álbuns, músicas, letras)",
+      "bible_size": "Bíblia"
     },
     "videos": {
       "action_link": "Link no navegador",
@@ -1227,8 +1324,6 @@
       "message_board_clear": "Limpar Painel",
       "message_board_list": "Recados",
       "musics": "Músicas",
-      "name_draw": "Nomes",
-      "name_draw_action": "Sortear Nome",
       "no_audio": "Sem Áudio",
       "online_personal": "Vídeos Personalizados",
       "online_videos": "Vídeos On-line",
@@ -1360,6 +1455,16 @@
       "view_downloads_for": "Ver downloads para {platform}",
       "available_for": "Windows, macOS e Linux",
       "version": "Versão {version}",
+      "linux": {
+        "processor": "Processador do computador",
+        "x64": "Intel / AMD (64 bits)",
+        "arm64": "ARM (64 bits)",
+        "choose_processor": "Selecione o processador para ver os downloads para Linux.",
+        "download_format": "Baixar {format}",
+        "deb": "Ubuntu, Debian e Mint",
+        "rpm": "Fedora e openSUSE",
+        "appimage": "Outras distribuições"
+      },
       "platform": {
         "windows": "Windows",
         "macos": "macOS",
@@ -1373,9 +1478,9 @@
     "feedback": "Enviar feedback",
     "help": "Ajuda",
     "dev_mode": "Modo desenvolvedor",
-    "quick_search": "Busca rápida (Ctrl+K)",
+    "quick_search": "Busca rápida",
     "quick_search_short": "Busca Rápida",
-    "bible_quick_search": "Busca bíblica rápida (Ctrl+B)",
+    "bible_quick_search": "Busca bíblica rápida",
     "bible_quick_search_short": "Busca Bíblica",
     "open_modules": "Módulos abertos",
     "ribbon_nav": "Navegação da Ribbon",
@@ -1555,10 +1660,8 @@
     },
     "esc": "Encerrar projeções ativas",
     "f1": "Mostrar atalhos de teclado",
-    "f5": "Recarregar módulo ativo",
     "f8": "Ativar/desativar modo culto",
-    "ctrl_w": "Fechar módulo ativo",
-    "ctrl_f": "Focar campo de busca",
+    "ctrl_w": "Fechar a aba (sem abas, a janela)",
     "ctrl_space": "Abrir busca rápida",
     "ctrl_b": "Abrir busca bíblica rápida",
     "ctrl_m": "Abrir busca de músicas",
@@ -1579,7 +1682,7 @@
     "end": "Último slide",
     "space": "Pausar/retomar reprodução",
     "pause": "Pausar/retomar reprodução",
-    "ctrl_shift_f2": "Limpar cache e recarregar dados",
+    "ctrl_shift_f2": "Limpar cache do banco",
     "ctrl_alt_d": "Alternar modo desenvolvedor",
     "ctrl_i": "Abrir/fechar chat",
     "prev_slide": "Slide anterior",
@@ -1594,11 +1697,120 @@
     "presentation_play": "Modo apresentação: reproduzir / pausar o que está no ar",
     "presentation_mute": "Modo apresentação: silenciar"
   },
+  "startup_tips": {
+    "title": "Dica do LouvorJA",
+    "shortcut_label": "Atalho de teclado",
+    "module_label": "Dica de módulo",
+    "feature_label": "Dica de configuração",
+    "dont_show_again": "Não mostrar dicas ao iniciar",
+    "previous": "Dica anterior",
+    "next": "Próxima dica",
+    "shortcut_details": {
+      "f1": "Abre a lista completa de atalhos de teclado do LouvorJA.",
+      "ctrl_k": "Abre a paleta de comandos para localizar rapidamente músicas, módulos e ações.",
+      "ctrl_space": "Abre a busca rápida de músicas, Bíblia e outros conteúdos em um só lugar.",
+      "ctrl_b": "Abre a busca bíblica para localizar livro, capítulo e versículo por nome, abreviação ou número.",
+      "ctrl_m": "Abre a busca de músicas para localizar hinos por nome, número ou trecho.",
+      "ctrl_o": "Liga ou desliga as sobreposições configuradas no módulo Sobreposições.",
+      "ctrl_p": "Inicia ou encerra a Projeção de Fundo no monitor configurado.",
+      "ctrl_tab": "Alterna para o próximo módulo aberto, sem fechar o atual.",
+      "ctrl_n": "Cria um novo item na liturgia ativa.",
+      "ctrl_shift_n": "Cria uma nova anotação na liturgia ativa.",
+      "ctrl_left": "Volta para a música anterior na coletânea ou liturgia.",
+      "ctrl_right": "Avança para a próxima música na coletânea ou liturgia.",
+      "space": "Pausa ou retoma a reprodução do conteúdo atual."
+    },
+    "features": {
+      "canva": {
+        "title": "Canva",
+        "body": "Conecte sua conta do canva no menu Opções > Integrações, para projetar designs do Canva. O app exporta o design, guarda uma cópia para abrir sem internet e mantém as páginas disponíveis no operador. Ou você pode projetar no modo apresentador, preservando a mídias e feitos da apresentação."
+      },
+      "libras": {
+        "title": "Tradução em Libras",
+        "body": "Em Acessibilidade, ative a tradução em Libras para músicas e textos bíblicos. A primeira tradução pode baixar animações e precisa de conexão com a internet."
+      },
+      "multi_monitor": {
+        "title": "Vários monitores",
+        "body": "Em Opções > Monitores, escolha onde abrir a projeção, a tela de retorno e o operador. Se um monitor for desconectado, o app evita abrir a janela na tela errada."
+      },
+      "remote_control": {
+        "title": "Controle remoto",
+        "body": "No menu Opções > Transmitir, ligue o servidor HTTP e use o QR Code para conectar o app Violin Remote ou use a versão web no celular. Converse com sua equipe em tempo real e defina as permissões de cada dispositivo para segregar os acessos(somente no App)."
+      },
+      "network_projection": {
+        "title": "Projeção pela rede",
+        "body": "No menu Opções > Transmitir, copie as URLs de projeção para abrir em outro computador ou celular da mesma rede. O token protege o acesso."
+      },
+      "obs": {
+        "title": "OBS e vMix",
+        "body": "No aplicativo desktop, use as URLs do servidor como Browser Source no OBS ou vMix. A tela é atualizada sozinha e pode entrar como camada na sua transmissão."
+      },
+      "liturgy_transfer": {
+        "title": "Levar a liturgia para outro computador",
+        "body": "Na Liturgia, use Exportar para salvar a programação e Importar no outro computador. O app também aceita arquivos .ja do LouvorJA clássico e da versão web."
+      },
+      "web_version": {
+        "title": "Versão web",
+        "body": "O LouvorJA também funciona no navegador como PWA. Instale pelo próprio navegador para abrir em uma janela separada; transmissão e atalhos globais continuam exclusivos do aplicativo desktop."
+      },
+      "storage_locations": {
+        "title": "Pastas de armazenamento",
+        "body": "Em Opções > Armazenamento, escolha onde ficam o acervo e os vídeos. Uma pasta compartilhada pode atender mais de uma instalação; não grave dados pessoais nela."
+      },
+      "custom_collections": {
+        "title": "Coletâneas personalizadas",
+        "body": "Crie Coletâneas Personalizadas para reunir músicas e arquivos .slja do seu jeito, sem depender das coletâneas oficiais."
+      },
+      "return_screen": {
+        "title": "Tela de retorno",
+        "body": "Personalize a tela de retorno com fundo, informações e o próximo item para o telão não ficar vazio entre músicas."
+      },
+      "scheduled_items": {
+        "title": "Itens agendados",
+        "body": "Use Itens Agendados para organizar avisos e compromissos do culto e acessá-los na hora certa. Com apenas alguns cliques você pode configurar mídias que passam todo culto alterando automaticamente para o dia configurado."
+      }
+    },
+    "items": {
+      "musics": {
+        "body": "Encontre hinos pelo número ou nome, monte listas e use a tela de retorno para manter o próximo item visível."
+      },
+      "bible": {
+        "body": "Use a busca rápida da Bíblia para abrir livro, capítulo e versículo, escolha a versão e projete o texto direto."
+      },
+      "liturgy": {
+        "body": "Monte a ordem do culto em blocos e execute cada item na sequência, sem perder o fio."
+      },
+      "overlay": {
+        "body": "Sobreposições exibem texto, imagem video, ou o espelho de um módulo por cima da projeção."
+      },
+      "background_projection": {
+        "body": "Use qualquer imagem ou vídeo como fundo da projeção, inclusive atrás de músicas e da Bíblia, sem interromper o que está no ar."
+      },
+      "background_sound": {
+        "body": "Prepare músicas e áudios de fundo para tocar antes, durante ou depois do culto."
+      },
+      "draw": {
+        "body": "Sorteie números ou nomes. De forma organizada, prática e elegante."
+      },
+      "media_library": {
+        "body": "Centralize imagens, áudios, vídeos e playlists que você usa nas projeções."
+      },
+      "slide_editor": {
+        "body": "Ajuste a letra, o playback e os tempos da música antes de projetar."
+      },
+      "announcements": {
+        "body": "Programe avisos e mantenha a ordem do que será exibido no telão."
+      },
+      "timer_worship": {
+        "body": "Use o Temporizador de Culto para acompanhar o tempo de cada parte do programa."
+      }
+    }
+  },
   "startup_check": {
     "title": "Verificação Inicial",
     "scanning": "Verificando arquivos do sistema...",
     "connection_status": "Conexão com o servidor",
-    "online_hint": "Baixar é opcional: com internet, o LouvorJA toca as músicas direto do servidor e guarda no computador as que você usar.",
+    "online_hint": "Baixar os áudios é opcional: com internet, o LouvorJA toca as músicas direto do servidor e guarda no computador as que você usar.",
     "collections_status": "Coletâneas",
     "bible_status": "Bíblia",
     "storage_status": "Armazenamento",
@@ -1611,9 +1823,7 @@
     "download_all": "Baixar Tudo",
     "sync_hint": "Você pode baixar álbuns ou versões bíblicas específicas depois no menu Opções > Sincronizar.",
     "offline_hint": "Servidor de download indisponível. Verifique sua conexão com a internet.",
-    "catalog_not_installed": "O catálogo offline não está instalado. O LouvorJA continua funcionando pela internet; instale o catálogo somente se quiser preparar este computador para uso offline.",
-    "catalog_scan_deferred": "A leitura detalhada do catálogo foi adiada para manter a inicialização rápida. Você pode iniciá-la agora, se quiser verificar os arquivos deste computador.",
-    "install_catalog": "Instalar catálogo offline",
+    "catalog_scan_deferred": "O banco de dados está pronto. Você pode verificar quais áudios e versões da Bíblia já estão disponíveis neste computador.",
     "scan_catalog": "Verificar arquivos",
     "minimize": "Minimizar para segundo plano",
     "task": {
@@ -1824,13 +2034,15 @@
   },
   "online_video": {
     "preparing": "Baixando o vídeo…",
+    "preparing_named": "Baixando vídeo: {title}",
     "phase": {
       "tools": "Preparando os componentes do vídeo",
-      "tools_ytdlp": "Preparando ferramenta 1 de 2 (yt-dlp): {percent}%",
-      "tools_ffmpeg": "Preparando ferramenta 2 de 2 (ffmpeg): {percent}%",
+      "tools_ytdlp": "Preparando ferramenta 1 de 3 (yt-dlp): {percent}%",
+      "tools_ffmpeg": "Preparando ferramenta 2 de 3 (ffmpeg): {percent}%",
       "queued": "Na fila",
       "downloading": "Baixando",
-      "finalizing": "Finalizando"
+      "finalizing": "Finalizando",
+      "tools_pot": "Preparando ferramenta 3 de 3 (provedor de PO token): {percent}%"
     },
     "errors": {
       "age": "Este vídeo tem restrição de idade e não pode ser projetado.",
@@ -1852,7 +2064,11 @@
       "download_all": "Baixar todos",
       "remove_all": "Remover downloads",
       "confirm_remove_all": "Remover os {count} vídeos baixados desta lista? Eles continuam na lista."
-    }
+    },
+    "preparing_tools": "Preparando os componentes de vídeo…",
+    "preparing_pot": "Instalando o provedor de PO token…",
+    "pot_unavailable": "O provedor de PO token não pôde ser instalado; alguns vídeos podem abrir no player do YouTube.",
+    "prepare_failed": "Não foi possível preparar os componentes de vídeo."
   },
   "chat": {
     "title": "Chat",
@@ -1866,5 +2082,6 @@
     "toggle": "Chat",
     "clear": "Limpar mensagens",
     "confirm_clear": "Tem certeza que deseja limpar todas as mensagens?"
-  }
+  },
+  "moved_to_category": "Movido para “{category}”"
 }

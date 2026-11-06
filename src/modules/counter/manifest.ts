@@ -1,11 +1,11 @@
-import type { Module } from "@/types/Module"
-import type { RibbonPage } from "@/types/Ribbon"
-import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
-import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
-import { ICONS } from "@/config/Icons"
-import { FONT } from "@/config/Fonts"
-import { ModuleEnum } from "@/enums/ModuleEnum"
-import { getModulePath } from "@/helpers/ModulePath"
+import type { Module } from "@/types/Module";
+import type { RibbonPage } from "@/types/Ribbon";
+import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum";
+import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum";
+import { ICONS } from "@/config/Icons";
+import { FONT } from "@/config/Fonts";
+import { ModuleEnum } from "@/enums/ModuleEnum";
+import { getModulePath } from "@/helpers/ModulePath";
 
 const moduleId = ModuleEnum.COUNTER;
 const modulePath = getModulePath(moduleId);
@@ -27,6 +27,8 @@ export const module: Module = {
     font_color: { type: "color", default: "#FFFFFF" },
     text_background_enabled: { type: "boolean", default: false },
     text_background_color: { type: "color", default: "transparent" },
+    text_padding_x: { type: "padding", default: 0 },
+    text_padding_y: { type: "padding", default: 0 },
     font_size: { type: "font-size", default: 50 },
     text_shadow: { type: "boolean", default: false },
     text_shadow_color: { type: "color", default: "#000000" },
@@ -39,7 +41,7 @@ export const module: Module = {
     image_opacity: { type: "opacity", default: 100 },
     image_fit: { type: "object-fit", default: "cover" },
   },
-}
+};
 
 export const contextualPages: RibbonPage[] = [
   {
@@ -53,25 +55,57 @@ export const contextualPages: RibbonPage[] = [
         id: "ctx_counter_actions",
         title: "ribbon.groups.actions",
         buttons: [
-          { id: `${moduleId}_decrement`, icon: ICONS.ACTIONS.MINUS_BOX, label: "ribbon.btn.counter_decrement", action: `${moduleId}_decrement`, color: "#e74c3c" },
-          { id: `${moduleId}_increment`, icon: ICONS.ACTIONS.ADD_BOX, label: "ribbon.btn.counter_increment", action: `${moduleId}_increment`, color: "#27ae60" },
-          { id: `${moduleId}_reset`, icon: ICONS.ACTIONS.RESTART, label: "ribbon.btn.counter_reset", action: `${moduleId}_reset`, color: "#7f8c8d" },
+          {
+            id: `${moduleId}_decrement`,
+            icon: ICONS.ACTIONS.MINUS_BOX,
+            label: "ribbon.btn.counter_decrement",
+            action: `${moduleId}_decrement`,
+            color: "#e74c3c",
+          },
+          {
+            id: `${moduleId}_increment`,
+            icon: ICONS.ACTIONS.ADD_BOX,
+            label: "ribbon.btn.counter_increment",
+            action: `${moduleId}_increment`,
+            color: "#27ae60",
+          },
+          {
+            id: `${moduleId}_reset`,
+            icon: ICONS.ACTIONS.RESTART,
+            label: "ribbon.btn.counter_reset",
+            action: `${moduleId}_reset`,
+            color: "#7f8c8d",
+          },
         ],
       },
       {
         id: "ctx_counter_format",
         title: "ribbon.groups.format",
         buttons: [
-          { id: `${moduleId}_toggle_format`, icon: ICONS.ACTIONS.FORMAT, label: "ribbon.btn.format", action: `${moduleId}_toggle_format`, color: "#1b4f8a" },
+          {
+            id: `${moduleId}_toggle_format`,
+            icon: ICONS.ACTIONS.FORMAT,
+            label: "ribbon.btn.format",
+            action: `${moduleId}_toggle_format`,
+            color: "#1b4f8a",
+          },
         ],
       },
       {
         id: "ctx_counter_screen",
         title: "ribbon.groups.projection",
         buttons: [
-          { id: `${moduleId}_project`, type: "screen", feature: moduleId, route: `/projection/module?module=${moduleId}`, icon: ICONS.PROJECTION.SCREEN_OUTLINE, label: "ribbon.btn.project", color: "#1b4f8a" },
+          {
+            id: `${moduleId}_project`,
+            type: "screen",
+            feature: moduleId,
+            route: `/projection/module?module=${moduleId}`,
+            icon: ICONS.PROJECTION.SCREEN_OUTLINE,
+            label: "ribbon.btn.project",
+            color: "#1b4f8a",
+          },
         ],
       },
     ],
   },
-]
+];

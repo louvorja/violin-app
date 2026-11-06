@@ -19,11 +19,26 @@ import {
  */
 
 describe("estilo de sobreposição", () => {
-  it("mede o texto pela altura da tela e o palco pela altura do container", () => {
+  it("mede o texto proporcionalmente pela altura da tela e do palco", () => {
     const slot = createOverlaySlot();
     slot.style.font_size = 7;
-    expect(overlayTextStyle(slot).fontSize).toBe("clamp(14px, 7vh, 80px)");
-    expect(overlayTextStyle(slot, STAGE_UNITS).fontSize).toBe("clamp(14px, 7cqh, 80px)");
+    expect(overlayTextStyle(slot).fontSize).toBe("7vh");
+    expect(overlayTextStyle(slot, STAGE_UNITS).fontSize).toBe("7cqh");
+  });
+
+  it("não trava o texto em 80px: 20% continua crescendo", () => {
+    const slot = createOverlaySlot();
+    slot.style.font_size = 20;
+    expect(overlayTextStyle(slot).fontSize).toBe("20vh");
+    expect(overlayTextStyle(slot, STAGE_UNITS).fontSize).toBe("20cqh");
+  });
+
+  it("mantém o intervalo de segurança de 0 a 20%", () => {
+    const slot = createOverlaySlot();
+    slot.style.font_size = 30;
+    expect(overlayTextStyle(slot).fontSize).toBe("20vh");
+    slot.style.font_size = -2;
+    expect(overlayTextStyle(slot).fontSize).toBe("0vh");
   });
 
   it("mede a imagem pela largura e altura da tela, com a escala do slot", () => {
@@ -60,7 +75,10 @@ describe("estilo de sobreposição", () => {
 
   it("alinha o texto pelo lado da âncora", () => {
     const at = (anchor: string) =>
-      overlayTextAlign({ ...createOverlaySlot(), position: { anchor, offset_x: 0, offset_y: 0 } } as never);
+      overlayTextAlign({
+        ...createOverlaySlot(),
+        position: { anchor, offset_x: 0, offset_y: 0 },
+      } as never);
     expect(at("top-left")).toBe("left");
     expect(at("center")).toBe("center");
     expect(at("bottom-center")).toBe("center");

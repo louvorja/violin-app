@@ -125,7 +125,6 @@ src/
 │   │       ├── Index.vue                 # Layout two-columns (playlist panel + songs)
 │   │       ├── PlaylistPanel.vue         # Painel esquerdo: criar/renomear/excluir playlists
 │   │       └── PlaylistSongs.vue         # Painel direito: músicas da playlist + play
-│   ├── name_draw/       # Sorteio de nomes (fullscreen dialog)
 │   ├── remote_control/
 │   ├── slide_editor/    # Editor de slides (autosave sessionStorage)
 │   ├── stopwatch/       # Cronômetro (alarme sonoro via Web Audio API)
@@ -251,47 +250,81 @@ $userdata.set("theme", "dark");
 
 ## Onde moram os dados
 
-Tudo que é do usuário fica numa **pasta de dados única** — `Documents/LouvorJA Violin`
-por padrão, trocável em "Sincronizar Arquivos → Armazenamento". No endereço antigo do
-sistema sobra apenas a âncora `data-location.json`, que diz onde essa pasta está:
-alguém precisa saber o endereço antes de abri-la.
+O programa é instalado separadamente do **perfil privado**, do **acervo** e dos
+**vídeos**. O perfil não tem seletor de local: `paths.dataDir()` retorna
+`<appData>/LouvorJA Violin/profile`, com o endereço de `appData` fornecido pelo Electron:
+
+| Sistema | Perfil privado |
+| --- | --- |
+| Windows | `%APPDATA%/LouvorJA Violin/profile` |
+| macOS | `~/Library/Application Support/LouvorJA Violin/profile` |
+| Linux | `$XDG_CONFIG_HOME/LouvorJA Violin/profile` ou `~/.config/LouvorJA Violin/profile` |
 
 ```
-<dados>/
-├── files/      acervo — áudio, capas, imagens; files/canva/ com os exports do Canva
-├── storage/    preferências — user_data.json, config.json, monitor_prefs.json
-├── pptx/       PDFs gerados de PowerPoint e as fontes deles (docs/pptx.md) — fora do acervo
-├── library/    documentos — liturgias salvas, playlists, coletâneas, itens agendados
-├── Videos/     vídeos online baixados e suas marcas de manter
-├── json_db/    cache das respostas JSON
-├── bin/        yt-dlp e ffmpeg
-└── .electron/  perfil, IndexedDB, cookies, caches e logs internos
+<perfil>/
+├── storage/           preferências e configurações por conta do sistema
+├── library/           documentos pessoais em JSON
+├── attachments/media/ anexos privados enviados pelo controle remoto
+├── canva/             cache dos exports do Canva (PDF/imagem) — da conta, fora do acervo
+├── pptx/              PDFs gerados de PowerPoint e as fontes deles (docs/pptx.md) — fora do acervo
+├── json_db/           cache de respostas JSON
+├── bin/               yt-dlp e ffmpeg
+├── temp/videos/       downloads parciais e streaming temporário
+├── temp/downloads/    downloads HTTP e retomadas
+├── temp/migrations/   cópias em preparação no mesmo volume
+└── .electron/         IndexedDB, cookies, caches e logs internos
 ```
 
-A divisão que importa é entre **documento** e **cache**:
+`paths.mediaDir()` e `paths.videosDir()` são independentes e alteráveis no setup e
+em Sincronizar Arquivos → Armazenamento. O acervo padrão é compartilhado:
+`%PUBLIC%/Documents/LouvorJA Violin/Acervo` no Windows,
+`/Users/Shared/LouvorJA Violin/Acervo` no macOS e
+`/var/lib/louvorja-violin/acervo` no Linux DEB/RPM. Windows individual e AppImage
+usam o mesmo acervo quando configurado e acessível, sem fallback silencioso para
+Documentos particulares. Sem acesso, o setup permite escolher outra pasta.
+Vídeos usam `<pasta de vídeos do sistema>/LouvorJA Violin` da conta atual
+(`Videos` no Windows, `Movies` no macOS, diretório XDG no Linux).
+Os instaladores Windows para todos e DEB/RPM provisionam o local comum; no macOS
+o app cria o padrão em `/Users/Shared`. Só pastas novas compartilhadas recebem
+permissão pública de escrita; pastas existentes e perfil nunca são ampliados.
 
-|          | Documento                                                                             | Cache                                                         |
-| -------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| O quê    | preferências, liturgias salvas, playlists, coletâneas personalizadas, itens agendados | `json_db/`, catálogos baixados, bundles do Libras, thumbnails |
-| Onde     | pasta de dados                                                                        | pasta de dados                                                |
-| Se sumir | o operador perde trabalho que ele fez à mão                                           | o app baixa de novo                                           |
+Mudanças são agendadas para o próximo boot e oferecem reutilizar uma coleção,
+copiar a atual com verificação ou mover. Copiar e reutilizar não apagam a origem;
+"mover" copia e confere pelo hash e só então apaga da origem os arquivos que o app
+gerencia (vídeos só pelo ID do YouTube), e só é oferecido quando a pasta atual não é
+compartilhada com outras contas. Nenhuma sobrescreve conflitos (com conflito nada é
+apagado) nem transfere arquivos pessoais junto ao acervo. "Usar a pasta padrão" em
+Armazenamento propõe as pastas de uma instalação nova. A seção Recuperação pede, para a
+próxima abertura (`storageRecovery.applyRequest`, antes de o Chromium abrir o perfil):
+reparar (caches regeneráveis e ferramentas de vídeo), começar do zero (perfil guardado em
+`recovery/`) ou reset total (sem cópia; acervo e vídeos só se marcados e não compartilhados). A migração do perfil antigo
+também conserva a origem, incluindo todos os bancos IndexedDB. Quem já usava o
+app fica com acervo e vídeos onde estavam (`<dados>/files` e `<dados>/Videos`),
+como se os tivesse escolhido ali: só o perfil é copiado, e os padrões comuns valem
+para instalações novas. Instalação nova não consulta Documentos. Se a pasta antiga
+estiver sem acesso (TCC do macOS, disco desconectado) ou a cópia falhar, o app abre
+num perfil provisório em `<appData>/LouvorJA Violin/fallback`, avisa e não publica
+nada; a próxima abertura tenta de novo. A cópia mostra progresso em um processo auxiliar com perfil
+temporário; conflitos mantêm as pastas anteriores e aparecem em Armazenamento.
+Downloads ficam privados; a publicação atômica entre volumes e a herança de
+permissões no Windows usam staging oculto transitório no destino.
 
-Ao criar armazenamento novo, classifique primeiro: documento vai para a pasta de
-dados via `DocStore`; cache também fica dentro da raiz escolhida. O perfil do
-Electron só muda de pasta no próximo boot, após fechar os bancos abertos.
+No desktop, preferências e documentos JSON são escritos pelo main, via
+`userStore`/`DocStore`, com gravação atômica em lote (300 ms). IndexedDB continua
+no Chromium e mistura catálogos com favoritos, histórico e coleções que contêm
+Blob/ArrayBuffer: deve permanecer privado até uma futura separação lógica por
+coleção. A migração ajusta caminhos de anexos privados sem serializar os binários
+em JSON. Não trate o ZIP de exportação como cópia integral do perfil.
 
-No desktop **o main é o único escritor**. O renderer nunca grava em disco por conta
-própria: `$userdata.set` manda um patch por IPC e `DocStore` manda a coleção. Os dois
-gravam em lote (janela de 300ms) e de forma atômica — a pasta costuma estar dentro do
-OneDrive ou do iCloud, e gravar a cada tecla acordaria o sincronizador sem parar.
+`storageAccess` concede uma única escrita por raiz de mídia. Outras contas leem
+os arquivos prontos; para adquirir escrita após a saída da outra conta, reiniciam
+o app. Limpeza de coleções compartilhadas fica desativada. Vídeos em streaming
+podem usar o diretório temporário privado mesmo com a coleção somente leitura.
+O acervo Classic é uma fonte opcional separada, somente leitura, com cópia
+explícita para o acervo próprio sem remover os originais.
 
-No navegador nada disso vale: lá o `Storage` usa localStorage e o `DocStore` delega ao
-IndexedDB. **Não há paridade entre web e desktop** — a ponte é exportar e importar.
-
-O IndexedDB continua sendo a casa dos catálogos baixados e das coleções que guardam
-binário (imagens de overlay, biblioteca de mídia, miniaturas, sons de fundo). Estas
-últimas ainda não têm caminho para a pasta de dados: vão precisar do arquivo gravado
-ao lado, em `library/<colecao>/<id>.<ext>`, com o JSON guardando só o metadado.
+No navegador, `Storage` usa localStorage e `DocStore` delega ao IndexedDB.
+Não há escolha de pastas nativas nem mudança nesse contrato do web/PWA.
 
 ## Helpers vs Composables
 
@@ -842,7 +875,7 @@ _Muito solicitado por usuários de live_
 | Feature                    | Origem Delphi                  | Status                |
 | -------------------------- | ------------------------------ | --------------------- |
 | Sorteador de números       | `fmMonitorSorteio.pas`         | ✅ módulo `draw`      |
-| Sorteador de nomes         | `fmMonitorSorteioNomes.pas`    | ✅ módulo `name_draw` |
+| Sorteador de nomes         | `fmMonitorSorteioNomes.pas`    | ✅ módulo `draw` (modo Nomes) |
 | Painel de recados dinâmico | `fmMonitorPainelDinamico.pas`  | ⚠️ roadmap            |
 | Texto interativo em tela   | `fmMonitorTextoInterativo.pas` | ⚠️ roadmap            |
 | Contador                   | módulo `counter`               | ✅ módulo `counter`   |
@@ -1001,7 +1034,7 @@ electron/
 └── main/
     ├── apiConfig.js      # Config central de URLs/tokens da API (shared)
     ├── csp.js            # Config central de Content-Security-Policy
-    ├── paths.js          # pasta de dados (âncora + fallback), userData, tempDir
+    ├── paths.js          # perfil privado fixo, acervo e vídeos independentes
     ├── windows.js        # BrowserWindow factory
     ├── userStore.js      # preferências em <dados>/storage (D1)
     ├── docStore.js       # documentos do usuário em <dados>/library

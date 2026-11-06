@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { LITURGY_VERSION_ACTION, MUSIC_EXECUTIONS, canExecute } from "@/config/MusicAction";
+import {
+  ACTION_LITURGY_VERSION,
+  LITURGY_VERSION_ACTION,
+  MUSIC_EXECUTIONS,
+  canExecute,
+} from "@/config/MusicAction";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 
 const enabled = (tracks: { sung: boolean; playback: boolean }) =>
@@ -44,5 +49,13 @@ describe("versão do item de liturgia", () => {
     expect(LITURGY_VERSION_ACTION.pb).toBe(MusicActionEnum.INSTRUMENTAL);
     expect(LITURGY_VERSION_ACTION.audio_pb).toBe(MusicActionEnum.PLAYBACK_ONLY);
     expect(LITURGY_VERSION_ACTION.lyric).toBe(MusicActionEnum.NO_AUDIO);
+  });
+
+  it("todo botão de execução volta para uma versão que toca a mesma ação", () => {
+    for (const { action } of MUSIC_EXECUTIONS) {
+      const version = ACTION_LITURGY_VERSION[action];
+      expect(version, action).toBeDefined();
+      expect(LITURGY_VERSION_ACTION[version!]).toBe(action);
+    }
   });
 });

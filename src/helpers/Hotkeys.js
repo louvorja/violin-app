@@ -10,8 +10,10 @@
  *   Hotkeys.register(combo, handler, options)     — registra atalho
  *   Hotkeys.unregister(combo, handler)            — remove handler específico
  *   Hotkeys.list()                                — retorna todos os atalhos p/ cheatsheet
+ *   formatShortcut(combo)                         — rótulo do atalho no sistema atual (⌘K / Ctrl+K)
  *
- * Formato de combo: "Ctrl+Shift+N", "F5", "Ctrl+ArrowUp", "Space"
+ * Formato de combo: "Mod+Shift+N", "Ctrl+M", "F5", "Mod+ArrowUp", "Space"
+ * `Mod` é o Command no Mac e o Ctrl nos outros; `Ctrl` explícito vale igual em todos.
  * Contextos: 'global' | 'media' | 'liturgy' | 'live' | 'edit'
  * @category helper-puro — Gerencia event listeners com primitivos JS; sem APIs Vue.
  */
@@ -28,10 +30,14 @@
  * Formato: chave normalizada por _normalizeCombo (módificadores maiúsculos, tecla minúscula).
  * Ver tabela completa em docs/architecture.md — seção "Atalhos de Teclado".
  */
+import { withTelemetryActionSource } from "@/helpers/TelemetryAction";
+import Platform from "@/helpers/Platform";
+
 export const GLOBAL_CANDIDATES = new Set([
   "f1", // Cheatsheet — útil system-wide durante apresentação
   "Ctrl+space", // Quick Search
   "Ctrl+b", // Bible Spotlight
+  "Meta+b", // Bible Spotlight (Mac)
   "Ctrl+m", // Music Spotlight
   "Ctrl+k", // Command Palette
   "Meta+k", // Command Palette (Mac)
@@ -71,6 +77,69 @@ function _normalizeCombo(combo) {
   return [...modifiers, key].join("+");
 }
 
+// O Chrome no Mac fica com estas e a página nunca as recebe; no Electron elas chegam.
+const MAC_BROWSER_RESERVED = new Set([
+  "Meta+n",
+  "Meta+Shift+n",
+  "Meta+t",
+  "Meta+Shift+t",
+  "Meta+w",
+]);
+
+/**
+ * `Mod` → as combinações reais. A primeira é a que a interface mostra; no Mac o
+ * Ctrl segue valendo por baixo, porque o controle remoto manda Ctrl seja qual
+ * for o sistema do computador.
+ */
+function _resolveMod(combo) {
+  const parts = combo.split("+");
+  const isMod = (part) => part.trim().toLowerCase() === "mod";
+  if (!parts.some(isMod)) return [combo];
+  const withMod = (mod) => parts.map((part) => (isMod(part) ? mod : part)).join("+");
+  const ctrl = withMod("Ctrl");
+  if (!Platform.isMac) return [ctrl];
+  const meta = withMod("Meta");
+  const isDesktop = typeof window !== "undefined" && !!window.louvorjaApi;
+  return isDesktop || !MAC_BROWSER_RESERVED.has(_normalizeCombo(meta))
+    ? [meta, ctrl]
+    : [ctrl, meta];
+}
+
+const KEY_LABELS = {
+  arrowup: "↑",
+  arrowdown: "↓",
+  arrowleft: "←",
+  arrowright: "→",
+  space: "Space",
+  escape: "Esc",
+  delete: "Del",
+  pageup: "PageUp",
+  pagedown: "PageDown",
+  home: "Home",
+  end: "End",
+  tab: "Tab",
+  pause: "Pause",
+  enter: "Enter",
+};
+const MAC_MODIFIERS = { Ctrl: "⌃", Alt: "⌥", Shift: "⇧", Meta: "⌘" };
+const DISPLAY_ORDER = ["Ctrl", "Alt", "Shift", "Meta"];
+
+/** As teclas de um atalho como o sistema as escreve: `["⇧", "⌘", "N"]` no Mac, `["Ctrl", "Shift", "N"]` fora dele. */
+export function shortcutParts(combo) {
+  const parts = _normalizeCombo(_resolveMod(combo)[0]).split("+");
+  const key = parts.pop();
+  const mac = Platform.isMac;
+  const modifiers = parts
+    .sort((a, b) => DISPLAY_ORDER.indexOf(a) - DISPLAY_ORDER.indexOf(b))
+    .map((modifier) => (mac ? MAC_MODIFIERS[modifier] : modifier));
+  return [...modifiers, KEY_LABELS[key] ?? key.toUpperCase()];
+}
+
+/** Rótulo de dica e de menu: `⇧⌘N` no Mac, `Ctrl+Shift+N` nos outros sistemas. */
+export function formatShortcut(combo) {
+  return shortcutParts(combo).join(Platform.isMac ? "" : "+");
+}
+
 /**
  * Deriva a chave canônica do evento de teclado.
  * Chaves de letras são normalizadas para minúsculas — Shift é capturado como modificador.
@@ -84,7 +153,9 @@ function _comboFromEvent(e) {
 
   // Normaliza para minúsculas — espelho exato de _normalizeCombo.
   // Espaço é renomeado antes do lowercase para consistência com "space" registrado.
-  const rawKey = e.key === " " ? "Space" : e.key;
+  // Com Option o Mac troca a letra pelo símbolo (⌥D vira "∂"): a tecla física decide.
+  const physicalLetter = e.altKey && /^Key[A-Z]$/.test(e.code || "") ? e.code.slice(3) : null;
+  const rawKey = e.key === " " ? "Space" : (physicalLetter ?? e.key);
   const key = rawKey.toLowerCase();
 
   return [...modifiers, key].join("+");
@@ -100,6 +171,10 @@ function _focusIsInForm() {
   if (tag === "input" || tag === "textarea") return true;
   if (el.isContentEditable) return true;
   return false;
+}
+
+function _allowsInForm(rule, e) {
+  return typeof rule === "function" ? Boolean(rule(e)) : Boolean(rule);
 }
 
 /** Space pertence ao controle focado: cancelá-lo impediria o clique nativo do botão. */
@@ -139,6 +214,9 @@ function _onKeyDown(e) {
   if (_layerEl && !_layerEl.closest(".lj-window, .lj-dialog--module")) return;
 
   const combo = _comboFromEvent(e);
+  // O Esc pertence à camada de cima: no diálogo de módulo (o álbum) ele fecha o
+  // diálogo e não apaga o telão por baixo. Cancelado aqui, a Reka não fecharia.
+  if (combo === "escape" && _layerEl?.closest(".lj-dialog--module")) return;
   if (combo === "space" && _focusOwnsSpace()) return;
   const handlers = _registry.get(combo);
   if (!handlers || handlers.length === 0) return;
@@ -151,7 +229,7 @@ function _onKeyDown(e) {
     const ctx = options.context || "global";
 
     // Ignora atalhos em campos de texto, exceto os marcados com allowInForm
-    if (inForm && ctx !== "edit" && !options.allowInForm) continue;
+    if (inForm && ctx !== "edit" && !_allowsInForm(options.allowInForm, e)) continue;
 
     // Contextos especiais verificados externamente pelo handler (media/liturgy)
     // Hotkeys.js não valida se o módulo está aberto — isso é responsabilidade do handler.
@@ -163,7 +241,7 @@ function _onKeyDown(e) {
       e.stopPropagation();
     }
 
-    handler(e);
+    withTelemetryActionSource("keyboard", () => handler(e));
 
     // Parar na primeira correspondência válida (último registrado vence)
     break;
@@ -193,15 +271,14 @@ function destroy() {
 /**
  * Registra um atalho.
  *
- * @param {string} combo           Ex: "Ctrl+K", "F5", "Space"
+ * @param {string} combo           Ex: "Mod+K" (Command no Mac, Ctrl fora dele), "Ctrl+M", "F5", "Space"
  * @param {Function} handler       Callback (recebe o KeyboardEvent)
  * @param {object} [options]
  * @param {string} [options.context]        'global'|'media'|'liturgy'|'live'|'edit'
  * @param {boolean} [options.preventDefault]  default: true
  * @param {boolean} [options.stopPropagation] default: false
- * @param {boolean} [options.allowInForm]     default: false
+ * @param {boolean|((e: KeyboardEvent) => boolean)} [options.allowInForm] default: false
  * @param {string} [options.description]      Texto para o cheatsheet (chave i18n ou texto literal)
- * @param {string} [options.label]            Label do combo (ex: "Ctrl+K")
  * @param {string} [options.group]            Grupo para o cheatsheet
  */
 function register(combo, handler, options = {}) {
@@ -211,11 +288,17 @@ function register(combo, handler, options = {}) {
     return;
   }
 
+  const [shown, ...aliases] = _resolveMod(combo);
+  _add(shown, handler, options);
+  for (const alias of aliases) _add(alias, handler, { ...options, alias: true });
+}
+
+function _add(combo, handler, options) {
   const key = _normalizeCombo(combo);
   if (!_registry.has(key)) _registry.set(key, []);
 
   // Avisa se o atalho é candidato a globalShortcut — double-fire potencial no Electron.
-  if (GLOBAL_CANDIDATES.has(key)) {
+  if (import.meta.env.DEV && GLOBAL_CANDIDATES.has(key)) {
     console.warn(
       `[Hotkeys] "${key}" é candidato a globalShortcut — pode causar double-fire ` +
         `se o Electron registrar o mesmo atalho via D6. Ver docs/architecture.md.`
@@ -240,6 +323,10 @@ function unregister(combo, handler) {
     return;
   }
 
+  for (const resolved of _resolveMod(combo)) _remove(resolved, handler);
+}
+
+function _remove(combo, handler) {
   const key = _normalizeCombo(combo);
   if (!_registry.has(key)) return;
 
@@ -255,18 +342,20 @@ function unregister(combo, handler) {
 
 /**
  * Retorna todos os atalhos registrados para o cheatsheet.
- * Apenas o último handler por combo é retornado (o que vence).
+ * Apenas o último handler por combo é retornado (o que vence); o Ctrl que fica
+ * por baixo do Command no Mac não aparece.
  *
- * @returns {Array<{combo: string, description: string, group: string}>}
+ * @returns {Array<{combo: string, parts: string[], description: string, group: string, context: string}>}
  */
 function list() {
   const result = [];
   for (const [combo, handlers] of _registry.entries()) {
     if (handlers.length === 0) continue;
     const last = handlers[handlers.length - 1];
+    if (last.options.alias) continue;
     result.push({
       combo,
-      label: last.options.label || combo,
+      parts: shortcutParts(combo),
       description: last.options.description || combo,
       group: last.options.group || "general",
       context: last.options.context || "global",
@@ -275,4 +364,4 @@ function list() {
   return result;
 }
 
-export default { init, destroy, register, unregister, list };
+export default { init, destroy, register, unregister, list, formatShortcut, shortcutParts };

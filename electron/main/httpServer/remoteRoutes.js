@@ -11,6 +11,7 @@
  * privados daqui. Este arquivo não requer routes.js (sem ciclo).
  */
 const path = require("path");
+const { randomUUID } = require("crypto");
 const fs = require("fs");
 const { Transform } = require("stream");
 const { pipeline } = require("stream/promises");
@@ -32,6 +33,32 @@ const KEY_LITURGY_ACTIVE_DAY = "modules.liturgy.active_day";
 /** Coleção (docStore) onde o histórico do chat é persistido — igual ao renderer. */
 const CHAT_MESSAGES_COLLECTION = "chat.messages";
 
+
+/** Estado do Sorteio devolvido pelo renderer (`http:draw`). */
+function isDrawResponse(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  if (payload.status === "error") return typeof payload.error === "string";
+  if (payload.status !== "ok" || !payload.state || typeof payload.state !== "object") return false;
+  const state = payload.state;
+  if (state.status !== "ok") return false;
+  if (state.mode !== "number" && state.mode !== "names") return false;
+  if (!Array.isArray(state.names) || state.names.length > 10_000) return false;
+  if (!state.names.every((name) => typeof name === "string" && name.length <= 200)) return false;
+  if (!state.range || !Number.isInteger(state.range.min) || !Number.isInteger(state.range.max)) {
+    return false;
+  }
+  if (state.current !== null && typeof state.current !== "string") return false;
+  if (!Array.isArray(state.drawn) || state.drawn.length > 100_000) return false;
+  if (!state.drawn.every((value) => typeof value === "string" && value.length <= 200)) return false;
+  if (!Number.isInteger(state.total) || state.total < 0) return false;
+  if (!Number.isInteger(state.remaining) || state.remaining < 0) return false;
+  return (
+    typeof state.animating === "boolean" &&
+    typeof state.running === "boolean" &&
+    typeof state.canDraw === "boolean" &&
+    typeof state.projecting === "boolean"
+  );
+}
 
 /** Rate limit simples: 1 msg/500ms por device. */
 const _chatRateLimit = new Map();
@@ -150,18 +177,6 @@ async function readJsonCacheOrNull(filePath) {
 
 
 /**
- * Faixas válidas do `album_<id>.json` — a contagem exibida no card.
- *
- * Os detalhes são arquivos de 1–2 KB (≤70 por catálogo), lidos em paralelo;
- * arquivo ausente devolve 0 e o badge simplesmente não aparece.
- */
-async function albumTrackCount(albumId) {
-  const detail = await readJsonCacheOrNull(jsonCache.safeLocalPath(`album_${albumId}`));
-  if (!Array.isArray(detail?.musics)) return 0;
-  return detail.musics.filter((music) => music && Number(Number(music.id_music)) > 0).length;
-}
-
-/**
  * Capa de um álbum: `http(s)` vira URL direta; caminho relativo vira a rota
  * própria `/api/music-library/image` (os clientes absolutizam com host+token).
  */
@@ -180,7 +195,7 @@ function officialAlbumPayload(album, count = 0) {
     id: `album:${Number(album.id_album)}`,
     title: String(album.name || "").slice(0, 1_000),
     subtitle: subtitle ? subtitle.slice(0, 300) : null,
-    // Faixas do `album_<id>.json` — 0 quando o detalhe local não existe
+    // Faixas do catálogo `{lang}_musics` — 0 quando o álbum não tem faixas
     // (mesma régua de `action=songs`: o badge nunca promete o que a lista
     // de faixas não entrega).
     count,
@@ -415,6 +430,30 @@ function register(app, ctx) {
     return readJsonCacheOrNull(filePath);
   }
 
+  /**
+   * Contagem de faixas por álbum a partir do catálogo `{lang}_musics`.
+   *
+   * Uma leitura do catálogo (cacheado, ~1,9 MB) em vez de baixar cada
+   * `album_<id>.json`: dá a contagem de todos os álbuns já na lista. A régua
+   * é a mesma da lista de faixas — só `id_music > 0` e um voto por álbum.
+   */
+  async function albumTrackCounts(lang) {
+    const catalog = await readJsonCacheOrFetch(`${lang}_musics`);
+    const counts = new Map();
+    if (!Array.isArray(catalog)) return counts;
+    for (const music of catalog) {
+      if (!music || Number(Number(music.id_music)) <= 0) continue;
+      const seen = new Set();
+      for (const association of Array.isArray(music.albums) ? music.albums : []) {
+        const albumId = Number(association?.id_album);
+        if (!Number.isFinite(albumId) || albumId <= 0 || seen.has(albumId)) continue;
+        seen.add(albumId);
+        counts.set(albumId, (counts.get(albumId) || 0) + 1);
+      }
+    }
+    return counts;
+  }
+
 
   /**
    * Músicas do acervo pessoal (IDB do renderer), filtradas com o **mesmo**
@@ -645,27 +684,25 @@ function register(app, ctx) {
 
         // Achata categorias → álbuns (dedup por id_album), filtra e ordena como
         // o módulo Álbuns do desktop (ano desc, depois nome).
-        const oficiais = await Promise.all(
-          [
-            ...new Map(
-              categories
-                .flatMap((category) => (Array.isArray(category?.albums) ? category.albums : []))
-                .filter(
-                  (album) =>
-                    album && Number.isFinite(Number(album.id_album)) && isAlbumEnabled(album.id_album, disabled)
-                )
-                .map((album) => [Number(album.id_album), album])
-            ).values(),
-          ]
-            .sort(
-              (a, b) =>
-                albumYear(b) - albumYear(a) || String(a.name || "").localeCompare(String(b.name || ""))
-            )
-            .map(
-              async (album) =>
-                officialAlbumPayload(album, await albumTrackCount(Number(album.id_album)))
-            )
-        );
+        const trackCounts = await albumTrackCounts(lang);
+        const oficiais = [
+          ...new Map(
+            categories
+              .flatMap((category) => (Array.isArray(category?.albums) ? category.albums : []))
+              .filter(
+                (album) =>
+                  album && Number.isFinite(Number(album.id_album)) && isAlbumEnabled(album.id_album, disabled)
+              )
+              .map((album) => [Number(album.id_album), album])
+          ).values(),
+        ]
+          .sort(
+            (a, b) =>
+              albumYear(b) - albumYear(a) || String(a.name || "").localeCompare(String(b.name || ""))
+          )
+          .map((album) =>
+            officialAlbumPayload(album, trackCounts.get(Number(album.id_album)) || 0)
+          );
 
         const colecoes = (docStore.read("custom_collections.collections") || [])
           .filter(
@@ -1212,6 +1249,136 @@ function register(app, ctx) {
 
 
   // ---------------------------------------------------------------
+  // GET/POST /api/draw — Sorteio (números ou nomes)
+  //
+  // GET  devolve o estado atual (modo, nomes, intervalo, sorteados).
+  // POST executa uma ação e devolve o estado resultante. O `draw` responde
+  // imediatamente com `animating: true`; o cliente consulta o estado até a
+  // roda assentar (não seguramos a requisição por até 60 s de efeito).
+  //
+  // Permission: draw (ou root).
+  // ---------------------------------------------------------------
+  async function drawStateViaRenderer(mainWindow, res, body) {
+    const data = await requestRenderer(mainWindow, res, "http:draw", body, {
+      prefix: "draw",
+      timeoutMs: 5_000,
+      maxPayloadBytes: 4_194_304,
+      validatePayload: isDrawResponse,
+    });
+    if (data.status === "error") {
+      if (!res.headersSent && !res.writableEnded) {
+        res.status(400).json({ error: data.error || "falha no sorteio" });
+      }
+      return;
+    }
+    if (!res.headersSent && !res.writableEnded) res.json(data);
+  }
+
+  app.get("/api/draw", async (req, res) => {
+    if (!hasDevicePermission(req, "draw")) {
+      console.log("[httpServer] draw → 403 (device sem a permission draw)");
+      return res.status(403).json({ error: "Device sem permissão de sorteio" });
+    }
+    const mainWindow = getValidMainWindow();
+    if (!mainWindow) return res.status(503).json({ error: "Janela principal não disponível" });
+    try {
+      await drawStateViaRenderer(mainWindow, res, { action: "state" });
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao consultar o sorteio");
+    }
+  });
+
+  app.post("/api/draw", async (req, res) => {
+    if (!hasDevicePermission(req, "draw")) {
+      console.log("[httpServer] draw → 403 (device sem a permission draw)");
+      return res.status(403).json({ error: "Device sem permissão de sorteio" });
+    }
+    const mainWindow = getValidMainWindow();
+    if (!mainWindow) return res.status(503).json({ error: "Janela principal não disponível" });
+
+    const body = req.body || {};
+    const action = body.action;
+    const actions = [
+      "state",
+      "draw",
+      "reset",
+      "set-mode",
+      "set-range",
+      "add-name",
+      "remove-name",
+      "rename-name",
+      "replace-names",
+      "set-running",
+      "set-projection",
+    ];
+    if (!actions.includes(action)) {
+      return res.status(400).json({ error: "action inválida", valid: actions });
+    }
+
+    const payload = { action };
+    if (action === "set-mode") {
+      if (body.mode !== "number" && body.mode !== "names") {
+        return res.status(400).json({ error: "mode deve ser number ou names" });
+      }
+      payload.mode = body.mode;
+    } else if (action === "set-range") {
+      if (
+        !Number.isSafeInteger(body.min) ||
+        !Number.isSafeInteger(body.max) ||
+        body.min < -2_147_483_648 ||
+        body.min > 2_147_483_647 ||
+        body.max < -2_147_483_648 ||
+        body.max > 2_147_483_647
+      ) {
+        return res.status(400).json({ error: "min e max devem ser inteiros de 32 bits" });
+      }
+      if (Math.abs(body.max - body.min) > 100_000) {
+        return res.status(400).json({ error: "intervalo máximo de 100000 números" });
+      }
+      payload.min = body.min;
+      payload.max = body.max;
+    } else if (action === "add-name" || action === "remove-name" || action === "rename-name") {
+      if (action !== "remove-name" && typeof body.name !== "string") {
+        return res.status(400).json({ error: "name é obrigatório" });
+      }
+      if (action === "remove-name" && typeof body.name !== "string" && !Number.isInteger(body.index)) {
+        return res.status(400).json({ error: "name ou index é obrigatório" });
+      }
+      if (action === "rename-name" && !Number.isInteger(body.index)) {
+        return res.status(400).json({ error: "index é obrigatório" });
+      }
+      if (body.name !== undefined) payload.name = body.name;
+      if (body.index !== undefined) payload.index = body.index;
+    } else if (action === "replace-names") {
+      if (
+        !Array.isArray(body.names) ||
+        body.names.length > 10_000 ||
+        !body.names.every((name) => typeof name === "string")
+      ) {
+        return res.status(400).json({ error: "names deve ser uma lista de textos (máx. 10000)" });
+      }
+      payload.names = body.names;
+    } else if (action === "set-running") {
+      if (typeof body.running !== "boolean") {
+        return res.status(400).json({ error: "running deve ser boolean" });
+      }
+      payload.running = body.running;
+    } else if (action === "set-projection") {
+      if (typeof body.active !== "boolean") {
+        return res.status(400).json({ error: "active deve ser boolean" });
+      }
+      payload.active = body.active;
+    }
+
+    try {
+      await drawStateViaRenderer(mainWindow, res, payload);
+    } catch (error) {
+      sendRendererError(res, error, "Timeout ao atualizar o sorteio");
+    }
+  });
+
+
+  // ---------------------------------------------------------------
   // POST /api/volume — volume dos players (projeção + som de fundo)
   //   { action: up|down, step? }  → passo (padrão 1%, clamp 0..100)
   //   { action: set, value }      → nível absoluto (0..100) — iOS espelha o iPhone
@@ -1406,7 +1573,7 @@ function register(app, ctx) {
   // POST action=project|canva-project|playlist — projeta um item/design ou
   //      controla a playlist do desktop
   // POST /api/media-library/upload — stream de bytes do celular, gravado em
-  //      <dados>/files/library/media/ e registrado na biblioteca pelo renderer
+  //      <perfil>/library/media/ e registrado na biblioteca pelo renderer
   // Permission: media_library (ou root)
   // ---------------------------------------------------------------
 
@@ -1442,7 +1609,6 @@ function register(app, ctx) {
     "pdf",
   ];
   /** Subpasta (relativa a <dados>/files) onde os uploads do remoto moram. */
-  const MEDIA_LIBRARY_UPLOAD_DIR = "library/media";
 
   /** Extensão aceita de um nome de arquivo (inclui o ponto: ".jpg"). */
   function mediaLibraryExt(fileName) {
@@ -1815,7 +1981,7 @@ function register(app, ctx) {
   // consome stream de outro type, então o pipe chega inteiro aqui).
   // Headers: X-File-Name (obrigatório, URL-encoded), X-Category-Id (opcional).
   //
-  // O main grava em <dados>/files/library/media/<id>.<ext> (tmp + rename) e
+  // O main grava em <perfil>/library/media/<id>.<ext> (tmp + rename) e
   // avisa o renderer para registrar na biblioteca — aí o item já projeta.
   // ---------------------------------------------------------------
   app.post("/api/media-library/upload", async (req, res) => {
@@ -1844,8 +2010,8 @@ function register(app, ctx) {
     }
 
     const dest = joinDentroDe(
-      paths.filesDir(),
-      path.posix.join(MEDIA_LIBRARY_UPLOAD_DIR, `upl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${ext}`)
+      paths.privateMediaDir(),
+      `upl_${randomUUID()}.${ext}`
     );
     if (!dest) {
       return res.status(500).json({ error: "Destino inválido no diretório de mídia" });
@@ -1872,7 +2038,7 @@ function register(app, ctx) {
     let stream;
     try {
       await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-      stream = fs.createWriteStream(tmp);
+      stream = fs.createWriteStream(tmp, { flags: "wx", mode: 0o600 });
       await pipeline(req, counter, stream);
     } catch (error) {
       if (stream && !stream.destroyed) stream.destroy();

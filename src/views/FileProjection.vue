@@ -276,7 +276,7 @@ async function loadPdf(
     pdfDoc = null;
     if (previousDoc) {
       try {
-        await (previousDoc as unknown as { destroy: () => Promise<void> }).destroy();
+        await previousDoc.loadingTask.destroy();
       } catch {
         /* ignore */
       }
@@ -294,7 +294,7 @@ async function loadPdf(
       expectedPlaybackId !== fileProjection.playback_id ||
       !fileProjection.active
     ) {
-      await (doc as unknown as { destroy: () => Promise<void> }).destroy();
+      await doc.loadingTask.destroy();
       return;
     }
     pdfDoc = doc;
@@ -493,6 +493,7 @@ function onVideoReady(event: Event): void {
     network_state: el.networkState,
   });
   Telemetry.track("file_projection_video_ready", {
+    readiness: event.type,
     playback_id: fileProjection.playback_id,
     duration: Number.isFinite(el.duration) ? el.duration : 0,
     width: el.videoWidth,
@@ -542,7 +543,7 @@ function onVideoPlaying(): void {
 
 function onVideoBuffering(event: Event): void {
   const el = event.currentTarget as HTMLVideoElement | null;
-  console.warn("[FileProjection] vídeo aguardando dados:", {
+  console.debug("[FileProjection] vídeo aguardando dados:", {
     playback_id: fileProjection.playback_id,
     trigger: event.type,
     current_time: el && Number.isFinite(el.currentTime) ? Number(el.currentTime.toFixed(3)) : 0,
@@ -684,7 +685,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
   }
 });
 
-useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
+useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
   activationGate.retire();
   ++activationGeneration;
   ++pdfLoadGeneration;
@@ -692,7 +693,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
   _destroyYoutube();
   if (pdfDoc) {
     try {
-      await (pdfDoc as any).destroy();
+      void pdfDoc.loadingTask.destroy().catch(() => {});
     } catch {
       /* ignore */
     }
@@ -1083,14 +1084,16 @@ onMounted(async () => {
   document.body.style.background = wpColor.value;
 });
 
-onBeforeUnmount(async () => {
+onBeforeUnmount(() => {
+  ++pdfLoadGeneration;
+  fileProjection.active = false;
   pdfRenderQueue.invalidate();
   videoFrameConfirmation.dispose();
   videoFirstFrame.dispose();
   if (wpBlobUrl) URL.revokeObjectURL(wpBlobUrl);
   if (pdfDoc) {
     try {
-      await (pdfDoc as any).destroy();
+      void pdfDoc.loadingTask.destroy().catch(() => {});
     } catch {
       /* ignore */
     }

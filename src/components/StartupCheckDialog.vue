@@ -9,7 +9,7 @@
     <!-- Verificando -->
     <div v-if="view === 'scanning'" class="sc-scanning">
       <LjSpinner :size="48" class="sc-scanning__spinner" />
-      <!-- O bundle só aparece depois de uma ação explícita da pessoa. -->
+      <!-- Acompanha também o download automático iniciado pela Shell. -->
       <template v-if="sync.bundleInstalling.value">
         <span class="sc-scanning__label">{{ $t("startup_check.bundle_downloading") }}</span>
         <LjProgress
@@ -48,7 +48,7 @@
         <LjChip size="sm" :variant="ftpChipVariant">{{ ftpLabel }}</LjChip>
       </div>
 
-      <!-- Baixar é opcional: o app toca direto do servidor -->
+      <!-- Os áudios podem ser reproduzidos direto do servidor. -->
       <LjAlert
         v-if="sync.ftpOk.value"
         variant="info"
@@ -69,13 +69,6 @@
         variant="danger"
         :icon="ICONS.UI.INFORMATION_OUTLINE"
         :text="$t('startup_check.bundle_error')"
-      />
-
-      <LjAlert
-        v-else-if="!catalogAvailable"
-        variant="warning"
-        :icon="ICONS.UI.INFORMATION_OUTLINE"
-        :text="$t('startup_check.catalog_not_installed')"
       />
 
       <LjAlert
@@ -364,11 +357,7 @@
           :disabled="sync.bundleInstalling.value"
           @click="prepareCatalog"
         >
-          {{
-            catalogAvailable
-              ? $t("startup_check.scan_catalog")
-              : $t("startup_check.install_catalog")
-          }}
+          {{ catalogAvailable ? $t("startup_check.scan_catalog") : $t("alert.retry") }}
         </LjButton>
       </template>
 
@@ -592,6 +581,9 @@ async function startScan({ detailed = false }: { detailed?: boolean } = {}): Pro
   view.value = "scanning";
   catalogActionFailed.value = false;
   try {
+    // Compartilha a instalação com a Shell, inclusive se ela já começou.
+    // A leitura detalhada continua opcional e usa somente o catálogo local.
+    if (!detailed) await sync.ensureCatalogBundle();
     const result = await sync.runScan(lang, { detailed });
     const total = result.categories.reduce(
       (sum: number, cat: any) => sum + (cat.albums?.length || 0),
@@ -609,6 +601,7 @@ async function startScan({ detailed = false }: { detailed?: boolean } = {}): Pro
       albumsTotal: total,
     };
     catalogAvailable.value = result.catalogAvailable;
+    catalogActionFailed.value = !result.catalogAvailable;
     detailedScan.value = result.detailed;
     selectedAlbums.value = [...result.cachedAlbums];
     selectedHymnal.value = result.hymnalCached;

@@ -77,7 +77,6 @@ const ROUTE_BY_MODULE = {
   // Genéricos — usam ModuleProjection.vue lendo ?module=<id>
   message_board: "/projection/module?module=message_board",
   draw: "/projection/module?module=draw",
-  name_draw: "/projection/module?module=name_draw",
   counter: "/projection/module?module=counter",
   clock: "/projection/module?module=clock",
   stopwatch: "/projection/module?module=stopwatch",

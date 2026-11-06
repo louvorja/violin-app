@@ -9,6 +9,13 @@
   >
     <!-- Slide atual (alClient): título e contador em fluxo, letra no resto -->
     <div class="return-current" :style="topPanelStyle">
+      <ModuleBackgroundMedia
+        v-if="customBackground && cfg.return_bg_top_is_video && cfg.return_bg_top_image"
+        :src="cfg.return_bg_top_image"
+        :video="true"
+        class="return-panel-bg"
+        :style="returnVideoStyle(cfg.return_bg_top_position)"
+      />
       <!-- Progresso total da música (barra no topo) -->
       <div v-if="cfg.show_progress_bar" class="return-track-progress-bar">
         <div
@@ -46,6 +53,13 @@
 
     <!-- Painel fixo no rodapé com o próximo slide (alBottom Delphi) -->
     <div class="return-bottom" :style="bottomPanelStyle">
+      <ModuleBackgroundMedia
+        v-if="customBackground && cfg.return_bg_bottom_is_video && cfg.return_bg_bottom_image"
+        :src="cfg.return_bg_bottom_image"
+        :video="true"
+        class="return-panel-bg"
+        :style="returnVideoStyle(cfg.return_bg_bottom_position)"
+      />
       <div class="return-bottom-grid">
         <span class="return-next-label">{{ t("shell.proj_return_next") }}</span>
         <div ref="nextBox" class="return-next-text">
@@ -69,6 +83,7 @@ import { useProjectionState } from "@/composables/useProjectionState";
 import { useSlideStyle } from "@/composables/useSlideStyle";
 import { useFitText } from "@/composables/useFitText";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import ReturnOverride from "@/components/ReturnOverride.vue";
 
@@ -99,14 +114,26 @@ const returnRootBackground = computed(() =>
 // A imagem de fundo só existe quando o operador a escolheu em "Fundo da tela de
 // retorno personalizado". A capa do slide não entra: atrás da letra ela só
 // tirava contraste de quem lê de longe.
-const topPanelStyle = computed(() =>
-  customBackground.value ? slideStyle.returnTopBgStyle() : { background: "#1a201a" }
-);
+function returnVideoStyle(position) {
+  return {
+    objectFit: position === "contain" ? "contain" : position === "stretch" ? "fill" : "cover",
+  };
+}
 
-const bottomPanelStyle = computed(() => ({
-  ...(customBackground.value ? slideStyle.returnBottomBgStyle() : { background: "#1d251d" }),
-  height: `${cfg.value.return_height_bottom}vh`,
-}));
+const topPanelStyle = computed(() => {
+  if (!customBackground.value) return { background: "#1a201a" };
+  const style = { ...slideStyle.returnTopBgStyle() };
+  if (cfg.value.return_bg_top_is_video) delete style.backgroundImage;
+  return style;
+});
+
+const bottomPanelStyle = computed(() => {
+  const style = customBackground.value
+    ? { ...slideStyle.returnBottomBgStyle() }
+    : { background: "#1d251d" };
+  if (cfg.value.return_bg_bottom_is_video) delete style.backgroundImage;
+  return { ...style, height: `${cfg.value.return_height_bottom}vh` };
+});
 
 const topHtml = computed(() => slideMainText(slide.value));
 const nextHtml = computed(() => slideMainText(nextSlide.value) || "—");
@@ -207,6 +234,14 @@ onBeforeUnmount(() => {
 }
 
 /* Painel atual (alClient) */
+.return-panel-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 .return-current {
   flex: 1 1 0;
   min-height: 0;

@@ -39,6 +39,19 @@ describe("StaleVersion", () => {
     window.removeEventListener("lj:pwa-recover", recover);
   });
 
+  it("só o clique pede recarga mesmo sem uma versão nova", () => {
+    const reload = vi.fn();
+    window.addEventListener("lj:pwa-reload", reload);
+    try {
+      notifyStaleVersion();
+      expect(reload).not.toHaveBeenCalled();
+      show.mock.calls[0][0].action();
+      expect(reload).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener("lj:pwa-reload", reload);
+    }
+  });
+
   it("o evento do Vite avisa falhas de importação sem inferir o status HTTP", () => {
     watchStaleVersion();
     const fire = (payload: unknown) =>

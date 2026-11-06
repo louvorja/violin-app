@@ -48,7 +48,6 @@ export const FEATURE_ROLE = {
   site_loader: ROLES.PROJECTION,
   counter: ROLES.PROJECTION,
   draw: ROLES.PROJECTION,
-  name_draw: ROLES.PROJECTION,
   message_board: ROLES.PROJECTION,
   stopwatch: ROLES.PROJECTION,
   timer: ROLES.PROJECTION,

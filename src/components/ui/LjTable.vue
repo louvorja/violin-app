@@ -72,6 +72,11 @@ withDefaults(
   font-size: var(--lj-text-base);
 }
 
+.lj-table:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
+}
+
 .lj-table__table {
   width: 100%;
   /* `separate` e não `collapse`: com as bordas colapsadas o traço do cabeçalho

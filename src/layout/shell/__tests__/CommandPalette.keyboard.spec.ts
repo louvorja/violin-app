@@ -5,6 +5,7 @@ import { nextTick, ref } from "vue";
 const quickPlay = vi.fn(() => true);
 const castelo = { id_music: 73, name: "Castelo Forte", has_instrumental_music: true };
 const runMusic = vi.fn();
+const runEterno = vi.fn();
 const runModule = vi.fn();
 
 const commands = [
@@ -15,6 +16,14 @@ const commands = [
     tracks: [73],
     music: castelo,
     run: runMusic,
+  },
+  {
+    id: "music:74",
+    title: "Castelo Eterno",
+    category: "music",
+    tracks: [74],
+    music: { id_music: 74, name: "Castelo Eterno", has_instrumental_music: false },
+    run: runEterno,
   },
   { id: "module:bible", title: "Bíblia", category: "module", run: runModule },
 ];
@@ -66,6 +75,10 @@ async function digitar(texto: string) {
   await nextTick();
 }
 
+function tecla(key: string) {
+  campo().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+}
+
 function enter(shiftKey = false) {
   campo().dispatchEvent(
     new KeyboardEvent("keydown", { key: "Enter", shiftKey, bubbles: true, cancelable: true })
@@ -80,6 +93,7 @@ function fechar() {
 beforeEach(() => {
   quickPlay.mockClear();
   runMusic.mockClear();
+  runEterno.mockClear();
   runModule.mockClear();
 });
 
@@ -93,6 +107,17 @@ describe("CommandPalette — busca rápida pelo teclado", () => {
     expect(runMusic).toHaveBeenCalledOnce();
     expect(quickPlay).not.toHaveBeenCalled();
     expect(wrapper!.emitted("update:modelValue")?.at(-1)).toEqual([false]);
+  });
+
+  it("↓ e Enter executam o resultado escolhido", async () => {
+    await abrir();
+    await digitar("castelo");
+    tecla("ArrowDown");
+    await nextTick();
+    expect(document.querySelector(".cmd-item--active")?.textContent).toContain("Castelo Eterno");
+    enter();
+    expect(runEterno).toHaveBeenCalledOnce();
+    expect(runMusic).not.toHaveBeenCalled();
   });
 
   it("Shift+Enter toca o playback da música", async () => {

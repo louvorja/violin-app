@@ -3,7 +3,12 @@
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'counter'" :manifest="manifest" />
       <div ref="container" class="counter-stage" :style="rootStyle">
-        <img v-if="bgImage" :src="bgImage" class="counter-bg-img" :style="imageStyle" alt="" />
+        <ModuleBackgroundMedia
+          v-if="bgImage"
+          :src="bgImage"
+          class="counter-bg-img"
+          :style="imageStyle"
+        />
         <div class="counter-display" :style="textStyle">{{ count }}</div>
       </div>
     </div>
@@ -14,6 +19,7 @@
 import { ref, watch } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";

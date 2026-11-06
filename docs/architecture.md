@@ -352,6 +352,16 @@ há projeção visível. O `windowFactory` desliga esse throttling somente enqua
 uma janela auxiliar de projeção está visível, preservando relógios e timers no
 telão sem manter CPU alta quando o operador minimiza o app.
 
+No Windows, a janela principal abre maximizada no primeiro uso e depois restaura
+o modo, o tamanho e a posição escolhidos em `options.windows.main`. A geometria
+é ajustada à área útil dos monitores disponíveis, e minimizar ou usar tela cheia
+temporariamente não altera essa preferência. A maximização espera a exibição
+da interface para não antecipar o fechamento do splash.
+
+A reconciliação dos monitores mantém a projeção local quando nenhum monitor foi
+atribuído ou a escolha é "Mesma janela". Um monitor configurado que ficou ausente
+ou ambíguo continua ocultando sua projeção até que o destino volte a estar disponível.
+
 ---
 
 ## 🔄 Gerenciamento de Estado
@@ -562,6 +572,8 @@ SHA-256. O gerador da API valida referências e todos os capítulos esperados a
 partir das versões e livros antes de publicar. O Worker do app verifica CRC,
 manifesto, nomes, arquivos faltantes/extras, tipo do pacote e SHA-256 antes de
 entregar cada JSON. O manifesto não é um dataset e nunca vai para o IndexedDB.
+`Sha256.ts` usa WebCrypto quando disponível e SHA-256 em JavaScript nos demais
+ambientes, preservando a validação dos pacotes e os hashes da biblioteca de mídia.
 
 `BundleInstaller.install({ catalogOnly: true })` baixa o catálogo com `no-store`,
 usa fallback da API quando necessário e publica os datasets e o marcador na mesma
@@ -579,8 +591,12 @@ O marcador bíblico usa revisão 2 e só é gravado após todos os capítulos.
 
 - PWA instalado: pode garantir o catálogo após oito segundos, online, sem economia
   de dados e fora de redes 2G. Aba comum não faz esse download automático.
-- Desktop: Verificação Inicial e Sincronizar garantem o catálogo antes de leituras
-  em massa, com progresso na própria tela. Esse download não traz capítulos.
+- Desktop: baixa o catálogo automaticamente assim que o armazenamento estiver
+  pronto, sem confirmação, mesmo quando a Verificação Inicial está oculta. Se
+  estiver offline, tenta ao reconectar. O diálogo acompanha a mesma instalação
+  e oferece nova tentativa em caso de falha; a varredura detalhada é opcional.
+  Sincronizar também garante o catálogo antes de leituras em massa. O catálogo
+  já instalado é reaproveitado, e esse download não traz áudios nem capítulos.
 - Aplicar atualização do catálogo usa o pacote menor. Reinstalar/restaurar o banco
   explicitamente usa o pacote completo.
 - Catálogos instalados são conferidos no boot/retomada/reconexão, com intervalo
@@ -732,7 +748,31 @@ No Windows, os dois `Program Files` e as pastas expostas por
 | **In-window**         | `src/helpers/Hotkeys.js`     | Apenas com janela do app em foco |
 | **Global (OS-level)** | `electron/main/shortcuts.js` | System-wide                      |
 
-Atalhos in-window registrados em `src/main.js` via `Hotkeys.register()`.
+Atalhos in-window registrados em `src/bootstrap/main-shell.js` via `Hotkeys.register()`.
+
+### Command no Mac
+
+As combinações com modificador moram em `src/constants/HotkeyCombos.ts` (`HOTKEY.*`),
+e o registro, as dicas (`LjTooltip :shortcut`, `RibbonButton.shortcut`) e a lista do F1
+leem dali. `Mod` é o Command no Mac e o Ctrl nos outros sistemas; o rótulo sai de
+`formatShortcut()` (`⇧⌘N` no Mac, `Ctrl+Shift+N` fora dele) — não escreva "Ctrl+X" em
+texto traduzido.
+
+`Ctrl` explícito fica só onde o Mac já usa o Command: ⌃M (⌘M minimiza), ⌃Tab (⌘Tab troca
+de app), ⌃Espaço (⌘Espaço é o Spotlight) e ⌃⌥D (⌥⌘D é o Dock). No Mac o Ctrl continua
+valendo por baixo do Command, sem aparecer na lista: o controle remoto manda Ctrl seja qual
+for o sistema. No navegador do Mac, ⌘N, ⇧⌘N e ⌘W ficam com o Chrome, então ali a interface
+mostra o Ctrl.
+
+⌘W / Ctrl+W fecha a aba à vista, como no Chrome; sem aba, a janela — pelo mesmo
+`window:close` do botão de fechar, que com projeção no ar só tira a janela da frente. No
+Mac o menu nativo (Fechar janela) pegaria o ⌘W antes da página: o `before-input-event` da
+janela principal (`electron/main.cjs`) cancela a tecla e a entrega ao Hotkeys pelo mesmo
+evento sintético do `/api/keyboard`.
+
+Tecla que só age com mídia aberta passa por `_ifMedia` com `preventDefault: false`: é ele
+que cancela quando age. Com o cancelamento automático do Hotkeys, PageUp não rolava lista
+nenhuma e Ctrl+← não pulava palavra em campo nenhum, com ou sem música.
 
 ### Cartão da biblioteca: projetar ou enfileirar
 
@@ -1275,9 +1315,9 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   Tocar um vídeo que só esperava na fila de pré-download o tira da fila (`runNow`, sem ocupar
   raia: nada segura o play, nem o fim de outro download); pedir outro vídeo cancela o que a
   projeção esperava — menos o download que o operador pediu de propósito (botão, link novo),
-  que só deixa de ser esperado; cancelar mata a árvore de processos (yt-dlp → python → ffmpeg). A troca/renovação das ferramentas só acontece com um único
-  download em curso (no Windows o `.exe` em uso não é sobrescrito). A barra é única e
-  monótona: na primeira vez as ferramentas ocupam os primeiros 25%.
+  que só deixa de ser esperado; cancelar mata a árvore de processos (yt-dlp → python → ffmpeg). O reparo
+  das ferramentas (apagar e reinstalar) só acontece com um único download em curso. A barra é
+  única e monótona: na primeira vez as ferramentas ocupam os primeiros 25%.
 - **Cancelar e pedir de novo** funciona na hora: um job já abortado, mas ainda saindo, não é
   reaproveitado por quem pede em seguida (`manager.ensure` espera o antigo largar a pasta de
   parciais e recomeça), e no renderer `_dropPendingDownload` também descarta o preparo
@@ -1285,9 +1325,16 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
 - **Ferramentas (yt-dlp + ffmpeg)** são instaladas uma vez, por todos: pedidos simultâneos
   compartilham a instalação e todos recebem o andamento (quem chega no meio parte do estado
   atual). Cancelar só faz quem cancelou parar de esperar — a instalação segue, porque o
-  operador que trocou de vídeo no primeiro uso a aproveita em vez de recomeçar do zero. Abrir
-  "Vídeos On-line" ou "Meus Vídeos Online" já dispara a instalação em silêncio
-  (`onlineVideo:prepare`, uma vez por sessão).
+  operador que trocou de vídeo no primeiro uso a aproveita em vez de recomeçar do zero. O
+  main as instala sozinho 3 min depois do boot (`maintainTools` em `index.js`: opção "Baixar"
+  ligada, sem projeção aberta nem download em curso), e abrir "Vídeos On-line" ou "Meus
+  Vídeos Online" dispara a mesma instalação (`onlineVideo:prepare`).
+- **yt-dlp em pasta, não em arquivo único**: o arquivo único (PyInstaller onefile) se
+  descompacta numa pasta temporária a cada execução — 3,5 s medidos no macOS só para o
+  `--version`, contra 0,35 s da versão em pasta; a resolução de um vídeo caiu de 6,6 s para
+  2,95 s. O zip é extraído em fluxo (`unzip.js`, ~0,5 s) para `bin/ytdlp/<sha256[0:16]>/`, e o
+  `tools.json` aponta a pasta atual: trocar de versão não mexe na que está rodando (no Windows o
+  `.exe` em uso nem seria sobrescrito), e as antigas saem na abertura seguinte (`cleanup`).
 - **Progresso** aparece em "Processos em segundo plano" (`useBackgroundTasks`, com botão de
   cancelar). Vídeo já em cache não pisca tarefa nenhuma.
 - **Vídeos baixados** em `<dados>/Videos/` (por padrão, `Documents/LouvorJA Violin/Videos`).
@@ -1309,7 +1356,9 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   já começa o download e guarda o vídeo, salvo com o download desligado nas opções.
 - **A cópia única** (`onlineVideo:stream`, `progressive.js`): o yt-dlp pede só os **links** das
   duas trilhas (`-J`, sem baixar) e o main as baixa **uma vez**, em pedaços de 2 MB, para
-  arquivos do tamanho final em `Videos/.stream/<id>/` que vão sendo preenchidos.
+  arquivos do tamanho final em `Videos/.stream/<id>/` que vão sendo preenchidos. Os links dos
+  clientes de TV só valem alguns segundos depois de emitidos (`available_at` no JSON, ~4 s):
+  pedir antes dá 403, então `resolveStreams` só os devolve nessa hora.
   Projeção, retorno, operador e o player do app leem desses arquivos por `Range`, em
   `louvorja://onlinestream/<id>/video|audio` — o handler espera o trecho que ainda não chegou
   e, num salto, o baixador pula para lá. Começa em ~7 s. Ao terminar, o ffmpeg junta as trilhas
@@ -1338,12 +1387,16 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   ou de país → só avisa o operador e **nada vai para o telão**; cancelamento → silencioso;
   qualquer outra (sem GitHub, ferramenta quebrada, `bot`, disco cheio, transmissão ao vivo) →
   aviso e cai no player do YouTube (`openEmbeddedYouTube`).
-- **yt-dlp desatualizado** (o YouTube muda o player a cada poucas semanas): falha que uma
-  versão nova resolve (`unknown`, `forbidden`, `format`, `bot`) renova o yt-dlp e repete uma
-  vez, no máximo uma renovação por hora.
+- **yt-dlp desatualizado** (o YouTube muda o player a cada poucas semanas): o canal é o
+  nightly, que o próprio yt-dlp recomenda e onde as correções saem primeiro (o estável ficou
+  dois meses parado em 2026). Falha que uma versão nova resolve (`unknown`, `forbidden`,
+  `format`, `bot`) renova e repete uma vez, no máximo uma renovação por hora; sem release
+  nova, a renovação custa só o `SHA2-256SUMS` (~1,5 KB). Além disso, `checkForUpdate` olha uma
+  vez por dia, para quem usou vídeo on-line no último mês, e troca a versão que já tem uma
+  semana; o arquivo único de versões anteriores do app migra para a pasta na primeira checagem.
 - **Web/PWA** não baixa: continua só com o player do YouTube.
 
-Arquivos: `electron/main/onlineVideo/{ids,store,runner,rangeSet,progressive,tools,manager,index}.js`,
+Arquivos: `electron/main/onlineVideo/{ids,store,runner,rangeSet,progressive,tools,unzip,manager,index}.js`,
 `src/helpers/OnlineVideo.ts`, `src/composables/useMedia.ts` (`openYouTube`),
 `src/composables/useOnlineVideoDownloads.ts` e os componentes
 `src/components/OnlineVideoDownload{,Badge,sBar}.vue`.

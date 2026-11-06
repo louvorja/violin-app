@@ -64,6 +64,35 @@ const data = () => $appdata.get(KEYS.MODULES.MEDIA.DATA) as Record<string, unkno
 /** Início de cada slide na faixa que o player sincroniza. */
 const times = () => [0, 1, 2].map((i) => slides.timeForPosition(i, 0, 999));
 
+async function pendingModeSwitch(source: "custom" | "catalog") {
+  const load = vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  const { default: userdata } = await import("@/helpers/UserData");
+  const audio = (await import("@/composables/useAudioPlayback")).useAudioPlayback();
+  userdata.set(KEYS.MODULES.MEDIA.LAZY_LOAD, true);
+  $appdata.set(KEYS.SHELL.IS_ONLINE, true);
+  if (source === "custom") await media.openCustomSong(song(), MusicActionEnum.NO_AUDIO);
+  else {
+    const { default: database } = await import("@/helpers/Database");
+    const { default: path } = await import("@/helpers/Path");
+    vi.spyOn(database, "get").mockResolvedValue({
+      id_music: 42,
+      name: "Acervo",
+      duration: "00:03:00",
+      lyric: [],
+      url_music: "/test.mp3",
+    });
+    vi.spyOn(path, "file").mockReturnValue("blob:catalog");
+    await media.open({ id_music: 42, mode: MusicActionEnum.NO_AUDIO });
+  }
+  const prepare = vi.spyOn(audio, "prepare");
+  vi.useFakeTimers();
+  media.switchMode(MusicActionEnum.AUDIO);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(prepare).toHaveBeenCalledOnce();
+  return { audio, element: load.mock.contexts.at(-1) as HTMLMediaElement };
+}
+
 beforeEach(async () => {
   vi.resetModules();
   setActivePinia(createPinia());
@@ -77,6 +106,8 @@ beforeEach(async () => {
 
 afterEach(() => {
   media.close(true);
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -161,6 +192,59 @@ describe("abrir música personalizada", () => {
     expect(await media.openCustomSong(song(), MusicActionEnum.INSTRUMENTAL)).toBe(false);
     expect(h.warning).toHaveBeenCalledOnce();
     expect(config().audio).toBe("");
+  });
+});
+
+describe.each(["custom", "catalog"] as const)("troca de modo pendente (%s)", (source) => {
+  it.each(["fechar", "outra música", "sem áudio"])(
+    "um timeout antigo não reabre a música depois de %s",
+    async (nextAction) => {
+      await pendingModeSwitch(source);
+      if (nextAction === "fechar") media.close(true);
+      else if (nextAction === "outra música")
+        await media.openCustomSong(
+          song({ id: "song-b", nome: "Outra música" }),
+          MusicActionEnum.NO_AUDIO
+        );
+      else media.switchMode(MusicActionEnum.NO_AUDIO);
+      const playback = media.getActivePlaybackId();
+      const title = slides.title.value;
+      const reopen = vi.spyOn(media, "openCustomSong");
+      const reopenCatalog = vi.spyOn(media, "open");
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(reopen).not.toHaveBeenCalled();
+      expect(reopenCatalog).not.toHaveBeenCalled();
+      expect(media.getActivePlaybackId()).toBe(playback);
+      expect(slides.title.value).toBe(title);
+      expect(config().audio).toBe("");
+    }
+  );
+
+  it("descarta a faixa que fica pronta depois de escolher sem áudio", async () => {
+    const { audio, element } = await pendingModeSwitch(source);
+    const takeover = vi.spyOn(audio, "takeOver").mockResolvedValue();
+    const release = vi.spyOn(audio, "release");
+    media.switchMode(MusicActionEnum.NO_AUDIO);
+    const playback = media.getActivePlaybackId();
+
+    element.dispatchEvent(new Event("canplay"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(takeover).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledWith(element);
+    expect(media.getActivePlaybackId()).toBe(playback);
+    expect(config()).toMatchObject({ mode: "no_audio", audio: "" });
+  });
+
+  it("mantém a recuperação por reabertura quando o timeout ainda é da tentativa atual", async () => {
+    await pendingModeSwitch(source);
+    const reopen =
+      source === "custom" ? vi.spyOn(media, "openCustomSong") : vi.spyOn(media, "open");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(reopen).toHaveBeenCalledOnce();
+    expect(config().mode).toBe("audio");
   });
 });
 

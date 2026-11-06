@@ -5,8 +5,7 @@
  * apenas tokens leves (`lib://audio/<hash>.mp3`); bytes vivem fora.
  *
  * Storage:
- *   - Web/PWA: IndexedDB (Blobs) via $idb (banco unificado `louvorja`)
- *   - Electron (futuro): `userData/audio_library/` via window.louvorjaApi
+ *   - Web/PWA e Electron: IndexedDB (Blobs) via $idb (banco unificado).
  *
  * Tokens suportados em resolveAudio():
  *   - lib://audio/<hash>.<ext>   → biblioteca persistente
@@ -16,6 +15,7 @@
  * @category helper-puro — Sem APIs Vue; sem acesso ao store.
  */
 import $idb from "@/helpers/IndexedDB";
+import { sha256Hex } from "@/helpers/Sha256";
 import { DB_TABLE } from "@/constants/DbTables";
 
 const STORE_AUDIO = DB_TABLE.AUDIO_LIBRARY;
@@ -41,12 +41,15 @@ interface ImageRecord {
   addedAt: string;
 }
 
-async function sha256(blob: Blob): Promise<string> {
-  const buf = await blob.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+async function readImport(file: File | Blob): Promise<{ blob: Blob; hash: string }> {
+  const source = file instanceof Blob ? file : new Blob([file as ArrayBuffer]);
+  const bytes = await source.arrayBuffer();
+  // File pode continuar ligado ao arquivo no disco. Depois de ler para o hash,
+  // guarda os mesmos bytes, mesmo que a origem mude antes do commit no IndexedDB.
+  return {
+    blob: new Blob([bytes], { type: source.type }),
+    hash: await sha256Hex(new Uint8Array(bytes)),
+  };
 }
 
 function extOf(name: string, fallback = "mp3"): string {
@@ -62,13 +65,19 @@ function hashFromToken(token: string): string {
   return token.replace(/^[a-z]+:\/\/(audio|image)\//, "").replace(/\.[^.]+$/, "");
 }
 
+/** Backups antigos em JSON podiam restaurar o Blob como um objeto vazio. */
+function storedBlob(record: unknown): Blob | null {
+  if (!record || typeof record !== "object") return null;
+  const blob = (record as { blob?: unknown }).blob;
+  return blob instanceof Blob ? blob : null;
+}
+
 export async function importAudio(file: File | Blob, name?: string): Promise<string> {
-  const blob = file instanceof Blob ? file : new Blob([file as ArrayBuffer]);
-  const hash = await sha256(blob);
+  const { blob, hash } = await readImport(file);
   const fileName = name || (file as File).name || "audio.mp3";
   const ext = extOf(fileName);
   const existing = await $idb.get<AudioRecord>(STORE_AUDIO, hash);
-  if (!existing) {
+  if (!storedBlob(existing)) {
     const rec: AudioRecord = {
       id: hash,
       hash,
@@ -84,12 +93,11 @@ export async function importAudio(file: File | Blob, name?: string): Promise<str
 }
 
 export async function importImage(file: File | Blob, name?: string): Promise<string> {
-  const blob = file instanceof Blob ? file : new Blob([file as ArrayBuffer]);
-  const hash = await sha256(blob);
+  const { blob, hash } = await readImport(file);
   const fileName = name || (file as File).name || "image.png";
   const ext = extOf(fileName, "png");
   const existing = await $idb.get<ImageRecord>(STORE_IMAGES, hash);
-  if (!existing) {
+  if (!storedBlob(existing)) {
     const rec: ImageRecord = {
       id: hash,
       hash,
@@ -114,8 +122,9 @@ export async function resolveAudio(token: string): Promise<string | null> {
   if (token.startsWith("lib://audio/")) {
     const hash = hashFromToken(token);
     const rec = await $idb.get<AudioRecord>(STORE_AUDIO, hash);
-    if (!rec) return null;
-    const url = URL.createObjectURL(rec.blob);
+    const blob = storedBlob(rec);
+    if (!blob) return null;
+    const url = URL.createObjectURL(blob);
     urlCache.set(token, url);
     return url;
   }
@@ -141,8 +150,9 @@ export async function resolveImage(token: string): Promise<string | null> {
   if (token.startsWith("lib://image/")) {
     const hash = hashFromToken(token);
     const rec = await $idb.get<ImageRecord>(STORE_IMAGES, hash);
-    if (!rec) return null;
-    const url = URL.createObjectURL(rec.blob);
+    const blob = storedBlob(rec);
+    if (!blob) return null;
+    const url = URL.createObjectURL(blob);
     urlCache.set(token, url);
     return url;
   }
@@ -162,7 +172,7 @@ export async function getAudioBlob(token: string): Promise<Blob | null> {
   if (!token) return null;
   if (token.startsWith("lib://audio/")) {
     const rec = await $idb.get<AudioRecord>(STORE_AUDIO, hashFromToken(token));
-    return rec?.blob || null;
+    return storedBlob(rec);
   }
   if (token.startsWith("pkg://audio/")) return sessionAudio.get(token) || null;
   return null;
@@ -172,7 +182,7 @@ export async function getImageBlob(token: string): Promise<Blob | null> {
   if (!token) return null;
   if (token.startsWith("lib://image/")) {
     const rec = await $idb.get<ImageRecord>(STORE_IMAGES, hashFromToken(token));
-    return rec?.blob || null;
+    return storedBlob(rec);
   }
   if (token.startsWith("pkg://image/") || token.startsWith("pkg://imagens/")) {
     return sessionImages.get(token) || null;

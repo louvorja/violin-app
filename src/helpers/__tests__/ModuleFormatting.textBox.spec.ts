@@ -21,6 +21,11 @@ describe("textBoxStyle", () => {
     );
   });
 
+  it("o espaçamento horizontal/vertical cresce a caixa só com o fundo ligado", () => {
+    expect(textBoxStyle({ enabled: true, paddingX: 12, paddingY: 6 }).padding).toBe("6px 12px");
+    expect(textBoxStyle({ enabled: false, paddingX: 12, paddingY: 6 }).padding).toBeUndefined();
+  });
+
   it("com a borda ligada, entra cor, transparência, raio e espessura", () => {
     const estilo = textBoxStyle({
       enabled: true,
@@ -68,11 +73,13 @@ describe("textBoxStyle", () => {
 });
 
 describe("manifestos com o contrato do fundo do texto", () => {
-  const MODULOS = ["timer", "timer_worship", "stopwatch", "clock"] as const;
+  const MODULOS = ["timer", "timer_worship", "stopwatch", "clock", "bible"] as const;
   const ESPERADOS: Array<[string, unknown]> = [
     ["text_background_enabled", false],
     ["text_background_color", "transparent"],
     ["text_background_opacity", 100],
+    ["text_padding_x", 0],
+    ["text_padding_y", 0],
     ["text_border_enabled", false],
     ["text_border_color", "#FFFFFF"],
     ["text_border_opacity", 100],
@@ -89,4 +96,20 @@ describe("manifestos com o contrato do fundo do texto", () => {
       }
     });
   }
+
+  it("todos os módulos com fundo de texto declaram os espaçamentos", () => {
+    for (const modulo of [
+      "bible",
+      "clock",
+      "counter",
+      "draw",
+      "message_board",
+      "stopwatch",
+      "timer",
+      "timer_worship",
+    ]) {
+      expect(moduleCustomizationDefault(modulo, "text_padding_x", undefined), modulo).toBe(0);
+      expect(moduleCustomizationDefault(modulo, "text_padding_y", undefined), modulo).toBe(0);
+    }
+  });
 });

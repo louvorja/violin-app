@@ -149,8 +149,6 @@ async function deleteItem(item: Awaited<ReturnType<typeof library.list>>[number]
     async (btn?: string) => {
       if (btn !== "yes") return;
       await library.remove(item.id);
-      const current = $liturgy.getCurrentLiturgyId();
-      if (current === item.id) $liturgy.setCurrentLiturgyId(null);
       allItems.value = await library.list();
     }
   );

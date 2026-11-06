@@ -1,12 +1,12 @@
-import type { Module } from "@/types/Module"
-import type { RibbonPage } from "@/types/Ribbon"
-import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
-import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
-import { ICONS } from "@/config/Icons"
-import { FONT } from "@/config/Fonts"
-import { SABBATH_SCHOOL_SOUNDS } from "@/config/SabbathSchool"
-import { ModuleEnum } from "@/enums/ModuleEnum"
-import { getModulePath } from "@/helpers/ModulePath"
+import type { Module } from "@/types/Module";
+import type { RibbonPage } from "@/types/Ribbon";
+import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum";
+import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum";
+import { ICONS } from "@/config/Icons";
+import { FONT } from "@/config/Fonts";
+import { SABBATH_SCHOOL_SOUNDS } from "@/config/SabbathSchool";
+import { ModuleEnum } from "@/enums/ModuleEnum";
+import { getModulePath } from "@/helpers/ModulePath";
 import { KEYS } from "@/constants/UserDataKeys";
 import { createTimerEndRibbonGroups } from "@/config/modules/ribbon/timerEndRibbon";
 
@@ -30,6 +30,8 @@ export const module: Module = {
     font_color: { type: "color", default: "#FFFFFF" },
     text_background_enabled: { type: "boolean", default: false },
     text_background_color: { type: "color", default: "transparent" },
+    text_padding_x: { type: "padding", default: 0 },
+    text_padding_y: { type: "padding", default: 0 },
     /*
      * Fundo do texto: cor + transparência e borda (raio, cor e transparência).
      * Mesmo contrato dos slides (`useSlideStyle.textBoxStyle`), com padrões
@@ -54,7 +56,7 @@ export const module: Module = {
     image_opacity: { type: "opacity", default: 100 },
     image_fit: { type: "object-fit", default: "cover" },
   },
-}
+};
 
 export const contextualPages: RibbonPage[] = [
   {

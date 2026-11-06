@@ -17,6 +17,8 @@
         autocomplete="off"
         spellcheck="false"
         @keydown.escape.prevent.stop="open = false"
+        @keydown.down.prevent.stop="move(1)"
+        @keydown.up.prevent.stop="move(-1)"
         @keydown.enter.prevent.stop="onEnter"
       />
     </div>
@@ -29,10 +31,10 @@
       <LjEmpty
         v-else-if="!filteredMusics.length"
         :icon="ICONS.MUSIC.NOTE_OUTLINE"
-        :title="search ? t('empty_search') : t('empty')"
+        :title="query ? t('empty_search') : t('empty')"
       />
 
-      <div v-else class="music-search__scroll">
+      <div v-else ref="resultsScroll" class="music-search__scroll">
         <table class="music-search__table">
           <thead>
             <tr>
@@ -43,10 +45,14 @@
           </thead>
           <tbody>
             <tr
-              v-for="item in filteredMusics"
+              v-for="(item, index) in filteredMusics"
               :key="item.custom_song_id || item.id_music"
               class="lj-music-row"
-              :class="{ 'music-search__row--pick': mode === 'pick' }"
+              :class="{
+                'music-search__row--pick': mode === 'pick',
+                'lj-music-row--active': index === nav.index.value,
+              }"
+              @mousemove="nav.setActive(index)"
               @click="mode === 'pick' && pickMusic(item)"
               @dblclick="pickMusic(item)"
             >
@@ -54,58 +60,23 @@
               <td class="music-search__album">{{ albumLabel(item) }}</td>
               <td>
                 <div class="music-search__actions">
-                  <LjButton
-                    v-if="mode === 'pick' && !onMusicAction"
-                    size="sm"
-                    variant="ghost"
-                    icon-only
-                    :icon="ICONS.MUSIC.SLIDES_AUDIO"
-                    :title="t('select')"
-                    :aria-label="t('select')"
-                    @click.stop="pickMusic(item)"
-                  />
                   <template v-if="onMusicAction">
                     <LjButton
-                      size="sm"
+                      v-for="execution in pickExecutions"
+                      :key="execution.id"
+                      size="md"
                       variant="ghost"
                       icon-only
-                      :icon="ICONS.MUSIC.SLIDES_AUDIO"
-                      :title="t('audio')"
-                      :aria-label="t('audio')"
-                      @click.stop="handleMusicAction(item, MusicActionEnum.AUDIO)"
-                    />
-                    <LjButton
-                      size="sm"
-                      variant="ghost"
-                      icon-only
-                      :icon="ICONS.MUSIC.SLIDES_PLAYBACK"
-                      :title="t('playback')"
-                      :aria-label="t('playback')"
-                      :disabled="!item.has_instrumental_music"
-                      @click.stop="handleMusicAction(item, MusicActionEnum.INSTRUMENTAL)"
-                    />
-                    <LjButton
-                      size="sm"
-                      variant="ghost"
-                      icon-only
-                      :icon="ICONS.MUSIC.AUDIO"
-                      :title="t('audio_only')"
-                      :aria-label="t('audio_only')"
-                      @click.stop="handleMusicAction(item, MusicActionEnum.AUDIO_ONLY)"
-                    />
-                    <LjButton
-                      size="sm"
-                      variant="ghost"
-                      icon-only
-                      :icon="ICONS.MUSIC.AUDIO_PLAYBACK"
-                      :title="t('playback_only')"
-                      :aria-label="t('playback_only')"
-                      :disabled="!item.has_instrumental_music"
-                      @click.stop="handleMusicAction(item, MusicActionEnum.PLAYBACK_ONLY)"
+                      :icon="execution.icon"
+                      :title="i18nT(execution.label)"
+                      :aria-label="i18nT(execution.label)"
+                      :disabled="!canExecute(execution, tracksOf(item))"
+                      :data-testid="'music-search-' + execution.id"
+                      @click.stop="handleMusicAction(item, execution.action)"
                     />
                   </template>
                   <l-music-menu-table
-                    v-else-if="!Platform.isRemote"
+                    v-else-if="mode !== 'pick' && !Platform.isRemote"
                     :id_music="Number(item.id_music)"
                     :music-subtitle="musicTitle(item, 'Música')"
                     :name="item.name"
@@ -141,6 +112,7 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, provide, ref, watch } from "vue";
 import { useSobreposicaoGlobal } from "@/composables/useSobreposicaoGlobal";
+import { useListNavigation } from "@/composables/useListNavigation";
 import { useI18n } from "vue-i18n";
 import LMusicMenuTable from "@/components/MusicMenuTable.vue";
 import { LjButton, LjDialog, LjEmpty, LjInput, LjSpinner } from "@/components/ui";
@@ -155,13 +127,17 @@ import Platform from "@/helpers/Platform";
 import { ICONS } from "@/config/Icons";
 import type { SearchMusicItem } from "@/types/Music";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
+import { MUSIC_EXECUTIONS, canExecute } from "@/config/MusicAction";
 import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 
 const props = defineProps<{
   modelValue: boolean;
   mode?: "execute" | "pick";
   musicsList?: SearchMusicItem[] | null;
+  /** Escolher pela versão: cada botão da linha entrega a música com a ação dele. */
   onMusicAction?: (music: SearchMusicItem, action: MusicActionEnum) => void;
+  /** As ações que quem escolhe sabe tocar; sem a lista, todas. */
+  musicActions?: MusicActionEnum[];
 }>();
 
 const emit = defineEmits<{
@@ -173,8 +149,24 @@ const { t: i18nT, locale } = useI18n();
 
 const RESULT_LIMIT = 80;
 const FUZZY_MIN_LENGTH = 3;
+const SEARCH_DEBOUNCE_MS = 150;
 
 const search = ref<string>("");
+// Filtrar e redesenhar até 80 linhas a cada tecla travava a tela em máquinas lentas:
+// a lista acompanha o campo depois da pausa, e Enter/setas aplicam na hora.
+const query = ref<string>("");
+let queryTimer: ReturnType<typeof setTimeout> | undefined;
+watch(search, (value) => {
+  clearTimeout(queryTimer);
+  if (!value.trim()) query.value = value;
+  else queryTimer = setTimeout(() => (query.value = value), SEARCH_DEBOUNCE_MS);
+});
+onScopeDispose(() => clearTimeout(queryTimer));
+
+function flushQuery(): void {
+  clearTimeout(queryTimer);
+  query.value = search.value;
+}
 // O primitivo não expõe o <input> interno: o invólucro é o caminho até ele
 // para devolver o foco ao campo assim que o diálogo abre.
 const searchBar = ref<HTMLElement | null>(null);
@@ -200,48 +192,77 @@ const { musics: sourceMusics } = useMusicCatalog(() =>
   Array.isArray(props.musicsList) ? props.musicsList : [...musics.value, ...customMusics.value]
 );
 
-const filteredMusics = computed<SearchMusicItem[]>(() => {
-  const query = Strings.clean(search.value);
-  if (!query) return [];
+const searchIndex = computed(() =>
+  sourceMusics.value.map((music: SearchMusicItem) => ({
+    music,
+    name: Strings.clean(music.name),
+    album: Strings.clean(albumLabel(music)),
+  }))
+);
 
-  const exact = sourceMusics.value
-    .filter((music: SearchMusicItem) => {
-      if (/^\d+$/.test(query)) return isHymnalTrack(music, query);
-      return (
-        Strings.clean(music.name).includes(query) ||
-        Strings.clean(albumLabel(music)).includes(query) ||
-        isHymnalTrack(music, query)
-      );
-    })
-    .slice(0, RESULT_LIMIT);
+const filteredMusics = computed<SearchMusicItem[]>(() => {
+  const cleaned = Strings.clean(query.value);
+  if (!cleaned) return [];
+
+  const numeric = /^\d+$/.test(cleaned);
+  const exact: SearchMusicItem[] = [];
+  for (const entry of searchIndex.value) {
+    const match = numeric
+      ? isHymnalTrack(entry.music, cleaned)
+      : entry.name.includes(cleaned) ||
+        entry.album.includes(cleaned) ||
+        isHymnalTrack(entry.music, cleaned);
+    if (!match) continue;
+    exact.push(entry.music);
+    if (exact.length === RESULT_LIMIT) break;
+  }
 
   if (exact.length) return exact;
   return approximateMusics();
 });
+
+const resultsScroll = ref<HTMLElement | null>(null);
+const nav = useListNavigation({
+  items: () => filteredMusics.value,
+  container: resultsScroll,
+  activeSelector: ".lj-music-row--active",
+});
+watch(search, () => nav.reset());
+// Síncrono: Enter logo após aplicar a busca precisa ver o destaque de volta na primeira.
+watch(query, () => nav.reset(), { flush: "sync" });
+
+function move(delta: number): void {
+  flushQuery();
+  nav.move(delta);
+}
+
+const fuzzyIndex = computed(
+  () =>
+    new Fuse(
+      sourceMusics.value.map((music: SearchMusicItem) => ({
+        music,
+        name: Strings.fold(music.name),
+        album: Strings.fold(albumLabel(music)),
+      })),
+      {
+        keys: ["name", "album"],
+        threshold: 0.35,
+        ignoreLocation: true,
+        minMatchCharLength: FUZZY_MIN_LENGTH,
+      }
+    )
+);
 
 /**
  * Rede de segurança para quem errou a digitação — mesma regra do módulo
  * Músicas: só roda quando a busca por trecho não achou nada.
  */
 function approximateMusics(): SearchMusicItem[] {
-  const query = Strings.fold(search.value);
-  if (query.length < FUZZY_MIN_LENGTH || /^\d+$/.test(query)) return [];
+  const folded = Strings.fold(query.value);
+  if (folded.length < FUZZY_MIN_LENGTH || /^\d+$/.test(folded)) return [];
 
-  const entries = sourceMusics.value.map((music) => ({
-    music,
-    name: Strings.fold(music.name),
-    album: Strings.fold(albumLabel(music)),
-  }));
-
-  const fuse = new Fuse(entries, {
-    keys: ["name", "album"],
-    threshold: 0.35,
-    ignoreLocation: true,
-    minMatchCharLength: FUZZY_MIN_LENGTH,
-  });
-
-  return fuse
-    .search(query)
+  return fuzzyIndex.value
+    .search(folded)
     .map((hit) => hit.item.music)
     .sort(compareMusics)
     .slice(0, RESULT_LIMIT);
@@ -253,6 +274,16 @@ function t(key: string): string {
 
 function albumLabel(music: SearchMusicItem): string {
   return musicAlbumLabel(music, t("custom_album"));
+}
+
+const pickExecutions = computed(() =>
+  props.musicActions
+    ? MUSIC_EXECUTIONS.filter((execution) => props.musicActions!.includes(execution.action))
+    : MUSIC_EXECUTIONS
+);
+
+function tracksOf(music: SearchMusicItem): { sung: boolean; playback: boolean } {
+  return { sung: music.has_audio !== false, playback: !!music.has_instrumental_music };
 }
 
 function focusSearch(event: Event): void {
@@ -295,12 +326,13 @@ async function loadMusics(): Promise<void> {
 }
 
 /**
- * Enter: a primeira da lista. Tocando aqui, Enter é cantado e Shift+Enter o
- * playback; como seletor de outro módulo, Enter escolhe.
+ * Enter: a destacada (de início, a primeira). Tocando aqui, Enter é cantado e
+ * Shift+Enter o playback; como seletor de outro módulo, Enter escolhe.
  */
 function onEnter(event: KeyboardEvent): void {
   if (!isQuickPlayEnter(event)) return;
-  const music = filteredMusics.value[0];
+  flushQuery();
+  const music = nav.active.value;
   if (!music || !search.value.trim()) return;
   if (props.mode === "pick") return pickMusic(music);
   if (props.onMusicAction) {

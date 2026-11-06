@@ -10,12 +10,17 @@ describe("download automático do catálogo", () => {
     expect(shouldAutoInstallCatalog(pwa, nav({ effectiveType: "4g" }))).toBe(true);
   });
 
-  it("aba comum do navegador não baixa 30MB sem pedir", () => {
+  it("aba comum do navegador não baixa o catálogo sem pedir", () => {
     expect(shouldAutoInstallCatalog({ ...pwa, installed: false }, nav())).toBe(false);
   });
 
-  it("no desktop quem cuida é a Verificação Inicial", () => {
-    expect(shouldAutoInstallCatalog({ ...pwa, desktop: true }, nav())).toBe(false);
+  it("desktop baixa automaticamente, independentemente da instalação do PWA", () => {
+    expect(shouldAutoInstallCatalog({ ...pwa, desktop: true, installed: false }, nav())).toBe(true);
+    expect(shouldAutoInstallCatalog({ ...pwa, desktop: true }, nav({ saveData: true }))).toBe(true);
+  });
+
+  it("desktop aguarda a conexão voltar", () => {
+    expect(shouldAutoInstallCatalog({ ...pwa, desktop: true, online: false }, nav())).toBe(false);
   });
 
   it("sem internet não tenta", () => {

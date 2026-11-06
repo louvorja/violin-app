@@ -6,12 +6,21 @@
   >
     <!-- Fundo (cor + imagem). Só pinta se houver imagem ou cor diferente do
          padrão; senão fica transparente sobre o root. -->
+    <ModuleBackgroundMedia
+      v-if="backgroundVideo"
+      :src="cfg.background_image"
+      :video="true"
+      class="lj-slide__bg"
+      :style="backgroundVideoStyle"
+    />
     <div
-      v-if="bgStyle.backgroundImage || cfg.background_color || cfg.custom_background_active"
+      v-else-if="bgStyle.backgroundImage || cfg.background_color || cfg.custom_background_active"
       :key="bgKey"
       class="lj-slide__bg"
       :style="bgStyle"
     />
+
+    <div v-if="backgroundBlurStyle" class="lj-slide__bg-blur" :style="backgroundBlurStyle" />
 
     <!-- Texto principal (capa OU letra).
          Na CAPA, mostra o nome da música em destaque (grande, cor da capa).
@@ -65,7 +74,8 @@ import { slideMainText } from "@/helpers/SlideText";
  * Tamanho dos textos: usa `cqh` (% da altura DESTE container) — automaticamente
  * ajusta tanto pra fullscreen (Projection) quanto pra preview menor (Slide
  * dentro do v-dialog do media). Sem multiplicadores arbitrários: o cfg.font_size_*
- * é a proporção direta.
+ * é a proporção direta, sem limites em pixels que travem telões de alta
+ * resolução ou aumentem artificialmente o texto nas prévias pequenas.
  *
  * Fundo, cores, fontes, alinhamento, blur/borda da caixa de texto e refrão com
  * cor própria — tudo lido de useSlideStyle (única fonte de verdade).
@@ -73,6 +83,7 @@ import { slideMainText } from "@/helpers/SlideText";
 import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import Strings from "@/helpers/Strings";
 import Path from "@/helpers/Path";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import { useSlideStyle } from "@/composables/useSlideStyle";
 
 /** Resolve url_image: passa caminho relativo pra Path.file; absoluto retorna como-está. */
@@ -172,6 +183,27 @@ const bgStyle = computed(() => {
   return slideStyle.bgStyle(slideObj.value);
 });
 const bgKey = computed(() => slideObj.value?.url_image || cfg.value.background_image || "default");
+const customBackgroundWins = computed(() => {
+  const current = slideObj.value;
+  const isImported = current?.id_music == null;
+  return cfg.value.custom_background_active && (!isImported || cfg.value.affect_external_slides);
+});
+const backgroundVideo = computed(
+  () =>
+    customBackgroundWins.value &&
+    cfg.value.background_is_video === true &&
+    !!cfg.value.background_image
+);
+const backgroundVideoStyle = computed(() => {
+  const position = cfg.value.background_position;
+  const objectFit = position === "contain" ? "contain" : position === "stretch" ? "fill" : "cover";
+  return { objectFit };
+});
+
+const backgroundBlurStyle = computed(() => {
+  const hasBackground = backgroundVideo.value || !!bgStyle.value.backgroundImage;
+  return hasBackground ? slideStyle.bgBlurStyle() : null;
+});
 
 const mainTextStyle = computed(() => {
   const base = isCover.value
@@ -259,6 +291,14 @@ onUnmounted(() => {
   inset: 0;
 }
 
+/* Desfoque numa camada própria: o fundo abaixo mantém o enquadramento
+   original e a camada acima apenas borra o que está atrás. */
+.lj-slide__bg-blur {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .lj-slide__content {
   position: absolute;
   inset: 0;
@@ -297,17 +337,17 @@ onUnmounted(() => {
 }
 
 .lj-slide__text--cover {
-  font-size: clamp(20px, calc(var(--lj-cover-size, 18) * 1cqh), 150px);
+  font-size: calc(var(--lj-cover-size, 18) * 1cqh);
   letter-spacing: 0.02em;
 }
 
 .lj-slide__text--lyric {
-  font-size: clamp(18px, calc(var(--lj-lyric-size, 14) * 1cqh), 200px);
+  font-size: calc(var(--lj-lyric-size, 10) * 1cqh);
   font-weight: 600;
 }
 
 .lj-slide__text--aux {
-  font-size: clamp(14px, calc(var(--lj-aux-size, 8) * 1cqh), 120px);
+  font-size: calc(var(--lj-aux-size, 8) * 1cqh);
   font-weight: 600;
   opacity: 0.95;
 }

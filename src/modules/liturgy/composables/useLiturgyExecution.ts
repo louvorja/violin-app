@@ -329,7 +329,12 @@ export function useLiturgyExecution() {
       $alert.error({ text: "modules.custom_online_videos.invalid_url" });
       return false;
     }
-    return $media.openYouTube(embedUrl, item.item || item.subitem || url);
+    // O subitem guarda o título do vídeo (YouTube); o item é o nome do item
+    // litúrgico. A tarefa de download em segundo plano precisa do primeiro.
+    const videoName = String(item.subitem || "")
+      .replace(/^URL:\s*/i, "")
+      .trim();
+    return $media.openYouTube(embedUrl, videoName || item.item || url);
   }
 
   /**
@@ -528,6 +533,43 @@ export function useLiturgyExecution() {
     return $path.file(dir);
   }
 
+  /**
+   * O arquivo ainda existe no caminho salvo? O protocolo `louvorja://local`
+   * devolve 404 para caminho ausente; pedir 1 byte evita abrir a projeção e
+   * deixar a tela preta/erro de áudio quando o arquivo foi movido ou apagado.
+   * Só vale para caminhos locais absolutos; URLs remotas/blob seguem o fluxo
+   * normal (a falha ali é de rede/formato, não de arquivo ausente).
+   */
+  async function _localFileExists(dir: string): Promise<boolean> {
+    if (!dir || !Platform.isDesktop) return true;
+    if (/^(blob|data):/i.test(dir)) return true;
+    const hasProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir);
+    if (hasProtocol && !/^louvorja:\/\/local\//i.test(dir)) return true;
+    const isLocalPath =
+      /^louvorja:\/\/local\//i.test(dir) ||
+      dir.startsWith("/") ||
+      /^[A-Za-z]:[\\/]/.test(dir) ||
+      dir.startsWith("\\\\");
+    if (!isLocalPath) return true;
+    const url = /^louvorja:\/\//i.test(dir) ? dir : _resolveFileUrl(dir);
+    try {
+      const response = await fetchWithTimeout(url, {
+        method: "GET",
+        headers: { Range: "bytes=0-0" },
+        timeout: NET_TIMEOUT.QUICK,
+        source: "file",
+      });
+      try {
+        await response.body?.cancel();
+      } catch {
+        /* corpo de erro/cancelamento não interessa */
+      }
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
   /** Cache de objectURLs para HEIC→JPEG (evita reconverter a cada projeção). */
   const _heicProjectionCache = new Map<string, string>();
 
@@ -559,12 +601,14 @@ export function useLiturgyExecution() {
     extraPayload?: Record<string, unknown>
   ): Promise<boolean> {
     const intent = ++fileOpenIntent;
+    const stageIsCurrent = $media.captureStageGuard();
+    const isCurrent = () => intent === fileOpenIntent && stageIsCurrent();
     let dir = item.dir || "";
     const storedFile =
       item.tipo === LiturgyItemTypeEnum.ARQUIVO && item.ref_id
         ? await resolveLiturgyFile(item.ref_id)
         : null;
-    if (item.tipo === LiturgyItemTypeEnum.ARQUIVO && item.ref_id && intent !== fileOpenIntent) {
+    if (!isCurrent()) {
       if (storedFile) releaseLiturgyFileUrl(storedFile.url);
       return false;
     }
@@ -580,7 +624,17 @@ export function useLiturgyExecution() {
         ...extraPayload,
         libRef: { table: DB_TABLE.LITURGY_FILES, id: item.ref_id },
       };
+    } else {
+      const exists = await _localFileExists(dir);
+      // Outro item pode ter sido pedido enquanto o disco era consultado.
+      if (intent !== fileOpenIntent) return false;
+      if (!exists) {
+        reportMissingResource("open_file", "file");
+        $alert.error({ text: dir, title: "modules.media.alerts.file_not_found" });
+        return false;
+      }
     }
+    if (intent !== fileOpenIntent) return false;
     const ext = dir.split(/[?#]/)[0].split(".").pop()?.toLowerCase() || "";
     // Tipo efetivo: extensão do caminho; sem extensão (ex.: blob URLs),
     // usa o hint informado pelo chamador (subtipo do item).
@@ -595,17 +649,24 @@ export function useLiturgyExecution() {
     if (
       !storedFile &&
       (kind === "audio" || kind === "video") &&
-      Boolean($userdata.get(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, false)) &&
-      (await openWithSystemPlayer(dir, kind))
+      Boolean($userdata.get(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, false))
     ) {
-      // Não deixe uma projeção anterior congelada enquanto o Windows assume
-      // a reprodução deste arquivo.
-      $media.close(true);
-      return false;
+      const opened = await openWithSystemPlayer(dir, kind);
+      // O SO pode responder minutos depois. Nem o sucesso deve fechar uma
+      // apresentação nova, nem a falha deve iniciar o arquivo antigo no app.
+      if (!isCurrent()) return false;
+      if (opened) {
+        $media.close(true);
+        return false;
+      }
     }
 
     // HEIC/HEIF: converte para JPEG antes de enviar à projeção.
     const url = storedFile?.url || (await _resolveRenderableUrl(dir));
+    if (!isCurrent()) {
+      if (storedFile) releaseLiturgyFileUrl(url);
+      return false;
+    }
 
     if (
       !url ||
@@ -690,7 +751,7 @@ export function useLiturgyExecution() {
       }
     } else if (!kind && !typeHint) {
       // Tipo desconhecido sem hint: comportamento legado (abrir com SO).
-      if (!(await openWithSystemPlayer(dir, "unknown"))) openUrl(dir);
+      if (!(await openWithSystemPlayer(dir, "unknown")) && isCurrent()) openUrl(dir);
       return false;
     } else {
       reportMissingResource("open_file", "renderable_file");

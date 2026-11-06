@@ -13,7 +13,15 @@ const usadas = [...new Set([...fonte.matchAll(/(?<![\w.])t\(\s*["']([\w.]+)["']/
 
 describe("MusicSpotlight — traduções", () => {
   it("acha as chaves usadas no componente", () => {
-    expect(usadas).toEqual(expect.arrayContaining(["audio", "playback", "audio_only", "playback_only"]));
+    expect(usadas.length).toBeGreaterThan(0);
+  });
+
+  it("os botões de versão usam os rótulos globais das execuções, já traduzidos", () => {
+    // Depois da junção com o main, os botões vêm de MUSIC_EXECUTIONS
+    // (src/config/MusicAction.ts), com rótulo em `ribbon.btn.*`, e não mais de
+    // chaves soltas em `components.music_search`.
+    expect(fonte).toMatch(/v-for="execution in pickExecutions"/);
+    expect(fonte).toMatch(/i18nT\(execution\.label\)/);
   });
 
   it.each(["pt", "es"])("toda chave existe em %s", (idioma) => {

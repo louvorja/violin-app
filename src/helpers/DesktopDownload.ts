@@ -1,4 +1,6 @@
 export type DesktopDownloadPlatform = "windows" | "macos" | "linux" | "other";
+export type LinuxDownloadArchitecture = "x64" | "arm64";
+export type LinuxDownloadFormat = "deb" | "rpm" | "appimage";
 
 interface NavigatorSnapshot {
   userAgent?: string;
@@ -47,6 +49,37 @@ export function desktopReleaseUrl(version: string): string {
   return `${RELEASES_BASE_URL}/tag/v${encodeURIComponent(normalizeVersion(version))}`;
 }
 
+/** Só pré-seleciona uma arquitetura de 64 bits quando o navegador a informa. */
+export function detectLinuxDownloadArchitecture(
+  navigatorSnapshot: NavigatorSnapshot
+): LinuxDownloadArchitecture | null {
+  const platform = navigatorSnapshot.platform?.toLowerCase() ?? "";
+  const userAgent = navigatorSnapshot.userAgent?.toLowerCase() ?? "";
+  // A plataforma explícita tem prioridade sobre um user-agent reduzido.
+  for (const value of [platform, userAgent]) {
+    if (/aarch64|arm64/.test(value)) return "arm64";
+    if (/x86_64|amd64|\bx64\b/.test(value)) return "x64";
+    if (/armv[5-8]l|i[3-6]86/.test(value)) return null;
+  }
+  return null;
+}
+
+/** Nomes publicados pelo electron-builder para cada formato e arquitetura. */
+export function linuxDownloadUrl(
+  format: LinuxDownloadFormat,
+  architecture: LinuxDownloadArchitecture,
+  version: string
+): string {
+  const cleanVersion = normalizeVersion(version);
+  const arm = architecture === "arm64";
+  const assets: Record<LinuxDownloadFormat, string> = {
+    deb: `louvorja-violin_${cleanVersion}_${arm ? "arm64" : "amd64"}.deb`,
+    rpm: `louvorja-violin-${cleanVersion}.${arm ? "aarch64" : "x86_64"}.rpm`,
+    appimage: `LouvorJA-Violin-${cleanVersion}-${arm ? "arm64" : "x86_64"}.AppImage`,
+  };
+  return `${RELEASES_BASE_URL}/download/v${encodeURIComponent(cleanVersion)}/${encodeURIComponent(assets[format])}`;
+}
+
 /**
  * O .dmg universal ganhou "_universal" no nome a partir da 2.0.0-beta.19: o site
  * da comunidade deduz a arquitetura pelo nome e, sem a marca, o anunciava como
@@ -58,12 +91,15 @@ function macInstallerSuffix(version: string): string {
   const [major, minor, patch] = [Number(m[1]), Number(m[2]), Number(m[3])];
   if (major < 2) return "";
   const beta = m[4] === undefined ? null : Number(m[4]);
-  return major === 2 && minor === 0 && patch === 0 && beta !== null && beta <= 18 ? "" : "_universal";
+  return major === 2 && minor === 0 && patch === 0 && beta !== null && beta <= 18
+    ? ""
+    : "_universal";
 }
 
 /**
  * Windows e macOS têm um único instalador recomendado e baixam diretamente.
- * Linux abre a release para escolher formato e arquitetura.
+ * Linux tem links por formato em LinuxDownloadOptions; sem uma escolha,
+ * este link genérico continua levando à página da release.
  */
 export function desktopDownloadUrl(platform: DesktopDownloadPlatform, version: string): string {
   const cleanVersion = normalizeVersion(version);

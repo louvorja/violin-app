@@ -43,7 +43,14 @@ function _broadcast(channel, payload) {
 /** Resolve o monitor de uma feature, ignorando falhas. */
 function _resolveDisplay(feature) {
   const result = displays.resolveFeature(feature);
-  return result ? result.display : null;
+  if (result?.display) return result.display;
+  // A abertura permite projeção local quando nenhum monitor foi atribuído
+  // (inclusive "mesma janela"). Reaplique esse destino: `none` não significa
+  // desconexão. Um destino salvo ausente/ambíguo continua oculto, sem fallback.
+  if (result?.status === "none" && result.reason !== "unknown-feature") {
+    return displays.connected().find((display) => display.primary) || null;
+  }
+  return null;
 }
 
 /** Aplica a mudança de monitores: papéis, janelas e renderers. */

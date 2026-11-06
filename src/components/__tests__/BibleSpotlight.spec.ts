@@ -226,6 +226,46 @@ describe("BibleSpotlight: digitação, carregamento e versão", () => {
     expect(mocks.broadcastSend).not.toHaveBeenCalled();
   });
 
+  it("aceita letra acentuada na digitação do livro", async () => {
+    const withAccents = [
+      ...books,
+      { id_bible_book: 24, name: "Jó", abbreviation: "Jó", chapters: 42 },
+      { id_bible_book: 25, name: "João", abbreviation: "Jo", chapters: 21 },
+    ];
+    const defaultGet = mocks.databaseGet.getMockImplementation()!;
+    mocks.databaseGet.mockImplementation((key: string) =>
+      key === "pt_bible_book" ? withAccents : defaultGet(key)
+    );
+    const input = await open();
+
+    await input.trigger("keydown", { key: "j" });
+    await input.trigger("keydown", { key: "ó" });
+    await flushPromises();
+
+    expect(wrapper.get(".quicknav-preview").text()).toBe("Jó → cap.");
+    expect(wrapper.findAll(".quicknav-option")).toHaveLength(0);
+  });
+
+  it("digitar jo sem acento confirma João direto", async () => {
+    const withAccents = [
+      ...books,
+      { id_bible_book: 24, name: "Jó", abbreviation: "Jó", chapters: 42 },
+      { id_bible_book: 25, name: "João", abbreviation: "Jo", chapters: 21 },
+    ];
+    const defaultGet = mocks.databaseGet.getMockImplementation()!;
+    mocks.databaseGet.mockImplementation((key: string) =>
+      key === "pt_bible_book" ? withAccents : defaultGet(key)
+    );
+    const input = await open();
+
+    await input.trigger("keydown", { key: "j" });
+    await input.trigger("keydown", { key: "o" });
+    await flushPromises();
+
+    expect(wrapper.get(".quicknav-preview").text()).toBe("João → cap.");
+    expect(wrapper.findAll(".quicknav-option")).toHaveLength(0);
+  });
+
   it("trata composição de teclado uma vez, sem duplicar os caracteres", async () => {
     const input = await open();
     await input.trigger("compositionstart");
@@ -282,6 +322,44 @@ describe("BibleSpotlight: ordinal dos livros (I Samuel, II Samuel)", () => {
     const preview = wrapper.get(".quicknav-preview").text();
     expect(preview).toBe("1Sm, 1Rs, Is");
     expect(wrapper.emitted("select")).toBeUndefined();
+  });
+
+  it("setas navegam pelas siglas, cima volta ao texto e clique escolhe", async () => {
+    const input = await open();
+    await input.trigger("keydown", { key: "i" });
+    await flushPromises();
+
+    expect(wrapper.findAll(".quicknav-option")).toHaveLength(3);
+    expect(wrapper.findAll(".quicknav-option.selected")).toHaveLength(0);
+
+    await input.trigger("keydown", { key: "ArrowDown" });
+    await flushPromises();
+    expect(wrapper.findAll(".quicknav-option.selected")).toHaveLength(1);
+    expect(wrapper.findAll(".quicknav-option")[0].classes()).toContain("selected");
+
+    await input.trigger("keydown", { key: "ArrowRight" });
+    await flushPromises();
+    expect(wrapper.findAll(".quicknav-option")[1].classes()).toContain("selected");
+
+    await input.trigger("keydown", { key: "ArrowUp" });
+    await flushPromises();
+    expect(wrapper.findAll(".quicknav-option.selected")).toHaveLength(0);
+    expect(wrapper.get(".quicknav-preview").text()).toBe("1Sm, 1Rs, Is");
+
+    await input.trigger("keydown", { key: "ArrowDown" });
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(wrapper.get(".quicknav-preview").text()).toBe("I Samuel → cap.");
+
+    await input.trigger("keydown", { key: "Backspace" });
+    await input.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    await input.trigger("keydown", { key: "i" });
+    await flushPromises();
+    const isaiah = wrapper.findAll(".quicknav-option")[2];
+    await isaiah.trigger("click");
+    await flushPromises();
+    expect(wrapper.get(".quicknav-preview").text()).toBe("Isaías → cap.");
   });
 
   it('"1s" confirma I Samuel e segue para capítulo e versículo', async () => {

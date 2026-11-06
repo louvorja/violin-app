@@ -2,23 +2,34 @@
  * Valida todos os manifest.ts dos módulos core contra as regras do schema.
  * Roda via `npm run validate:manifests` e como prebuild.
  */
-import { readFileSync, existsSync } from "fs"
-import { resolve, dirname } from "path"
-import { fileURLToPath } from "url"
-import fg from "fast-glob"
+import { readFileSync, existsSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+import fg from "fast-glob";
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const root = resolve(__dirname, "..")
-const MODULES_DIR = resolve(root, "src/modules")
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = resolve(__dirname, "..");
+const MODULES_DIR = resolve(root, "src/modules");
 
 const VALID_CUSTOMIZATION_TYPES = new Set([
-  "font", "color", "font-size", "border-spacing",
-  "v-align", "h-align", "image", "opacity", "object-fit", "select", "boolean",
+  "font",
+  "color",
+  "font-size",
+  "border-spacing",
+  "padding",
+  "v-align",
+  "h-align",
+  "image",
+  "opacity",
+  "object-fit",
+  "select",
+  "boolean",
   // Caixa de texto dos módulos utilitários: raio e espessura da borda, com
   // faixas próprias (o raio admite 0, que é "sem cantos arredondados").
-  "radius", "border-width",
-])
-const VALID_MODULE_OPTION_SIZES = new Set(["small", "medium", "large"])
+  "radius",
+  "border-width",
+]);
+const VALID_MODULE_OPTION_SIZES = new Set(["small", "medium", "large"]);
 
 /**
  * Campos de primeiro nível de um bloco — `[chave, corpo]` para cada
@@ -29,23 +40,23 @@ const VALID_MODULE_OPTION_SIZES = new Set(["small", "medium", "large"])
  * chave no meio da linha — o campo era cortado antes do próprio `label`.
  */
 function camposDoBloco(bloco: string): Array<[string, string]> {
-  const campos: Array<[string, string]> = []
-  const abertura = /(\w+):\s*\{/g
-  let m: RegExpExecArray | null
+  const campos: Array<[string, string]> = [];
+  const abertura = /(\w+):\s*\{/g;
+  let m: RegExpExecArray | null;
 
   while ((m = abertura.exec(bloco)) !== null) {
-    const inicioCorpo = m.index + m[0].length
-    let nivel = 1
-    let i = inicioCorpo
+    const inicioCorpo = m.index + m[0].length;
+    let nivel = 1;
+    let i = inicioCorpo;
     for (; i < bloco.length && nivel > 0; i++) {
-      if (bloco[i] === "{") nivel++
-      else if (bloco[i] === "}") nivel--
+      if (bloco[i] === "{") nivel++;
+      else if (bloco[i] === "}") nivel--;
     }
-    if (nivel !== 0) break
-    campos.push([m[1], bloco.slice(inicioCorpo, i - 1)])
-    abertura.lastIndex = i
+    if (nivel !== 0) break;
+    campos.push([m[1], bloco.slice(inicioCorpo, i - 1)]);
+    abertura.lastIndex = i;
   }
-  return campos
+  return campos;
 }
 
 /**
@@ -57,63 +68,63 @@ function camposDoBloco(bloco: string): Array<[string, string]> {
  * customização sem `type`, `label` e `default`.
  */
 function extrairBloco(conteudo: string, chave: string): string | null {
-  const inicio = conteudo.search(new RegExp(`${chave}:\\s*\\{`))
-  if (inicio < 0) return null
+  const inicio = conteudo.search(new RegExp(`${chave}:\\s*\\{`));
+  if (inicio < 0) return null;
 
-  const abre = conteudo.indexOf("{", inicio)
-  let nivel = 0
+  const abre = conteudo.indexOf("{", inicio);
+  let nivel = 0;
   for (let i = abre; i < conteudo.length; i++) {
-    if (conteudo[i] === "{") nivel++
+    if (conteudo[i] === "{") nivel++;
     else if (conteudo[i] === "}") {
-      nivel--
-      if (nivel === 0) return conteudo.slice(abre + 1, i)
+      nivel--;
+      if (nivel === 0) return conteudo.slice(abre + 1, i);
     }
   }
-  return null
+  return null;
 }
 
 function formatRow(moduleId: string, status: "ok" | "warn" | "error", detail: string) {
-  const icon = status === "ok" ? "✓" : status === "warn" ? "⚠" : "✗"
-  return `  ${icon} ${moduleId} — ${detail}`
+  const icon = status === "ok" ? "✓" : status === "warn" ? "⚠" : "✗";
+  return `  ${icon} ${moduleId} — ${detail}`;
 }
 
 function validate() {
-  const manifests = resolve(root, "src/modules/*/manifest.ts").replace(/\\/g, "/")
-  const files = fg.sync(manifests)
+  const manifests = resolve(root, "src/modules/*/manifest.ts").replace(/\\/g, "/");
+  const files = fg.sync(manifests);
 
-  console.log(`\nValidando ${files.length} manifest.ts...\n`)
+  console.log(`\nValidando ${files.length} manifest.ts...\n`);
 
-  let errors = 0
-  let warnings = 0
+  let errors = 0;
+  let warnings = 0;
 
   for (const file of files) {
-    const moduleDir = dirname(file)
-    const moduleId = moduleDir.split("/").pop()!
+    const moduleDir = dirname(file);
+    const moduleId = moduleDir.split("/").pop()!;
 
-    const ptJson = resolve(moduleDir, "lang/pt.json")
-    const esJson = resolve(moduleDir, "lang/es.json")
+    const ptJson = resolve(moduleDir, "lang/pt.json");
+    const esJson = resolve(moduleDir, "lang/es.json");
 
     if (!existsSync(ptJson)) {
-      console.log(formatRow(moduleId, "error", "lang/pt.json ausente"))
-      errors++
+      console.log(formatRow(moduleId, "error", "lang/pt.json ausente"));
+      errors++;
     }
     if (!existsSync(esJson)) {
-      console.log(formatRow(moduleId, "error", "lang/es.json ausente"))
-      errors++
+      console.log(formatRow(moduleId, "error", "lang/es.json ausente"));
+      errors++;
     }
 
-    const content = readFileSync(file, "utf-8")
+    const content = readFileSync(file, "utf-8");
 
     // Manifest gerado por factory (ex: createHymnalManifest) — a factory
     // é tipada (Module) e garante os campos estruturais; os checks inline
     // de objeto module não se aplicam aqui.
-    const usesFactory = content.includes("createHymnalManifest")
+    const usesFactory = content.includes("createHymnalManifest");
 
     // ── moduleId declarado com ModuleEnum ──
-    const idEnumMatch = content.match(/moduleId\s*=\s*ModuleEnum\.(\w+);/)
+    const idEnumMatch = content.match(/moduleId\s*=\s*ModuleEnum\.(\w+);/);
     if (!usesFactory && !idEnumMatch) {
-      console.log(formatRow(moduleId, "error", "moduleId não declarado com ModuleEnum.<KEY>"))
-      errors++
+      console.log(formatRow(moduleId, "error", "moduleId não declarado com ModuleEnum.<KEY>"));
+      errors++;
     }
 
     // ── modulePath = getModulePath(moduleId) (helper leve) ou $modules.getPath(moduleId) (legado) ──
@@ -122,142 +133,162 @@ function validate() {
       !content.includes("getModulePath(moduleId)") &&
       !content.includes("$modules.getPath(moduleId)")
     ) {
-      console.log(formatRow(moduleId, "error", "getModulePath(moduleId) ausente"))
-      errors++
+      console.log(formatRow(moduleId, "error", "getModulePath(moduleId) ausente"));
+      errors++;
     }
 
     // ── showInMainMenu: obrigatório ──
     if (!usesFactory && !content.includes("showInMainMenu:")) {
-      console.log(formatRow(moduleId, "error", "showInMainMenu ausente (obrigatório)"))
-      errors++
+      console.log(formatRow(moduleId, "error", "showInMainMenu ausente (obrigatório)"));
+      errors++;
     }
 
     // ── id no objeto module ──
     if (!usesFactory && !content.includes("id: moduleId")) {
-      console.log(formatRow(moduleId, "error", "id: deve usar moduleId (ModuleEnum)"))
-      errors++
+      console.log(formatRow(moduleId, "error", "id: deve usar moduleId (ModuleEnum)"));
+      errors++;
     }
 
     // ── title via i18n ──
-    const titleI18n = content.match(/title:\s*`\$\{modulePath\}\.title`/)
+    const titleI18n = content.match(/title:\s*`\$\{modulePath\}\.title`/);
     if (!usesFactory && !titleI18n) {
-      console.log(formatRow(moduleId, "error", "title: deve usar `${modulePath}.title` (i18n)"))
-      errors++
+      console.log(formatRow(moduleId, "error", "title: deve usar `${modulePath}.title` (i18n)"));
+      errors++;
     }
 
     // ── description: obrigatório e via i18n ──
-    const descI18n = content.match(/description:\s*`\$\{modulePath\}\.description`/)
-    const rawDesc = content.match(/description:\s*"(.*?)"/)
+    const descI18n = content.match(/description:\s*`\$\{modulePath\}\.description`/);
+    const rawDesc = content.match(/description:\s*"(.*?)"/);
     if (rawDesc) {
-      console.log(formatRow(moduleId, "error", `description hardcoded: "${rawDesc[1]}" — deve usar i18n`))
-      errors++
+      console.log(
+        formatRow(moduleId, "error", `description hardcoded: "${rawDesc[1]}" — deve usar i18n`)
+      );
+      errors++;
     } else if (!usesFactory && !descI18n) {
-      const hasDesc = content.includes("description:")
+      const hasDesc = content.includes("description:");
       if (!hasDesc) {
-        console.log(formatRow(moduleId, "error", "description: campo obrigatório ausente"))
-        errors++
+        console.log(formatRow(moduleId, "error", "description: campo obrigatório ausente"));
+        errors++;
       }
     }
 
     // ── module.icon: deve usar ICONS.* (erro se hardcoded com "mdi-") ──
     // Escopo: apenas linhas dentro do objeto "export const module"
-    const moduleObjectContent = content.match(/export const module: Module = \{([\s\S]*?)\n\}/)
+    const moduleObjectContent = content.match(/export const module: Module = \{([\s\S]*?)\n\}/);
     if (moduleObjectContent) {
-      const moduleBlock = moduleObjectContent[1]
-      const moduleIconStr = moduleBlock.match(/icon:\s*"mdi-[^"]+"/)
+      const moduleBlock = moduleObjectContent[1];
+      const moduleIconStr = moduleBlock.match(/icon:\s*"mdi-[^"]+"/);
       if (moduleIconStr) {
-        console.log(formatRow(moduleId, "error", `module.icon hardcoded "${moduleIconStr[0]}" — use ICONS.*`))
-        errors++
+        console.log(
+          formatRow(moduleId, "error", `module.icon hardcoded "${moduleIconStr[0]}" — use ICONS.*`)
+        );
+        errors++;
       }
     }
 
     // ── botões da ribbon com icon hardcoded: warning ──
-    const iconMatch = content.match(/(?<!\/\/\s*)icon:\s*"(mdi-[^"]+)"/)
+    const iconMatch = content.match(/(?<!\/\/\s*)icon:\s*"(mdi-[^"]+)"/);
     if (iconMatch) {
-      console.log(formatRow(moduleId, "warn", `icon hardcoded (botão): "${iconMatch[1]}" — prefira ICONS.*`))
-      warnings++
+      console.log(
+        formatRow(moduleId, "warn", `icon hardcoded (botão): "${iconMatch[1]}" — prefira ICONS.*`)
+      );
+      warnings++;
     }
 
     // ── icon mdi-format-color-fill / mdi-restore proibidos ──
     if (content.includes('icon: "mdi-format-color-fill"')) {
-      console.log(formatRow(moduleId, "error", 'icon "mdi-format-color-fill" — use ICONS.ACTIONS.FORMAT'))
-      errors++
+      console.log(
+        formatRow(moduleId, "error", 'icon "mdi-format-color-fill" — use ICONS.ACTIONS.FORMAT')
+      );
+      errors++;
     }
     if (content.includes('icon: "mdi-restore"')) {
-      console.log(formatRow(moduleId, "error", 'icon "mdi-restore" — use ICONS.ACTIONS.RESTORE'))
-      errors++
+      console.log(formatRow(moduleId, "error", 'icon "mdi-restore" — use ICONS.ACTIONS.RESTORE'));
+      errors++;
     }
 
     // ── icon no objeto module (não opcional) ──
-    const moduleIcon = content.match(/^\s{2}icon:\s/m)
+    const moduleIcon = content.match(/^\s{2}icon:\s/m);
     if (!usesFactory && !moduleIcon) {
-      console.log(formatRow(moduleId, "error", "module.icon: campo obrigatório no objeto module"))
-      errors++
+      console.log(formatRow(moduleId, "error", "module.icon: campo obrigatório no objeto module"));
+      errors++;
     }
 
     // ── color no objeto module ──
     if (!usesFactory && !content.match(/^\s{2}color:\s/m)) {
-      console.log(formatRow(moduleId, "error", "module.color: campo obrigatório no objeto module"))
-      errors++
+      console.log(formatRow(moduleId, "error", "module.color: campo obrigatório no objeto module"));
+      errors++;
     }
 
     // ── category no objeto module ──
     if (!usesFactory && !content.includes("category:")) {
-      console.log(formatRow(moduleId, "error", "module.category: campo obrigatório"))
-      errors++
+      console.log(formatRow(moduleId, "error", "module.category: campo obrigatório"));
+      errors++;
     }
 
     // ── group no objeto module ──
     if (!usesFactory && !content.includes("group:")) {
-      console.log(formatRow(moduleId, "error", "module.group: campo obrigatório"))
-      errors++
+      console.log(formatRow(moduleId, "error", "module.group: campo obrigatório"));
+      errors++;
     }
 
     // ── order no objeto module ──
     if (!usesFactory && !content.match(/^\s{2}order:\s/m)) {
-      console.log(formatRow(moduleId, "error", "module.order: campo obrigatório"))
-      errors++
+      console.log(formatRow(moduleId, "error", "module.order: campo obrigatório"));
+      errors++;
     }
 
     // ── moduleOptions (se presente) ──
-    const moduleOptionsBlock = content.match(/moduleOptions:\s*\{([^}]*)\}/)
+    const moduleOptionsBlock = content.match(/moduleOptions:\s*\{([^}]*)\}/);
     if (moduleOptionsBlock) {
-      const block = moduleOptionsBlock[1]
+      const block = moduleOptionsBlock[1];
       // popup deve ser boolean
       if (block.includes("popup") && !block.match(/popup:\s*(true|false)/)) {
-        console.log(formatRow(moduleId, "error", "moduleOptions.popup deve ser boolean"))
-        errors++
+        console.log(formatRow(moduleId, "error", "moduleOptions.popup deve ser boolean"));
+        errors++;
       }
       // size deve ser small|medium|large
-      const sizeMatch = block.match(/size:\s*"([^"]+)"/)
+      const sizeMatch = block.match(/size:\s*"([^"]+)"/);
       if (sizeMatch && !VALID_MODULE_OPTION_SIZES.has(sizeMatch[1])) {
-        console.log(formatRow(moduleId, "error", `moduleOptions.size deve ser "small" | "medium" | "large", recebido "${sizeMatch[1]}"`))
-        errors++
+        console.log(
+          formatRow(
+            moduleId,
+            "error",
+            `moduleOptions.size deve ser "small" | "medium" | "large", recebido "${sizeMatch[1]}"`
+          )
+        );
+        errors++;
       }
     }
 
     // ── customization (se presente) ──
-    const block = extrairBloco(content, "customization")
+    const block = extrairBloco(content, "customization");
     if (block !== null) {
       for (const [key, fieldBody] of camposDoBloco(block)) {
-        const typeMatch = fieldBody.match(/type:\s*"([^"]+)"/)
+        const typeMatch = fieldBody.match(/type:\s*"([^"]+)"/);
         if (!typeMatch) {
-          console.log(formatRow(moduleId, "error", `customization.${key}: "type" obrigatório`))
-          errors++
+          console.log(formatRow(moduleId, "error", `customization.${key}: "type" obrigatório`));
+          errors++;
         } else if (!VALID_CUSTOMIZATION_TYPES.has(typeMatch[1])) {
-          console.log(formatRow(moduleId, "error", `customization.${key}.type: tipo desconhecido "${typeMatch[1]}"`))
-          errors++
+          console.log(
+            formatRow(
+              moduleId,
+              "error",
+              `customization.${key}.type: tipo desconhecido "${typeMatch[1]}"`
+            )
+          );
+          errors++;
         }
         if (!fieldBody.includes("default:")) {
-          console.log(formatRow(moduleId, "error", `customization.${key}: "default" obrigatório`))
-          errors++
+          console.log(formatRow(moduleId, "error", `customization.${key}: "default" obrigatório`));
+          errors++;
         }
       }
     }
   }
 
-  console.log(`\n${errors} erros, ${warnings} avisos em ${files.length} módulos.\n`)
-  process.exit(errors > 0 ? 1 : 0)
+  console.log(`\n${errors} erros, ${warnings} avisos em ${files.length} módulos.\n`);
+  process.exit(errors > 0 ? 1 : 0);
 }
 
-validate()
+validate();

@@ -8,7 +8,12 @@
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'timer_worship'" :manifest="manifest" />
       <div ref="container" class="tw-root" :style="rootStyle">
-        <img v-if="bgImage" :src="bgImage" class="tw-bg-img" :style="imageStyle" alt="" />
+        <ModuleBackgroundMedia
+          v-if="bgImage"
+          :src="bgImage"
+          class="tw-bg-img"
+          :style="imageStyle"
+        />
 
         <!-- Display -->
         <div
@@ -33,6 +38,7 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import TimerEndActionDialogs from "@/components/TimerEndActionDialogs.vue";
 import $userdata from "@/helpers/UserData";

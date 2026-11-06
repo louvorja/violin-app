@@ -8,16 +8,19 @@
       :aria-label="t('components.inputs.search')"
       :icon="ICONS.ACTIONS.SEARCH"
       @update:model-value="onMusicSearch"
+      @keydown="onSearchKey"
     />
 
     <!-- Busca: resultados nos dois acervos (oficial + coletâneas). -->
     <template v-if="searching">
-      <ul v-if="musicResults.length > 0" class="rm-list">
+      <ul v-if="musicResults.length > 0" ref="resultsList" class="rm-list">
         <li
-          v-for="m in musicResults"
+          v-for="(m, index) in musicResults"
           :key="m.custom_song_id || m.id_music"
           class="rm-item lj-music-row"
+          :class="{ 'lj-music-row--active': index === nav.index.value }"
           @click="openVersionPicker(m)"
+          @mousemove="nav.setActive(index)"
         >
           <div class="rm-item__text">
             <span class="rm-item__title lj-u-truncate">{{ m.name }}</span>
@@ -127,7 +130,7 @@
 <script setup lang="ts">
 import { LjButton, LjDialog, LjIcon, LjInput, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { MusicLibraryAlbum, MusicItem, SearchMusicItem } from "@/types/Music";
 import type { ChooseLaterItem } from "@/types/Liturgy";
@@ -136,6 +139,7 @@ import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import { musicAlbumLabel } from "@root/config/musicCatalog.mjs";
 import { serverImageUrl } from "@/helpers/serverImageUrl";
 import { httpErrorMessage } from "@/helpers/httpErrorMessage";
+import { useListNavigation } from "@/composables/useListNavigation";
 
 const props = defineProps<{
   token?: string;
@@ -374,6 +378,23 @@ async function onMusicSearch(): Promise<void> {
       loadingMusics.value = false;
     }
   }, 300);
+}
+
+/* Num computador com teclado: ↑/↓ escolhem o resultado e Enter faz o mesmo que tocá-lo. */
+const resultsList = ref<HTMLElement | null>(null);
+const nav = useListNavigation({
+  items: () => musicResults.value,
+  container: resultsList,
+  activeSelector: ".lj-music-row--active",
+});
+watch(musicResults, () => nav.reset());
+
+function onSearchKey(event: KeyboardEvent): void {
+  if (nav.handleArrow(event) || event.key !== "Enter" || event.isComposing) return;
+  event.preventDefault();
+  // A busca do que acabou de ser digitado ainda não voltou: a lista na tela é a anterior.
+  if (loadingMusics.value) return;
+  if (nav.active.value) openVersionPicker(nav.active.value);
 }
 
 function openVersionPicker(music: MusicItem): void {

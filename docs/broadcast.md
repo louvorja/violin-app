@@ -122,14 +122,11 @@ evitando que uma cópia antiga substitua o estado atual.
 
 | Tipo | Gatilho |
 |---|---|
-| `MODULE_REFRESH` | F5 / F9 / Ctrl+Shift+F2 |
-| `MODULE_FOCUS_SEARCH` | Ctrl+F |
-| `MEDIA_PREV_MUSIC` | Ctrl+← |
-| `MEDIA_NEXT_MUSIC` | Ctrl+→ |
-| `LITURGY_NEW_ITEM` | Ctrl+N |
-| `LITURGY_NEW_ANNOTATION` | Ctrl+Shift+N |
-| `DRAWING_NUMBER` | HTTP externo (sorteio) |
-| `DRAWING_NAME` | HTTP externo (sorteio) |
+| `MEDIA_PREV_MUSIC` | ⌘← / Ctrl+← |
+| `MEDIA_NEXT_MUSIC` | ⌘→ / Ctrl+→ |
+| `LITURGY_RIBBON_ACTION` | ⌘N / Ctrl+N (`add`) |
+| `LITURGY_NEW_ANNOTATION` | ⇧⌘N / Ctrl+Shift+N |
+| `DRAWING_TEXT` | HTTP externo (sorteio): número ou nome em `{ text }` |
 
 ---
 

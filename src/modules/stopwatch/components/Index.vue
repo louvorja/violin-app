@@ -8,7 +8,12 @@
     <div class="lj-u-flex lj-u-h-full">
       <ModuleFormatDrawer v-model="show_format" :module-id="'stopwatch'" :manifest="manifest" />
       <div ref="container" class="sw-body" :style="rootStyle">
-        <img v-if="bgImage" :src="bgImage" class="sw-bg-img" :style="imageStyle" alt="" />
+        <ModuleBackgroundMedia
+          v-if="bgImage"
+          :src="bgImage"
+          class="sw-bg-img"
+          :style="imageStyle"
+        />
 
         <!-- Display -->
         <div
@@ -40,6 +45,7 @@ import { LjChip } from "@/components/ui";
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import { playBeep } from "@helpers/AudioBeep";
 import AppData from "@/helpers/AppData";

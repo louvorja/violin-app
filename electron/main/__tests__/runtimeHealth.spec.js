@@ -38,6 +38,8 @@ function makeMonitor(options = {}) {
     emitIncident: (incident) => incidents.push(incident),
     getRuntimeSnapshot: () => options.runtimeSnapshot || ({ download_active: true }),
     onEventLoopSample: options.onEventLoopSample,
+    isAppHidden: options.isAppHidden,
+    platform: options.platform,
     sampleIntervalMs: 60_000,
     criticalDelayMs: 1_000,
     incidentCooldownMs: 60_000,
@@ -237,6 +239,46 @@ describe("runtimeHealth", () => {
     loopDelayMonitor.max = 9_000e6;
     state.advanceWall(15_000);
     state.advanceMonotonic(15_000);
+    state.monitor.sampleEventLoop();
+    expect(state.incidents).toHaveLength(1);
+  });
+
+  it("ignora o App Nap do macOS enquanto nenhuma janela fica visível", () => {
+    let hidden = true;
+    const state = makeMonitor({
+      loopDelayMonitor: fakeLoopDelay({ max: 25_000e6, p99: 25_000e6 }),
+      platform: "darwin",
+      isAppHidden: () => hidden,
+    });
+
+    state.monitor.sampleEventLoop();
+    state.advanceWall(61_000);
+    state.advanceMonotonic(61_000);
+    state.monitor.sampleEventLoop();
+    expect(state.incidents).toHaveLength(0);
+
+    // Restaurada durante a amostra: a travada pode ter ocorrido com a janela à vista.
+    hidden = false;
+    state.advanceWall(61_000);
+    state.advanceMonotonic(61_000);
+    state.monitor.sampleEventLoop();
+    expect(state.incidents).toHaveLength(1);
+
+    // Minimizada só no fim da amostra: a travada continua sendo registrada.
+    hidden = true;
+    state.advanceWall(61_000);
+    state.advanceMonotonic(61_000);
+    state.monitor.sampleEventLoop();
+    expect(state.incidents).toHaveLength(2);
+  });
+
+  it("mantém a travada com janelas ocultas fora do macOS", () => {
+    const state = makeMonitor({
+      loopDelayMonitor: fakeLoopDelay({ max: 25_000e6, p99: 25_000e6 }),
+      platform: "linux",
+      isAppHidden: () => true,
+    });
+
     state.monitor.sampleEventLoop();
     expect(state.incidents).toHaveLength(1);
   });

@@ -529,6 +529,13 @@ export async function webStorageUsage(): Promise<WebStorageUsage> {
 export async function auditWebStorage(
   source: "boot" | "download_finished" | "user_remove" | "user_clear"
 ): Promise<void> {
+  if (!isWebFileStoreSupported()) {
+    reportReliabilityEvent("web_storage_unavailable", {
+      source,
+      reason: "cache_storage_unavailable",
+    });
+    return;
+  }
   try {
     const store = await openCaches();
     const [audio, images, usage] = await Promise.all([

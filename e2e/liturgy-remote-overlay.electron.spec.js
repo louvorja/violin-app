@@ -36,6 +36,8 @@ test("remote liturgy activates linked overlay only when a selected announcement 
           auto_download_updates: false,
           dev: { devtools_projections: false, devtools_main_window: false },
         },
+        // A marcação do item é o sinal de que o comando remoto chegou.
+        modules: { liturgy: { mark_on_access: true } },
       })
     );
     app = await electron.launch({
@@ -98,9 +100,11 @@ test("remote liturgy activates linked overlay only when a selected announcement 
 
     async function sendRemoteExecute(itemId = id) {
       await app.evaluate(({ BrowserWindow }, alvo) => {
-        const window = BrowserWindow.getAllWindows().find((win) =>
-          win.webContents.getURL().includes("localhost:5002")
-        );
+        // A projeção de anúncios também vem de localhost:5002; o app real envia à principal.
+        const window = BrowserWindow.getAllWindows().find((win) => {
+          const url = win.webContents.getURL();
+          return url.includes("localhost:5002") && !url.includes("/projection");
+        });
         window.webContents.send("http:song-slides", {
           action: "liturgy-execute",
           id: alvo,

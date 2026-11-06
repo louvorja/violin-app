@@ -606,18 +606,22 @@ async function _runDownloadedYouTube(
   let registered = false;
 
   _ytDownloading = id;
-  const res = await OnlineVideo.ensure(id, (p) => {
-    if (seq !== _ytPrepareSeq) return;
-    downloads.mark(id, p); // o cartão do vídeo mostra o andamento, e o "✕" cancela
-    // Só entra na lista quando há trabalho de verdade: um vídeo em cache não tem
-    // progresso, e não vale piscar um "preparando" para algo instantâneo.
-    if (!registered) {
-      registered = true;
-      tasks.registerTask(taskId, title || id, () => OnlineVideo.cancel(id));
-      $snackbar.info(say("online_video.preparing"), { key: `ov-prep-${id}`, timeout: 5000 });
-    }
-    tasks.updateTask(taskId, { progress: p.percent, detail: OnlineVideo.phaseText(p) });
-  });
+  const res = await OnlineVideo.ensure(
+    id,
+    (p) => {
+      if (seq !== _ytPrepareSeq) return;
+      downloads.mark(id, p); // o cartão do vídeo mostra o andamento, e o "✕" cancela
+      // Só entra na lista quando há trabalho de verdade: um vídeo em cache não tem
+      // progresso, e não vale piscar um "preparando" para algo instantâneo.
+      if (!registered) {
+        registered = true;
+        tasks.registerTask(taskId, title || id, () => OnlineVideo.cancel(id));
+        $snackbar.info(say("online_video.preparing"), { key: `ov-prep-${id}`, timeout: 5000 });
+      }
+      tasks.updateTask(taskId, { progress: p.percent, detail: OnlineVideo.phaseText(p) });
+    },
+    { origin: "playback", stageEpoch: diagnosticContext.media_stage_epoch }
+  );
   mediaDiagnosticLog(res.ok ? "debug" : "warn", "youtube download resolution", {
     ...diagnosticContext,
     phase: "download_resolution",
@@ -777,7 +781,7 @@ async function _runStreamedYouTube(
 
   try {
     _ytDownloading = id; // até os links chegarem, cancelar ou abrir outra coisa desiste do pedido
-    const res = await OnlineVideo.stream(id);
+    const res = await OnlineVideo.stream(id, diagnosticContext.media_stage_epoch);
     mediaDiagnosticLog(res.ok ? "debug" : "warn", "youtube stream resolution", {
       ...diagnosticContext,
       phase: "stream_resolution",
@@ -880,7 +884,14 @@ async function _runStreamedYouTube(
         error_message: mediaDiagnosticMessage(el.error?.message) ?? null,
       };
       console.warn("[OnlineVideo] o vídeo aberto direto não chegou a tocar:", { id, ...detail });
-      Telemetry.track("online_video_stream_start_failed", { video_id: id, ...detail });
+      Telemetry.track("online_video_stream_start_failed", {
+        video_id: id,
+        ...detail,
+        ...OnlineVideo.telemetryDiagnostics(res.diagnostic),
+        playback_id: _activePlayback?.playback_id,
+        request_origin: "playback",
+        media_stage_epoch: _stageEpoch,
+      });
       mediaDiagnosticLog("warn", "youtube stream media not ready", {
         ...diagnosticContext,
         phase: "media_ready_wait",
@@ -1517,6 +1528,12 @@ function _pdfPageStep(delta: number): boolean {
 }
 
 const _self = {
+  /** Preparações externas só podem assumir a apresentação se nada a substituiu. */
+  captureStageGuard(): () => boolean {
+    const stageEpoch = _stageEpoch;
+    return () => stageEpoch === _stageEpoch;
+  },
+
   /** ID da tentativa atual para os módulos que orquestram a reprodução. */
   getActivePlaybackId(): string | null {
     return _activePlayback?.playback_id || null;
@@ -1952,6 +1969,11 @@ const _self = {
       return;
     }
     const switchPlaybackId = _newPlaybackId();
+    const switchStageEpoch = _stageEpoch;
+    const isCurrentSwitch = () =>
+      switchStageEpoch === _stageEpoch &&
+      _loadingId === idMusic &&
+      _activePlayback?.playback_id === switchPlaybackId;
     const switchContext: AudioTelemetryContext = {
       playback_id: switchPlaybackId,
       id_music: idMusic,
@@ -1988,13 +2010,9 @@ const _self = {
             original_source: sourceDetails,
           })
           .then((faixa) => {
-            // Outra música entrou no ar durante o carregamento: esta não serve
-            // mais, e o blob dela só sai da memória se alguém soltar. A música
-            // personalizada não tem id de acervo, então é o playback que a distingue.
-            if (
-              _loadingId !== idMusic ||
-              (custom && _activePlayback?.playback_id !== switchPlaybackId)
-            ) {
+            // Fechar, abrir outra música ou mudar de modo invalida o preparo,
+            // mesmo quando o ID da música continua igual.
+            if (!isCurrentSwitch()) {
               _audio.release(faixa);
               return;
             }
@@ -2028,6 +2046,8 @@ const _self = {
               });
           })
           .catch((error) => {
+            // Um erro atrasado não pode reabrir a música que o operador já deixou.
+            if (!isCurrentSwitch()) return;
             // A faixa não quis carregar em paralelo; o caminho normal reabre a
             // música e traz junto o tratamento de erro de sempre.
             _switchingMode = false;
@@ -2781,7 +2801,11 @@ const _self = {
    * @returns true quando há algo tocando; false quando o operador cancelou ou o
    *          vídeo não pode ser reproduzido (privado, removido, restrito).
    */
-  async openYouTube(url: string, title: string): Promise<boolean> {
+  async openYouTube(
+    url: string,
+    title: string,
+    options: { preferStream?: boolean } = {}
+  ): Promise<boolean> {
     const id = OnlineVideo.videoIdFromUrl(url);
     // Dois cliques no mesmo vídeo enquanto ele abre partilham a tentativa em
     // curso; um segundo vídeo de fato revoga a primeira tentativa.
@@ -2798,16 +2822,26 @@ const _self = {
         const outcome = await _prepareDownloadedYouTube(id, title);
         if (outcome !== "embed") return outcome === "playing";
       } else if (id && OnlineVideo.downloadEnabled()) {
-        // Sem esperar o download: toca das trilhas que o main baixa uma vez só, e o download termina
-        // ao fundo. Se não der para tocar assim, começa pelo player do YouTube (que pode ter
-        // anúncio) e o download segue mesmo assim, para as próximas vezes.
-        const outcome = await _prepareStreamedYouTube(id, title);
-        if (outcome !== "embed") return outcome === "playing";
-        void useOnlineVideoDownloads().download(id, title, {
-          keep: false,
-          quiet: true,
-          background: true,
-        });
+        if (options.preferStream === true) {
+          // Modo antigo, mantido para diagnóstico/teste: tenta tocar das trilhas
+          // diretas antes de abrir o embed.
+          const outcome = await _prepareStreamedYouTube(id, title);
+          if (outcome !== "embed") return outcome === "playing";
+          void useOnlineVideoDownloads().download(id, title, {
+            keep: false,
+            quiet: true,
+            background: true,
+          });
+        } else {
+          // Padrão: o clique abre o vídeo imediatamente pelo YouTube e o
+          // arquivo local é preparado em segundo plano. Na próxima abertura,
+          // `isDownloaded` acha o MP4 e toca sem anúncio.
+          void useOnlineVideoDownloads().download(id, title, {
+            keep: false,
+            quiet: true,
+            background: true,
+          });
+        }
       }
       if (stageEpoch !== _stageEpoch) return false;
       await this.openEmbeddedYouTube(url, title, stageEpoch);
@@ -3141,6 +3175,12 @@ const _self = {
   },
 
   goToTime(time: number): void {
+    Telemetry.breadcrumb?.("media_seek_requested", {
+      playback_id: _activePlayback?.playback_id,
+      from_time: _audio.currentTime.value,
+      requested_time: time,
+      mode: _isYouTube() ? "youtube" : "media",
+    });
     if (_isYouTube()) {
       $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, {
         action: "seekTo",
@@ -3154,6 +3194,11 @@ const _self = {
   },
 
   advanceTime(time = 10): void {
+    Telemetry.breadcrumb?.("media_seek_requested", {
+      playback_id: _activePlayback?.playback_id,
+      from_time: _audio.currentTime.value,
+      delta: time,
+    });
     if (_isYouTube()) {
       const newTime = Math.max(0, _audio.currentTime.value + time);
       $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, {
@@ -3176,6 +3221,12 @@ const _self = {
   },
 
   pause(bool = true, callback?: () => void): void {
+    Telemetry.breadcrumb?.("media_playback_requested", {
+      playback_id: _activePlayback?.playback_id,
+      action: bool ? "pause" : "play",
+      current_time: _audio.currentTime.value,
+      was_paused: _audio.isPaused.value,
+    });
     if (_isYouTube()) {
       if (bool) {
         $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, {
@@ -3215,6 +3266,12 @@ const _self = {
       const self = this;
       _audio.play(
         (e) => {
+          // O "tocar já" do YouTube tem um fallback próprio (volta ao embed e
+          // inicia o download). Um 403 do CDN no meio da trilha não pode abrir
+          // o modal de áudio: o operador acabaria fechando um erro que o app
+          // já está resolvendo.
+          const source = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.AUDIO);
+          if (typeof source === "string" && OnlineVideo.isProgressiveUrl(source)) return;
           const id = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC) as string | number | null;
           // Arquivos diretos da liturgia não têm id_music: sem reabrir o banco com null.
           // A nova tentativa fica onde a música estava: minimizada, ela não pode
@@ -3270,7 +3327,14 @@ const _self = {
   },
 
   setVolume(val: number): void {
+    const previous = _audio.volume.value;
     _audio.setVolume(val);
+    Telemetry.breadcrumb?.("media_volume_changed", {
+      playback_id: _activePlayback?.playback_id,
+      from_volume: previous,
+      requested_volume: val,
+      volume: _audio.volume.value,
+    });
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VOLUME, val);
     if (_isYouTube()) {
       $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, {

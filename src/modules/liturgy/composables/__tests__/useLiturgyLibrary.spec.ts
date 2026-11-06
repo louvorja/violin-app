@@ -1,11 +1,65 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createPinia, setActivePinia } from "pinia";
 import { parseJaImport, useLiturgyLibrary } from "../useLiturgyLibrary";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { agendaParaPersistir, prepararAgenda } from "../../agenda";
 import DocStore from "@/helpers/DocStore";
 import type { LiturgyLibraryItem } from "@/types/LiturgyLibrary";
+import Liturgy from "@/helpers/Liturgy";
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("exclusão de uma liturgia salva", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    setActivePinia(createPinia());
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("desvincula todos os dias e a seleção atual sem apagar os itens da agenda", async () => {
+    vi.spyOn(DocStore, "del").mockResolvedValue();
+    const library = useLiturgyLibrary();
+    const items = library.parseImport(
+      JSON.stringify({ name: "Culto", items: [{ tipo: "anotacao", item: "Preservar" }] })
+    )!.items;
+    Liturgy.set(items, 0);
+    Liturgy.setDayLiturgyId(0, "excluida");
+    Liturgy.setDayLiturgyId(6, "excluida");
+    Liturgy.setDayLiturgyId(3, "outra");
+    Liturgy.setCurrentLiturgyId("excluida");
+
+    await library.remove("excluida");
+
+    expect(Liturgy.getCurrentLiturgyId()).toBeNull();
+    expect(Liturgy.getDayLiturgyId(0)).toBeNull();
+    expect(Liturgy.getDayLiturgyId(6)).toBeNull();
+    expect(Liturgy.getDayLiturgyId(3)).toBe("outra");
+    expect(Liturgy.list(0)).toEqual(items);
+  });
+
+  it("preserva a seleção de outra liturgia ao excluir um registro inativo", async () => {
+    vi.spyOn(DocStore, "del").mockResolvedValue();
+    Liturgy.setCurrentLiturgyId("outra");
+    Liturgy.setDayLiturgyId(6, "excluida");
+
+    await useLiturgyLibrary().remove("excluida");
+
+    expect(Liturgy.getCurrentLiturgyId()).toBe("outra");
+    expect(Liturgy.getDayLiturgyId(6)).toBeNull();
+  });
+
+  it("mantém os vínculos se a exclusão no armazenamento falhar", async () => {
+    vi.spyOn(DocStore, "del").mockRejectedValue(new Error("falha ao gravar"));
+    Liturgy.setCurrentLiturgyId("original");
+    Liturgy.setDayLiturgyId(6, "original");
+
+    await expect(useLiturgyLibrary().remove("original")).rejects.toThrow("falha ao gravar");
+
+    expect(Liturgy.getCurrentLiturgyId()).toBe("original");
+    expect(Liturgy.getDayLiturgyId(6)).toBe("original");
+  });
+});
 
 // Recorte fiel de um `liturgia.ja` real (formato Delphi/TIniFile), com dois
 // grupos: um sem "categoria" (culto avulso) e um com ela (Escola Sabatina).

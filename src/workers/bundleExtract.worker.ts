@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 
 import { validateBundleManifest, isBibleFile } from "@/helpers/BundleManifest";
+import { sha256Hex } from "@/helpers/Sha256";
 import { BUNDLE_MANIFEST_FILE, type BundleKind } from "@/types/Bundle";
 
 interface ExtractRequest {
@@ -47,10 +48,7 @@ export function installBundleExtractWorker(scope: BundleExtractWorkerScope): voi
       const key = path.replace(/\.json$/, "");
       const bytes = await zip.files[path].async("uint8array");
       const file = hashes.get(path)!;
-      const digest = await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
-      const sha256 = Array.from(new Uint8Array(digest), (byte) =>
-        byte.toString(16).padStart(2, "0")
-      ).join("");
+      const sha256 = await sha256Hex(bytes as Uint8Array<ArrayBuffer>);
       if (bytes.byteLength !== file.bytes || sha256 !== file.sha256)
         throw new Error(`Bundle inválido: integridade de ${path}`);
       const data: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));

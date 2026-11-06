@@ -12,6 +12,36 @@ beforeEach(useTestBundleWorker);
 afterEach(() => vi.unstubAllGlobals());
 
 describe("extractBundleEntries", () => {
+  it("extrai o pacote da Bíblia validado mesmo sem crypto.subtle", async () => {
+    vi.stubGlobal("crypto", {});
+    const buffer = await zipWithManifest({ "bible_1_1_1.json": { 1: "Texto" } }, "bible");
+    const onEntry = vi.fn();
+    await extractBundleEntries(buffer, { kind: "bible", onEntry });
+    expect(onEntry).toHaveBeenCalledWith({
+      key: "bible_1_1_1",
+      data: { 1: "Texto" },
+      current: 1,
+      total: 1,
+    });
+    expect(TestBundleWorker.latest?.terminated).toBe(true);
+  });
+
+  it("continua rejeitando conteúdo adulterado sem crypto.subtle, mesmo com CRC válido", async () => {
+    vi.stubGlobal("crypto", {});
+    const zip = await JSZip.loadAsync(
+      await zipWithManifest({ "bible_1_1_1.json": { 1: "Texto" } }, "bible")
+    );
+    zip.file("bible_1_1_1.json", JSON.stringify({ 1: "Outro" }));
+    const onEntry = vi.fn();
+    await expect(
+      extractBundleEntries(await zip.generateAsync({ type: "arraybuffer" }), {
+        kind: "bible",
+        onEntry,
+      })
+    ).rejects.toThrow(/integridade de bible_1_1_1/);
+    expect(onEntry).not.toHaveBeenCalled();
+  });
+
   it("extrai ZIP validado no worker, transfere buffer e espera consumo", async () => {
     const onEntry = vi.fn(async () => {});
     const buffer = await zipWithManifest(

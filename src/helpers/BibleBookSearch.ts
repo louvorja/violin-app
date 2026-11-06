@@ -33,6 +33,15 @@ export function compactarBusca(texto: string): string {
   return normalizarBusca(texto).replace(/[\s.-]+/g, "");
 }
 
+/** Forma que preserva acentos: "jo" e "jó" deixam de ser a mesma consulta. */
+function compactarBruto(texto: string): string {
+  return String(texto || "")
+    .normalize("NFC")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s.-]+/g, "");
+}
+
 export interface OrdinalDividido {
   ordinal: number | null;
   resto: string;
@@ -74,8 +83,12 @@ interface LivroIndexado<T> {
   book: T;
   /** Nome compacto, do jeito que está nos dados ("isamuel"). */
   nome: string;
+  /** Nome compacto preservando acentos ("jó", "joão"). */
+  nomeBruto: string;
   /** Abreviação compacta ("1sm"). */
   abrev: string;
+  /** Abreviação compacta preservando acentos ("jó", "jo"). */
+  abrevBruto: string;
   /** Ordinal do livro, do nome ou da abreviação. */
   ordinal: number | null;
   /** Nome compacto sem o ordinal ("samuel"); o nome inteiro quando não há. */
@@ -96,17 +109,24 @@ function indexar<T extends BibleBookSearchable>(book: T): LivroIndexado<T> {
   return {
     book,
     nome: compactarBusca(normalizado),
+    nomeBruto: compactarBruto(book.name || ""),
     abrev,
+    abrevBruto: compactarBruto(book.abbreviation || ""),
     /* O nome manda; a abreviação só completa quando o nome não traz o numeral. */
     ordinal: ordinal ?? abrevOrdinal,
     resto: ordinal ? compactarBusca(resto) : compactarBusca(normalizado),
     abrevResto: abrevOrdinal ? abrev.slice(1) : abrev,
     palavras: normalizado.split(/\s+/).filter(Boolean),
-    chaves: normalizarBusca(book.keywords || "").split(/\s+/).filter(Boolean).map(compactarBusca),
+    chaves: normalizarBusca(book.keywords || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(compactarBusca),
   };
 }
 
 const PONTOS = {
+  abrevBrutaExata: -2,
+  nomeBrutoExato: -1,
   abrevExata: 0,
   nomeExato: 1,
   grupoOrdinal: 2,
@@ -147,6 +167,7 @@ export function buscarLivros<T extends BibleBookSearchable>(
   const texto = normalizarBusca(consulta);
   if (!texto) return [];
   const compacta = compactarBusca(texto);
+  const bruto = compactarBruto(consulta);
   const { ordinal, resto } = dividirOrdinal(texto, false);
   const restoCompacto = compactarBusca(resto);
   const temOrdinal = ordinal != null;
@@ -155,7 +176,9 @@ export function buscarLivros<T extends BibleBookSearchable>(
   for (const book of livros) {
     const indexado = indexar(book);
     let score = Infinity;
-    if (indexado.abrev === compacta) score = PONTOS.abrevExata;
+    if (indexado.abrevBruto === bruto) score = PONTOS.abrevBrutaExata;
+    else if (indexado.nomeBruto === bruto) score = PONTOS.nomeBrutoExato;
+    else if (indexado.abrev === compacta) score = PONTOS.abrevExata;
     else if (indexado.nome === compacta) score = PONTOS.nomeExato;
     else if (temOrdinal) {
       if (indexado.ordinal === ordinal) {
@@ -179,8 +202,11 @@ export function buscarLivros<T extends BibleBookSearchable>(
     if (score < Infinity) pontuados.push({ book, score });
   }
 
+  /* Com acento digitado, "jó" não pode cair no "joão" só porque a busca sem
+     acento os igualaria. Um exato bruto manda sozinho na lista. */
+  const exatosBrutos = pontuados.filter((p) => p.score <= PONTOS.nomeBrutoExato);
   const exatos = pontuados.filter((p) => p.score <= PONTOS.nomeExato);
-  const lista = exatos.length ? exatos : pontuados;
+  const lista = exatosBrutos.length ? exatosBrutos : exatos.length ? exatos : pontuados;
   /* Sort estável: empate mantém a ordem canônica em que os livros chegaram. */
   return lista.sort((a, b) => a.score - b.score).map((p) => p.book);
 }

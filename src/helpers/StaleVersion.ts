@@ -25,7 +25,7 @@ export function notifyStaleVersion(): void {
     color: "warning",
     timeout: 15000,
     key: "stale_version",
-    action: () => window.dispatchEvent(new Event("lj:pwa-recover")),
+    action: () => window.dispatchEvent(new Event("lj:pwa-reload")),
   });
 }
 

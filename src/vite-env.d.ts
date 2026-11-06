@@ -1,5 +1,39 @@
 /// <reference types="vite/client" />
 declare global {
+  interface StorageLocations {
+    profileDir: string;
+    mediaDir: string;
+    videosDir: string;
+    setupCompleted: boolean;
+    restartRequired: boolean;
+    pending?: { mediaDir: string; videosDir: string; moving?: boolean } | null;
+    access?: {
+      media: { writable: boolean; shared: boolean; reason?: string };
+      videos: { writable: boolean; shared: boolean; reason?: string };
+    };
+    changeError?: string;
+    /** As pastas que uma instalação nova usaria nesta máquina. */
+    defaults?: { mediaDir: string; videosDir: string } | null;
+    /** Se esta conta pode apagar a pasta atual depois de mover (não compartilhada). */
+    canMove?: { media: boolean; videos: boolean };
+  }
+
+  /** Por que o app abriu num perfil provisório, e quantas aberturas seguidas falharam. */
+  interface StorageDataDirIssue {
+    reason: "unavailable" | "failed";
+    wanted?: string;
+    message?: string;
+    attempts?: number;
+    canReset?: boolean;
+  }
+
+  interface StorageLocationsInput {
+    mediaDir: string;
+    videosDir: string;
+    mediaAction: "reuse" | "copy" | "move";
+    videosAction: "reuse" | "copy" | "move";
+  }
+
   interface UserDataIpcPatch {
     path: string;
     value: unknown;
@@ -234,6 +268,7 @@ declare global {
       >;
       validate: (dir: string) => Promise<{
         ok: boolean;
+        lang?: "pt" | "es" | null;
         configDir?: string;
         folders?: Record<string, boolean>;
         error?: string;
@@ -328,29 +363,44 @@ declare global {
       cloudStates?: (paths: string[]) => Promise<Record<string, "local" | "cloud">>;
       cloudDownload?: (filePath: string) => Promise<{ ok: true } | { ok: false; error: string }>;
       onCloudProgress?: (cb: (data: { path: string; percent: number }) => void) => () => void;
-      setDataDir: (dir: string, opts?: { moveExisting?: boolean }) => Promise<void>;
+      locations: () => Promise<StorageLocations>;
+      configureLocations: (locations: StorageLocationsInput) => Promise<{
+        ok: true;
+        restartRequired: boolean;
+      }>;
+      completeSetup: () => Promise<void>;
+      privatePathMappings: () => Promise<Array<{ from: string; to: string }>>;
+      restart: () => Promise<void>;
       enforceQuota: (maxBytes: number) => Promise<void>;
       checkLocal: (paths: string[]) => Promise<Record<string, "own" | "classic" | false>>;
       removeFiles: (paths: string[]) => Promise<void>;
       sizeOfPaths: (
         paths: string[]
       ) => Promise<{ bytes: number; classicBytes: number; count: number; missing: number }>;
-      openDir: () => Promise<void>;
+      openDir: (kind?: "media" | "videos" | "profile") => Promise<void>;
       verify: (files: unknown) => Promise<unknown>;
       clearUnused: (files: unknown) => Promise<void>;
       stats: () => Promise<{
         dataDir?: string;
-        dataDirIssue?: { wanted: string; reason: string } | null;
+        dataDirIssue?: StorageDataDirIssue | null;
         restartRequired?: boolean;
         filesDir?: string;
+        mediaDir?: string;
+        videosDir?: string;
+        videos?: { bytes: number; count: number };
         files?: { bytes: number; count: number };
-        /** Cache de export do Canva (`files/canva`), fora do acervo. */
+        /** Cache de export do Canva, no perfil e fora do acervo. */
         canva?: { bytes: number; count: number };
         json?: { bytes: number; count: number };
         total?: { bytes: number };
       }>;
-      dataDirIssue: () => Promise<{ wanted: string; reason: string } | null>;
-      clearJson: () => Promise<void>;
+      dataDirIssue: () => Promise<StorageDataDirIssue | null>;
+      recover: (
+        action: "reset" | "reimport" | "repair" | "wipe",
+        options?: { media?: boolean; videos?: boolean }
+      ) => Promise<void>;
+      olderVersion: () => Promise<{ since: string; legacyRoot: string } | null>;
+      keepCurrentVersion: () => Promise<void>;
       clearFiles: () => Promise<void>;
       setAutoCache: (enabled: boolean) => Promise<void>;
     };
@@ -374,7 +424,10 @@ declare global {
       dir: string;
     };
     protocol: { setRemoteConfig: (config: unknown) => void };
-    jsonCache: { clear: () => Promise<void>; dir: string };
+    jsonCache: {
+      expire: (files?: string[]) => Promise<{ expired: number }>;
+      dir: () => Promise<string>;
+    };
     download: {
       onProgress: (
         cb: (d: { file?: string; total: number; downloaded?: number; failed?: number }) => void
@@ -461,7 +514,10 @@ declare global {
     displays: {
       list: () => Promise<unknown[]>;
       getPreferred: (feature: string) => Promise<{ id: number; bounds: unknown } | null>;
-      setPreferred: (feature: string, displayId: number | string | null | undefined) => Promise<void>;
+      setPreferred: (
+        feature: string,
+        displayId: number | string | null | undefined
+      ) => Promise<void>;
       getPrefs: () => Promise<Record<string, number | string | null>>;
       getRoles: () => Promise<
         {
@@ -563,9 +619,7 @@ declare global {
        * "Projetar como: PDF": não usa sessão web do Canva, só o token da API.
        * Fica pendente enquanto o job roda (até ~1 minuto).
        */
-      exportPdf: (
-        designId: string
-      ) => Promise<
+      exportPdf: (designId: string) => Promise<
         CanvaResult & {
           path?: string;
           cached?: boolean;

@@ -26,6 +26,9 @@ const electron = require("electron");
 const { pathToFileURL } = require("url");
 const fs = require("fs-extra");
 const path = require("path");
+const { randomUUID } = require("node:crypto");
+const { Readable } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
 const paths = require("./paths.js");
 const jsonCache = require("./jsonCache.js");
 const mediaResolver = require("./mediaResolver.js");
@@ -34,6 +37,9 @@ const netHealth = require("./netHealth.js");
 const apiConfig = require("./apiConfig.js");
 const { buildCsp } = require("./csp.js");
 const onlineVideo = require("./onlineVideo/index.js");
+const storageAccess = require("./storageAccess.js");
+const { ensureCollectionSubdirectory } = require("./sharedCollectionDirs.js");
+const { publishCollectionFile } = require("./collectionPublication.js");
 
 // ---------------------------------------------------------------------------
 // Configuração de URLs remotas
@@ -128,8 +134,10 @@ async function _responderArquivo(caminho, request) {
   }
 
   const start = parseInt(match[1], 10);
-  const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
-  if (start >= fileSize) {
+  // O cliente pode pedir além do EOF sem conhecer o tamanho (RFC 9110, 14.1.2).
+  // Corpo e cabeçalhos precisam descrever apenas os bytes que existem.
+  const end = match[2] ? Math.min(parseInt(match[2], 10), fileSize - 1) : fileSize - 1;
+  if (start >= fileSize || end < start) {
     return new Response(null, {
       status: 416,
       headers: { "Content-Range": `bytes */${fileSize}` },
@@ -203,73 +211,73 @@ function setAutoCacheEnabled(enabled) {
 }
 
 /**
- * Endereço novo de um arquivo que ficou no cache ANTIGO do Canva.
+ * Endereço novo de um arquivo pessoal que ficou num endereço antigo.
  *
- * O cache de export mudou de `<dados>/canva` para `<dados>/files/canva`, e
- * URLs guardadas antes disso continuam apontando para o endereço velho. A que
- * dói é o `LJ_FILE_PROJECTION` do telão: reabrir a última projeção depois de
- * atualizar cairia num arquivo inexistente e a tela ficaria vazia até o
- * operador projetar de novo. Em vez disso, servimos do endereço novo.
- *
- * Só vale para um ARQUIVO dentro da pasta antiga: a pasta em si continuaria
- * 404 (servir diretório viraria 500 no stream).
- *
- * TODO: remover junto com `main/canva/migration.js`, na versão seguinte —
- * roteiro em `docs/canva-cache-migration-removal.md`.
+ * Cache do Canva e anexos moraram dentro da pasta de dados única e agora vivem
+ * no perfil privado. URLs guardadas antes da mudança continuam apontando para o
+ * endereço velho. A que dói é o `LJ_FILE_PROJECTION` do telão: reabrir a última
+ * projeção cairia num arquivo inexistente e a tela ficaria vazia até o operador
+ * projetar de novo. Só vale para um ARQUIVO dentro de uma origem conhecida.
  *
  * @param {string} absoluto
- * @returns {string|null} null quando o caminho não é o cache antigo do Canva
+ * @returns {string|null}
  */
-function _enderecoNovoDoCanva(absoluto) {
+function _enderecoNovoPrivado(absoluto) {
   try {
-    const antigo = path.resolve(paths.dataDir(), "canva");
     const alvo = path.resolve(absoluto);
-    if (!alvo.startsWith(`${antigo}${path.sep}`)) return null;
-    return path.join(paths.filesDir(), "canva", path.relative(antigo, alvo));
+    for (const { from, to } of paths.privatePathMappings()) {
+      const origem = path.resolve(from);
+      if (alvo.startsWith(`${origem}${path.sep}`)) return path.join(to, path.relative(origem, alvo));
+    }
   } catch (_) {
-    /* Sem pasta de dados resolvida não há cache antigo a procurar. */
-    return null;
+    /* Sem layout legível não há endereço antigo a procurar. */
   }
+  return null;
 }
 
 /**
- * Grava um ReadableStream em um arquivo via .tmp + rename atômico.
- * Usado pelo auto-cache do host "files".
+ * Resposta remota que o player pode abandonar no meio. O Electron cancela o
+ * corpo que devolvemos quando o player desiste do trecho (busca dentro da
+ * faixa, troca de versão), mas não repassa isso à resposta do `net.fetch`: o
+ * pedido ao servidor seguia aberto, os abandonados enchiam a janela da conexão
+ * com dados que ninguém lia e o trecho seguinte não chegava — a música parava.
  */
-async function _writeStreamToFile(readable, finalPath) {
-  await fs.ensureDir(path.dirname(finalPath));
-  const tmp = `${finalPath}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
-  const writer = fs.createWriteStream(tmp);
-  const reader = readable.getReader();
+function _abandonableResponse(response, abort) {
+  if (!response.body) return response;
+  const reader = response.body.getReader();
+  const body = new ReadableStream({
+    async pull(controller) {
+      try {
+        const { value, done } = await reader.read();
+        if (done) controller.close();
+        else controller.enqueue(value);
+      } catch (error) {
+        try { controller.error(error); } catch { /* o player já encerrou */ }
+      }
+    },
+    cancel() {
+      abort.abort();
+      reader.cancel().catch(() => {});
+    },
+  });
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+}
 
+/** O streaming permanece privado; só o arquivo completo é publicado no acervo. */
+async function _writeStreamToFile(readable, finalPath) {
+  const root = paths.filesDir();
+  const shared = storageAccess.status().media?.shared === true;
+  const workDir = path.join(paths.dataDir(), "temp", "downloads");
+  await fs.ensureDir(workDir, { mode: 0o700 });
+  const tmp = path.join(workDir, `autocache-${randomUUID()}.partial`);
   try {
-    /* eslint-disable no-constant-condition */
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      // value é Uint8Array — converte pra Buffer antes de gravar
-      writer.write(Buffer.from(value));
-    }
-    /* eslint-enable no-constant-condition */
-    await new Promise((resolve, reject) => {
-      writer.end((err) => (err ? reject(err) : resolve()));
+    await ensureCollectionSubdirectory(root, path.dirname(finalPath), { shared });
+    await pipeline(Readable.fromWeb(readable), fs.createWriteStream(tmp, { flags: "wx", mode: 0o600 }));
+    await publishCollectionFile(tmp, finalPath, { root, shared,
+      cancelled: () => !storageAccess.canWrite("media"),
     });
-    await fs.move(tmp, finalPath, { overwrite: true });
     console.log("[protocol] Auto-cached:", finalPath);
-  } catch (e) {
-    try {
-      await fs.remove(tmp);
-    } catch (_) {
-      /* ignore */
-    }
-    throw e;
-  } finally {
-    try {
-      reader.releaseLock();
-    } catch (_) {
-      /* ignore */
-    }
-  }
+  } finally { await fs.remove(tmp); }
 }
 
 // ---------------------------------------------------------------------------
@@ -476,19 +484,20 @@ function handle() {
           if (rangeHeader) headers.Range = rangeHeader;
 
           try {
-            const response = await electron.net.fetch(remoteUrl, { headers });
+            const abort = new AbortController();
+            const response = await electron.net.fetch(remoteUrl, { headers, signal: abort.signal });
             // Resposta é resposta: mesmo um 404 prova que o servidor respondeu.
             netHealth.report(true, "protocol");
 
             if (!response.ok || response.status !== 200 || isRangeRequest) {
-              return response; // não cacheamos parciais nem erros
+              return _abandonableResponse(response, abort); // não cacheamos parciais nem erros
             }
 
-            if (!_autoCacheEnabled || !response.body) {
-              return response;
+            if (!_autoCacheEnabled || !require("./storageAccess.js").canWrite("media") || !response.body) {
+              return _abandonableResponse(response, abort);
             }
 
-            // Tee: uma branch vai pro renderer, outra grava em .tmp e renomeia.
+            // Tee: uma branch vai ao renderer; a outra usa temporário privado.
             const [forRenderer, forDisk] = response.body.tee();
             _writeStreamToFile(forDisk, localPath).catch((e) =>
               console.warn("[protocol] Auto-cache falhou:", e.message || e)
@@ -537,8 +546,8 @@ function handle() {
         }
 
         if (!(await fs.pathExists(raw))) {
-          /* Cache do Canva no endereço antigo: serve do novo (ver o TODO acima). */
-          const migrado = _enderecoNovoDoCanva(raw);
+          /* Arquivo pessoal no endereço antigo: serve do novo. */
+          const migrado = _enderecoNovoPrivado(raw);
           if (migrado && (await fs.pathExists(migrado))) {
             return await _responderArquivo(migrado, request);
           }

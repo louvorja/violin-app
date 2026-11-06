@@ -29,19 +29,16 @@ function _registerProjectionHotkeys(): void {
     context: "announcements",
     description: "hotkeys.announcements_next",
     group: "announcements",
-    label: "\u2192",
   });
   Hotkeys.register("ArrowLeft", _hotkeyPrev, {
     context: "announcements",
     description: "hotkeys.announcements_prev",
     group: "announcements",
-    label: "\u2190",
   });
   Hotkeys.register("Space", _hotkeyNext, {
     context: "announcements",
     description: "hotkeys.announcements_next",
     group: "announcements",
-    label: "Space",
   });
   _hotkeysRegistered = true;
 }

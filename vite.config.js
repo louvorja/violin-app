@@ -5,6 +5,7 @@ import posthogRollupPlugin from "@posthog/rollup-plugin";
 import path from "path";
 import { createRequire } from "module";
 import { randomUUID, createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { KEYS_LS } from "./src/constants/LocalStorageKeys";
 import { normalizeAppVersion } from "./src/helpers/AppVersion.js";
 
@@ -44,7 +45,18 @@ export default async ({ mode }) => {
 
   // Detectar target: "desktop" (Electron) ou "web" (padrão PWA)
   const isDesktop = process.env.VITE_TARGET === "desktop";
-  const webBuildId = isDesktop ? null : randomUUID();
+  const appBuildId = randomUUID();
+  let appCommit = "unknown";
+  try {
+    appCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+      encoding: "utf8",
+      timeout: 1000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    /* source archives have no Git metadata */
+  }
+  const webBuildId = appBuildId;
   const recoveryScript = `(${installPwaRecovery.toString()})(${JSON.stringify({
     scope: process.env.VITE_BASE_URL || "/",
     build: webBuildId,
@@ -86,6 +98,17 @@ export default async ({ mode }) => {
   // Plugins base — sempre incluídos
   const plugins = [
     vue(),
+    {
+      name: "louvorja-build-identity",
+      apply: "build",
+      generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "app-build.json",
+          source: JSON.stringify({ version: 1, id: appBuildId, commit: appCommit }),
+        });
+      },
+    },
     // No desktop (Electron), CSP é gerenciado via session.webRequest no
     // main process, com política relaxada para janelas de projeção de vídeo
     // (YouTube IFrame Player API precisa de 'unsafe-inline' no script-src).
@@ -100,13 +123,6 @@ export default async ({ mode }) => {
                 "<!--CSP_PROD-->",
                 `${cspMeta}<meta name="louvorja-build" content="${webBuildId}"><script>${recoveryScript}</script>`
               );
-            },
-            generateBundle() {
-              this.emitFile({
-                type: "asset",
-                fileName: "app-build.json",
-                source: JSON.stringify({ version: 1, id: webBuildId }),
-              });
             },
           },
         ]),
@@ -323,6 +339,8 @@ export default async ({ mode }) => {
 
     define: {
       "process.env": {},
+      "import.meta.env.VITE_APP_BUILD": JSON.stringify(appBuildId),
+      "import.meta.env.VITE_APP_COMMIT": JSON.stringify(appCommit),
       __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "true",
     },
     optimizeDeps: {

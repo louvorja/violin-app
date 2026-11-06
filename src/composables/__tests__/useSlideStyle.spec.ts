@@ -15,13 +15,25 @@ const K = KEYS.OPTIONS.SLIDE;
 describe("useSlideStyle — leitura das opções", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    for (const k of [K.CUSTOM_TEXT_FORMAT, K.SHADOW_ENABLED, K.SHADOW_BLUR,
-                     K.SHADOW_OFFSET_Y, K.FONT_SIZE_NEXT,
-                     K.CUSTOM_RETURN_TEXT_FORMAT, K.RETURN_TEXT_CASE, K.SLIDES,
-                     K.RETURN_FONT_SIZE_LYRIC, K.RETURN_FONT_SIZE_COVER,
-                     K.CUSTOM_RETURN_BACKGROUND, K.RETURN_BG_TOP_POSITION,
-                     K.RETURN_BG_BOTTOM_POSITION, K.MAIN_TEXT_SCALE, K.RETURN_TEXT_SCALE,
-                     K.TEXT_BG_BLUR_ENABLED, K.TEXT_BG_BLUR]) {
+    for (const k of [
+      K.CUSTOM_TEXT_FORMAT,
+      K.SHADOW_ENABLED,
+      K.SHADOW_BLUR,
+      K.SHADOW_OFFSET_Y,
+      K.FONT_SIZE_NEXT,
+      K.CUSTOM_RETURN_TEXT_FORMAT,
+      K.RETURN_TEXT_CASE,
+      K.SLIDES,
+      K.RETURN_FONT_SIZE_LYRIC,
+      K.RETURN_FONT_SIZE_COVER,
+      K.CUSTOM_RETURN_BACKGROUND,
+      K.RETURN_BG_TOP_POSITION,
+      K.RETURN_BG_BOTTOM_POSITION,
+      K.MAIN_TEXT_SCALE,
+      K.RETURN_TEXT_SCALE,
+      K.TEXT_BG_BLUR_ENABLED,
+      K.TEXT_BG_BLUR,
+    ]) {
       $userdata.set(k, undefined);
     }
   });
@@ -137,22 +149,26 @@ describe("useSlideStyle — leitura das opções", () => {
     expect(top.background).toBe(SLIDE_STYLE_DEFAULT.return_bg_top_color);
   });
 
-  it("fundo borrado desfoca a imagem do slide, proporcional à altura, e não a caixa do texto (#13)", () => {
+  it("fundo borrado usa uma camada de desfoque sem alterar o enquadramento (#36)", () => {
     const slide = { url_image: "https://files.louvorja.com.br/images/hasd_579.jpg", id_music: 21 };
     expect(useSlideStyle().bgStyle(slide).filter).toBeUndefined();
+    expect(useSlideStyle().bgStyle(slide).transform).toBeUndefined();
+    expect(useSlideStyle().bgBlurStyle()).toBeNull();
 
     $userdata.set(K.TEXT_BG_BLUR_ENABLED, true);
     $userdata.set(K.TEXT_BG_BLUR, 20);
     const style = useSlideStyle();
     const bg = style.bgStyle(slide);
-    expect(bg.filter).toBe("blur(calc(20 * 100cqh / 1080))");
-    expect(bg.transform).toBe("scale(1.08)");
+    expect(bg.filter).toBeUndefined();
+    expect(bg.transform).toBeUndefined();
+    expect(style.bgBlurStyle()).toMatchObject({
+      backdropFilter: "blur(calc(20 * 100cqh / 1080))",
+      WebkitBackdropFilter: "blur(calc(20 * 100cqh / 1080))",
+    });
     expect(style.textBoxStyle()).not.toHaveProperty("backdropFilter");
 
-    // Sem imagem não há o que desfocar, e intensidade zero desliga.
-    expect(style.bgStyle({ id_music: 21 }).filter).toBeUndefined();
     $userdata.set(K.TEXT_BG_BLUR, 0);
-    expect(useSlideStyle().bgStyle(slide).filter).toBeUndefined();
+    expect(useSlideStyle().bgBlurStyle()).toBeNull();
   });
 
   it("o caixa do retorno obedece ao próprio interruptor", () => {

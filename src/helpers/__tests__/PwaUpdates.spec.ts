@@ -207,6 +207,56 @@ describe("PwaUpdates", () => {
     expect(h.reload).not.toHaveBeenCalled();
   });
 
+  it("recupera o build atual somente por pedido explícito, após persistir", async () => {
+    const h = boot();
+    await h.tick();
+    const beforeReload = vi.fn().mockResolvedValue(undefined);
+    const options = { canReload: () => true, beforeReload };
+    expect(await h.instance.apply(options)).toBe(false);
+    expect(beforeReload).not.toHaveBeenCalled();
+    expect(await h.instance.apply({ ...options, reloadCurrentBuild: true })).toBe(true);
+    expect(beforeReload).toHaveBeenCalledOnce();
+    expect(h.reload).toHaveBeenCalledOnce();
+    expect(h.latest()).toMatchObject({ ready: false, status: "current" });
+  });
+
+  it("não recarrega o build atual se ficar offline ou surgir trabalho durante a gravação", async () => {
+    const h = boot();
+    await h.tick();
+    const canReload = vi.fn(() => true);
+    const beforeReload = vi.fn(async () => {
+      canReload.mockReturnValue(false);
+    });
+    const options = { canReload, beforeReload, reloadCurrentBuild: true };
+    expect(await h.instance.apply(options)).toBe(false);
+    expect(h.latest()).toMatchObject({ ready: false, status: "current" });
+    canReload.mockReturnValue(true);
+    beforeReload.mockImplementation(async () => {
+      h.online.mockReturnValue(false);
+    });
+    expect(await h.instance.apply(options)).toBe(false);
+    expect(h.latest()).toMatchObject({ ready: false, status: "offline" });
+    expect(h.reload).not.toHaveBeenCalled();
+    expect(await h.instance.apply(options)).toBe(false);
+    expect(beforeReload).toHaveBeenCalledTimes(2);
+  });
+
+  it("falha ao salvar também impede a recuperação do build atual", async () => {
+    const h = boot();
+    await h.tick();
+    expect(
+      await h.instance.apply({
+        canReload: () => true,
+        beforeReload: async () => {
+          throw new Error("IDB");
+        },
+        reloadCurrentBuild: true,
+      })
+    ).toBe(false);
+    expect(h.reload).not.toHaveBeenCalled();
+    expect(h.latest()).toMatchObject({ ready: false, status: "error" });
+  });
+
   it("espera terminar a ativação mesmo após controllerchange antes de recarregar", async () => {
     const h = boot({ active: "B" });
     await h.tick();
@@ -384,6 +434,62 @@ describe("PwaUpdates", () => {
         recovery_ms: 15_000,
       })
     );
+  });
+
+  it.each([false, true])(
+    "registra novamente após update rejeitar um registro inválido (build publicado: %s)",
+    async (versioned) => {
+      const deployed = versioned ? vi.fn().mockResolvedValue("B") : undefined;
+      const h = boot({ deployed });
+      await h.tick();
+      // Após a primeira instalação falhar, o navegador remove os workers do
+      // registro. update() continua rejeitando esse objeto mesmo com rede.
+      h.reg.update.mockRejectedValue(new DOMException("No newest worker", "InvalidStateError"));
+      const replacement = Object.assign(new EventTarget(), {
+        installing: null,
+        waiting: null,
+        update: vi.fn().mockResolvedValue(undefined),
+      });
+      h.sw.register.mockResolvedValue(replacement);
+
+      await h.instance.check();
+      expect(h.latest().status).toBe("error");
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(h.sw.register).toHaveBeenCalledTimes(2);
+      expect(h.sw.register).toHaveBeenLastCalledWith(versioned ? "/sw.js?build=B" : "/sw.js", {
+        scope: "/",
+        updateViaCache: "none",
+      });
+      expect(h.reg.update).toHaveBeenCalledTimes(1);
+      expect(replacement.update).toHaveBeenCalledOnce();
+      expect(h.latest()).toMatchObject({ status: "current", ready: false });
+      expect(diagnostics.event).toHaveBeenCalledWith(
+        "pwa_update_recovered",
+        expect.objectContaining({ stage: "check", attempts: 1 })
+      );
+      expect(h.reload).not.toHaveBeenCalled();
+    }
+  );
+
+  it("aguarda a identidade publicada antes de substituir um registro inválido", async () => {
+    const deployed = vi.fn().mockResolvedValue("B");
+    const h = boot({ loaded: "A", deployed });
+    await h.tick();
+    h.reg.update.mockRejectedValueOnce(new DOMException("No newest worker", "InvalidStateError"));
+    await h.instance.check();
+    deployed.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(h.sw.register).toHaveBeenCalledTimes(1);
+    expect(h.latest().status).toBe("error");
+
+    deployed.mockResolvedValue("C");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(h.sw.register).toHaveBeenCalledTimes(2);
+    expect(h.sw.register).toHaveBeenLastCalledWith("/sw.js?build=C", expect.anything());
+    expect(h.latest().status).toBe("current");
+    expect(h.reload).not.toHaveBeenCalled();
   });
 
   it("instalação lenta mantém o acompanhamento e informa a etapa correta", async () => {

@@ -160,6 +160,34 @@ test("álbuns, voltar e cantar pelo menu podem ser acionados pelo teclado", asyn
   await expect(page.getByRole("dialog", { name: "Glória ao Pai" })).toBeVisible();
 });
 
+test("só teclado: ↓ escolhe o álbum e Enter abre; ↓ escolhe a faixa e Enter toca", async ({
+  page,
+}) => {
+  await start(page);
+  const search = page.locator(".dx-toolbar input");
+  await search.click();
+  const activeAlbum = page.locator(".dx-album--active");
+  await expect(activeAlbum).toHaveCount(0);
+  await search.press("ArrowDown");
+  await search.press("ArrowDown");
+  await expect(activeAlbum).toHaveText(await page.locator(".dx-album").nth(1).textContent());
+
+  await search.fill("gratidão");
+  await expect(activeAlbum).toContainText("Doxologia de Gratidão");
+  await search.press("Enter");
+  await expect(page.locator(".dx-tracks tbody tr")).toHaveCount(albumDetail.musics.length);
+  await expect(search).toBeFocused();
+
+  const activeRow = page.locator(".dx-tracks tr.lj-music-row--active");
+  await expect(activeRow).toHaveCount(0);
+  await search.press("ArrowDown");
+  await search.press("ArrowDown");
+  await expect(activeRow).toContainText("Teu Amor nos Guia");
+  await search.press("ArrowUp");
+  await search.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Glória ao Pai" })).toBeVisible();
+});
+
 test("busca, limpeza e estados vazios funcionam nos dois níveis", async ({ page }) => {
   await start(page);
 

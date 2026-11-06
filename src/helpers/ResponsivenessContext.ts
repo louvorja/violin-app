@@ -26,6 +26,16 @@ function scriptUrl(value: unknown): string | undefined {
   }
 }
 
+function invoker(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return scriptUrl(value);
+  // `IMG[src=…].onload` traz o endereço da mídia, que pode ser um caminho local do usuário.
+  return value
+    .replace(/\[src=[^\]]*\]/g, "[src]")
+    .replace(/[^a-zA-Z0-9_$.:#-]/g, "_")
+    .slice(0, 120);
+}
+
 /** LoAF exposes script entry points, not a stack of every slow sub-function. */
 export function animationFrameDiagnostic(entry: PerformanceEntry): Record<string, unknown> | null {
   const raw = entry as PerformanceEntry & Record<string, unknown>;
@@ -55,6 +65,7 @@ export function animationFrameDiagnostic(entry: PerformanceEntry): Record<string
         forced_style_layout_ms: number(script.forcedStyleAndLayoutDuration),
         pause_ms: number(script.pauseDuration),
         invoker_type: label(script.invokerType, 60),
+        invoker: invoker(script.invoker),
         window_attribution: label(script.windowAttribution, 60),
       }))
       .sort((a, b) => (b.duration_ms || 0) - (a.duration_ms || 0))

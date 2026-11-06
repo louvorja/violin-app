@@ -1,10 +1,8 @@
 <template>
   <div ref="container" class="lj-u-flex" :class="alignClass" :style="containerStyle">
-    <img
+    <ModuleBackgroundMedia
       v-if="userdata.image"
       :src="userdata.image"
-      alt=""
-      loading="eager"
       :style="{
         top: 0,
         left: 0,
@@ -27,6 +25,7 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { module as manifest } from "../manifest";
 import Modules from "@/helpers/Modules";
 import UserData from "@/helpers/UserData";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import { useContainerSize } from "@/composables/useContainerSize";
 import { FONT, resolveFont } from "@/config/Fonts";
 

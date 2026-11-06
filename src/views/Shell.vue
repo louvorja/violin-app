@@ -51,13 +51,24 @@
     <MusicSpotlight v-if="musicSearchOpen" v-model="musicSearchOpen" />
     <BibleSpotlight v-if="bibleSearchOpen" v-model="bibleSearchOpen" />
     <HotkeysCheatsheet v-if="hotkeysOpen" v-model="hotkeysOpen" />
+    <StartupTipDialog
+      v-if="startupTipOpen && startupTip"
+      v-model="startupTipOpen"
+      :tip="startupTip"
+      :show-previous="startupTipHistory.length > 1"
+      :previous-disabled="startupTipHistoryIndex === 0"
+      :next-disabled="startupNextDisabled"
+      @previous="showPreviousStartupTip"
+      @next="showNextStartupTip"
+    />
     <ReleaseNotesDialog
       v-if="releaseNotesOpen"
       v-model="releaseNotesOpen"
       :release="releaseNotes"
       @close="onReleaseNotesClose"
     />
-    <StartupCheckDialog v-if="startupCheckOpen" v-model="startupCheckOpen" />
+    <StorageSetupDialog v-if="storageSetupOpen" @complete="onStorageSetupComplete" />
+    <StartupCheckDialog v-if="startupCheckOpen && storageReady" v-model="startupCheckOpen" />
     <InstallAppDialog v-if="installDialogOpen" v-model="installDialogOpen" />
     <UpdateAvailableDialog
       v-if="updateDialogOpen"
@@ -92,9 +103,13 @@ import { liturgySidebarDefault } from "@/helpers/LiturgySidebar";
 const HotkeysCheatsheet = defineAsyncComponent(
   () => import("@/layout/shell/HotkeysCheatsheet.vue")
 );
+const StartupTipDialog = defineAsyncComponent(() => import("@/components/StartupTipDialog.vue"));
 const InstallAppDialog = defineAsyncComponent(() => import("@/components/InstallAppDialog.vue"));
 const StartupCheckDialog = defineAsyncComponent(
   () => import("@/components/StartupCheckDialog.vue")
+);
+const StorageSetupDialog = defineAsyncComponent(
+  () => import("@/components/StorageSetupDialog.vue")
 );
 const ReleaseNotesDialog = defineAsyncComponent(
   () => import("@/components/ReleaseNotesDialog.vue")
@@ -117,6 +132,7 @@ import { anyOpenModuleWants, moduleShell } from "@/config/modules";
 import $popup from "@/helpers/Popup";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { buildStartupTips, type StartupTip } from "@/helpers/StartupTips";
 
 import { registerShell } from "@/composables/useShell";
 import { useAppTheme } from "@/composables/useAppTheme";
@@ -144,7 +160,53 @@ const cmdPaletteOpen = ref(false);
 const musicSearchOpen = ref(false);
 const bibleSearchOpen = ref(false);
 const hotkeysOpen = ref(false);
+const startupTipOpen = ref(false);
+const startupTips = ref<StartupTip[]>([]);
+const startupTipHistory = ref<StartupTip[]>([]);
+const startupTipHistoryIndex = ref(0);
+const startupTipSeen = ref<Set<string>>(new Set());
+const startupTip = computed(() => startupTipHistory.value[startupTipHistoryIndex.value] ?? null);
+const startupNextDisabled = computed(() =>
+  startupTips.value.every((tip) => startupTipSeen.value.has(tip.id))
+);
 const startupCheckOpen = ref(false);
+const storageSetupOpen = ref(false);
+const storageReady = ref(!Platform.isDesktop);
+let storageSetupPromise: Promise<void> | null = null;
+let finishStorageSetup: (() => void) | null = null;
+
+function onStorageSetupComplete(): void {
+  storageSetupOpen.value = false;
+  storageReady.value = true;
+  finishStorageSetup?.();
+  finishStorageSetup = null;
+  autoInstallCatalog();
+}
+
+/** A primeira escolha das pastas acontece antes de qualquer download de boot. */
+function ensureStorageSetup(): Promise<void> {
+  if (storageReady.value) return Promise.resolve();
+  if (storageSetupPromise) return storageSetupPromise;
+  storageSetupPromise = (async () => {
+    try {
+      const locations = await Platform.api?.storage.locations();
+      if (locations?.setupCompleted && !locations.pending && !locations.restartRequired) {
+        storageReady.value = true;
+        autoInstallCatalog();
+        return;
+      }
+    } catch (error) {
+      // A própria tela permite tentar ler novamente. Não prosseguir com
+      // downloads em um caminho que ainda não pudemos verificar.
+      console.warn("[Shell] storage setup falhou:", error);
+    }
+    storageSetupOpen.value = true;
+    await new Promise<void>((resolve) => {
+      finishStorageSetup = resolve;
+    });
+  })();
+  return storageSetupPromise;
+}
 const releaseNotesOpen = ref(false);
 const releaseNotes = ref<ReleaseNotes | null>(null);
 const updateDialogOpen = ref(false);
@@ -157,16 +219,17 @@ const {
 } = useAppInstall();
 
 // App instalado: o catálogo desce sozinho no primeiro uso com internet, para as
-// listas e o modo offline não dependerem de abrir Sincronizar antes. Espera o
-// boot assentar, porque instalar o ZIP grava milhares de registros no IndexedDB.
+// listas e o modo offline não dependerem de abrir Sincronizar antes. No desktop,
+// começa assim que o armazenamento estiver pronto, mesmo com o diálogo oculto.
+// No PWA, espera o boot assentar antes de gravar os registros no IndexedDB.
 // `ensureCatalogBundle` não baixa nada quando o catálogo já está instalado.
-const CATALOG_AUTO_INSTALL_DELAY_MS = 8000;
+const CATALOG_AUTO_INSTALL_DELAY_MS = Platform.isDesktop ? 0 : 8000;
 let catalogAutoInstallTimer: ReturnType<typeof setTimeout> | null = null;
 let catalogAutoInstallArmed = false;
 const shellOnline = () => $appdata.get<boolean>(KEYS.SHELL.IS_ONLINE, true) !== false;
 
 function autoInstallCatalog(): void {
-  if (!catalogAutoInstallArmed) return;
+  if (!catalogAutoInstallArmed || !storageReady.value) return;
   // Atualizou o app: renova o catálogo guardado (em qualquer plataforma).
   if (shellOnline()) void sync.refreshCatalogAfterUpdate();
   const context = {
@@ -232,7 +295,8 @@ const onOpenMusicSearch = () => {
 const onOpenBibleSearch = () => {
   bibleSearchOpen.value = true;
 };
-const onOpenStartupCheck = () => {
+const onOpenStartupCheck = async () => {
+  await ensureStorageSetup();
   startupCheckOpen.value = true;
 };
 
@@ -322,6 +386,42 @@ let _releaseNotesPromise: Promise<ReleaseNotes | null> | null = null;
 let _startupCheckTimeout: ReturnType<typeof setTimeout> | null = null;
 let _bootPhase: "idle" | "release-notes" | "startup" | "done" = "idle";
 let _startupCloseDeferred = false;
+let _startupTipShown = false;
+
+/** Encerra o encadeamento de diálogos do boot e mostra a dica de abertura. */
+function _finishBootFlow(): void {
+  _bootPhase = "done";
+  if (_startupTipShown) return;
+  _startupTipShown = true;
+  // O modal bloqueia os fluxos E2E que existiam antes das dicas.
+  if (import.meta.env.VITE_E2E === "1") return;
+  if ($userdata.get<boolean>(KEYS.OPTIONS.SHOW_STARTUP_TIPS, true) === false) return;
+  const tips = buildStartupTips();
+  if (tips.length === 0) return;
+  const first = tips[Math.floor(Math.random() * tips.length)];
+  startupTips.value = tips;
+  startupTipHistory.value = [first];
+  startupTipHistoryIndex.value = 0;
+  startupTipSeen.value = new Set([first.id]);
+  startupTipOpen.value = true;
+}
+
+function showPreviousStartupTip(): void {
+  if (startupTipHistoryIndex.value > 0) startupTipHistoryIndex.value -= 1;
+}
+
+function showNextStartupTip(): void {
+  const unseen = startupTips.value.filter((tip) => !startupTipSeen.value.has(tip.id));
+  if (unseen.length === 0) return;
+  const next = unseen[Math.floor(Math.random() * unseen.length)];
+
+  // A nova dica nasce do ponto atual; o que estava à frente vira histórico
+  // abandonado, mas continua marcado como já exibido.
+  startupTipHistory.value = startupTipHistory.value.slice(0, startupTipHistoryIndex.value + 1);
+  startupTipHistory.value.push(next);
+  startupTipHistoryIndex.value = startupTipHistory.value.length - 1;
+  startupTipSeen.value = new Set([...startupTipSeen.value, next.id]);
+}
 
 watch(startupCheckOpen, (isOpen, wasOpen) => {
   if (!wasOpen || isOpen || _bootPhase !== "startup") return;
@@ -330,7 +430,7 @@ watch(startupCheckOpen, (isOpen, wasOpen) => {
     return;
   }
   _startupCloseDeferred = false;
-  _bootPhase = "done";
+  _finishBootFlow();
 });
 
 watch(
@@ -339,7 +439,7 @@ watch(
     if (_bootPhase !== "startup" || !_startupCloseDeferred) return;
     if (downloading || bibleDownloading) return;
     _startupCloseDeferred = false;
-    _bootPhase = "done";
+    _finishBootFlow();
   }
 );
 
@@ -362,6 +462,7 @@ async function _showPendingReleaseNotes(): Promise<boolean> {
 }
 
 async function _continueBootAfterUpdate(): Promise<void> {
+  await ensureStorageSetup();
   _startupCheckPending = false;
   if (_startupCheckTimeout) {
     clearTimeout(_startupCheckTimeout);
@@ -375,7 +476,11 @@ async function _continueBootAfterUpdate(): Promise<void> {
 }
 
 async function _showPendingStartupCheck() {
-  if (!Platform.isDesktop) return;
+  if (!Platform.isDesktop) {
+    _finishBootFlow();
+    return;
+  }
+  await ensureStorageSetup();
 
   // Em desenvolvimento a verificação roda a cada recarga do Vite e prende o boot
   // num diálogo modal que só diz respeito à instalação do usuário final.
@@ -384,7 +489,7 @@ async function _showPendingStartupCheck() {
     $userdata.get<boolean>(KEYS.OPTIONS.SKIP_STARTUP_CHECK, false) ||
     $userdata.get<boolean>(KEYS.OPTIONS.STARTUP_CHECK_DONE, false);
   if (skip) {
-    _bootPhase = "done";
+    _finishBootFlow();
     return;
   }
 
@@ -642,9 +747,9 @@ onMounted(() => {
     $appdata.set(KEYS.SHELL.IS_DESKTOP, false);
   }
 
-  // Startup check — só no desktop. O diálogo automático faz apenas a checagem
-  // leve do marker/conexão; bundle e varredura detalhada exigem ação explícita.
-  // O fluxo é: update check → release notes → startup check leve.
+  // Startup check — só no desktop. O diálogo acompanha a instalação automática
+  // do catálogo; a varredura detalhada e os downloads de mídia ficam por escolha.
+  // O fluxo dos diálogos é: update check → release notes → startup check.
   if (platform.electron) {
     // As notas pertencem a uma atualização, não a uma versão. Sem registrar a
     // versão da execução anterior, uma instalação nova (chave vazia) contava
@@ -704,7 +809,7 @@ onMounted(() => {
   }
 
   if (Platform.isDesktop) {
-    _runStartupUpdateCheck();
+    void ensureStorageSetup().then(() => _runStartupUpdateCheck());
   } else {
     void _continueBootAfterUpdate();
   }

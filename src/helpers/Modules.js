@@ -96,6 +96,21 @@ export default {
   },
 
   /**
+   * ⌘W / Ctrl+W, como no Chrome: fecha a aba à vista. Devolve `false` quando não
+   * sobrou aba — aí quem chamou fecha a janela.
+   */
+  closeActiveTab() {
+    const tabs = Object.values($appdata.get("modules") || {}).filter(
+      (m) => m && m.show === true && m.popup !== true
+    );
+    const active = $appdata.get("active_module");
+    const tab = tabs.find((m) => m.id === active) ?? tabs.at(-1);
+    if (!tab) return false;
+    this.close(tab.id);
+    return true;
+  },
+
+  /**
    * No shell embedded, minimizar = fechar.
    * (Tray-area do layout antigo foi removida.)
    * @param {string} id

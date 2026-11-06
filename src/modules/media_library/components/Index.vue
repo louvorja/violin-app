@@ -101,75 +101,88 @@
             <!-- Chips de categorias (filtro) -->
             <div v-if="categories.length || uncategorizedCount > 0" class="media-chips">
               <span class="media-chips-title">{{ tm("categories") }}</span>
-              <div
+              <CategoryChip
                 v-for="cat in categories"
                 :key="cat.id"
-                class="media-chip"
-                :class="{ 'media-chip--active': selectedCategoryIds.has(cat.id) }"
-                :style="{ '--chip-color': cat.color }"
-                @click="toggleCategoryChip(cat.id)"
-              >
-                <span class="media-chip-icon-wrap">
-                  <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
-                  <img v-else :src="cat.icon" class="media-chip-img" alt="" />
-                </span>
-                <span class="media-chip-name">{{ cat.name }}</span>
-                <span class="media-chip-count">
-                  {{ files.filter((f) => f.categoryId === cat.id).length }}
-                </span>
-                <button
-                  type="button"
-                  class="media-chip-add"
-                  :title="tm('add_files')"
-                  :aria-label="tm('add_files')"
-                  @click.stop="beginAddWithCategory(cat.id)"
-                >
-                  <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
-                </button>
-              </div>
-              <div
-                v-if="uncategorizedCount > 0"
-                class="media-chip media-chip--uncategorized"
-                :class="{ 'media-chip--active': selectedCategoryIds.has(UNCATEGORIZED_ID) }"
-                @click="toggleCategoryChip(UNCATEGORIZED_ID)"
-              >
-                <span class="media-chip-icon-wrap">
-                  <LjIcon :icon="ICONS.UI.FILE_MULTIPLE" :size="14" />
-                </span>
-                <span class="media-chip-name">{{ tm("uncategorized") }}</span>
-                <span class="media-chip-count">{{ uncategorizedCount }}</span>
-                <button
-                  type="button"
-                  class="media-chip-add"
-                  :title="tm('add_files')"
-                  :aria-label="tm('add_files')"
-                  @click.stop="beginAddWithCategory(UNCATEGORIZED_ID)"
-                >
-                  <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
-                </button>
-              </div>
+                :category-id="cat.id"
+                :name="cat.name"
+                :icon="cat.icon"
+                :icon-type="cat.iconType"
+                :color="cat.color"
+                :count="files.filter((f) => f.categoryId === cat.id).length"
+                :active="selectedCategoryIds.has(cat.id)"
+                :drop-target="dropTargetId === cat.id"
+                :add-item-label="t('ribbon.btn.add_item')"
+                :edit-label="t('shell.category.edit_category')"
+                show-add
+                :add-label="tm('add_files')"
+                @select="onCategoryChipClick(cat.id)"
+                @add="onCategoryAddClick(cat.id)"
+                @edit="editCategoryFromChip(cat.id)"
+                @dragover="onCategoryDragOver($event, cat.id)"
+                @dragleave="onCategoryDragLeave($event, cat.id)"
+                @drop="onCategoryDrop($event, cat.id)"
+              />
+              <CategoryChip
+                v-if="categories.length > 0 || uncategorizedCount > 0"
+                category-id=""
+                :name="tm('uncategorized')"
+                :icon="ICONS.UI.FILE_MULTIPLE"
+                icon-type="icon"
+                color="var(--lj-text-subtle)"
+                :count="uncategorizedCount"
+                :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
+                :drop-target="dropTargetId === UNCATEGORIZED_ID"
+                :editable="false"
+                :add-item-label="t('ribbon.btn.add_item')"
+                show-add
+                :add-label="tm('add_files')"
+                @select="onCategoryChipClick(UNCATEGORIZED_ID)"
+                @add="onCategoryAddClick(UNCATEGORIZED_ID)"
+                @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
+                @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
+                @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
+              />
             </div>
             <div v-if="filteredFiles.length" class="media-grid">
               <div
                 v-for="file in filteredFiles"
                 :key="file.id"
                 class="media-grid-item"
-                @click="tocarDaBiblioteca(file)"
+                :style="{ '--card-category-color': categoryColor(file.categoryId) }"
+                draggable="true"
+                @click="onCardClick(file)"
+                @dragstart="onCardDragStart($event, file)"
+                @dragend="onCardDragEnd"
+                @touchstart.passive="onCardTouchStart($event, file)"
+                @contextmenu.prevent
               >
-                <img
-                  v-if="file.thumb"
-                  :src="file.thumb"
-                  class="media-grid-item-thumb"
-                  alt=""
-                  loading="lazy"
-                  @error="thumbNaoCarregou(file)"
-                />
-                <div v-else class="media-grid-item-thumb media-grid-item-thumb--icon">
-                  <LjIcon :icon="fileTypeIcon(file.type)" :size="28" />
+                <div class="media-grid-item-thumb-wrap">
+                  <img
+                    v-if="file.thumb"
+                    :src="file.thumb"
+                    class="media-grid-item-thumb"
+                    alt=""
+                    loading="lazy"
+                    draggable="false"
+                    @error="thumbNaoCarregou(file)"
+                  />
+                  <div v-else class="media-grid-item-thumb media-grid-item-thumb--icon">
+                    <LjIcon :icon="fileTypeIcon(file.type)" :size="28" />
+                  </div>
+                  <CategoryItemIcon
+                    v-if="categoryFor(file.categoryId)"
+                    placement="top-left"
+                    translucent
+                    :icon="categoryFor(file.categoryId)?.icon || ''"
+                    :icon-type="categoryFor(file.categoryId)?.iconType || 'icon'"
+                    :color="categoryFor(file.categoryId)?.color || 'var(--lj-text-subtle)'"
+                    :label="categoryFor(file.categoryId)?.name || ''"
+                  />
                 </div>
                 <div class="media-grid-item-name">{{ file.name }}</div>
-                <div v-if="categoryName(file.categoryId)" class="media-grid-item-category">
-                  {{ categoryName(file.categoryId) }}
+                <div v-if="categoryFor(file.categoryId)" class="media-grid-item-footer">
+                  <span class="media-grid-item-category">{{ categoryName(file.categoryId) }}</span>
                 </div>
                 <!--
                   Ações do card. O "+" vem primeiro porque enfileirar é a ação
@@ -177,7 +190,7 @@
                   botão que o coloca na playlist para percorrer depois com as
                   setas.
                 -->
-                <div class="media-grid-item-actions">
+                <div class="media-grid-item-actions" data-no-category-drag @dragstart.stop.prevent>
                   <LjButton
                     size="sm"
                     variant="ghost"
@@ -379,6 +392,8 @@
         @change="onFilesSelected"
       />
 
+      <CategoryDragGhost :ghost="touchGhost" :compact="dropTargetId !== null" />
+
       <!-- Seleção de categoria na importação -->
       <LjDialog v-model="showCategorySelect" size="sm" :title="tm('select_category')">
         <div class="media-cat-list">
@@ -403,11 +418,10 @@
 
       <!-- Gerenciar Categorias -->
       <CategoryManagerDialog
+        ref="categoryManagerRef"
         v-model="showManageDialog"
         :categories="categories"
         :saving="saving"
-        :icon-options="iconOptions"
-        :color-presets="colorPresets"
         module-id="media_library"
         @save="handleSaveCategory"
         @delete="handleDeleteCategory"
@@ -451,6 +465,11 @@ import $alert from "@/helpers/Alert";
 import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
 import { localPathOf } from "@/helpers/FilePath";
 import $snackbar from "@/helpers/Snackbar";
+import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
+import { useCategoryDrag } from "@/composables/useCategoryDrag";
+import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
+import CategoryChip from "@/components/CategoryChip.vue";
+import CategoryItemIcon from "@/components/CategoryItemIcon.vue";
 import { ICONS } from "@/config/Icons";
 import $idb from "@/helpers/IndexedDB";
 import { ensureRenderableImage, isHeic, heicToJpeg } from "@/helpers/ImageConvert";
@@ -565,9 +584,12 @@ async function deleteFile(id: string): Promise<void> {
  */
 const moduleContainer = ref<{
   tm: (_key: string, _named?: Record<string, unknown>) => string;
+  t?: (_key: string, _named?: Record<string, unknown>) => string;
 } | null>(null);
 const tm = (key: string, named?: Record<string, unknown>): string =>
   (named ? moduleContainer.value?.tm(key, named) : moduleContainer.value?.tm(key)) || key;
+const t = (key: string, named?: Record<string, unknown>): string =>
+  (named ? moduleContainer.value?.t?.(key, named) : moduleContainer.value?.t?.(key)) || key;
 
 const libraryFilter = ref<LibraryFilter>("all");
 
@@ -596,6 +618,9 @@ const files = ref<MediaFile[]>([]);
 const categories = ref<CategoryFileData[]>([]);
 const selectedCategoryIds = ref(new Set<string>());
 const showManageDialog = ref(false);
+const categoryManagerRef = ref<{
+  openEditCategory: (_category: CategoryFileData) => void;
+} | null>(null);
 const showCategorySelect = ref(false);
 const saving = ref(false);
 let pendingCategoryId: string | null = null;
@@ -610,6 +635,76 @@ async function loadCategories(): Promise<void> {
 function categoryName(categoryId?: string): string {
   if (!categoryId) return "";
   return categories.value.find((c) => c.id === categoryId)?.name || "";
+}
+
+function categoryColor(categoryId?: string): string {
+  if (!categoryId) return "transparent";
+  return categories.value.find((c) => c.id === categoryId)?.color || "transparent";
+}
+
+function categoryFor(categoryId?: string) {
+  if (!categoryId) return null;
+  return categories.value.find((c) => c.id === categoryId) || null;
+}
+
+async function moveFileToCategory(file: MediaFile, categoryId: string): Promise<void> {
+  if ((file.categoryId || "") === categoryId) return;
+  if (categoryId && !categories.value.some((category) => category.id === categoryId)) return;
+
+  const previous = file.categoryId;
+  file.categoryId = categoryId;
+  try {
+    await saveFile(file);
+  } catch (error) {
+    file.categoryId = previous;
+    throw error;
+  }
+
+  const category = categoryId ? categoryName(categoryId) : tm("uncategorized");
+  $snackbar.show(t("moved_to_category", { category }));
+}
+
+const {
+  draggingId,
+  dropTargetId,
+  touchGhost,
+  shouldSuppressClick,
+  shouldSuppressCategoryClick,
+  onCardDragStart,
+  onCardDragEnd,
+  onCategoryDragOver,
+  onCategoryDragLeave,
+  onCategoryDrop,
+  onCardTouchStart,
+} = useCategoryDrag<MediaFile>({
+  source: "media_library",
+  findItem: (id) => files.value.find((file) => file.id === id) || null,
+  canDrop: (file, categoryId) =>
+    (file.categoryId || "") !== categoryId &&
+    (!categoryId || categories.value.some((category) => category.id === categoryId)),
+  assign: moveFileToCategory,
+});
+
+function onCardClick(file: MediaFile): void {
+  if (shouldSuppressClick(file.id)) return;
+  void tocarDaBiblioteca(file);
+}
+
+function onCategoryChipClick(categoryId: string): void {
+  if (shouldSuppressCategoryClick(categoryId)) return;
+  toggleCategoryChip(categoryId);
+}
+
+function onCategoryAddClick(categoryId: string): void {
+  if (shouldSuppressCategoryClick(categoryId)) return;
+  beginAddWithCategory(categoryId);
+}
+
+function editCategoryFromChip(categoryId: string): void {
+  const category = categories.value.find((item) => item.id === categoryId);
+  if (!category) return;
+  showManageDialog.value = true;
+  categoryManagerRef.value?.openEditCategory(category);
 }
 
 const uncategorizedCount = computed(() => {
@@ -661,19 +756,6 @@ async function handleSaveCategory(cat: CategoryFileData): Promise<void> {
     saving.value = false;
   }
 }
-
-const iconOptions = Object.values(ICONS.CATEGORY).map((value) => ({ value }));
-
-const colorPresets = [
-  "#4CAF50",
-  "#2196F3",
-  "#9C27B0",
-  "#FF9800",
-  "#F44336",
-  "#00BCD4",
-  "#3F51B5",
-  "#E91E63",
-];
 
 /** Excluir categoria apaga TAMBÉM os arquivos dela (padrão som de fundo). */
 async function handleDeleteCategory(id: string): Promise<void> {
@@ -894,16 +976,19 @@ function _cancelarFilaMiniaturas(): void {
 const isDragOver = ref(false);
 let dragCounter = 0;
 
-function onDragEnter(): void {
+function onDragEnter(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = true;
   dragCounter++;
 }
 
-function onDragOver(): void {
+function onDragOver(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = true;
 }
 
-function onDragLeave(): void {
+function onDragLeave(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   dragCounter--;
   if (dragCounter <= 0) {
     isDragOver.value = false;
@@ -923,6 +1008,7 @@ function noteUnsupported(): void {
 }
 
 async function onDrop(e: DragEvent): Promise<void> {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = false;
   dragCounter = 0;
   const droppedFiles = e.dataTransfer?.files;
@@ -2536,16 +2622,25 @@ onBeforeUnmount(() => {
   gap: var(--lj-space-2);
   padding: var(--lj-space-4) var(--lj-space-2);
   border-radius: var(--lj-radius-lg);
-  cursor: pointer;
+  cursor: grab;
   transition:
     background var(--lj-transition-normal),
-    border-color var(--lj-transition-normal);
+    border-color var(--lj-transition-normal),
+    opacity var(--lj-transition-fast),
+    transform var(--lj-transition-fast);
   border: 1px solid transparent;
   position: relative;
+  background: color-mix(in srgb, var(--card-category-color, transparent) 12%, var(--lj-surface-bg));
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
 .media-grid-item:hover {
-  background: var(--lj-surface-bg-hover);
+  background: color-mix(
+    in srgb,
+    var(--card-category-color, transparent) 18%,
+    var(--lj-surface-bg-hover)
+  );
   border-color: var(--lj-surface-border);
 }
 
@@ -2565,9 +2660,16 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
-.media-grid-item-thumb {
+.media-grid-item-thumb-wrap {
+  position: relative;
   width: 100%;
   height: 70px;
+  flex-shrink: 0;
+}
+
+.media-grid-item-thumb {
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   border-radius: var(--lj-radius-lg);
   overflow: hidden;
@@ -2595,15 +2697,23 @@ onBeforeUnmount(() => {
   color: var(--lj-text);
 }
 
+.media-grid-item-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  width: 100%;
+  padding: 0 var(--lj-space-2) var(--lj-space-1);
+}
+
 .media-grid-item-category {
+  flex: 1;
+  min-width: 0;
   font-size: var(--lj-text-xs);
-  padding: 0 var(--lj-space-3) var(--lj-space-1);
   color: var(--lj-text-subtle);
-  text-align: center;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  width: 100%;
 }
 
 /* ── Chips de categorias (filtro) ── */
@@ -2622,82 +2732,6 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--lj-text-muted);
-}
-
-.media-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--lj-space-2);
-  padding: var(--lj-space-1) var(--lj-space-5);
-  /* Pílula — o raio acompanha a altura, fora da escala de raios do sistema. */
-  border-radius: var(--lj-radius-pill);
-  border: 1.5px solid var(--chip-color);
-  background: transparent;
-  color: var(--chip-color);
-  cursor: pointer;
-  font-size: var(--lj-text-base);
-  font-family: inherit;
-  transition:
-    background var(--lj-transition-fast),
-    opacity var(--lj-transition-fast);
-  opacity: 0.55;
-  outline: none;
-  white-space: nowrap;
-}
-
-.media-chip:hover {
-  opacity: 0.85;
-}
-
-.media-chip--active {
-  background: color-mix(in srgb, var(--chip-color) 20%, transparent);
-  opacity: 1;
-}
-
-.media-chip--uncategorized {
-  --chip-color: var(--lj-text-subtle);
-}
-
-.media-chip-icon-wrap {
-  display: flex;
-  align-items: center;
-}
-
-.media-chip-img {
-  width: 14px;
-  height: 14px;
-  object-fit: contain;
-}
-
-.media-chip-count {
-  font-size: var(--lj-text-xs);
-  background: color-mix(in srgb, var(--chip-color) 30%, transparent);
-  border-radius: var(--lj-radius-pill);
-  padding: 0 var(--lj-space-3);
-  line-height: 16px;
-}
-
-.media-chip-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: inherit;
-  padding: 0;
-  opacity: 0.6;
-  transition:
-    opacity var(--lj-transition-fast),
-    background var(--lj-transition-fast);
-}
-
-.media-chip-add:hover {
-  opacity: 1;
-  background: color-mix(in srgb, var(--chip-color) 20%, transparent);
 }
 
 .media-playlist {

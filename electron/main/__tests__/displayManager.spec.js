@@ -22,6 +22,7 @@ let broadcasts = [];
 let monitors = [];
 let reconcileImpl = () => ({ shown: [], hidden: [] });
 let reconcileChamadas = 0;
+let resolution = null;
 
 function injetar(specifier, exports) {
   const id = require.resolve(specifier);
@@ -38,15 +39,15 @@ function carregar() {
   injetar("../displays.js", {
     connected: () => monitors,
     list: () => monitors,
-    resolveFeature: () => ({ display: { id: 1 }, status: "resolved", reason: null, role: null }),
+    resolveFeature: () => resolution,
   });
   injetar("../monitorConfig.js", {
     reconcile: () => ({ changed: false, promoted: [] }),
   });
   injetar("../windowFactory.js", {
-    reconcile: () => {
+    reconcile: (resolveDisplay) => {
       reconcileChamadas += 1;
-      return reconcileImpl();
+      return reconcileImpl(resolveDisplay);
     },
   });
   injetar("../safeWebContents.js", {
@@ -73,7 +74,8 @@ beforeEach(() => {
   screen = new EventEmitter();
   logs = [];
   broadcasts = [];
-  monitors = [{ id: 1, bounds: { x: 0, y: 0 } }];
+  monitors = [{ id: 1, primary: true, bounds: { x: 0, y: 0 } }];
+  resolution = { display: monitors[0], status: "resolved", reason: null, role: "projection" };
   reconcileImpl = () => ({ shown: [], hidden: [] });
   reconcileChamadas = 0;
 
@@ -105,6 +107,53 @@ afterEach(() => {
 });
 
 describe("displayManager", () => {
+  it.each([null, "no-role"])("mantém a projeção local aberta sem monitor atribuído (%s)", async (reason) => {
+    resolution = { display: null, status: "none", reason, role: reason ? null : "projection" };
+    let target;
+    reconcileImpl = (resolveDisplay) => {
+      target = resolveDisplay("musicas");
+      return { shown: [], hidden: target ? [] : ["musicas"] };
+    };
+    await ciclo("display-metrics-changed");
+    expect(target).toBe(monitors[0]);
+    expect(ultimo().hidden).toEqual([]);
+  });
+
+  it.each([
+    ["pending", "monitor-absent"],
+    ["pending", "operator-screen"],
+    ["pending", "invalid-monitor"],
+    ["ambiguous", "twin-monitors"],
+    ["none", "unknown-feature"],
+  ])("não troca um destino indisponível pela tela local (%s, %s)", async (status, reason) => {
+    resolution = { display: null, status, reason, role: "projection" };
+    let target;
+    reconcileImpl = (resolveDisplay) => {
+      target = resolveDisplay("musicas");
+      return { shown: [], hidden: target ? [] : ["musicas"] };
+    };
+    await ciclo("display-removed");
+    expect(target).toBeNull();
+    expect(ultimo().hidden).toEqual(["musicas"]);
+  });
+
+  it("volta ao projetor configurado quando ele reconecta", async () => {
+    const projector = { id: 2, primary: false, bounds: { x: 1920, y: 0 } };
+    let target;
+    reconcileImpl = (resolveDisplay) => {
+      target = resolveDisplay("musicas");
+      return { shown: target ? ["musicas"] : [], hidden: target ? [] : ["musicas"] };
+    };
+    resolution = { display: null, status: "pending", reason: "monitor-absent", role: "projection" };
+    await ciclo("display-removed");
+    expect(target).toBeNull();
+    monitors.push(projector);
+    resolution = { display: projector, status: "resolved", reason: null, role: "projection" };
+    await ciclo("display-added");
+    expect(target).toBe(projector);
+    expect(ultimo().shown).toEqual(["musicas"]);
+  });
+
   it("agrupa a rajada de eventos do `screen` num ciclo só", async () => {
     await ciclo("display-added", "display-metrics-changed", "display-removed");
 

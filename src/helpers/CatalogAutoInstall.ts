@@ -21,8 +21,10 @@ export function shouldAutoInstallCatalog(
   context: CatalogAutoInstallContext,
   nav: Navigator | undefined = globalThis.navigator
 ): boolean {
-  // No desktop a Verificação Inicial já cuida do catálogo.
-  if (context.desktop || !context.installed || !context.online) return false;
+  if (!context.online) return false;
+  // O desktop prepara o catálogo mesmo quando a Verificação Inicial está oculta.
+  if (context.desktop) return true;
+  if (!context.installed) return false;
   const connection = (nav as (Navigator & { connection?: ConnectionHint }) | undefined)?.connection;
   return !connection?.saveData && !/^(slow-)?2g$/.test(connection?.effectiveType ?? "");
 }

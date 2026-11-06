@@ -5,26 +5,51 @@
         type="text"
         :value="displayValue"
         class="format-field format-field--input field-image__input"
-        placeholder="Caminho da imagem ou URL"
+        :placeholder="
+          storedImage
+            ? t('components.customization.saved_image')
+            : t('components.customization.media_placeholder')
+        "
         @input="onInput(($event.target as HTMLInputElement).value)"
       />
-      <button class="field-image__btn" title="Escolher arquivo" @click="browse">…</button>
+      <button
+        class="field-image__btn"
+        :title="t('components.customization.choose_file')"
+        :aria-label="t('components.customization.choose_file')"
+        @click="browse"
+      >
+        …
+      </button>
+      <button
+        class="field-image__btn"
+        :title="t('components.customization.choose_media')"
+        :aria-label="t('components.customization.choose_media')"
+        @click="mediaPickerOpen = true"
+      >
+        <LjIcon :icon="ICONS.MEDIA.LIBRARY" :size="14" />
+      </button>
       <button
         v-if="modelValue"
         class="field-image__btn field-image__btn--clear"
-        title="Remover imagem"
+        :title="t('components.customization.remove_image')"
+        :aria-label="t('components.customization.remove_image')"
         @click="$emit('update:modelValue', '')"
       >
         ×
       </button>
     </div>
+    <MediaBackgroundPicker v-model="mediaPickerOpen" @pick="onMediaPicked" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { LjIcon } from "@/components/ui";
+import MediaBackgroundPicker from "@/components/MediaBackgroundPicker.vue";
+import { ICONS } from "@/config/Icons";
 import $path from "@/helpers/Path";
-import { pickImage } from "@/helpers/FilePicker";
+import { pickBackgroundMedia } from "@/helpers/FilePicker";
 
 interface CustomizationField {
   type: string;
@@ -45,10 +70,13 @@ const emit = defineEmits<{
   "update:modelValue": [value: string];
 }>();
 
+const { t } = useI18n();
+const mediaPickerOpen = ref(false);
 const LOCAL_PREFIX = "louvorja://local";
+const storedImage = computed(() => props.modelValue?.startsWith("lib://image/") === true);
 
 const displayValue = computed(() => {
-  if (!props.modelValue) return "";
+  if (!props.modelValue || storedImage.value) return "";
   if (props.modelValue.startsWith(LOCAL_PREFIX)) {
     return decodeURIComponent(props.modelValue.slice(LOCAL_PREFIX.length));
   }
@@ -68,8 +96,12 @@ function onInput(raw: string): void {
 }
 
 async function browse(): Promise<void> {
-  const url = await pickImage();
+  const url = await pickBackgroundMedia();
   if (url) emit("update:modelValue", url);
+}
+
+function onMediaPicked(item: { url: string }): void {
+  if (item.url) emit("update:modelValue", item.url);
 }
 </script>
 

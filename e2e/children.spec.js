@@ -153,6 +153,29 @@ for (const { label, options } of [
   });
 }
 
+test("só teclado: ↓ escolhe o álbum, Enter abre e ↓ escolhe a música", async ({ page }) => {
+  await start(page);
+  const search = page.locator(".ch-search input");
+  await search.click();
+  const activeAlbum = page.locator(".ch-album--active");
+  await expect(activeAlbum).toHaveCount(0);
+  await search.press("ArrowDown");
+  await search.press("ArrowDown");
+  await expect(activeAlbum).toHaveText(await page.locator(".ch-album").nth(1).textContent());
+
+  await search.fill("família");
+  await expect(activeAlbum).toContainText(albums[0].name);
+  await search.press("Enter");
+  await expect(page.locator(".ch-table tbody tr")).toHaveCount(albumDetail.musics.length);
+  await expect(search).toBeFocused();
+
+  const activeRow = page.locator(".ch-table tr.lj-music-row--active");
+  await expect(activeRow).toHaveCount(0);
+  await search.press("ArrowDown");
+  await search.press("ArrowDown");
+  await expect(activeRow).toContainText("Meu Pequeno Mundo");
+});
+
 test("busca e estados vazios funcionam em álbuns e músicas", async ({ page }) => {
   await start(page);
   const search = page.locator(".ch-search input");

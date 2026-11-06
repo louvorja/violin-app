@@ -160,6 +160,7 @@ import {
   LjInput,
 } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
+import { CATEGORY_COLOR_PRESETS, CATEGORY_ICON_OPTIONS } from "@/constants/CategoryOptions";
 import $alert from "@/helpers/Alert";
 import { MediaFile } from "@/types/Media";
 
@@ -174,14 +175,20 @@ export interface CategoryFileData {
   files?: MediaFile[];
 }
 
-const props = defineProps<{
-  modelValue: boolean;
-  categories: CategoryFileData[];
-  saving: boolean;
-  iconOptions: { value: string }[];
-  colorPresets: string[];
-  moduleId: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean;
+    categories: CategoryFileData[];
+    saving: boolean;
+    iconOptions?: { value: string }[];
+    colorPresets?: string[];
+    moduleId: string;
+  }>(),
+  {
+    iconOptions: () => CATEGORY_ICON_OPTIONS,
+    colorPresets: () => CATEGORY_COLOR_PRESETS,
+  }
+);
 
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
@@ -303,6 +310,8 @@ function removeCustomIcon(): void {
   form.value.iconType = "icon";
   form.value.icon = props.iconOptions[0]?.value || "";
 }
+
+defineExpose({ openEditCategory });
 </script>
 
 <!-- O conteúdo dos diálogos vai para um portal, mas é compilado AQUI (slot do

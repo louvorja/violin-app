@@ -22,6 +22,13 @@ export const NET_TIMEOUT = {
 } as const;
 
 export type NetworkErrorKind = "network" | "http" | "other";
+export interface RequestDiagnostic {
+  endpoint?: string;
+  operationId?: string;
+  requestId?: string;
+  attempt?: number;
+  fallback?: "primary" | "normalized" | "alternate";
+}
 
 export interface FetchOptions extends RequestInit {
   /** Milissegundos até desistir. Padrão: `NET_TIMEOUT.DEFAULT`. */
@@ -34,6 +41,8 @@ export interface FetchOptions extends RequestInit {
    * ou bloqueado na rede da igreja, com o resto funcionando. Só o sucesso conta.
    */
   thirdParty?: boolean;
+  /** Logical identifiers only; never forwarded as HTTP headers or request fields. */
+  diagnostic?: RequestDiagnostic;
 }
 
 type NetworkReporter = (ok: boolean, source: string) => void;
@@ -45,6 +54,44 @@ export interface NetworkTiming {
   outcome: "response" | "network_error" | "cancelled";
   remote: boolean;
   third_party: boolean;
+  endpoint: string;
+  method: string;
+  request_id?: string;
+  operation_id?: string;
+  attempt?: number;
+  fallback?: string;
+  failure_kind?: "timeout" | "network" | "cancelled" | "http";
+}
+
+function diagnosticId(value: unknown): string | undefined {
+  return typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,100}$/.test(value) ? value : undefined;
+}
+
+function requestDiagnostic(
+  options: RequestDiagnostic | undefined,
+  source: string,
+  method: string
+): Partial<NetworkTiming> {
+  let requestId = diagnosticId(options?.requestId);
+  try {
+    requestId ||= globalThis.crypto?.randomUUID?.();
+  } catch {
+    /* optional */
+  }
+  return {
+    endpoint: diagnosticId(options?.endpoint) || diagnosticId(source) || "other",
+    method: /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(method) ? method : "OTHER",
+    request_id: requestId,
+    operation_id: diagnosticId(options?.operationId),
+    ...(Number.isInteger(options?.attempt) &&
+    Number(options?.attempt) >= 0 &&
+    Number(options?.attempt) <= 100
+      ? { attempt: options?.attempt }
+      : {}),
+    ...(["primary", "normalized", "alternate"].includes(options?.fallback || "")
+      ? { fallback: options?.fallback }
+      : {}),
+  };
 }
 
 type NetworkTimingReporter = (timing: NetworkTiming) => void;
@@ -132,24 +179,43 @@ export async function fetchWithTimeout(
     timeout = NET_TIMEOUT.DEFAULT,
     source = "fetch",
     thirdParty = false,
+    diagnostic,
     signal,
     ...rest
   } = init;
 
   const controller = new AbortController();
-  const prazo = setTimeout(() => controller.abort(new DOMException("Timeout", "TimeoutError")), timeout);
+  const prazo = setTimeout(
+    () => controller.abort(new DOMException("Timeout", "TimeoutError")),
+    timeout
+  );
 
   const signals = [controller.signal];
   if (signal) signals.push(signal);
 
   const remota = ehRemota(input);
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const correlation = requestDiagnostic(
+    diagnostic,
+    source,
+    String(rest.method || (input instanceof Request ? input.method : "GET")).toUpperCase()
+  );
 
-  const reportTiming = (timing: Omit<NetworkTiming, "duration_ms">): void => {
+  const reportTiming = (
+    timing: Omit<NetworkTiming, "duration_ms" | "endpoint" | "method">
+  ): void => {
     try {
       _timingReporter?.({
+        endpoint: "other",
+        method: "GET",
+        ...correlation,
         ...timing,
-        duration_ms: Math.max(0, Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt)),
+        duration_ms: Math.max(
+          0,
+          Math.round(
+            (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
+          )
+        ),
       });
     } catch {
       /* métricas nunca podem alterar a chamada de rede */
@@ -160,17 +226,39 @@ export async function fetchWithTimeout(
     const response = await fetch(input, { ...rest, signal: AbortSignal.any(signals) });
     clearTimeout(prazo);
     if (remota) report(true, source);
-    reportTiming({ source, status: response.status, ok: response.ok, outcome: "response", remote: remota, third_party: thirdParty });
+    reportTiming({
+      source,
+      status: response.status,
+      ok: response.ok,
+      outcome: "response",
+      remote: remota,
+      third_party: thirdParty,
+      ...(response.ok ? {} : { failure_kind: "http" }),
+    });
     return response;
   } catch (e) {
     clearTimeout(prazo);
     // Cancelamento nosso (trocar de música, fechar a tela) não é falha de rede.
-    if (signal?.aborted) {
-      reportTiming({ source, outcome: "cancelled", remote: remota, third_party: thirdParty });
+    const timedOut =
+      controller.signal.aborted || (signal?.aborted && signal.reason?.name === "TimeoutError");
+    if (signal?.aborted && !timedOut) {
+      reportTiming({
+        source,
+        outcome: "cancelled",
+        failure_kind: "cancelled",
+        remote: remota,
+        third_party: thirdParty,
+      });
       throw e;
     }
     if (remota && !thirdParty && classifyNetworkError(e) === "network") report(false, source);
-    reportTiming({ source, outcome: "network_error", remote: remota, third_party: thirdParty });
+    reportTiming({
+      source,
+      outcome: "network_error",
+      failure_kind: timedOut ? "timeout" : "network",
+      remote: remota,
+      third_party: thirdParty,
+    });
     throw e;
   }
 }
