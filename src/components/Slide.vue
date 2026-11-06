@@ -20,6 +20,8 @@
       :style="bgStyle"
     />
 
+    <div v-if="backgroundBlurStyle" class="lj-slide__bg-blur" :style="backgroundBlurStyle" />
+
     <!-- Texto principal (capa OU letra).
          Na CAPA, mostra o nome da música em destaque (grande, cor da capa).
          O toggle `show_title_first_slide` controla se a capa exibe o título —
@@ -195,12 +197,12 @@ const backgroundVideo = computed(
 const backgroundVideoStyle = computed(() => {
   const position = cfg.value.background_position;
   const objectFit = position === "contain" ? "contain" : position === "stretch" ? "fill" : "cover";
-  const style = { objectFit };
-  if (cfg.value.text_bg_blur_enabled && cfg.value.text_bg_blur > 0) {
-    style.filter = `blur(calc(${cfg.value.text_bg_blur} * 100cqh / 1080))`;
-    style.transform = "scale(1.08)";
-  }
-  return style;
+  return { objectFit };
+});
+
+const backgroundBlurStyle = computed(() => {
+  const hasBackground = backgroundVideo.value || !!bgStyle.value.backgroundImage;
+  return hasBackground ? slideStyle.bgBlurStyle() : null;
 });
 
 const mainTextStyle = computed(() => {
@@ -287,6 +289,14 @@ onUnmounted(() => {
 .lj-slide__bg {
   position: absolute;
   inset: 0;
+}
+
+/* Desfoque numa camada própria: o fundo abaixo mantém o enquadramento
+   original e a camada acima apenas borra o que está atrás. */
+.lj-slide__bg-blur {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .lj-slide__content {

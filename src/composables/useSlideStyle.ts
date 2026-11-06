@@ -138,6 +138,7 @@ interface SlideStyleAPI {
   auxStyle: (slide?: SlideOption) => CSSProperties;
   nextStyle: (slide?: SlideOption) => CSSProperties;
   bgStyle: (slide?: SlideOption) => CSSProperties;
+  bgBlurStyle: () => CSSProperties | null;
   returnTopBgStyle: () => CSSProperties;
   returnBottomBgStyle: () => CSSProperties;
   rootStyle: ComputedRef<CSSProperties>;
@@ -582,16 +583,24 @@ export function useSlideStyle(): SlideStyleAPI {
         style.backgroundPosition = POSITIONS[slideImagePos];
       }
     }
-    // "Fundo borrado" desfoca a imagem de fundo do slide, não só a área atrás do
-    // texto: a caixa do texto, escura por padrão, escondia o efeito (issue #13).
-    // A intensidade é medida numa tela de 1080 linhas e acompanha a altura do
-    // slide, para a prévia pequena não ficar mais borrada que a projeção. A escala
-    // esconde a borda transparente que o desfoque cria.
-    if (imageUrl && cfg.value.text_bg_blur_enabled && cfg.value.text_bg_blur > 0) {
-      style.filter = `blur(calc(${cfg.value.text_bg_blur} * 100cqh / 1080))`;
-      style.transform = "scale(1.08)";
-    }
+    // O desfoque é aplicado numa camada `backdrop-filter` acima do fundo, no
+    // Slide. Isso preserva o enquadramento original: `filter: blur()` exigia
+    // ampliar a imagem para esconder as bordas transparentes e causava o zoom
+    // reportado na issue #36.
     return style;
+  }
+
+  /**
+   * Estilo da camada de desfoque do fundo. Fica separado do fundo para não
+   * alterar o tamanho/posição da imagem.
+   */
+  function bgBlurStyle(): CSSProperties | null {
+    if (!cfg.value.text_bg_blur_enabled || cfg.value.text_bg_blur <= 0) return null;
+    const blur = `blur(calc(${cfg.value.text_bg_blur} * 100cqh / 1080))`;
+    return {
+      backdropFilter: blur,
+      WebkitBackdropFilter: blur,
+    };
   }
 
   function returnTopBgStyle(): CSSProperties {
@@ -671,6 +680,7 @@ export function useSlideStyle(): SlideStyleAPI {
     auxStyle,
     nextStyle,
     bgStyle,
+    bgBlurStyle,
     returnTopBgStyle,
     returnBottomBgStyle,
     rootStyle,
