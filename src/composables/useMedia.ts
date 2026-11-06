@@ -54,6 +54,7 @@ import {
 } from "@/helpers/VideoPlaybackSnapshot";
 import { nextFileProjectionEpoch } from "@/presentation/FileProjectionActivation";
 import { audioFailure } from "@/helpers/AudioFailure";
+import { prepareLocalMediaAudio } from "@/helpers/AudioPacketScan";
 import {
   mediaSourceDetails,
   mediaElementDetails,
@@ -2360,6 +2361,15 @@ const _self = {
           : _newPlaybackId(),
     };
     const stageEpoch = ++_stageEpoch;
+    /* Antes de qualquer janela ler o arquivo: a partir do registro, o protocolo
+       só entrega áudio já conferido (ver AudioPacketScan). */
+    const audioChecked =
+      projection.type === "video"
+        ? Promise.all([
+            prepareLocalMediaAudio(projection.url),
+            prepareLocalMediaAudio(videoAudioUrl),
+          ])
+        : null;
     _dropPendingDownload();
     _opening.value = null;
     const wasYouTube = _isYouTube();
@@ -2384,6 +2394,10 @@ const _self = {
 
     await _queueStageWindows(stageEpoch, closeMusicProjectionWindows);
     if (stageEpoch !== _stageEpoch) return false;
+    if (audioChecked) {
+      await audioChecked;
+      if (stageEpoch !== _stageEpoch) return false;
+    }
     try {
       localStorage.setItem(KEYS.PROJECTION.LJ_FILE_PROJECTION, JSON.stringify(projection));
       localStorage.removeItem(KEYS.PROJECTION.LJ_YOUTUBE_PROJECTION);
@@ -2569,6 +2583,13 @@ const _self = {
       if ($userdata.get<boolean>(KEYS.MODULES.SLIDE_EDITOR.PROJECTING, false) === true)
         $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE);
       await _queueStageWindows(stageEpoch, closeMusicProjectionWindows);
+      if (stageEpoch !== _stageEpoch) return;
+    }
+    if (params.url) {
+      await Promise.all([
+        prepareLocalMediaAudio(params.url),
+        prepareLocalMediaAudio(params.videoUrl),
+      ]);
       if (stageEpoch !== _stageEpoch) return;
     }
     const playback_id = _newPlaybackId();

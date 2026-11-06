@@ -1835,6 +1835,11 @@ ipcMain.on("presentation:media-active", (event, active) => {
 onlineVideo.registerIpc(ipcMain);
 
 // ---------------------------------------------------------------------------
+// Quadros de áudio que o Chromium recusa, trocados por silêncio (audioRepair:*)
+// ---------------------------------------------------------------------------
+require("./main/audioRepair/index.js").registerIpc(ipcMain, protocolModule.localPathFromUrl);
+
+// ---------------------------------------------------------------------------
 // IPC handlers de displays e janelas (D4)
 // ---------------------------------------------------------------------------
 

@@ -40,6 +40,7 @@ const onlineVideo = require("./onlineVideo/index.js");
 const storageAccess = require("./storageAccess.js");
 const { ensureCollectionSubdirectory } = require("./sharedCollectionDirs.js");
 const { publishCollectionFile } = require("./collectionPublication.js");
+const audioRepair = require("./audioRepair/index.js");
 
 // ---------------------------------------------------------------------------
 // Configuração de URLs remotas
@@ -118,12 +119,14 @@ const _MIME_TYPES = {
  * "fim" e encerrava o hino no meio do culto.
  */
 async function _responderArquivo(caminho, request) {
-  const fileSize = (await fs.stat(caminho)).size;
+  const stat = await fs.stat(caminho);
+  const fileSize = stat.size;
+  const reparo = audioRepair.forFile(caminho, stat);
   const rangeHeader = request.headers.get("range");
   const match = rangeHeader && rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
 
   if (!match) {
-    return new Response(fs.createReadStream(caminho), {
+    return new Response(reparo ? _corpoReparado(caminho, 0, fileSize - 1, reparo) : fs.createReadStream(caminho), {
       status: 200,
       headers: {
         "Content-Type": _getMimeType(caminho),
@@ -141,6 +144,18 @@ async function _responderArquivo(caminho, request) {
     return new Response(null, {
       status: 416,
       headers: { "Content-Range": `bytes */${fileSize}` },
+    });
+  }
+
+  if (reparo) {
+    return new Response(_corpoReparado(caminho, start, end, reparo), {
+      status: 206,
+      headers: {
+        "Content-Type": _getMimeType(caminho),
+        "Content-Length": String(end - start + 1),
+        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+        "Accept-Ranges": "bytes",
+      },
     });
   }
 
@@ -209,9 +224,90 @@ async function _responderArquivo(caminho, request) {
   });
 }
 
+const _CHUNK_REPARADO = 64 * 1024;
+
+/**
+ * Corpo de `[start, end]` com os quadros de áudio recusados trocados por
+ * silêncio (ver `audioRepair`). Lê sob demanda — só quando o player pede mais
+ * — e não entrega bytes que a varredura ainda não conferiu.
+ */
+function _corpoReparado(caminho, start, end, reparo) {
+  let fh = null;
+  let pos = start;
+  let fechado = false;
+  const fechar = () => {
+    if (fechado) return;
+    fechado = true;
+    fh?.close().catch(() => {});
+  };
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        if (!fh) {
+          const aberto = await fs.promises.open(caminho, "r");
+          if (fechado) {
+            aberto.close().catch(() => {});
+            return;
+          }
+          fh = aberto;
+        }
+        if (pos > end) {
+          fechar();
+          controller.close();
+          return;
+        }
+        const n = Math.min(_CHUNK_REPARADO, end - pos + 1);
+        const espera = reparo.waitFor(pos + n);
+        if (espera) await espera;
+        if (fechado) return;
+        const buf = Buffer.allocUnsafe(n);
+        const { bytesRead } = await fh.read(buf, 0, n, pos);
+        if (fechado) return;
+        if (bytesRead === 0) {
+          fechar();
+          controller.close();
+          return;
+        }
+        const chunk = bytesRead < n ? buf.subarray(0, bytesRead) : buf;
+        reparo.apply(chunk, pos);
+        pos += bytesRead;
+        controller.enqueue(chunk);
+      } catch (err) {
+        fechar();
+        try { controller.error(err); } catch { /* o player já encerrou */ }
+      }
+    },
+    cancel() {
+      fechar();
+    },
+  }, new CountQueuingStrategy({ highWaterMark: 16 }));
+}
+
 function _getMimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   return _MIME_TYPES[ext] || "application/octet-stream";
+}
+
+/**
+ * Caminho absoluto de um `louvorja://local/<caminho>`; `null` quando ele tenta
+ * sair da pasta (`..`). O pathname vem percent-encoded (%20 → espaço).
+ */
+function _caminhoLocal(pathname) {
+  let raw = decodeURIComponent(pathname);
+  // Windows: strip leading / antes da letra de drive (/C:/... → C:/...)
+  if (/^\/[A-Za-z]:\//.test(raw)) raw = raw.slice(1);
+  return !raw || temSegmentoPai(raw) ? null : raw;
+}
+
+/** O mesmo caminho que o host `local` serve, para quem recebe só a URL. */
+function localPathFromUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "louvorja:" || parsed.host !== "local") return null;
+    return _caminhoLocal(parsed.pathname || "/");
+  } catch {
+    return null;
+  }
 }
 
 function setAutoCacheEnabled(enabled) {
@@ -542,13 +638,8 @@ function handle() {
       // absoluto real (a `/` inicial já faz parte do path Unix).
       // ------------------------------------------------------------------
       if (host === "local") {
-        // pathname vem percent-encoded (ex: %20 → espaço): decodifica
-        let raw = decodeURIComponent(pathname);
-
-        // Windows: strip leading / antes da letra de drive (/C:/... → C:/...)
-        if (/^\/[A-Za-z]:\//.test(raw)) raw = raw.slice(1);
-
-        if (!raw || temSegmentoPai(raw)) {
+        const raw = _caminhoLocal(pathname);
+        if (!raw) {
           console.warn("[protocol] local: path traversal bloqueado:", pathname);
           return new Response("Forbidden", { status: 403 });
         }
@@ -588,4 +679,11 @@ function getRemoteConfig() {
   return { ..._config };
 }
 
-module.exports = { register, handle, setRemoteConfig, getRemoteConfig, setAutoCacheEnabled };
+module.exports = {
+  register,
+  handle,
+  setRemoteConfig,
+  getRemoteConfig,
+  setAutoCacheEnabled,
+  localPathFromUrl,
+};

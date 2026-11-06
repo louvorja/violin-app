@@ -322,6 +322,18 @@ declare global {
       cancel: () => void;
       checkFiles: (files: unknown) => Promise<unknown>;
     };
+    audioRepair: {
+      begin: (url: string) => Promise<import("./helpers/AudioPacketScan").AudioScanBegin>;
+      read: (
+        token: string,
+        from: number,
+        count: number
+      ) => Promise<{ data: Uint8Array; sizes: number[] } | null>;
+      report: (
+        token: string,
+        result: { upto: number; bad: number[]; done?: boolean } | { abort: true }
+      ) => Promise<{ ok: boolean; patched?: number; unpatchable?: number }>;
+    };
     onlineVideo: {
       status: () => Promise<{
         count: number;
