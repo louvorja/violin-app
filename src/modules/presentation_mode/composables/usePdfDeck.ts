@@ -28,6 +28,8 @@ const doc = shallowRef<PDFDocumentProxy | null>(null);
 const url = ref<string | null>(null);
 const page = ref(1);
 const total = ref(0);
+/** Largura ÷ altura da primeira página (o laser e a lousa do controle encaixam por ela). */
+const aspect = ref(16 / 9);
 /** Página → imagem da miniatura (data URL), desenhada sob demanda. */
 const thumbs = reactive(new Map<number, string>());
 let installed = false;
@@ -64,6 +66,12 @@ function install(): void {
         if (seq !== loadSeq) return void loaded.cleanup();
         doc.value = loaded;
         total.value = loaded.numPages;
+        try {
+          const v = (await loaded.getPage(1)).getViewport({ scale: 1 });
+          if (seq === loadSeq && v.width > 0 && v.height > 0) aspect.value = v.width / v.height;
+        } catch {
+          /* fica a proporção de antes */
+        }
         if (atEnd) moveTo(loaded.numPages);
         else if (atPage > 1) moveTo(Math.min(atPage, loaded.numPages));
       } catch (e) {
@@ -141,6 +149,27 @@ async function thumbOf(n: number): Promise<void> {
   }
 }
 
+/**
+ * Uma página como imagem (JPEG), na largura pedida — para o controle remoto,
+ * que mostra o slide maior do que as miniaturas da grade.
+ */
+async function renderPage(n: number, width: number): Promise<string | null> {
+  const d = doc.value;
+  if (!d || n < 1 || n > d.numPages) return null;
+  try {
+    const p = await d.getPage(n);
+    const base = p.getViewport({ scale: 1 });
+    const viewport = p.getViewport({ scale: width / base.width });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    await p.render({ canvas, viewport }).promise;
+    return doc.value === d ? canvas.toDataURL("image/jpeg", 0.8) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function usePdfDeck() {
   install();
   const active = computed(() => !!url.value && total.value > 0);
@@ -182,5 +211,8 @@ export function usePdfDeck() {
     source,
     openNextAtEnd: () => (startAtEnd = true),
     openNextAtPage: (n: number) => (startAtPage = n),
+    aspect,
+    url,
+    renderPage,
   };
 }

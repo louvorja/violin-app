@@ -319,6 +319,8 @@ export const ICONS = {
   },
   PROJECTION: {
     CLEAN: "wallpaper-off",
+    /** Laser do controle remoto. */
+    LASER: "focus-2",
     PRESENT: "slideshow",
     PRESENTATION: "presentation",
     RETURN: "screen-share",

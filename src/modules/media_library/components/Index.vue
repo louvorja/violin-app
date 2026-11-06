@@ -2370,7 +2370,13 @@ function conferirContagem(total: number): void {
 // Recebe page/totalPages da janela de projeção
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload) => {
   const data = fileProjectionPageFor(payload, currentPdfPlaybackId);
-  if (!data || data.source !== "projection" || data.totalPages === undefined) return;
+  if (!data || data.source !== "projection") return;
+  // A tela mudou de página por outro caminho (o controle remoto, o modo
+  // apresentação): o painel acompanha, sem mandar a página de volta.
+  if (Number.isInteger(data.page) && data.page >= 1 && data.page !== currentPdfPage.value) {
+    currentPdfPage.value = data.page;
+  }
+  if (data.totalPages === undefined) return;
   currentPdfTotalPages.value = data.totalPages;
   conferirContagem(data.totalPages);
   if (currentPdfPage.value > data.totalPages) {
@@ -2426,7 +2432,20 @@ onMounted(async () => {
   loadPlaylist();
 });
 
+/** Arquivo enviado pelo celular: a lista recarrega, sem precisar reabrir a Biblioteca. */
+async function recarregarDoCelular(): Promise<void> {
+  const novos = await loadLibrary();
+  const conhecidos = new Set(files.value.map((f) => f.id));
+  const chegaram = novos.filter((f) => !conhecidos.has(f.id));
+  if (!chegaram.length) return;
+  files.value = [...chegaram, ...files.value];
+  $snackbar.success(tm("uploaded_from_phone", { name: chegaram.map((f) => f.name).join(", ") }));
+}
+const aoMudarBiblioteca = () => void recarregarDoCelular();
+window.addEventListener("lj:media-library-changed", aoMudarBiblioteca);
+
 onBeforeUnmount(() => {
+  window.removeEventListener("lj:media-library-changed", aoMudarBiblioteca);
   pararEscutaNativo?.();
   _cancelarFilaMiniaturas();
   for (const url of createdObjectUrls.values()) {

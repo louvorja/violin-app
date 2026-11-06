@@ -269,7 +269,8 @@ import UpNextBlock from "./UpNextBlock.vue";
 import ReturnPlayerBar from "./ReturnPlayerBar.vue";
 import PdfStage from "./PdfStage.vue";
 import PptxProgress from "./PptxProgress.vue";
-import { isPowerPoint, preparePowerPoint } from "../composables/usePowerPoint";
+import { isPowerPoint, livePowerPointPath, preparePowerPoint } from "../composables/usePowerPoint";
+import { presentRequest } from "../composables/openInPresentationMode";
 import { usePptxNative } from "../composables/usePptxNative";
 import { takeOffAir } from "../composables/takeOffAir";
 import { returnOverrideFor } from "../composables/returnTarget";
@@ -360,7 +361,8 @@ const {
   setOutputLocked,
   prepare,
 } = useProgram();
-const { execute, executeChild, projectPath, projectCanva, projectPdf, sendBible } = useProgramExecution();
+const { execute, executeChild, projectPath, projectCanva, projectPdf, sendBible } =
+  useProgramExecution();
 const { importFromLiturgy, saveAsLiturgy } = useProgramLiturgy();
 const stage = useStage();
 const folders = useFolderItems();
@@ -770,7 +772,8 @@ const livePipProgress = computed(() => {
 useClicker({
   navigate,
   // PowerPoint com animações por cima do PA: a tela preta é a dele.
-  toggleBlack: () => (pptxNative.active.value ? void pptxNative.toggleBlack() : setCleared(!cleared.value)),
+  toggleBlack: () =>
+    pptxNative.active.value ? void pptxNative.toggleBlack() : setCleared(!cleared.value),
   send: onEnter,
   zoomIn: () => liveZoom.zoomIn(),
   zoomOut: () => liveZoom.zoomOut(),
@@ -788,6 +791,34 @@ const livePptxPath = computed(() => {
   const p = pathOf(liveOrigin.value);
   return p && isPowerPoint(p) ? p : null;
 });
+// O controle remoto lê daqui qual PowerPoint está no ar (fontes, animações).
+watch(livePptxPath, (p) => (livePowerPointPath.value = p), { immediate: true });
+onBeforeUnmount(() => (livePowerPointPath.value = null));
+
+/*
+ * "Apresentar" pedido pelo controle remoto: o arquivo já foi posto na prévia;
+ * vai ao ar quando a prévia for ele e puder ser apresentada.
+ */
+watch(
+  () =>
+    [
+      presentRequest.value,
+      canPresentPreview.value,
+      pathOf(stage.preview.value),
+      stagePreview.value,
+    ] as const,
+  ([req, can, previewPath, inPreview]) => {
+    if (!req) return;
+    if (Date.now() - req.at > 30_000) return void (presentRequest.value = null);
+    if (previewPath !== req.path) return;
+    // Já é o que está no ar: não recomeça do primeiro slide.
+    if (!inPreview) return void (presentRequest.value = null);
+    if (!can) return;
+    presentRequest.value = null;
+    presentPreview();
+  },
+  { immediate: true }
+);
 
 /*
  * Pasta de anúncios com vários PowerPoints: quem apresentava com animações e

@@ -307,7 +307,37 @@ describe("RemoteMediaLibrary — playlist e upload", () => {
     wrapper.unmount();
   });
 
-  it("upload manda os bytes crus com X-File-Name", async () => {
+  it("upload manda os bytes crus com X-File-Name e mostra o andamento", async () => {
+    // O envio usa XMLHttpRequest: só ele informa o andamento do upload.
+    const sent: { url: string; headers: Record<string, string>; body: unknown }[] = [];
+    let progress: ((e: { lengthComputable: boolean; loaded: number; total: number }) => void) | null = null;
+    let finish: (() => void) | null = null;
+    class FakeXhr {
+      status = 0;
+      responseText = "";
+      upload: { onprogress: typeof progress } = { onprogress: null };
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      private url = "";
+      private headers: Record<string, string> = {};
+      open(_m: string, url: string) {
+        this.url = url;
+      }
+      setRequestHeader(k: string, v: string) {
+        this.headers[k] = v;
+      }
+      send(body: unknown) {
+        sent.push({ url: this.url, headers: this.headers, body });
+        progress = (e) => this.upload.onprogress?.(e);
+        finish = () => {
+          this.status = 201;
+          this.responseText = "{}";
+          this.onload?.();
+        };
+      }
+    }
+    vi.stubGlobal("XMLHttpRequest", FakeXhr);
+
     const wrapper = abrir();
     await new Promise((r) => setTimeout(r, 0));
     calls.length = 0;
@@ -318,14 +348,21 @@ describe("RemoteMediaLibrary — playlist e upload", () => {
     await input.trigger("change");
     await new Promise((r) => setTimeout(r, 0));
 
-    const post = calls.find((call) => call.url.includes("/upload"));
-    expect(post?.init?.method).toBe("POST");
-    const headers = post?.init?.headers as Record<string, string>;
-    expect(headers["X-File-Name"]).toBe(encodeURIComponent("foto.png"));
-    expect(headers["Content-Type"]).toBe("application/octet-stream");
-    expect(post?.init?.body).toBeInstanceOf(ArrayBuffer);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].url).toContain("/api/media-library/upload");
+    expect(sent[0].headers["X-File-Name"]).toBe(encodeURIComponent("foto.png"));
+    expect(sent[0].headers["Content-Type"]).toBe("application/octet-stream");
+    expect(sent[0].body).toBe(file);
+
+    progress!({ lengthComputable: true, loaded: 1, total: 2 });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(wrapper.find(".rm-bar__fill").attributes("style")).toContain("width: 50%");
+
+    finish!();
+    await new Promise((r) => setTimeout(r, 0));
     // Depois de enviar, a biblioteca é recarregada.
     expect(calls.filter((call) => String(call.url).includes("action=library")).length).toBe(1);
     wrapper.unmount();
+    vi.unstubAllGlobals();
   });
 });

@@ -45,6 +45,11 @@ export interface PowerPointProgress {
 export const powerPointInfo = reactive(new Map<string, PowerPointInfo>());
 /** A conversão que está demorando, para a faixa de andamento do módulo. */
 export const powerPointProgress = ref<PowerPointProgress | null>(null);
+/**
+ * O PowerPoint por trás do PDF no ar, enquanto o modo apresentação está aberto
+ * (o controle remoto pergunta por ele para as fontes e as animações).
+ */
+export const livePowerPointPath = ref<string | null>(null);
 
 let progressInstalled = false;
 /** Conversões pedidas e ainda sem resposta: caminho → quantas. */
@@ -131,10 +136,14 @@ export function missingFontNames(info: PowerPointInfo | null | undefined): strin
     .map((f) => f.name);
 }
 
-/** O que se sabe do arquivo; sem nada guardado (app reaberto), pergunta ao main. */
-export function loadPowerPointInfo(path: string): void {
+/**
+ * O que se sabe do arquivo; sem nada guardado (app reaberto), pergunta ao main.
+ * `name` é o que o operador vê na faixa de andamento — o arquivo que veio do
+ * celular, por exemplo, fica no disco com um nome interno (`upl_…`).
+ */
+export function loadPowerPointInfo(path: string, name?: string): void {
   if (!POWERPOINT_ENABLED || powerPointInfo.has(path) || pending.has(path)) return;
-  void convert(path);
+  void (name ? convertNamed(path, name) : convert(path));
 }
 
 /**

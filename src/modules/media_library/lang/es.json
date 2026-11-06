@@ -143,5 +143,6 @@
     "feat_hint_no_native": "Este archivo tiene {items}, que quedan quietos en el modo imagen. Para presentarlos se necesita PowerPoint (Windows) o LibreOffice — ver Opciones → Reproductor de Audio/Vídeo.",
     "project_native": "Presentar con {app}",
     "open_presentation": "Abrir en el modo presentación"
-  }
+  },
+  "uploaded_from_phone": "Llegó del celular: {name}"
 }

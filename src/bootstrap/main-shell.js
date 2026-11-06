@@ -5,7 +5,9 @@ import { watchStaleVersion } from "@/helpers/StaleVersion";
 import requiresNetwork from "@/directives/requiresNetwork";
 import App from "@/App.vue";
 import router from "@/router";
-import { createI18nInstance } from "@/i18n";
+import { createI18nInstance, i18nAtual } from "@/i18n";
+import $snackbar from "@/helpers/Snackbar";
+import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import VueFullscreen from "vue-fullscreen";
 import "@/assets/styles/tokens.css";
 import "@/assets/styles/ui.css";
@@ -75,7 +77,6 @@ import {
 } from "@/helpers/Overlay";
 import Shortcuts from "@/helpers/Shortcuts";
 import Telemetry from "@/helpers/Telemetry";
-import $snackbar from "@/helpers/Snackbar";
 import Hotkeys from "@/helpers/Hotkeys";
 import { useShell } from "@/composables/useShell";
 import { BROADCAST_TYPE } from "@helpers/BroadcastTypes";
@@ -1491,6 +1492,52 @@ $storage.hydrate().then(async () => {
             break;
           }
 
+          case "phone-pptx": {
+            // PowerPoint enviado pelo celular: o main converte e avisa aqui o andamento.
+            const t = i18nAtual()?.global?.t;
+            const msg = (key, params) =>
+              t ? String(t(`remote_control.media_library.${key}`, params)) : key;
+            // Na lista de tarefas em segundo plano, com "slide 3 de 12".
+            const tasks = useBackgroundTasks();
+            const taskId = `phone-pptx-${clip(data.id, 64)}`;
+            const name = clip(data.name, 200);
+            if (data.status === "converting") {
+              tasks.registerTask(taskId, msg("phone_pptx_task", { name }));
+              tasks.updateTask(taskId, { progress: 5, detail: msg("phone_pptx_fonts") });
+              $snackbar.info(msg("phone_pptx_converting", { name }), { timeout: 8000 });
+            } else if (data.status === "progress") {
+              const total = Number(data.total) || 0;
+              const done = Math.min(Number(data.done) || 0, total);
+              tasks.updateTask(
+                taskId,
+                total
+                  ? {
+                      progress: 10 + Math.round((85 * done) / total),
+                      detail: msg("phone_pptx_slides", { done, total }),
+                    }
+                  : {
+                      progress: 10,
+                      detail: msg(
+                        data.phase === "converting"
+                          ? "phone_pptx_converting_short"
+                          : "phone_pptx_fonts"
+                      ),
+                    }
+              );
+            } else if (data.status === "done") {
+              tasks.completeTask(taskId);
+            } else if (data.status === "error") {
+              tasks.updateTask(taskId, { status: "error", error: clip(data.message, 300) });
+              $snackbar.error(
+                msg("phone_pptx_failed", { name, message: clip(data.message, 300) }),
+                {
+                  timeout: 12000,
+                }
+              );
+            }
+            break;
+          }
+
           case "saved": {
             // Upload do remoto: o main gravou os bytes em disco e delegou o
             // registro (metadado + thumb) para o renderer. A confirmação volta
@@ -1508,6 +1555,8 @@ $storage.hydrate().then(async () => {
                   : {}),
               });
               console.log("[http:media-library] upload registrado:", record.id);
+              // A Biblioteca aberta lê a lista só ao montar: avisa que chegou arquivo.
+              window.dispatchEvent(new CustomEvent("lj:media-library-changed"));
               respond({ status: "ok" });
             } catch (error) {
               console.warn("[http:media-library] upload não registrou:", error?.message || error);
@@ -2190,6 +2239,13 @@ $storage.hydrate().then(async () => {
         case "http:media-library":
           await handleMediaLibraryHttp(data);
           break;
+        case "http:presenter": {
+          // Aba Apresentação do controle remoto: carregado só quando alguém usa.
+          const { handlePresenterHttp } =
+            await import("@/modules/presentation_mode/remotePresenter");
+          await handlePresenterHttp(data);
+          break;
+        }
         case "http:background-sound": {
           // Som de fundo: o player é single (useBackgroundSound), então o
           // controle remoto funciona sem o módulo aberto.
@@ -2825,7 +2881,10 @@ $storage.hydrate().then(async () => {
           if (immediate) action();
           // Encerrar o telão é a resposta esperada: o Sim já vem marcado.
           else
-            $alert.yesno({ text: confirmKey, default_button: "yes" }, (btn) => btn === "yes" && action());
+            $alert.yesno(
+              { text: confirmKey, default_button: "yes" },
+              (btn) => btn === "yes" && action()
+            );
         };
         Broadcast.send(BROADCAST_TYPE.RETURN_OVERRIDE, { active: false });
 

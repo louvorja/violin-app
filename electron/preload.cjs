@@ -32,7 +32,7 @@ const HTTP_RENDERER_RESPONSE_CHANNEL = "http:renderer-response";
  * pessoais. O `preloadIpcContract.spec` cobre a lista de prefixos justamente
  * para o próximo esquecimento falhar no teste e não em produção.
  */
-const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos|custom-music|music-album|background-sound|volume|media-library):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos|custom-music|music-album|background-sound|volume|media-library|presenter):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 contextBridge.exposeInMainWorld("louvorjaApi", {
   /** Resolve o caminho real de um File arrastado/selecionado (Electron 32+). */
@@ -815,7 +815,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
    * Eventos: "http:song-slides", "http:open-song", "http:drawing-number",
    * "http:drawing-name", "http:libras-bundle", "http:projections-close",
    * "http:online-videos", "http:custom-music", "http:music-album", "http:background-sound",
-   * "http:volume", "http:media-library"
+   * "http:volume", "http:media-library", "http:presenter"
    * Retorna função de cleanup que remove todos os listeners.
    *
    * @param {(eventType: string, data: object) => void} cb
@@ -835,6 +835,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       "http:background-sound",
       "http:volume",
       "http:media-library",
+      "http:presenter",
     ];
     const handlers = events.map((evt) => {
       const handler = (_e, data) => cb(evt, data);
