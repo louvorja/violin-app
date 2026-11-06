@@ -37,6 +37,7 @@ import {
 } from "@/helpers/LiturgyFiles";
 import { canLinkOverlay, youtubeVideoId } from "../overlayLink";
 import { ativarOverlayVinculado, prepararExecucao } from "../linkedOverlay";
+import { isYoutube } from "../item";
 
 // A shell e o módulo podem pedir arquivos ao mesmo tempo. Uma leitura/abertura
 // antiga que termina depois não assume a URL da solicitação mais recente.
@@ -71,11 +72,6 @@ export function useLiturgyExecution() {
 
   /** Instância compartilhada com o módulo Som de Fundo (mesmo player). */
   const $bgSound = useBackgroundSound();
-
-  function isYoutube(url: string | undefined | null): boolean {
-    if (!url) return false;
-    return /youtu\.?be/i.test(url);
-  }
 
   /* ============== Item execution ============== */
   async function executeItem(item: LiturgyItem): Promise<void> {

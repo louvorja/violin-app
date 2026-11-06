@@ -54,7 +54,11 @@
     </div>
 
     <!-- Fontes do arquivo: o que está instalado, o que falta e como resolver. -->
-    <div v-if="fontsOpen && info && !native.active.value" class="pm-pptx__fonts" data-testid="pm-pptx-fonts">
+    <div
+      v-if="fontsOpen && info && !native.active.value"
+      class="pm-pptx__fonts"
+      data-testid="pm-pptx-fonts"
+    >
       <p v-if="info.fontsError" class="pm-pptx__warn">
         {{ tm("pptx.fonts_error", { message: info.fontsError }) }}
       </p>
@@ -62,7 +66,11 @@
       <ul v-else class="pm-pptx__list">
         <li v-for="f in info.fonts" :key="f.name" class="pm-pptx__font">
           <LjIcon
-            :icon="f.status === 'missing' || f.status === 'unmatched' ? ICONS.UI.ALERT : ICONS.UI.CHECK_CIRCLE"
+            :icon="
+              f.status === 'missing' || f.status === 'unmatched'
+                ? ICONS.UI.ALERT
+                : ICONS.UI.CHECK_CIRCLE
+            "
             :size="14"
             :class="`pm-pptx__icon--${toneOf(f.status)}`"
           />
@@ -73,7 +81,13 @@
       <p v-if="info.staleFonts" class="pm-pptx__warn">{{ tm("pptx.stale_fonts") }}</p>
       <p v-else-if="missing.length" class="pm-pptx__muted">{{ tm("pptx.missing_hint") }}</p>
       <div class="pm-pptx__actions">
-        <LjButton size="sm" variant="subtle" :disabled="busy" data-testid="pm-pptx-install-font" @click="installFont">
+        <LjButton
+          size="sm"
+          variant="subtle"
+          :disabled="busy"
+          data-testid="pm-pptx-install-font"
+          @click="installFont"
+        >
           {{ tm("pptx.install_font") }}
         </LjButton>
         <LjButton
@@ -100,6 +114,7 @@ import $snackbar from "@/helpers/Snackbar";
 import { LjButton, LjChip, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { usePptxNative } from "../composables/usePptxNative";
+import { useLiveContent } from "../composables/useLiveContent";
 import {
   loadPowerPointInfo,
   missingFontNames,
@@ -117,6 +132,13 @@ const props = defineProps<{ pptxPath: string; page: number; locked: boolean }>()
 const emit = defineEmits<{ regenerated: [pdf: string] }>();
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const native = usePptxNative();
+const live = useLiveContent();
+
+/** O nome que o operador conhece: o título no ar, não o do arquivo no disco. */
+function displayName(): string {
+  const title = String(live.title.value || "").trim();
+  return title || (props.pptxPath.split(/[\\/]/).pop() ?? props.pptxPath);
+}
 
 const info = computed(() => powerPointInfo.get(props.pptxPath) ?? null);
 const missing = computed(() => missingFontNames(info.value));
@@ -127,7 +149,7 @@ const busy = ref(false);
 watch(
   () => props.pptxPath,
   (p) => {
-    loadPowerPointInfo(p);
+    loadPowerPointInfo(p, displayName());
     fontsOpen.value = missing.value.length > 0 || !!info.value?.staleFonts;
   },
   { immediate: true }
@@ -152,7 +174,10 @@ const hint = computed(() => {
   if (f.videos) items.push(tm("pptx.feat_videos", { count: f.videos }));
   if (f.audios) items.push(tm("pptx.feat_audios", { count: f.audios }));
   if (!items.length) return tm("pptx.native_hint_plain");
-  const list = items.length > 1 ? `${items.slice(0, -1).join(", ")}${tm("pptx.feat_and")}${items.at(-1)}` : items[0];
+  const list =
+    items.length > 1
+      ? `${items.slice(0, -1).join(", ")}${tm("pptx.feat_and")}${items.at(-1)}`
+      : items[0];
   return tm("pptx.native_hint", { items: list });
 });
 
@@ -204,8 +229,7 @@ async function regenerate(): Promise<void> {
   if (busy.value) return;
   busy.value = true;
   try {
-    const name = props.pptxPath.split(/[\\/]/).pop() ?? props.pptxPath;
-    const pdf = await regeneratePowerPoint(props.pptxPath, name);
+    const pdf = await regeneratePowerPoint(props.pptxPath, displayName());
     if (pdf) emit("regenerated", pdf);
   } finally {
     busy.value = false;

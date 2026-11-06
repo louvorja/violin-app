@@ -24,6 +24,34 @@ const devices = require("../devices.js");
 const { safeSend } = require("../safeWebContents.js");
 const transmissionRoutes = require("./transmissionRoutes.js");
 const remoteRoutes = require("./remoteRoutes.js");
+const presenterRoutes = require("./presenterRoutes.js");
+const { createPresenterOverlay } = require("../presenterOverlay.js");
+
+/**
+ * Janela do laser e da lousa sobre o telão (aba Apresentação do controle).
+ * Criada na primeira vez que alguém usa; o Electron só é carregado aqui, para
+ * os testes de rota rodarem em Node puro.
+ */
+let _presenterOverlay = null;
+function getPresenterOverlay() {
+  if (_presenterOverlay) return _presenterOverlay;
+  try {
+    const { BrowserWindow } = require("electron");
+    const displays = require("../displays.js");
+    _presenterOverlay = createPresenterOverlay({
+      BrowserWindow,
+      getBounds: () => {
+        // O mesmo telão em que o slide aparece (e o PowerPoint com animações).
+        const d = displays.getFileProjectionDisplay();
+        return d ? d.bounds : null;
+      },
+      log: console.log,
+    });
+  } catch {
+    return null;
+  }
+  return _presenterOverlay;
+}
 
 
 function isPlainObject(value) {
@@ -554,6 +582,13 @@ function setupRoutes(
     isMediaLibraryCommandResponse,
     isMediaLibraryImageResponse,
     hasDevicePermission,
+  });
+  presenterRoutes.register(app, {
+    getValidMainWindow,
+    requestRenderer,
+    sendRendererError,
+    hasDevicePermission,
+    getOverlay: getPresenterOverlay,
   });
 
 

@@ -14,7 +14,7 @@ import Media from "@/composables/useMedia";
 import type { LiturgyItem } from "@/types/Liturgy";
 import { useLiturgyExecution } from "@/modules/liturgy/composables/useLiturgyExecution";
 import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
-import { liturgyItem } from "../program/liturgy";
+import { newItem } from "@/modules/liturgy/item";
 import { applyOverride, isMusicMode, type MusicMode } from "../program/musicModes";
 import { currentMusicOverride } from "./useMusicOverride";
 import { nextVerseOf } from "../program/bible";
@@ -163,7 +163,7 @@ export function useProgramExecution() {
    */
   function projectPath(path: string, name: string): void {
     const send = (dir: string) =>
-      executeItem(liturgyItem({ id: crypto.randomUUID(), tipo: LiturgyItemTypeEnum.ARQUIVO, dir, item: name }));
+      executeItem(newItem(LiturgyItemTypeEnum.ARQUIVO, { dir, item: name }));
     void (async () => {
       // Só na nuvem, o vídeo tocaria aos trancos enquanto baixa: o operador decide.
       if (!(await cloud.ensureLocal(path, name))) return;
@@ -193,7 +193,7 @@ export function useProgramExecution() {
         $snackbar.error(t?.("modules.presentation_mode.canva.site_failed") ?? "Canva");
         return;
       }
-      executeItem(liturgyItem({ id: crypto.randomUUID(), tipo: LiturgyItemTypeEnum.SITE, url, item: title }));
+      executeItem(newItem(LiturgyItemTypeEnum.SITE, { url, item: title }));
     })();
   }
 
@@ -202,7 +202,7 @@ export function useProgramExecution() {
    * entra no lugar do antigo, sem mudar o que o módulo considera no ar.
    */
   function projectPdf(pdf: string, name: string): void {
-    executeItem(liturgyItem({ id: crypto.randomUUID(), tipo: LiturgyItemTypeEnum.ARQUIVO, dir: pdf, item: name }));
+    executeItem(newItem(LiturgyItemTypeEnum.ARQUIVO, { dir: pdf, item: name }));
   }
 
   /**

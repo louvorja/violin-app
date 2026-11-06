@@ -27,3 +27,18 @@ export function takeOffAir(kind: LiveKind | null): void {
       break;
   }
 }
+
+/**
+ * O que está no ar, para o "Tirar do ar": tudo o que está sendo reproduzido —
+ * na tela principal, só no retorno ou só na faixa de áudio. Um hino em "só
+ * áudio" não aparece em tela nenhuma, mas a igreja está ouvindo.
+ */
+export interface AirState {
+  kind: LiveKind | null;
+  returnOnly: boolean;
+  audio: boolean;
+}
+
+export function hasAnythingOnAir(state: AirState): boolean {
+  return !!state.kind || state.returnOnly || state.audio;
+}

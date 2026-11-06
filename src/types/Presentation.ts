@@ -1,24 +1,16 @@
-import type { LiturgyItem } from "@/types/Liturgy";
+import type { LiturgyItem, LiturgyItemKind } from "@/types/Liturgy";
 
-/** O que um item projeta. Decide o ícone e, nas próximas fases, o palco. */
+/**
+ * O que um item projeta. Decide o ícone e o palco. Os tipos da liturgia mais
+ * os que só o programa tem.
+ */
 export type ProgramItemKind =
-  | "music"
-  | "video"
-  | "online_video"
-  | "image"
-  | "audio"
-  | "file"
-  | "presentation"
+  | LiturgyItemKind
   | "bible"
-  | "announcements"
   /** Momento do culto com uma lista de fotos, vídeos e PDFs (anúncios, missionário…). */
   | "moment"
   /** Pasta da biblioteca (comum ou série): o conteúdo é o que estiver nela na hora. */
-  | "folder"
-  | "note"
-  | "site"
-  | "overlay"
-  | "scheduled";
+  | "folder";
 
 /** Versículo escolhido pelo BibleSpotlight — a liturgia não tem tipo Bíblia. */
 export interface ProgramBibleRef {

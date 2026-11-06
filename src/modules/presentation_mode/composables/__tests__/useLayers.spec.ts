@@ -5,10 +5,14 @@ const m = vi.hoisted(() => ({
   close: vi.fn(),
   showOnReturn: vi.fn(async () => {}),
   takeOffAir: vi.fn(),
+  appdata: {} as Record<string, unknown>,
 }));
 const live = { current: ref<string | null>(null), file: ref<{ type: string } | null>(null) };
 const returnState = { id: null as string | null };
 
+vi.mock("@/helpers/AppData", () => ({
+  default: { get: (key: string, fallback?: unknown) => m.appdata[key] ?? fallback },
+}));
 vi.mock("@/composables/useMedia", () => ({ default: { close: m.close } }));
 vi.mock("@/composables/useFileProjection", () => ({ useFileProjection: () => ({ stopProjection: vi.fn() }) }));
 vi.mock("../useLiveContent", () => ({ useLiveContent: () => live }));
@@ -16,13 +20,15 @@ vi.mock("../useReturnPlayer", () => ({ useReturnPlayer: () => ({ state: returnSt
 vi.mock("../useOutputs", () => ({ anyScreenOpen: vi.fn(), returnOverride: ref(null), showOnReturn: m.showOnReturn }));
 vi.mock("../takeOffAir", () => ({ takeOffAir: m.takeOffAir }));
 
-const { claimScreen } = await import("../useLayers");
+const { claimScreen, stopAllLayers } = await import("../useLayers");
+const { KEYS } = await import("@/constants/UserDataKeys");
 
 beforeEach(() => {
   vi.clearAllMocks();
   live.current.value = null;
   live.file.value = null;
   returnState.id = null;
+  m.appdata = {};
 });
 
 describe("claimScreen", () => {
@@ -50,5 +56,22 @@ describe("claimScreen", () => {
     returnState.id = "r1";
     claimScreen("video");
     expect(m.showOnReturn).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("stopAllLayers", () => {
+  it("um áudio tocando sozinho também está no ar: Tirar do ar o para", () => {
+    m.appdata[KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY] = true;
+    stopAllLayers();
+    expect(m.takeOffAir).not.toHaveBeenCalled();
+    expect(m.close).toHaveBeenCalledWith(true, false, true);
+  });
+
+  it("foto com música por baixo: sai a foto e sai a música", () => {
+    live.current.value = "file";
+    m.appdata[KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY] = true;
+    stopAllLayers();
+    expect(m.takeOffAir).toHaveBeenCalledWith("file");
+    expect(m.close).toHaveBeenCalledWith(true, false, true);
   });
 });

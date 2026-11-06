@@ -181,6 +181,7 @@ describe("preload IPC contract", () => {
       "volume",
       "media-library",
       "draw",
+      "presenter",
     ]) {
       expect(
         api.httpServer.respond(`${prefixo}:${uuid}`, { status: "ok" }),

@@ -156,3 +156,16 @@ describe("monitor escolhido no utilitário", () => {
     expect(displays.getPreferred("musicas")?.id).toBe(2);
   });
 });
+
+describe("telão do arquivo (laser, lousa e PowerPoint com animações)", () => {
+  it("é o monitor de Projetar arquivos quando ele resolve", () => {
+    const esperado = displays.getPreferred("file_projection");
+    expect(displays.getFileProjectionDisplay()?.id).toBe(esperado?.id ?? 2);
+  });
+
+  it("sem monitor de arquivos, cai no das músicas — como a janela do slide", () => {
+    monitorConfig.setFeatureRole({ userData, feature: "file_projection", role: null });
+    expect(displays.getPreferred("file_projection")).toBeNull();
+    expect(displays.getFileProjectionDisplay()?.id).toBe(2);
+  });
+});

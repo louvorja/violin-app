@@ -106,6 +106,15 @@
         <remote-presenter :token="token" @show-snackbar="showSnackbar" />
       </div>
 
+      <!-- Tab Apresentação: slides, laser e lousa -->
+      <div v-if="isBooted('presentation')" v-show="tab === 'presentation'" class="rc-pane">
+        <remote-presentation
+          :token="token"
+          @show-snackbar="showSnackbar"
+          @go-tab="(name) => (tab = name)"
+        />
+      </div>
+
       <!-- Tab Biblioteca de Mídia -->
       <div v-if="isBooted('media_library')" v-show="tab === 'media_library'" class="rc-pane">
         <remote-media-library ref="mediaLibraryRef" :token="token" @show-snackbar="showSnackbar" />
@@ -254,6 +263,7 @@ import RemoteShortcuts from "./RemoteShortcuts.vue";
 import RemoteVideos from "./RemoteVideos.vue";
 import RemoteBackgroundSound from "./RemoteBackgroundSound.vue";
 import RemotePresenter from "./RemotePresenter.vue";
+import RemotePresentation from "./RemotePresentation.vue";
 import RemoteMediaLibrary from "./RemoteMediaLibrary.vue";
 import RemoteDraw from "./RemoteDraw.vue";
 
@@ -302,6 +312,11 @@ const tabItems = computed(() =>
       icon: ICONS.MODULES.MEDIA_LIBRARY,
     },
     { value: "music", label: t("module_group.musics.title"), icon: ICONS.MUSIC.NOTE },
+    {
+      value: "presentation",
+      label: t("remote_control.tabs.presentation"),
+      icon: ICONS.PROJECTION.LASER,
+    },
     {
       value: "presenter",
       label: t("remote_control.tabs.presenter"),

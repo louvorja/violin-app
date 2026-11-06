@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import { kindFromPath } from "../program/liturgy";
+import { kindOfPath } from "@/modules/liturgy/item";
 import { progressOf } from "../program/series";
 import { onFolderChanged, readFolder, type LibraryEntry } from "./useFileLibrary";
 import { useSeries } from "./useSeries";
@@ -51,7 +51,7 @@ function filesOf(dir: string): LibraryEntry[] | undefined {
 
 /** Os que contam para a série — o mesmo critério da barra de série da biblioteca. */
 const seriesFiles = (files: LibraryEntry[]) =>
-  files.filter((e) => ["video", "image"].includes(kindFromPath(e.path)));
+  files.filter((e) => ["video", "image"].includes(kindOfPath(e.path)));
 
 /** O próximo da série, ou null se a pasta não é série (ou a série terminou). */
 async function nextOf(dir: string): Promise<LibraryEntry | null> {

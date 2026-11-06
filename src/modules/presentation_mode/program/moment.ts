@@ -1,5 +1,5 @@
 import type { ProgramItem, ProgramSubItem } from "@/types/Presentation";
-import { kindFromPath } from "./liturgy";
+import { kindOfPath } from "@/modules/liturgy/item";
 import { isPowerPoint, POWERPOINT_ENABLED } from "../composables/usePowerPoint";
 
 /**
@@ -15,13 +15,13 @@ const MOMENT_KINDS = new Set(["image", "video", "presentation"]);
 export function acceptsInMoment(path: string): boolean {
   // PowerPoint está desligado (só PDF): nem entra, em vez de falhar no ar.
   if (isPowerPoint(path) && !POWERPOINT_ENABLED) return false;
-  return MOMENT_KINDS.has(kindFromPath(path));
+  return MOMENT_KINDS.has(kindOfPath(path));
 }
 
 const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
 export function childFromPath(path: string, id: string): ProgramSubItem {
-  return { id, title: baseName(path).replace(/\.[^.]+$/, ""), kind: kindFromPath(path), path };
+  return { id, title: baseName(path).replace(/\.[^.]+$/, ""), kind: kindOfPath(path), path };
 }
 
 /** Acrescenta arquivos ao fim do momento; o mesmo arquivo não entra duas vezes. */
