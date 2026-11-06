@@ -272,14 +272,19 @@ import PptxProgress from "./PptxProgress.vue";
 import { isPowerPoint, livePowerPointPath, preparePowerPoint } from "../composables/usePowerPoint";
 import { presentRequest } from "../composables/openInPresentationMode";
 import { usePptxNative } from "../composables/usePptxNative";
-import { takeOffAir } from "../composables/takeOffAir";
+import { hasAnythingOnAir } from "../composables/takeOffAir";
 import { returnOverrideFor } from "../composables/returnTarget";
 import { useProgramDownloads } from "../composables/useCloudFiles";
 import { programFilePaths } from "../program/paths";
 import { useStage } from "../composables/useStage";
 import { useStageNavigation } from "../composables/useStageNavigation";
 import { useReturnBlankSync } from "../composables/useReturnVisibility";
-import { claimScreen, claimVideo, resetOrphanScreens } from "../composables/useLayers";
+import {
+  claimScreen,
+  claimVideo,
+  resetOrphanScreens,
+  stopAllLayers,
+} from "../composables/useLayers";
 import { useFolderItems } from "../composables/useFolderItems";
 import { usePlayerMute } from "../composables/usePlayerMute";
 import {
@@ -719,19 +724,28 @@ const { libraryLivePath, liveBibleRef } = useLibraryLiveMarks({
   liveProgramItem,
 });
 
-/** Tira do ar o que está na tela, mantendo a apresentação aberta. */
+/**
+ * Tira do ar tudo o que está tocando — tela, retorno e áudio —, mantendo a
+ * apresentação aberta. O que está só no retorno conta: o operador não vê o
+ * palco da mesa.
+ */
 function takeOff(): void {
   Telemetry.track("presentation_take_off", {
     kind: liveKind.value,
     return_only: !!returnOverride.value,
+    audio: audioLive.value,
   });
-  takeOffAir(liveKind.value);
-  // O que está só no retorno também está no ar: o operador não vê o palco da mesa.
-  if (returnOverride.value) void showOnReturn(null);
+  stopAllLayers();
   stage.clearSent();
+  stage.clearAudio();
 }
-/** Há o que tirar do ar: algo na tela principal ou algo só no retorno. */
-const canTakeOff = computed(() => !!liveKind.value || !!returnOverride.value);
+const canTakeOff = computed(() =>
+  hasAnythingOnAir({
+    kind: liveKind.value,
+    returnOnly: !!returnOverride.value,
+    audio: audioLive.value,
+  })
+);
 watch(canTakeOff, (can) => $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_TAKE_OFF, can), {
   immediate: true,
 });
