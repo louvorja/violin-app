@@ -148,6 +148,7 @@
 
 <script setup lang="ts">
 import { useLiturgyI18n } from "../i18n";
+import { useCollapsedBlocos } from "../composables/useCollapsedBlocos";
 import { setScrollPosition, restoreScrollPosition } from "@/helpers/ScrollMemory";
 import { LjButton, LjEmpty, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
@@ -189,7 +190,7 @@ const props = withDefaults(
 const { t } = useLiturgyI18n();
 
 const draggingBlocoId = ref<string | null>(null);
-const collapsedBlocos = ref(new Set<string>());
+const { collapsedBlocos, toggleBlocoCollapse } = useCollapsedBlocos();
 
 const scroller = ref<HTMLElement | null>(null);
 
@@ -207,13 +208,6 @@ function restoreScroll() {
 
 onMounted(restoreScroll);
 onActivated(restoreScroll);
-
-function toggleBlocoCollapse(blocoId: string) {
-  const s = collapsedBlocos.value;
-  if (s.has(blocoId)) s.delete(blocoId);
-  else s.add(blocoId);
-  collapsedBlocos.value = new Set(s);
-}
 
 function getBlocoColor(blocoId: string): string {
   const bloco = props.items.find((i) => i.tipo === LiturgyItemTypeEnum.BLOCO && i.id === blocoId);

@@ -6,7 +6,7 @@
  * (`blocoId`), não os soltos que aparecem na mesma seção — é o modelo de dados,
  * e é o que a tela tem de respeitar.
  */
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 
 vi.mock("vuedraggable", () => ({
@@ -30,6 +30,7 @@ vi.mock("@/helpers/ScrollMemory", () => ({
 }));
 
 import LiturgyTimeline from "../LiturgyTimeline.vue";
+import { resetCollapsedBlocos } from "../../composables/useCollapsedBlocos";
 
 type Item = {
   id: string;
@@ -92,6 +93,10 @@ const botoesRecolher = (wrapper: ReturnType<typeof montar>) =>
   wrapper.findAll(".tl-bloco-collapse");
 
 describe("bloco: recolher e expandir", () => {
+  beforeEach(() => {
+    resetCollapsedBlocos();
+  });
+
   it("começa tudo expandido", () => {
     const wrapper = montar();
 
@@ -124,6 +129,17 @@ describe("bloco: recolher e expandir", () => {
     await botoesRecolher(wrapper)[0].trigger("click");
 
     expect(colapso(wrapper, "i3").classes()).not.toContain("tl-collapse--closed");
+  });
+
+  it("mantém o bloco recolhido ao desmontar e voltar para a timeline", async () => {
+    const first = montar();
+    await botoesRecolher(first)[0].trigger("click");
+    expect(colapso(first, "i1").classes()).toContain("tl-collapse--closed");
+    first.unmount();
+
+    const reopened = montar();
+    expect(colapso(reopened, "i1").classes()).toContain("tl-collapse--closed");
+    expect(botoesRecolher(reopened)[0].attributes("aria-expanded")).toBe("false");
   });
 
   it("o segundo clique reexpande e o aria acompanha", async () => {
