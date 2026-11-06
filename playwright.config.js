@@ -49,6 +49,9 @@ export default defineConfig({
       // Evita que os módulos mostrem alert de "Arquivo não encontrado" no boot
       VITE_URL_DATABASE: "http://e2e.mock",
       VITE_URL_FILES: "http://e2e.mock",
+      // O modal de dicas bloquearia cliques dos fluxos E2E; o produto continua
+      // exibindo dicas normalmente fora do ambiente de teste.
+      VITE_E2E: "1",
     },
   },
 });

@@ -382,6 +382,8 @@ function _finishBootFlow(): void {
   _bootPhase = "done";
   if (_startupTipShown) return;
   _startupTipShown = true;
+  // O modal bloqueia os fluxos E2E que existiam antes das dicas.
+  if (import.meta.env.VITE_E2E === "1") return;
   if ($userdata.get<boolean>(KEYS.OPTIONS.SHOW_STARTUP_TIPS, true) === false) return;
   const tips = buildStartupTips();
   if (tips.length === 0) return;
