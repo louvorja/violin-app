@@ -8,7 +8,7 @@ export interface RoleContribuitor {
 
 enum RoleContribuitorEnum {
   web = "Web",
-  electron = "Electron",
+  desktop = "Violin Desktop",
   delphi = "Delphi",
   api = "API",
 }
@@ -19,9 +19,9 @@ const ROLE_CONTRIBUTOR: Record<RoleContribuitorEnum, RoleContribuitor> = {
     icon: ICONS.PROJETOS.WEB,
     color: "#1673c8",
   },
-  [RoleContribuitorEnum.electron]: {
-    name: RoleContribuitorEnum.electron,
-    icon: ICONS.PROJETOS.ELECTRON,
+  [RoleContribuitorEnum.desktop]: {
+    name: RoleContribuitorEnum.desktop,
+    icon: ICONS.PROJETOS.DESKTOP,
     color: "#0fb0d3",
   },
   [RoleContribuitorEnum.delphi]: {
@@ -61,11 +61,35 @@ interface ContributorsCategory {
 
 export const CONTRIBUTORS: ContributorsCategory[] = [
   {
-    name: "Desenvolvedor da Coletânea",
+    name: "Mantenedores",
     contributors: [
       {
+        name: "Diego Menezes",
+        description: [
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.desktop],
+        ],
+        website: "https://79team.com",
+        github: "diego-menezes",
+        linkedin: "menezes-diego",
+      },
+      {
+        name: "Juan Aleixo",
+        description: [
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.desktop],
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.api],
+        ],
+        github: "juanaleixo",
+        linkedin: "juanaleixo",
+      },
+      {
         name: "Mayco W. G. Rolbuche",
-        description: "Desenvolvedor da Coletânea",
+        description: [
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.delphi],
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.api],
+        ],
         email: "mayco_rolbuche@hotmail.com",
         github: "maycorolbuche",
         website: "https://maycorolbuche.com.br",
@@ -87,31 +111,9 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
         whatsapp: "5579933001017",
       },
       {
-        name: "Adalberto Correa",
-        description: "Blog Liga o Som",
-        email: "adalberto@correa.ac",
-        website: "http://www.ligaosom.com.br/",
-        facebook: "https://www.facebook.com/blogligaosom",
-      },
-      {
-        name: "Ismael Lima",
-        description: "Seven Informática",
-        email: "ismael@seveninformatica.net.br",
-        website: "http://seveninformatica.net.br/",
-        facebook: "se7eninformatica",
-      },
-      {
-        name: "Grupo Evangelístico 300 de Gideão",
-        email: "grupoevangelistico300degideao@gmail.com",
-        website: "https://300gideao.com.br/",
-      },
-      {
-        name: "Thiago Amaral de Oliveira",
-        description: "Portal Adventista Baixo Guandu/ES",
-        email: "thiagoamaraldeoliveira@gmail.com",
-        website: "https://iasdbaixoguandu.com.br",
-        website2: "https://esperancajovem.com.br",
-        facebook: "thiagoguandu",
+        name: "Afino",
+        description: "Hub financeiro inteligente",
+        website: "https://afino.com.br",
       },
     ],
   },
@@ -128,41 +130,19 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
         whatsapp: "5541988875184",
       },
       {
-        name: "Diego Menezes",
-        description: [
-          ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
-          ROLE_CONTRIBUTOR[RoleContribuitorEnum.electron],
-        ],
-        website: "https://79team.com",
-        github: "diego-menezes",
-        linkedin: "menezes-diego",
-      },
-      {
-        name: "Gabriel Kramer Mota",
-        description: [ROLE_CONTRIBUTOR[RoleContribuitorEnum.web]],
-        email: "kramermota55@gmail.com",
-        github: "gabrielkramermota",
-      },
-      {
         name: "Henry Ávila",
         description: [ROLE_CONTRIBUTOR[RoleContribuitorEnum.delphi]],
         github: "henryavila",
         website: "https://henryavila.com",
       },
       {
-        name: "Juan Aleixo",
-        description: [
-          ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
-          ROLE_CONTRIBUTOR[RoleContribuitorEnum.electron],
-        ],
-        github: "juanaleixo",
-        linkedin: "juanaleixo",
+        name: "Marcelo Araújo",
+        description: [ROLE_CONTRIBUTOR[RoleContribuitorEnum.web]],
+        github: "marceloaraujo7-dev",
       },
       {
         name: "Paulo Vitor",
-        description: [
-          ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
-        ],
+        description: [ROLE_CONTRIBUTOR[RoleContribuitorEnum.web]],
         email: "paulovitor.ssantos@outlook.com",
         github: "paulo-ssantos",
         linkedin: "paulo-2048",
@@ -199,6 +179,7 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
         github: "tiagoadv7",
         linkedin: "tiago-lima-4a90b4118",
         instagram: "tiagolimadbvs7",
+        facebook: "tiago.nevesdelima",
         whatsapp: "5548988747793",
       },
       {
@@ -210,14 +191,6 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
         email: "victor_hugo_ventura@hotmail.com",
         github: "corugo",
         facebook: "victor.hugo.ventura",
-      },
-      {
-        name: "Vitório Augusto Cavalheiro",
-        description: [ROLE_CONTRIBUTOR[RoleContribuitorEnum.web]],
-        email: "victor_hugo_ventura@hotmail.com",
-        website: "https://vitorio-a-cavalheiro.vercel.app",
-        github: "oVitorio-ac",
-        linkedin: "vitorio-ac",
       },
     ],
   },
@@ -249,10 +222,13 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
       {
         name: "Augusto Resende",
         email: "augusto.resende@outlook.com",
+        github: "augustresende",
         facebook: "AugustoResendePublico",
       },
       {
         name: "Caique Marcel",
+        image:
+          "https://gravatar.com/avatar/74bbcd134fe4d42b88c44535bd8cd92a51ca773d37d3c392dbf510071f2d2f84?s=144&d=404",
         email: "caiquemarceldbv@gmail.com",
       },
       {
@@ -299,11 +275,6 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
         name: "Rogerio Figueira",
         email: "roger.figueira31@gmail.com",
         facebook: "roger.figueira.14",
-      },
-      {
-        name: "Tiago Lima",
-        email: "tiagolimadbvs7@gmail.com",
-        facebook: "tiago.nevesdelima",
       },
     ],
   },

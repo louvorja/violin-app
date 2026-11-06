@@ -470,7 +470,7 @@ export const ICONS = {
   },
   PROJETOS: {
     WEB: "world",
-    ELECTRON: "atom",
+    DESKTOP: "device-laptop",
     DELPHI: "device-imac",
     API: "api",
   },
