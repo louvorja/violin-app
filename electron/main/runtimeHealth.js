@@ -96,6 +96,8 @@ function createRuntimeHealthMonitor(options = {}) {
     ? options.getChildProcessContext : () => ({});
   const onEventLoopSample = typeof options.onEventLoopSample === "function"
     ? options.onEventLoopSample : () => {};
+  const isAppHidden = typeof options.isAppHidden === "function" ? options.isAppHidden : () => false;
+  const platform = options.platform || process.platform;
   const createId = options.createId || randomUUID;
   const sampleIntervalMs = _integer(
     options.sampleIntervalMs || DEFAULT_SAMPLE_INTERVAL_MS,
@@ -128,6 +130,11 @@ function createRuntimeHealthMonitor(options = {}) {
   let previousCpuUsage = process.cpuUsage();
   let previousSampleAt = monotonicNow();
   let previousWallAt = now();
+  let hiddenAtPreviousSample = appHidden();
+
+  function appHidden() {
+    try { return isAppHidden() === true; } catch { return false; }
+  }
 
   function recordEvent(type, details = {}) {
     recentEvents.push({
@@ -250,9 +257,16 @@ function createRuntimeHealthMonitor(options = {}) {
     // monotônico para durante o sono e o de parede não; nas outras, nenhuma travada
     // real do processo passa de dois minutos sem a janela cair por "unresponsive".
     const suspendSuspected = wallElapsedMs - elapsedMs > 5_000 || sample.main_loop_max_ms > 120_000;
+    // Sem janela visível o macOS põe o app em App Nap e segura os timers do main por
+    // dezenas de segundos, sem CPU e sem travamento real. Exigir as duas pontas da
+    // amostra preserva a travada que terminou com a janela sendo minimizada.
+    const hiddenNow = appHidden();
+    const appNapSuspected = platform === "darwin" && hiddenNow && hiddenAtPreviousSample;
+    hiddenAtPreviousSample = hiddenNow;
     const observedAt = wallAt;
     if (
       !suspendSuspected &&
+      !appNapSuspected &&
       sampledAt >= suppressLoopIncidentsUntil &&
       sample.main_loop_max_ms >= criticalDelayMs &&
       observedAt - lastLoopIncidentAt >= incidentCooldownMs
@@ -282,6 +296,7 @@ function createRuntimeHealthMonitor(options = {}) {
     previousCpuUsage = process.cpuUsage();
     previousSampleAt = monotonicNow();
     previousWallAt = now();
+    hiddenAtPreviousSample = appHidden();
     loopDelay.reset();
     recordEvent("system_resume", { window_role: "unknown", status: "observed" });
   }
@@ -390,6 +405,7 @@ function createRuntimeHealthMonitor(options = {}) {
     loopDelay.enable();
     previousCpuUsage = process.cpuUsage();
     previousSampleAt = monotonicNow();
+    hiddenAtPreviousSample = appHidden();
     timer = setInterval(sampleEventLoop, sampleIntervalMs);
     timer.unref?.();
   }

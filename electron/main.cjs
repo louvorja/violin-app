@@ -451,6 +451,8 @@ const runtimeHealth = createRuntimeHealthMonitor({
   getRuntimeSnapshot: _compactRuntimeSnapshot,
   getChildProcessContext: (details) => downloader.getChildProcessContext(details),
   onEventLoopSample: (sample) => cpuProfileCapture.observeEventLoopSample(sample),
+  isAppHidden: () => BrowserWindow.getAllWindows()
+    .every((win) => win.isDestroyed() || win.isMinimized() || !win.isVisible()),
 });
 onlineVideo.setStreamFailureReporter((failure) => {
   _emitRuntimeIncident({
