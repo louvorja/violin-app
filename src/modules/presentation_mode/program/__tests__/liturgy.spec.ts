@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { Program } from "@/types/Presentation";
-import { importLiturgy, kindFromPath, liturgyItem, programToLiturgy } from "../liturgy";
+import { importLiturgy, programToLiturgy } from "../liturgy";
+import { newItem } from "@/modules/liturgy/item";
 
 function ids() {
   let n = 0;
@@ -18,12 +19,12 @@ describe("importar liturgia", () => {
   ];
 
   const liturgy = [
-    liturgyItem({ id: "solto", tipo: T.ANOTACAO, item: "Aviso inicial", duration: 2 }),
-    liturgyItem({ id: "b1", tipo: T.BLOCO, item: "Abertura", time: "09:00" }),
-    liturgyItem({ id: "m1", tipo: T.MUSICA, item: "Firme nas Promessas", id_music: 10, musica: 10, duration: 5 }),
-    liturgyItem({ id: "f1", tipo: T.ARQUIVO, item: "Testemunho", dir: "C:\\Culto\\Testemunho.MP4", duration: 4 }),
-    liturgyItem({ id: "b2", tipo: T.BLOCO, item: "Anúncios", time: "09:20" }),
-    liturgyItem({ id: "n1", tipo: T.ANUNCIOS, item: "Anúncios da semana", anuncios_ids: ["an3", "an1"], duration: 6 }),
+    newItem(T.ANOTACAO, { id: "solto", item: "Aviso inicial", duration: 2 }),
+    newItem(T.BLOCO, { id: "b1", item: "Abertura", time: "09:00" }),
+    newItem(T.MUSICA, { id: "m1", item: "Firme nas Promessas", id_music: 10, musica: 10, duration: 5 }),
+    newItem(T.ARQUIVO, { id: "f1", item: "Testemunho", dir: "C:\\Culto\\Testemunho.MP4", duration: 4 }),
+    newItem(T.BLOCO, { id: "b2", item: "Anúncios", time: "09:20" }),
+    newItem(T.ANUNCIOS, { id: "n1", item: "Anúncios da semana", anuncios_ids: ["an3", "an1"], duration: 6 }),
   ];
 
   it("vira sessões nos blocos e guarda o item de origem", () => {
@@ -47,17 +48,10 @@ describe("importar liturgia", () => {
   });
 
   it("anúncios sem seleção trazem todos", () => {
-    const item = liturgyItem({ id: "x", tipo: T.ANUNCIOS, item: "Todos" });
+    const item = newItem(T.ANUNCIOS, { id: "x", item: "Todos" });
     const result = importLiturgy([item], { newId: ids(), defaultSessionLabel: "Geral", announcements });
     expect(result.sessions[0].items[0].children).toHaveLength(3);
     expect(result.plannedStart).toBeNull();
-  });
-
-  it("classifica arquivos pela extensão", () => {
-    expect(kindFromPath("/a/b.jpeg")).toBe("image");
-    expect(kindFromPath("sermao.PPTX")).toBe("presentation");
-    expect(kindFromPath("hino.opus")).toBe("audio");
-    expect(kindFromPath("leia-me")).toBe("file");
   });
 });
 
@@ -78,7 +72,7 @@ describe("salvar programa como liturgia", () => {
             kind: "music",
             title: "Bendito Louvor",
             plannedMinutes: 6,
-            source: liturgyItem({ id: "orig", tipo: T.MUSICA, id_music: 7, musica: 7, item: "Antigo" }),
+            source: newItem(T.MUSICA, { id: "orig", id_music: 7, musica: 7, item: "Antigo" }),
           },
         ],
       },

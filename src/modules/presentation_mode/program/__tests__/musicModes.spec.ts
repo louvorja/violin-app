@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { ProgramItem } from "@/types/Presentation";
-import { liturgyItem } from "../liturgy";
+import type { LiturgyItem } from "@/types/Liturgy";
+import { newItem } from "@/modules/liturgy/item";
 import { applyOverride, needsModeChoice } from "../musicModes";
 
-const item = (fields: Partial<Parameters<typeof liturgyItem>[0]>): ProgramItem => ({
+const item = (fields: Partial<LiturgyItem>): ProgramItem => ({
   id: "i",
   kind: "music",
   title: "Hino",
   plannedMinutes: 3,
-  source: liturgyItem({ id: "s", tipo: LiturgyItemTypeEnum.MUSICA, id_music: 211, musica: 211, ...fields }),
+  source: newItem(LiturgyItemTypeEnum.MUSICA, { id: "s", id_music: 211, musica: 211, ...fields }),
 });
 
 describe("needsModeChoice", () => {
@@ -21,7 +22,7 @@ describe("needsModeChoice", () => {
 
   it("música a escolher (qual música) e itens que não são música não entram", () => {
     expect(needsModeChoice(item({ subtipo: "", escolha: true }))).toBe(false);
-    expect(needsModeChoice({ source: liturgyItem({ id: "a", tipo: LiturgyItemTypeEnum.ARQUIVO, dir: "/x.mp4" }) })).toBe(false);
+    expect(needsModeChoice({ source: newItem(LiturgyItemTypeEnum.ARQUIVO, { id: "a", dir: "/x.mp4" }) })).toBe(false);
     expect(needsModeChoice({})).toBe(false);
   });
 });

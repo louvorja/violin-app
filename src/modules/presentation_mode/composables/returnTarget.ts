@@ -3,7 +3,7 @@ import $snackbar from "@/helpers/Snackbar";
 import * as OnlineVideo from "@/helpers/OnlineVideo";
 import { i18nAtual } from "@/i18n";
 import type { ProgramItem } from "@/types/Presentation";
-import { kindFromPath } from "../program/liturgy";
+import { kindOfPath } from "@/modules/liturgy/item";
 import { filePathOf, type Playable } from "../program/playable";
 import type { ReturnTarget } from "./useOutputs";
 
@@ -22,7 +22,7 @@ function say(key: string): string {
 }
 
 function fromFile(path: string, title: string): ReturnTarget | null {
-  const type = kindFromPath(path);
+  const type = kindOfPath(path);
   return type === "image" || type === "video" ? { type, url: $path.local(path), title, path } : null;
 }
 

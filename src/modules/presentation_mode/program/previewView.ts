@@ -4,12 +4,12 @@ import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { ProgramItem } from "@/types/Presentation";
 import type { PreviewView } from "../components/StagePreview.vue";
 import { KIND_ICONS } from "./kinds";
-import { kindFromPath } from "./liturgy";
+import { kindOfPath } from "@/modules/liturgy/item";
 import type { Playable } from "./playable";
 import { needsModeChoice } from "./musicModes";
 
 export function fileView(path: string, title: string): PreviewView {
-  const kind = kindFromPath(path);
+  const kind = kindOfPath(path);
   if (kind === "image") return { kind: "image", title, icon: KIND_ICONS.image, playable: true, url: $path.local(path) };
   if (kind === "video") return { kind: "video", title, icon: KIND_ICONS.video, playable: true, url: $path.local(path) };
   return { kind: "other", title, icon: KIND_ICONS[kind], playable: true };

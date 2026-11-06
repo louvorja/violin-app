@@ -1,7 +1,7 @@
 import { ICONS } from "@/config/Icons";
 import type { ProgramItem } from "@/types/Presentation";
 import { canvaSiteItem, fileItem, fileTitle, onlineItem, bibleItem, songItem } from "./items";
-import { kindFromPath } from "./liturgy";
+import { kindOfPath } from "@/modules/liturgy/item";
 import { KIND_ICONS } from "./kinds";
 import type { MusicMode } from "./musicModes";
 import { samePlayable, type Playable } from "./playable";
@@ -69,7 +69,7 @@ export function historySubtitle(playable: Playable): string {
 export function historyIcon(playable: Playable): string {
   switch (playable.type) {
     case "file":
-      return KIND_ICONS[kindFromPath(playable.entry.path)] ?? ICONS.UI.FILE;
+      return KIND_ICONS[kindOfPath(playable.entry.path)] ?? ICONS.UI.FILE;
     case "song":
       return KIND_ICONS.music;
     case "online":

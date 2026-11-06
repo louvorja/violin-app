@@ -4,7 +4,7 @@ import Telemetry from "@/helpers/Telemetry";
 import { useAudioPlayback } from "@/composables/useAudioPlayback";
 import type { SeriesDoc, SeriesOp, SeriesVersion } from "@/types/Series";
 import { PLAYED_AFTER_SECONDS, PlayedTime, playedInCycle, progressOf, splitPath } from "../program/series";
-import { kindFromPath } from "../program/liturgy";
+import { kindOfPath } from "@/modules/liturgy/item";
 import type { LibraryEntry } from "./useFileLibrary";
 import type { LjMenuItem } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
@@ -106,7 +106,7 @@ export function useFolderSeries(
   const files = computed(() =>
     folder.entries.value
       .filter((e) => !e.isDir && splitPath(e.path).dir === dir.value)
-      .filter((e) => ["video", "image"].includes(kindFromPath(e.path)))
+      .filter((e) => ["video", "image"].includes(kindOfPath(e.path)))
       .map((e) => e.name)
   );
   const played = computed(() => (doc.value ? playedInCycle(doc.value) : null));
@@ -146,14 +146,14 @@ export function useSeriesRecorder(livePath: () => string | null): void {
   const stopImage = watch(livePath, (path) => {
     if (timer) clearTimeout(timer);
     timer = null;
-    if (path && kindFromPath(path) === "image") {
+    if (path && kindOfPath(path) === "image") {
       timer = setTimeout(() => livePath() === path && void record(path), PLAYED_AFTER_SECONDS * 1000);
     }
   });
   const stopVideo = watch(
     () => [livePath(), audio.currentTime.value, audio.duration.value] as const,
     ([path, time, duration]) => {
-      const video = path && kindFromPath(path) !== "image" ? path : null;
+      const video = path && kindOfPath(path) !== "image" ? path : null;
       if (played.feed(video, time, duration) && video) void record(video);
     }
   );
