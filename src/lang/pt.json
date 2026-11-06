@@ -1999,7 +1999,12 @@
     "fullscreen_hint": "Você também pode apertar F11",
     "fullscreen_auto_hint": "Um clique é necessário porque o navegador não permite que sites entrem em tela cheia sozinhos. No aplicativo para computador a projeção já abre em tela cheia, sem clique.",
     "video_unavailable": "Vídeo indisponível",
-    "video_unavailable_hint": "Não foi possível carregar o vídeo. Verifique a conexão com a internet."
+    "video_unavailable_hint": "Não foi possível carregar o vídeo. Verifique a conexão com a internet.",
+    "video_unavailable_not_found": "O arquivo do vídeo não foi encontrado. Ele pode ter sido movido ou apagado.",
+    "video_unavailable_permission": "O LouvorJA não tem permissão para ler o arquivo do vídeo.",
+    "video_unavailable_unreadable": "Não foi possível ler o arquivo do vídeo. Verifique se o disco ou a pasta está disponível.",
+    "video_unavailable_format": "O formato deste vídeo não é suportado.",
+    "video_unavailable_decode": "O vídeo está danificado e não pôde ser reproduzido."
   },
   "online_video": {
     "preparing": "Baixando o vídeo…",

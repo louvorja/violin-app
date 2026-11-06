@@ -140,6 +140,7 @@ import type { LiturgyItem } from "@/types/Liturgy";
 import { DB_TABLE } from "@/constants/DbTables";
 import $alert from "@/helpers/Alert";
 import { fetchWithTimeout } from "@/helpers/Http";
+import Telemetry from "@/helpers/Telemetry";
 
 function arquivo(dir: string, item = "Arquivo"): LiturgyItem {
   return { id: "1", tipo: LiturgyItemTypeEnum.ARQUIVO, item, dir } as LiturgyItem;
@@ -743,5 +744,76 @@ describe("liturgia — ciclo de vida do overlay vinculado", () => {
     await playMusic(music("sung"), "lyric");
 
     expect(mocks.writeOverlaySlot).not.toHaveBeenCalled();
+  });
+});
+
+describe("liturgia — 'não encontrado' só quando o arquivo não existe", () => {
+  const responde = (status: number) =>
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: status < 300,
+      status,
+      body: { cancel: vi.fn(async () => {}) },
+    } as unknown as Response);
+
+  it("arquivo ausente avisa 'não encontrado' e não vira exceção", async () => {
+    responde(404);
+    const ui = useLiturgyExecution();
+    expect(await ui.openFile(arquivo("/Users/ana/sumiu.mp4"))).toBe(false);
+    expect($alert.error).toHaveBeenCalledWith({
+      text: "/Users/ana/sumiu.mp4",
+      title: "modules.media.alerts.file_not_found",
+    });
+    expect(Telemetry.track).toHaveBeenCalledWith("liturgy_resource_missing", {
+      operation: "open_file",
+      resource: "file",
+    });
+    expect(Telemetry.captureException).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [403, "permission"],
+    [500, "unreadable"],
+  ])("status %i não é 'não encontrado': motivo próprio e erro registrado", async (status, motivo) => {
+    responde(status);
+    const ui = useLiturgyExecution();
+    expect(await ui.openFile(arquivo("/Users/ana/Informativo.mp4"))).toBe(false);
+    expect(mocks.projectFile).not.toHaveBeenCalled();
+    expect($alert.error).toHaveBeenCalledWith({
+      text: "/Users/ana/Informativo.mp4",
+      title: `modules.media.alerts.file_${motivo}`,
+    });
+    expect(Telemetry.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        source: "liturgy.execution.open_file_access",
+        file_status: motivo,
+        file_basename: "Informativo.mp4",
+      })
+    );
+  });
+
+  it("disco que não responde no prazo tem aviso próprio", async () => {
+    vi.mocked(fetchWithTimeout).mockRejectedValueOnce(
+      Object.assign(new Error("Timeout"), { name: "TimeoutError" })
+    );
+    const ui = useLiturgyExecution();
+    expect(await ui.openFile(arquivo("G:\\Meu Drive\\Informativo.mp4"))).toBe(false);
+    expect($alert.error).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "modules.media.alerts.file_timeout" })
+    );
+  });
+
+  it("tipo que o app não abre não é 'não encontrado'", async () => {
+    const ui = useLiturgyExecution();
+    expect(await ui.openFile(arquivo("/Users/ana/planilha.xlsx"), "document")).toBe(false);
+    expect($alert.error).toHaveBeenCalledWith({
+      text: "/Users/ana/planilha.xlsx",
+      title: "modules.media.alerts.file_unsupported",
+    });
+    expect(Telemetry.track).toHaveBeenCalledWith("liturgy_file_unsupported", {
+      operation: "open_file",
+      extension: "xlsx",
+      kind: "document",
+    });
   });
 });

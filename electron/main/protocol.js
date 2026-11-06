@@ -299,6 +299,40 @@ function _caminhoLocal(pathname) {
   return !raw || temSegmentoPai(raw) ? null : raw;
 }
 
+/**
+ * Por que um arquivo local não pode ser entregue — `null` quando pode.
+ *
+ * Só ENOENT/ENOTDIR é "não existe". Sem permissão (pasta protegida do macOS,
+ * ACL do Windows) e disco que não responde (unidade de rede, Google Drive sem
+ * conexão) são outra coisa: dizer "não encontrado" mandava o operador procurar
+ * um arquivo que está lá.
+ */
+async function _falhaLocal(caminho) {
+  try {
+    const st = await fs.stat(caminho);
+    if (!st.isFile()) return { tipo: "not_found", code: "ENOTFILE" };
+    await fs.access(caminho, fs.constants.R_OK);
+    return null;
+  } catch (e) {
+    const code = typeof e?.code === "string" ? e.code : "UNKNOWN";
+    if (code === "ENOENT" || code === "ENOTDIR") return { tipo: "not_found", code };
+    if (code === "EACCES" || code === "EPERM") return { tipo: "permission", code };
+    return { tipo: "unreadable", code };
+  }
+}
+
+/** O status diz o motivo (o renderer só lê o status de uma origem cruzada). */
+function _respostaDeFalhaLocal(falha) {
+  const status = falha.tipo === "not_found" ? 404 : falha.tipo === "permission" ? 403 : 500;
+  if (falha.tipo !== "not_found") {
+    console.warn(`[protocol] local: ${falha.tipo} (${falha.code})`);
+  }
+  return new Response(falha.tipo, {
+    status,
+    headers: { "X-Louvorja-File-Error": falha.tipo, "X-Louvorja-File-Code": falha.code },
+  });
+}
+
 /** O mesmo caminho que o host `local` serve, para quem recebe só a URL. */
 function localPathFromUrl(url) {
   try {
@@ -644,14 +678,15 @@ function handle() {
           return new Response("Forbidden", { status: 403 });
         }
 
-        if (!(await fs.pathExists(raw))) {
+        const falha = await _falhaLocal(raw);
+        if (falha?.tipo === "not_found") {
           /* Arquivo pessoal no endereço antigo: serve do novo. */
           const migrado = _enderecoNovoPrivado(raw);
-          if (migrado && (await fs.pathExists(migrado))) {
+          if (migrado && !(await _falhaLocal(migrado))) {
             return await _responderArquivo(migrado, request);
           }
-          return new Response("Not found", { status: 404 });
         }
+        if (falha) return _respostaDeFalhaLocal(falha);
 
         return await _responderArquivo(raw, request);
       }

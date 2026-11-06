@@ -1999,7 +1999,12 @@
     "fullscreen_hint": "También puede pulsar F11",
     "fullscreen_auto_hint": "Se necesita un clic porque el navegador no permite que los sitios entren en pantalla completa por sí solos. En la aplicación de escritorio la proyección ya abre en pantalla completa, sin clic.",
     "video_unavailable": "Video no disponible",
-    "video_unavailable_hint": "No se pudo cargar el video. Verifique la conexión a internet."
+    "video_unavailable_hint": "No se pudo cargar el video. Verifique la conexión a internet.",
+    "video_unavailable_not_found": "No se encontró el archivo del video. Puede haber sido movido o eliminado.",
+    "video_unavailable_permission": "LouvorJA no tiene permiso para leer el archivo del video.",
+    "video_unavailable_unreadable": "No se pudo leer el archivo del video. Verifique que el disco o la carpeta esté disponible.",
+    "video_unavailable_format": "El formato de este video no es compatible.",
+    "video_unavailable_decode": "El video está dañado y no se pudo reproducir."
   },
   "online_video": {
     "preparing": "Descargando el video…",
