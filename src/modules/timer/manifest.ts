@@ -46,6 +46,7 @@ export const module: Module = {
     text_shadow: { type: "boolean", default: false },
     text_shadow_color: { type: "color", default: "#000000" },
     text_shadow_blur: { type: "font-size", default: 4 },
+    warning_color: { type: "color", default: "#F59E0B" },
     alert_color: { type: "color", default: "#E74C3C" },
     background_color: { type: "color", default: "#000000" },
     border_spacing: { type: "border-spacing", default: 10 },

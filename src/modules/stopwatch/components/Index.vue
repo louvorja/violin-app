@@ -41,11 +41,10 @@
             <div
               class="sw-display"
               :class="{
-                'sw-warning': alert === 'warning',
                 'sw-done': alert === 'danger',
                 'sw-done--stopped': alert === 'danger' && !overtime,
               }"
-              :style="[textStyle, alert === 'danger' ? alertStyle : null]"
+              :style="[textStyle, alertColor ? { color: alertColor } : null]"
               data-testid="stopwatch-display"
             >
               {{ display }}
@@ -68,12 +67,18 @@
           <div v-if="mode === 'down'" class="sw-progress" aria-hidden="true">
             <div
               class="sw-progress-bar"
-              :class="alert ? `sw-progress-bar--${alert}` : null"
-              :style="{ width: `${progress * 100}%` }"
+              :style="[
+                { width: `${progress * 100}%` },
+                alertColor ? { background: alertColor } : null,
+              ]"
             />
           </div>
 
-          <ModuleAlertFrame :level="flashBorders ? alert : ''" data-testid="stopwatch-frame" />
+          <ModuleAlertFrame
+            :level="flashBorders ? alert : ''"
+            :color="alertColor"
+            data-testid="stopwatch-frame"
+          />
         </div>
 
         <!-- Modo, tempos rápidos e aviso: o que se mexe durante o culto. -->
@@ -144,13 +149,11 @@ import {
 } from "../stopwatchClock";
 
 const PRESETS = [5, 10, 15, 30];
-/** Cor do aviso amarelo — a mesma da moldura no telão. */
-const WARNING_COLOR = "#F59E0B";
 /** Quatro pinturas por segundo bastam para o segundo virar na hora certa. */
 const TICK_MS = 250;
 
 const { show_format } = useModuleFormat("stopwatch", manifest);
-const { rootStyle, textStyle, alertStyle, bgImage, imageStyle, container } =
+const { rootStyle, textStyle, alertStyle, warningStyle, bgImage, imageStyle, container } =
   useModuleBodyStyle("stopwatch");
 
 const projection = useModuleProjection("stopwatch", {
@@ -242,18 +245,26 @@ const endsAt = computed(() =>
     : ""
 );
 
+/*
+ * Cor do estado: "Cor do aviso" e "Cor do alerta" da Formatação. O número, a
+ * barra e a moldura (na tela e no telão) usam a mesma, para nunca ficarem
+ * com cores diferentes entre si.
+ */
+const alertColor = computed(() =>
+  alert.value === "danger"
+    ? alertStyle.value?.color
+    : alert.value === "warning"
+      ? warningStyle.value?.color
+      : undefined
+);
+
 watch(
-  [display, alert, flashBorders, () => alertStyle.value?.color],
+  [display, alert, flashBorders, alertColor],
   () => {
     projection.emit({
       text: display.value,
       active: true,
-      color:
-        alert.value === "danger"
-          ? alertStyle.value?.color
-          : alert.value === "warning"
-            ? WARNING_COLOR
-            : undefined,
+      color: alertColor.value,
       alert: flashBorders.value && alert.value ? alert.value : undefined,
     });
   },
@@ -488,9 +499,6 @@ onBeforeUnmount(() => {
   line-height: 1.05;
   transition: color var(--lj-transition-slow);
 }
-.sw-warning {
-  color: #f59e0b !important;
-}
 .sw-done--stopped {
   animation: sw-pulse 0.8s ease-in-out infinite alternate;
 }
@@ -520,12 +528,6 @@ onBeforeUnmount(() => {
   transition:
     width 0.25s linear,
     background-color var(--lj-transition-slow);
-}
-.sw-progress-bar--warning {
-  background: #f59e0b;
-}
-.sw-progress-bar--danger {
-  background: #ef4444;
 }
 
 .sw-bg-img {

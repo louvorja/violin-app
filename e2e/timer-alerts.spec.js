@@ -176,3 +176,17 @@ for (const mod of MODULES) {
     }
   });
 }
+
+test('timer: com o aviso em "Não", passar do horário ainda fica vermelho', async ({ page }) => {
+  await openModule(page, MODULES[0]);
+  await page.getByRole("tab", { name: "Não" }).click();
+  await page.getByTestId("ribbon-btn-timer_toggle").click();
+  await page.clock.runFor(70_000);
+  const display = page.getByTestId("timer-display");
+  const color = () => display.evaluate((el) => getComputedStyle(el).color);
+  await expect(page.getByTestId("timer-stage")).toHaveAttribute("data-alert", "none");
+  await expect.poll(color).toBe("rgb(255, 255, 255)");
+  await page.clock.runFor(60_000);
+  await expect(page.getByTestId("timer-stage")).toHaveAttribute("data-alert", "danger");
+  await expect.poll(color).toBe("rgb(231, 76, 60)");
+});

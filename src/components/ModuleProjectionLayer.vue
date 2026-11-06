@@ -97,6 +97,7 @@
       class="module-projection__alert"
       :class="`module-projection__alert--${alert}`"
       :data-testid="`module-projection-alert-${alert}`"
+      :style="color ? { '--frame-color': color } : undefined"
       aria-hidden="true"
     />
   </div>
@@ -430,15 +431,20 @@ onMounted(() => {
   pointer-events: none;
   animation: module-projection-alert 1.2s ease-in-out infinite alternate;
 }
+/* A moldura usa a cor do número (`color` do payload), que vem da Formatação. */
 .module-projection__alert--warning {
+  --frame-color-default: #f59e0b;
   box-shadow:
-    inset 0 0 0 1.2vmin #f59e0b,
-    inset 0 0 6vmin rgba(245, 158, 11, 0.55);
+    inset 0 0 0 1.2vmin var(--frame-color, var(--frame-color-default)),
+    inset 0 0 6vmin
+      color-mix(in srgb, var(--frame-color, var(--frame-color-default)) 55%, transparent);
 }
 .module-projection__alert--danger {
+  --frame-color-default: #ef4444;
   box-shadow:
-    inset 0 0 0 1.4vmin #ef4444,
-    inset 0 0 8vmin rgba(239, 68, 68, 0.6);
+    inset 0 0 0 1.4vmin var(--frame-color, var(--frame-color-default)),
+    inset 0 0 8vmin
+      color-mix(in srgb, var(--frame-color, var(--frame-color-default)) 60%, transparent);
   animation-duration: 0.8s;
 }
 @keyframes module-projection-alert {

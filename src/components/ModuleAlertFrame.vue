@@ -4,6 +4,7 @@
     class="module-alert-frame"
     :class="`module-alert-frame--${level}`"
     :data-testid="`module-alert-frame-${level}`"
+    :style="color ? { '--frame-color': color } : undefined"
     aria-hidden="true"
   />
 </template>
@@ -17,7 +18,11 @@
  *
  * O pai precisa ser `position: relative` — a moldura cobre a área dele.
  */
-defineProps<{ level?: "" | "warning" | "danger" | null }>();
+defineProps<{
+  level?: "" | "warning" | "danger" | null;
+  /** Cor da moldura — a mesma do número ("Cor do aviso"/"Cor do alerta" da Formatação). */
+  color?: string;
+}>();
 </script>
 
 <style scoped>
@@ -29,14 +34,18 @@ defineProps<{ level?: "" | "warning" | "danger" | null }>();
   animation: module-alert-frame 1.2s ease-in-out infinite alternate;
 }
 .module-alert-frame--warning {
+  --frame-color-default: #f59e0b;
   box-shadow:
-    inset 0 0 0 6px #f59e0b,
-    inset 0 0 36px rgba(245, 158, 11, 0.55);
+    inset 0 0 0 6px var(--frame-color, var(--frame-color-default)),
+    inset 0 0 36px
+      color-mix(in srgb, var(--frame-color, var(--frame-color-default)) 55%, transparent);
 }
 .module-alert-frame--danger {
+  --frame-color-default: #ef4444;
   box-shadow:
-    inset 0 0 0 7px #ef4444,
-    inset 0 0 44px rgba(239, 68, 68, 0.6);
+    inset 0 0 0 7px var(--frame-color, var(--frame-color-default)),
+    inset 0 0 44px
+      color-mix(in srgb, var(--frame-color, var(--frame-color-default)) 60%, transparent);
   animation-duration: 0.8s;
 }
 @keyframes module-alert-frame {

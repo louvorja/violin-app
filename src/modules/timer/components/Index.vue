@@ -29,7 +29,7 @@
           >
             {{ projecao }}
           </div>
-          <ModuleAlertFrame :level="flashBorders ? alertLevel : ''" />
+          <ModuleAlertFrame :level="flashBorders ? alertLevel : ''" :color="displayColor" />
         </div>
         <ModuleTimerDock
           :mode="mode"
@@ -68,7 +68,7 @@ import { MediaEnum } from "@/enums/MediaEnum";
 $userdata.setIfNull(KEYS.MODULES.TIMER.END_ACTION, MediaEnum.NONE);
 
 const { show_format } = useModuleFormat("timer", manifest);
-const { rootStyle, textStyle, alertStyle, bgImage, imageStyle, container } =
+const { rootStyle, textStyle, alertStyle, warningStyle, bgImage, imageStyle, container } =
   useModuleBodyStyle("timer");
 const endAction = useTimerEndAction("timer", KEYS.MODULES.TIMER);
 
@@ -144,17 +144,15 @@ const alertActive = computed<boolean>(
 );
 
 const { tm } = useModuleI18n("timer");
-/** Amarelo do aviso — o mesmo da moldura e do Cronômetro. */
-const WARNING_COLOR = "#F59E0B";
-
 /*
- * Cor do número: amarelo nos segundos de destaque, a cor de alerta da
- * Formatação só depois do horário. Antes, o destaque já pintava de vermelho
+ * Cor do número (e da moldura): "Cor do aviso" nos segundos de destaque,
+ * "Cor do alerta" só depois do horário — as duas da Formatação. Antes, o destaque já pintava de vermelho
  * enquanto a moldura ficava amarela.
  */
 const displayColor = computed<string | undefined>(() => {
-  if (!alertActive.value) return undefined;
-  return seconds.value <= 0 ? alertStyle.value.color : WARNING_COLOR;
+  // Passou do horário: vermelho mesmo com o aviso em "Não".
+  if (mode.value === "down" && seconds.value <= 0 && alarmed.value) return alertStyle.value.color;
+  return alertActive.value ? warningStyle.value.color : undefined;
 });
 const displayColorStyle = computed(() =>
   displayColor.value ? { color: displayColor.value } : null
