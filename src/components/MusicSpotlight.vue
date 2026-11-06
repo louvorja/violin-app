@@ -17,8 +17,8 @@
         autocomplete="off"
         spellcheck="false"
         @keydown.escape.prevent.stop="open = false"
-        @keydown.down.prevent.stop="nav.move(1)"
-        @keydown.up.prevent.stop="nav.move(-1)"
+        @keydown.down.prevent.stop="move(1)"
+        @keydown.up.prevent.stop="move(-1)"
         @keydown.enter.prevent.stop="onEnter"
       />
     </div>
@@ -31,7 +31,7 @@
       <LjEmpty
         v-else-if="!filteredMusics.length"
         :icon="ICONS.MUSIC.NOTE_OUTLINE"
-        :title="search ? t('empty_search') : t('empty')"
+        :title="query ? t('empty_search') : t('empty')"
       />
 
       <div v-else ref="resultsScroll" class="music-search__scroll">
@@ -149,8 +149,24 @@ const { t: i18nT, locale } = useI18n();
 
 const RESULT_LIMIT = 80;
 const FUZZY_MIN_LENGTH = 3;
+const SEARCH_DEBOUNCE_MS = 150;
 
 const search = ref<string>("");
+// Filtrar e redesenhar até 80 linhas a cada tecla travava a tela em máquinas lentas:
+// a lista acompanha o campo depois da pausa, e Enter/setas aplicam na hora.
+const query = ref<string>("");
+let queryTimer: ReturnType<typeof setTimeout> | undefined;
+watch(search, (value) => {
+  clearTimeout(queryTimer);
+  if (!value.trim()) query.value = value;
+  else queryTimer = setTimeout(() => (query.value = value), SEARCH_DEBOUNCE_MS);
+});
+onScopeDispose(() => clearTimeout(queryTimer));
+
+function flushQuery(): void {
+  clearTimeout(queryTimer);
+  query.value = search.value;
+}
 // O primitivo não expõe o <input> interno: o invólucro é o caminho até ele
 // para devolver o foco ao campo assim que o diálogo abre.
 const searchBar = ref<HTMLElement | null>(null);
@@ -176,20 +192,30 @@ const { musics: sourceMusics } = useMusicCatalog(() =>
   Array.isArray(props.musicsList) ? props.musicsList : [...musics.value, ...customMusics.value]
 );
 
-const filteredMusics = computed<SearchMusicItem[]>(() => {
-  const query = Strings.clean(search.value);
-  if (!query) return [];
+const searchIndex = computed(() =>
+  sourceMusics.value.map((music: SearchMusicItem) => ({
+    music,
+    name: Strings.clean(music.name),
+    album: Strings.clean(albumLabel(music)),
+  }))
+);
 
-  const exact = sourceMusics.value
-    .filter((music: SearchMusicItem) => {
-      if (/^\d+$/.test(query)) return isHymnalTrack(music, query);
-      return (
-        Strings.clean(music.name).includes(query) ||
-        Strings.clean(albumLabel(music)).includes(query) ||
-        isHymnalTrack(music, query)
-      );
-    })
-    .slice(0, RESULT_LIMIT);
+const filteredMusics = computed<SearchMusicItem[]>(() => {
+  const cleaned = Strings.clean(query.value);
+  if (!cleaned) return [];
+
+  const numeric = /^\d+$/.test(cleaned);
+  const exact: SearchMusicItem[] = [];
+  for (const entry of searchIndex.value) {
+    const match = numeric
+      ? isHymnalTrack(entry.music, cleaned)
+      : entry.name.includes(cleaned) ||
+        entry.album.includes(cleaned) ||
+        isHymnalTrack(entry.music, cleaned);
+    if (!match) continue;
+    exact.push(entry.music);
+    if (exact.length === RESULT_LIMIT) break;
+  }
 
   if (exact.length) return exact;
   return approximateMusics();
@@ -202,30 +228,41 @@ const nav = useListNavigation({
   activeSelector: ".lj-music-row--active",
 });
 watch(search, () => nav.reset());
+// Síncrono: Enter logo após aplicar a busca precisa ver o destaque de volta na primeira.
+watch(query, () => nav.reset(), { flush: "sync" });
+
+function move(delta: number): void {
+  flushQuery();
+  nav.move(delta);
+}
+
+const fuzzyIndex = computed(
+  () =>
+    new Fuse(
+      sourceMusics.value.map((music: SearchMusicItem) => ({
+        music,
+        name: Strings.fold(music.name),
+        album: Strings.fold(albumLabel(music)),
+      })),
+      {
+        keys: ["name", "album"],
+        threshold: 0.35,
+        ignoreLocation: true,
+        minMatchCharLength: FUZZY_MIN_LENGTH,
+      }
+    )
+);
 
 /**
  * Rede de segurança para quem errou a digitação — mesma regra do módulo
  * Músicas: só roda quando a busca por trecho não achou nada.
  */
 function approximateMusics(): SearchMusicItem[] {
-  const query = Strings.fold(search.value);
-  if (query.length < FUZZY_MIN_LENGTH || /^\d+$/.test(query)) return [];
+  const folded = Strings.fold(query.value);
+  if (folded.length < FUZZY_MIN_LENGTH || /^\d+$/.test(folded)) return [];
 
-  const entries = sourceMusics.value.map((music) => ({
-    music,
-    name: Strings.fold(music.name),
-    album: Strings.fold(albumLabel(music)),
-  }));
-
-  const fuse = new Fuse(entries, {
-    keys: ["name", "album"],
-    threshold: 0.35,
-    ignoreLocation: true,
-    minMatchCharLength: FUZZY_MIN_LENGTH,
-  });
-
-  return fuse
-    .search(query)
+  return fuzzyIndex.value
+    .search(folded)
     .map((hit) => hit.item.music)
     .sort(compareMusics)
     .slice(0, RESULT_LIMIT);
@@ -294,6 +331,7 @@ async function loadMusics(): Promise<void> {
  */
 function onEnter(event: KeyboardEvent): void {
   if (!isQuickPlayEnter(event)) return;
+  flushQuery();
   const music = nav.active.value;
   if (!music || !search.value.trim()) return;
   if (props.mode === "pick") return pickMusic(music);
