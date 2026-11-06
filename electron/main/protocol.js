@@ -159,6 +159,10 @@ async function _responderArquivo(caminho, request) {
    *
    * Com a bandeira, cada operação acontece no máximo uma vez e nenhuma
    * exceção escapa.
+   *
+   * A leitura acompanha o consumo: sem pausar quando a fila enche, o player
+   * pedia `bytes=0-` e o main lia o vídeo inteiro para a memória, uma vez por
+   * janela e por seek, e travava em coleta de lixo durante a projeção.
    */
   let encerrado = false;
   const readable = new ReadableStream({
@@ -167,6 +171,7 @@ async function _responderArquivo(caminho, request) {
         if (encerrado) return;
         try {
           controller.enqueue(chunk);
+          if (controller.desiredSize <= 0) stream.pause();
         } catch {
           // Consumer fechou o stream (seek/navegação) → para de ler do disco.
           encerrado = true;
@@ -184,11 +189,14 @@ async function _responderArquivo(caminho, request) {
         try { controller.error(err); } catch { /* idem */ }
       });
     },
+    pull() {
+      stream.resume();
+    },
     cancel() {
       encerrado = true;
       stream.destroy();
     },
-  });
+  }, new CountQueuingStrategy({ highWaterMark: 16 }));
 
   return new Response(readable, {
     status: 206,
