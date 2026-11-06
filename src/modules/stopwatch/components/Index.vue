@@ -76,23 +76,14 @@
           <ModuleAlertFrame :level="flashBorders ? alert : ''" data-testid="stopwatch-frame" />
         </div>
 
-        <!-- Controles do dia a dia, sem depender da ribbon. -->
-        <div class="sw-dock">
-          <div class="sw-segmented" role="group" :aria-label="tm('ribbon.mode')">
-            <button
-              v-for="m in MODES"
-              :key="m"
-              type="button"
-              class="sw-seg"
-              :class="{ 'sw-seg--on': mode === m }"
-              :aria-pressed="mode === m"
-              :data-testid="`stopwatch-mode-${m}`"
-              @click="setMode(m)"
-            >
-              {{ tm(`mode.${m}`) }}
-            </button>
-          </div>
-
+        <!-- Modo, tempos rápidos e aviso: o que se mexe durante o culto. -->
+        <ModuleTimerDock
+          :mode="mode"
+          :warning-seconds="warningSeconds"
+          :labels="dockLabels"
+          @update:mode="setMode"
+          @update:warning-seconds="setWarning"
+        >
           <div
             v-if="mode === 'down'"
             class="sw-presets"
@@ -119,29 +110,7 @@
               {{ tm("screen.minutes", { n: 1 }) }}
             </LjButton>
           </div>
-
-          <div class="sw-dock-spacer" />
-
-          <LjButton
-            :icon="ICONS.ACTIONS.RESTART"
-            variant="default"
-            data-testid="stopwatch-reset"
-            @click="reset()"
-          >
-            {{ tm("actions.reset") }}
-          </LjButton>
-          <button
-            type="button"
-            class="sw-play"
-            :class="{ 'sw-play--running': running }"
-            :title="running ? tm('actions.pause') : tm('actions.start')"
-            :aria-label="running ? tm('actions.pause') : tm('actions.start')"
-            data-testid="stopwatch-toggle"
-            @click="toggle()"
-          >
-            <LjIcon :icon="running ? ICONS.PLAYER.PAUSE : ICONS.PLAYER.PLAY" :size="22" />
-          </button>
-        </div>
+        </ModuleTimerDock>
       </div>
     </div>
   </ModuleContainer>
@@ -149,13 +118,14 @@
 
 <script setup>
 import { ICONS } from "@/config/Icons";
-import { LjButton, LjChip, LjIcon } from "@/components/ui";
+import { LjButton, LjChip } from "@/components/ui";
 import { ref, computed, watch, onBeforeUnmount, onMounted } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import ModuleAlertFrame from "@/components/ModuleAlertFrame.vue";
+import ModuleTimerDock from "@/components/ModuleTimerDock.vue";
 import { playBeep } from "@helpers/AudioBeep";
 import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
@@ -173,7 +143,6 @@ import {
   stopwatchProgress,
 } from "../stopwatchClock";
 
-const MODES = ["up", "down"];
 const PRESETS = [5, 10, 15, 30];
 /** Cor do aviso amarelo — a mesma da moldura no telão. */
 const WARNING_COLOR = "#F59E0B";
@@ -345,6 +314,18 @@ function setMode(value) {
   if (value === mode.value) return;
   $userdata.set(KEYS.MODULES.STOPWATCH.MODE, value);
 }
+
+function setWarning(seconds) {
+  $userdata.set(KEYS.MODULES.STOPWATCH.WARNING_SECONDS, String(seconds));
+}
+
+const dockLabels = computed(() => ({
+  mode: tm("ribbon.mode"),
+  up: tm("mode.up"),
+  down: tm("mode.down"),
+  warning: tm("ribbon.warning"),
+  warnings: ["off", "m1", "m2", "m5", "m10"].map((k) => tm(`warning.${k}`)),
+}));
 
 function setTarget(total) {
   $userdata.set(KEYS.MODULES.STOPWATCH.TARGET_SECONDS, Math.max(0, Math.min(total, 99 * 3600)));
@@ -556,85 +537,10 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-/* ── Dock de controles ─────────────────────────────────────────────── */
-.sw-dock {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--lj-space-4);
-  padding: var(--lj-space-4) var(--lj-space-5);
-  border-top: 1px solid var(--lj-body-divider);
-  background: var(--lj-surface-bg);
-}
-.sw-dock-spacer {
-  flex: 1 1 auto;
-}
-
-.sw-segmented {
-  display: inline-flex;
-  padding: 2px;
-  gap: 2px;
-  border-radius: var(--lj-ui-radius);
-  background: var(--lj-surface-sunken, rgba(127, 127, 127, 0.14));
-  border: var(--lj-ui-border);
-}
-.sw-seg {
-  height: calc(var(--lj-ui-h-md) - 6px);
-  padding: 0 var(--lj-space-5);
-  border: 0;
-  border-radius: calc(var(--lj-ui-radius) - 2px);
-  background: transparent;
-  color: var(--lj-text-muted, inherit);
-  font-size: var(--lj-text-sm);
-  cursor: pointer;
-}
-.sw-seg:hover {
-  color: var(--lj-text);
-}
-.sw-seg:focus-visible {
-  outline: none;
-  box-shadow: var(--lj-ui-focus);
-}
-.sw-seg--on {
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
-}
-
 .sw-presets {
   display: inline-flex;
   flex-wrap: wrap;
   gap: var(--lj-space-2);
-}
-
-.sw-play {
-  display: inline-grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: 50%;
-  background: #27ae60;
-  color: #fff;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-  transition:
-    background var(--lj-transition-fast),
-    transform var(--lj-transition-fast);
-}
-.sw-play:hover {
-  filter: brightness(1.08);
-}
-.sw-play:active {
-  transform: scale(0.96);
-}
-.sw-play:focus-visible {
-  outline: none;
-  box-shadow: var(--lj-ui-focus);
-}
-.sw-play--running {
-  background: #e67e22;
 }
 
 @keyframes sw-pulse {

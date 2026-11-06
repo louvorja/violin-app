@@ -20,16 +20,16 @@
     "set_time": "Tempo",
     "show_seconds": "Exibir segundos",
     "count_overtime": "Contar tempo excedido",
-    "alerts": "Avisos",
     "warning": "Avisar faltando",
-    "flash_borders": "Piscar bordas"
+    "flash_borders": "Piscar bordas",
+    "options": "Opções"
   },
   "warning": {
-    "off": "Não avisar",
-    "m1": "1 minuto",
-    "m2": "2 minutos",
-    "m5": "5 minutos",
-    "m10": "10 minutos"
+    "off": "Não",
+    "m1": "1 min",
+    "m2": "2 min",
+    "m5": "5 min",
+    "m10": "10 min"
   },
   "screen": {
     "on_air": "No telão",

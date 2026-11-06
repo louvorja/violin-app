@@ -1,9 +1,19 @@
 {
   "title": "Temporizador de Culto",
   "description": "Temporizador para culto com alertas sonoros configuráveis.",
-  "mode": { "up": "Progressivo", "down": "Regressivo" },
-  "actions": { "start": "Iniciar", "pause": "Pausar", "reset": "Zerar", "set": "Definir horário" },
-  "alarm": { "done": "Tempo esgotado!" },
+  "mode": {
+    "up": "Progressivo",
+    "down": "Regressivo"
+  },
+  "actions": {
+    "start": "Iniciar",
+    "pause": "Pausar",
+    "reset": "Zerar",
+    "set": "Definir horário"
+  },
+  "alarm": {
+    "done": "Tempo esgotado!"
+  },
   "sound": {
     "start": "Abertura",
     "five_min": "5 minutos",
@@ -33,7 +43,6 @@
     "show_target_time": "Exibir hora na projeção",
     "show_alert": "Destacar ao final",
     "alert_seconds": "Segundos restantes para destacar",
-    "alerts": "Avisos",
     "count_overtime": "Contar tempo excedido",
     "flash_borders": "Piscar bordas",
     "timer_end": "Ao terminar",
@@ -50,6 +59,15 @@
     "online_video_search": "Buscar vídeo...",
     "online_video_url": "Ou cole uma URL do YouTube",
     "music": "Configurar música",
-    "not_configured": "não configurado"
+    "not_configured": "não configurado",
+    "options": "Opções",
+    "warning": "Avisar faltando"
+  },
+  "warning": {
+    "off": "Não",
+    "m1": "1 min",
+    "m2": "2 min",
+    "m5": "5 min",
+    "m10": "10 min"
   }
 }

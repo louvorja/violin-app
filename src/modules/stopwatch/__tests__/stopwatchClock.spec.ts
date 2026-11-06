@@ -27,7 +27,7 @@ describe("stopwatchClock", () => {
 
   it("regressivo passa do zero com tempo excedido e para nele sem", () => {
     expect(shownSeconds("down", 60, 72_400, true)).toBe(-12);
-    expect(formatStopwatch(-12, true)).toBe("+00:12");
+    expect(formatStopwatch(-12, true)).toBe("-00:12");
     expect(shownSeconds("down", 60, 72_400, false)).toBe(0);
   });
 
@@ -41,7 +41,7 @@ describe("stopwatchClock", () => {
     expect(formatStopwatch(280, false, true)).toBe("05");
     expect(formatStopwatch(30, false, true)).toBe("01");
     expect(formatStopwatch(0, false, true)).toBe("00");
-    expect(formatStopwatch(-30, false, true)).toBe("+00");
+    expect(formatStopwatch(-30, false, true)).toBe("-00");
     expect(formatStopwatch(3599, false, true)).toBe("1:00");
   });
 

@@ -219,7 +219,7 @@ export const KEYS = {
       MODE: `${MODULES_STOPWATCH}.mode`,
       TARGET_SECONDS: `${MODULES_STOPWATCH}.target_seconds`,
       SHOW_SECONDS: `${MODULES_STOPWATCH}.show_seconds`,
-      /** Regressivo continua depois do zero, mostrando "+mm:ss". */
+      /** Regressivo continua depois do zero, mostrando "-mm:ss". */
       COUNT_OVERTIME: `${MODULES_STOPWATCH}.count_overtime`,
       /** Segundos antes do fim em que o aviso amarelo começa (0 desliga). */
       WARNING_SECONDS: `${MODULES_STOPWATCH}.warning_seconds`,
@@ -238,7 +238,7 @@ export const KEYS = {
       SHOW_TARGET_TIME: `${MODULES_TIMER}.show_target_time`,
       SHOW_ALERT: `${MODULES_TIMER}.show_alert`,
       ALERT_SECONDS: `${MODULES_TIMER}.alert_seconds`,
-      /** Regressivo continua depois do zero, mostrando "+hh:mm:ss". */
+      /** Regressivo continua depois do zero, mostrando "-hh:mm:ss". */
       COUNT_OVERTIME: `${MODULES_TIMER}.count_overtime`,
       /** Bordas pulsando na tela e no telão durante os avisos. */
       FLASH_BORDERS: `${MODULES_TIMER}.flash_borders`,
@@ -254,7 +254,7 @@ export const KEYS = {
       SHOW_TARGET_TIME: `${MODULES_TIMER_WORSHIP}.show_target_time`,
       SHOW_ALERT: `${MODULES_TIMER_WORSHIP}.show_alert`,
       ALERT_SECONDS: `${MODULES_TIMER_WORSHIP}.alert_seconds`,
-      /** Regressivo continua depois do zero, mostrando "+hh:mm:ss". */
+      /** Regressivo continua depois do zero, mostrando "-hh:mm:ss". */
       COUNT_OVERTIME: `${MODULES_TIMER_WORSHIP}.count_overtime`,
       /** Bordas pulsando na tela e no telão durante os avisos. */
       FLASH_BORDERS: `${MODULES_TIMER_WORSHIP}.flash_borders`,

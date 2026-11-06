@@ -26,7 +26,7 @@ export function elapsedMs(run: StopwatchRun, now: number): number {
 }
 
 /**
- * Segundos que a tela mostra. No regressivo, negativo é tempo excedido —
+ * Segundos que a tela mostra. No regressivo, negativo é tempo excedido ("-00:12") —
  * só quando `overtime` está ligado; senão para no zero.
  */
 export function shownSeconds(
@@ -42,7 +42,7 @@ export function shownSeconds(
 }
 
 /**
- * `mm:ss`, `h:mm:ss` ou só os minutos; tempo excedido ganha um "+".
+ * `mm:ss`, `h:mm:ss` ou só os minutos; tempo excedido ganha um "-" (a contagem passou do zero).
  *
  * Sem segundos no regressivo (`roundUp`), o minuto arredonda para cima: com
  * 4:40 restantes mostra "05", e só chega a "00" quando o tempo acaba — como
@@ -55,7 +55,7 @@ export function formatStopwatch(seconds: number, showSeconds: boolean, roundUp =
   const h = Math.floor(abs / 3600);
   const m = Math.floor((abs % 3600) / 60);
   const s = abs % 60;
-  const sign = seconds < 0 ? "+" : "";
+  const sign = seconds < 0 ? "-" : "";
   const mm = String(m).padStart(2, "0");
   const ss = String(s).padStart(2, "0");
   if (h > 0) return showSeconds ? `${sign}${h}:${mm}:${ss}` : `${sign}${h}:${mm}`;

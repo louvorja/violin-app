@@ -115,17 +115,6 @@ export const contextualPages: RibbonPage[] = [
         title: "ribbon.groups.time",
         buttons: [
           {
-            id: `${moduleId}_mode`,
-            type: "select",
-            optionKey: KEYS.MODULES.TIMER_WORSHIP.MODE,
-            label: `${modulePath}.ribbon.mode`,
-            defaultValue: "down",
-            options: [
-              { value: "up", label: `${modulePath}.mode.up` },
-              { value: "down", label: `${modulePath}.mode.down` },
-            ],
-          },
-          {
             id: `${moduleId}_set_time`,
             type: "action_input",
             inputType: "time",
@@ -143,27 +132,15 @@ export const contextualPages: RibbonPage[] = [
         ],
       },
       {
-        id: moduleCtxId + "_alerts",
-        title: `${modulePath}.ribbon.alerts`,
+        /*
+         * Modo e aviso ("Destacar ao final" + segundos) desceram para a barra
+         * de baixo da tela (ModuleTimerDock), a um clique; aqui fica só o que
+         * se configura uma vez.
+         */
+        id: moduleCtxId + "_options",
+        title: `${modulePath}.ribbon.options`,
         compactRows: 2,
         buttons: [
-          {
-            id: `${moduleId}_show_alert`,
-            type: "checkbox",
-            optionKey: KEYS.MODULES.TIMER_WORSHIP.SHOW_ALERT,
-            label: `${modulePath}.ribbon.show_alert`,
-            defaultValue: true,
-          },
-          {
-            id: `${moduleId}_alert_seconds`,
-            type: "number",
-            optionKey: KEYS.MODULES.TIMER_WORSHIP.ALERT_SECONDS,
-            label: `${modulePath}.ribbon.alert_seconds`,
-            defaultValue: 60,
-            min: 5,
-            max: 600,
-            step: 5,
-          },
           {
             id: `${moduleId}_count_overtime`,
             type: "checkbox",

@@ -7,34 +7,43 @@
   >
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'timer_worship'" :manifest="manifest" />
-      <div
-        ref="container"
-        class="tw-root"
-        :style="rootStyle"
-        data-testid="timer-worship-stage"
-        :data-alert="alertLevel || 'none'"
-      >
-        <ModuleBackgroundMedia
-          v-if="bgImage"
-          :src="bgImage"
-          class="tw-bg-img"
-          :style="imageStyle"
-        />
-
-        <!-- Display -->
+      <div class="timer-layout">
         <div
-          class="tw-display"
-          :class="{
-            'tw-warning': mode === 'down' && alertActive && seconds > 0,
-            'tw-critical': mode === 'down' && alertActive && seconds <= 10 && seconds > 0,
-            'tw-done': mode === 'down' && seconds <= 0 && alarmed && !overtime,
-          }"
-          :style="[textStyle, alertActive ? alertStyle : null]"
-          data-testid="timer-worship-display"
+          ref="container"
+          class="tw-root"
+          :style="rootStyle"
+          data-testid="timer-worship-stage"
+          :data-alert="alertLevel || 'none'"
         >
-          {{ projecao }}
+          <ModuleBackgroundMedia
+            v-if="bgImage"
+            :src="bgImage"
+            class="tw-bg-img"
+            :style="imageStyle"
+          />
+
+          <!-- Display -->
+          <div
+            class="tw-display"
+            :class="{
+              'tw-warning': mode === 'down' && alertActive && seconds > 0,
+              'tw-critical': mode === 'down' && alertActive && seconds <= 10 && seconds > 0,
+              'tw-done': mode === 'down' && seconds <= 0 && alarmed && !overtime,
+            }"
+            :style="[textStyle, displayColorStyle]"
+            data-testid="timer-worship-display"
+          >
+            {{ projecao }}
+          </div>
+          <ModuleAlertFrame :level="flashBorders ? alertLevel : ''" />
         </div>
-        <ModuleAlertFrame :level="flashBorders ? alertLevel : ''" />
+        <ModuleTimerDock
+          :mode="mode"
+          :warning-seconds="showAlert ? alertSeconds : 0"
+          :labels="dockLabels"
+          @update:mode="mode = $event"
+          @update:warning-seconds="setWarning"
+        />
       </div>
     </div>
 
@@ -49,6 +58,7 @@ import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import ModuleAlertFrame from "@/components/ModuleAlertFrame.vue";
+import ModuleTimerDock from "@/components/ModuleTimerDock.vue";
 import TimerEndActionDialogs from "@/components/TimerEndActionDialogs.vue";
 import $userdata from "@/helpers/UserData";
 import $appdata from "@/helpers/AppData";
@@ -115,6 +125,36 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let fiveMinFired = false;
 let oneMinFired = false;
 
+/** Amarelo do aviso — o mesmo da moldura e do Cronômetro. */
+const WARNING_COLOR = "#F59E0B";
+
+/*
+ * Cor do número: amarelo nos segundos de destaque, a cor de alerta da
+ * Formatação só depois do horário. Antes, o destaque já pintava de vermelho
+ * enquanto a moldura ficava amarela.
+ */
+const displayColor = computed<string | undefined>(() => {
+  if (!alertActive.value) return undefined;
+  return seconds.value <= 0 ? alertStyle.value.color : WARNING_COLOR;
+});
+const displayColorStyle = computed(() =>
+  displayColor.value ? { color: displayColor.value } : null
+);
+
+function setWarning(value: number): void {
+  // "Não" desliga o destaque; os outros botões ligam e definem os segundos.
+  $userdata.set(KEYS.MODULES.TIMER_WORSHIP.SHOW_ALERT, value > 0);
+  if (value > 0) $userdata.set(KEYS.MODULES.TIMER_WORSHIP.ALERT_SECONDS, value);
+}
+
+const dockLabels = computed(() => ({
+  mode: tm("ribbon.mode"),
+  up: tm("mode.up"),
+  down: tm("mode.down"),
+  warning: tm("ribbon.warning"),
+  warnings: ["off", "m1", "m2", "m5", "m10"].map((k) => tm(`warning.${k}`)),
+}));
+
 const overtime = computed<boolean>(
   () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.COUNT_OVERTIME, true) !== false
 );
@@ -138,8 +178,8 @@ const display = computed<string>(() => {
   const h = Math.floor(abs / 3600);
   const m = Math.floor((abs % 3600) / 60);
   const s = abs % 60;
-  // Negativo é tempo excedido: "+00:02:10".
-  const sign = seconds.value < 0 ? "+" : "";
+  // Negativo é tempo excedido: "-00:02:10".
+  const sign = seconds.value < 0 ? "-" : "";
   return `${sign}${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 });
 
@@ -242,7 +282,7 @@ watch(
     projection.emit({
       text: projecao.value,
       active: true,
-      color: alertActive.value ? alertStyle.value.color : undefined,
+      color: displayColor.value,
       alert: flashBorders.value && alertLevel.value ? alertLevel.value : undefined,
     });
   },
@@ -305,7 +345,7 @@ function updateRunningTime(): void {
   if (left <= 0) {
     if (!alarmed.value) {
       alarmed.value = true;
-      // Com tempo excedido a contagem segue (+00:00:01…); sem ele, para no zero.
+      // Com tempo excedido a contagem segue (-00:00:01…); sem ele, para no zero.
       if (!overtime.value) pause();
       endAction.triggerTimerEndAction();
     }
@@ -418,6 +458,13 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
+.timer-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
 .tw-root {
   position: relative;
   overflow: hidden;

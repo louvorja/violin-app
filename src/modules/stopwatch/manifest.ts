@@ -116,24 +116,7 @@ export const contextualPages: RibbonPage[] = [
       {
         id: "ctx_stopwatch_time",
         title: "ribbon.groups.time",
-        /*
-         * Duas linhas: o modo e o tempo na primeira coluna, as opções na
-         * segunda. Com o padrão de três linhas o "Exibir segundos" ficava
-         * abaixo da altura da ribbon e aparecia só um traço dele.
-         */
-        compactRows: 2,
         buttons: [
-          {
-            id: `${moduleId}_mode`,
-            type: "select",
-            optionKey: KEYS.MODULES.STOPWATCH.MODE,
-            label: `${modulePath}.ribbon.mode`,
-            defaultValue: "up",
-            options: [
-              { value: "up", label: `${modulePath}.mode.up` },
-              { value: "down", label: `${modulePath}.mode.down` },
-            ],
-          },
           {
             id: `${moduleId}_set_time`,
             customButton: TimeDurationInput,
@@ -141,6 +124,17 @@ export const contextualPages: RibbonPage[] = [
             label: `${modulePath}.ribbon.set_time`,
             defaultValue: 600,
           },
+        ],
+      },
+      {
+        /*
+         * As três opções juntas, uma embaixo da outra. O modo e o aviso
+         * desceram para a barra de baixo da tela (ModuleTimerDock), a um
+         * clique; aqui fica só o que se configura uma vez.
+         */
+        id: "ctx_stopwatch_options",
+        title: `${modulePath}.ribbon.options`,
+        buttons: [
           {
             id: `${moduleId}_show_seconds`,
             type: "checkbox",
@@ -154,27 +148,6 @@ export const contextualPages: RibbonPage[] = [
             optionKey: KEYS.MODULES.STOPWATCH.COUNT_OVERTIME,
             label: `${modulePath}.ribbon.count_overtime`,
             defaultValue: true,
-          },
-        ],
-      },
-      {
-        id: "ctx_stopwatch_alerts",
-        title: `${modulePath}.ribbon.alerts`,
-        compactRows: 2,
-        buttons: [
-          {
-            id: `${moduleId}_warning_seconds`,
-            type: "select",
-            optionKey: KEYS.MODULES.STOPWATCH.WARNING_SECONDS,
-            label: `${modulePath}.ribbon.warning`,
-            defaultValue: "60",
-            options: [
-              { value: "0", label: `${modulePath}.warning.off` },
-              { value: "60", label: `${modulePath}.warning.m1` },
-              { value: "120", label: `${modulePath}.warning.m2` },
-              { value: "300", label: `${modulePath}.warning.m5` },
-              { value: "600", label: `${modulePath}.warning.m10` },
-            ],
           },
           {
             id: `${moduleId}_flash_borders`,

@@ -66,17 +66,17 @@ for (const mod of MODULES) {
     await expect(projection.getByTestId("module-projection-alert-warning")).toBeAttached();
 
     await page.clock.runFor(62_000);
-    await expect(display).toContainText(/\+00:00:1\d/);
+    await expect(display).toContainText(/-00:00:1\d/);
     await expect(stage).toHaveAttribute("data-alert", "danger");
     await expect(projection.getByTestId("module-projection-alert-danger")).toBeAttached();
-    await expect(projection.locator(".module-projection__text")).toContainText(/\+00:00:1\d/);
+    await expect(projection.locator(".module-projection__text")).toContainText(/-00:00:1\d/);
 
     // Pausar e retomar no excedido continua do horário de hoje, não de amanhã.
     await page.getByTestId(`ribbon-btn-${mod.id}_toggle`).click();
     await page.clock.runFor(5_000);
     await page.getByTestId(`ribbon-btn-${mod.id}_toggle`).click();
     await page.clock.runFor(1_000);
-    await expect(display).toContainText(/\+00:00:[12]\d/);
+    await expect(display).toContainText(/-00:00:[12]\d/);
     await expect(stage).toHaveAttribute("data-alert", "danger");
 
     // Sem "Piscar bordas" o vermelho continua no número, mas a moldura some.
@@ -91,12 +91,12 @@ for (const mod of MODULES) {
     await page.getByTestId(`ribbon-btn-${mod.id}_toggle`).click();
     await page.clock.runFor(130_000);
     await expect(page.getByTestId(mod.display)).toContainText("00:00:00");
-    await expect(page.getByTestId(mod.display)).not.toContainText("+");
+    await expect(page.getByTestId(mod.display)).not.toContainText("-");
     await expect(page.getByTestId(mod.stage)).toHaveAttribute("data-alert", "danger");
   });
 }
 
-test("timer: sem mexer no modo, conta regressivo como a ribbon mostra", async ({ page }) => {
+test("timer: sem mexer no modo, conta regressivo como a tela mostra", async ({ page }) => {
   await page.clock.install({ time: new Date(2026, 10, 5, 10, 58, 0) });
   await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
   await page.route("**/json_db/**", (route) => route.fulfill({ json: [] }));
@@ -108,9 +108,11 @@ test("timer: sem mexer no modo, conta regressivo como a ribbon mostra", async ({
   await page.locator('[data-testid="ribbon-btn-timer"]').click();
   const display = page.getByTestId("timer-display");
   await expect(display).toBeVisible();
-  await expect(
-    page.locator('[data-testid="ribbon-btn-timer_mode"] select, select').first()
-  ).toHaveValue("down");
+  // O modo fica na barra de baixo: sem mexer, já vem em Regressivo.
+  await expect(page.getByRole("tab", { name: "Regressivo" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
   const time = page.locator('input[type="time"]').first();
   await time.fill("11:00");
   await time.dispatchEvent("change");
@@ -149,5 +151,5 @@ test("timer: horário de madrugada vira o de amanhã; horário que acabou de pas
   await expect(display).toContainText("00:00:00");
   await page.getByTestId("ribbon-btn-timer_toggle").click();
   await page.clock.runFor(2_000);
-  await expect(display).toContainText(/\+00:3\d:\d\d/);
+  await expect(display).toContainText(/-00:3\d:\d\d/);
 });
