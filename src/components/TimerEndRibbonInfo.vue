@@ -1,6 +1,12 @@
 <template>
-  <div v-if="info" class="timer-end-ribbon-info">
-    <span class="timer-end-ribbon-label">{{ t(langPath + ".ribbon.timer_end") }}</span>
+  <div
+    v-if="info"
+    class="timer-end-ribbon-info"
+    :class="{ 'timer-end-ribbon-info--inline': inline }"
+  >
+    <span v-if="!inline" class="timer-end-ribbon-label">
+      {{ t(langPath + ".ribbon.timer_end") }}
+    </span>
     <LjChip variant="primary" size="md" :icon="icon" class="timer-end-ribbon-chip">
       {{ info }}
     </LjChip>
@@ -17,10 +23,17 @@ import { MediaEnum } from "@/enums/MediaEnum";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import { ICONS } from "@/config/Icons";
 import { getTimerEndActionKeys } from "@/config/modules/ribbon/timerEndRibbon";
+import type { RibbonButton, RibbonGroup } from "@/types/Ribbon";
 
 const props = defineProps<{
   module: string;
+  /** Item da ribbon, quando entra como `customButton` dentro do grupo "Ao terminar". */
+  config?: RibbonButton | RibbonGroup;
 }>();
+
+/* Dentro do grupo "Ao terminar", logo abaixo de "Ação ao final": o título
+   repetiria o do grupo, e o resumo tem de caber na coluna. */
+const inline = computed(() => !!props.config && "customButton" in props.config);
 
 const { t } = useI18n();
 const langPath = computed(() => $modules.getPath(props.module));
@@ -108,6 +121,11 @@ const info = computed<string | null>(() => {
   gap: 2px;
   padding: 4px 8px;
   min-width: 180px;
+}
+.timer-end-ribbon-info--inline {
+  min-width: 0;
+  max-width: 220px;
+  padding: 0 var(--lj-space-3);
 }
 .timer-end-ribbon-label {
   font-size: 10px;

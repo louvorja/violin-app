@@ -194,7 +194,11 @@ $userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.SOUND_ONE_MIN, true);
 $userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.END_ACTION, MediaEnum.NONE);
 
 const selectedSound = computed<string>(
-  () => $userdata.get(KEYS.MODULES.TIMER_WORSHIP.SELECTED_SOUND) as string
+  () =>
+    $userdata.get(
+      KEYS.MODULES.TIMER_WORSHIP.SELECTED_SOUND,
+      SABBATH_SCHOOL_SOUNDS.OPENING.id
+    ) as string
 );
 
 const projection = useModuleProjection(ModuleEnum.TIMER_WORSHIP, {

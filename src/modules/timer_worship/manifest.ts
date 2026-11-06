@@ -173,6 +173,9 @@ export const contextualPages: RibbonPage[] = [
       {
         id: moduleCtxId + "_sound",
         title: "ribbon.groups.sound",
+        // "Reproduzir" em cima da caixa: ao lado, a largura de alinhamento do
+        // rótulo empurrava a caixa e a ribbon passava da tela.
+        stackedFields: true,
         buttons: [
           {
             id: "tw_sound_start",
@@ -197,6 +200,9 @@ export const contextualPages: RibbonPage[] = [
             type: "select",
             optionKey: `${modulePath}.selected_sound`,
             label: `${modulePath}.sound.alarm_label`,
+            // Sem padrão a caixa nascia vazia e "Tocar" não tocava nada até
+            // alguém escolher um som.
+            defaultValue: SABBATH_SCHOOL_SOUNDS.OPENING.id,
             options: [
               {
                 value: SABBATH_SCHOOL_SOUNDS.OPENING.id,

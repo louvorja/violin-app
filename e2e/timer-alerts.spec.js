@@ -153,3 +153,26 @@ test("timer: horário de madrugada vira o de amanhã; horário que acabou de pas
   await page.clock.runFor(2_000);
   await expect(display).toContainText(/-00:3\d:\d\d/);
 });
+
+for (const mod of MODULES) {
+  test(`${mod.id}: ribbon cabe em 1366 px com qualquer ação ao final`, async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+    await page.route("**/json_db/**", (route) => route.fulfill({ json: [] }));
+    await page.goto("/");
+    await page
+      .locator('[data-testid="modules-ready"]')
+      .waitFor({ state: "attached", timeout: 30_000 });
+    await page.locator(`#ribbon-tab-${mod.tab}`).click();
+    await page.locator(`[data-testid="ribbon-btn-${mod.id}"]`).click();
+    await expect(page.getByTestId(mod.display)).toBeVisible();
+    const action = page.locator(`[data-testid="ribbon-btn-${mod.id}_end_action"] select`);
+    const overflow = () =>
+      page.locator(".ribbon-body--ctx").evaluate((el) => el.scrollWidth - el.clientWidth);
+    for (const value of ["none", "audio", "video", "online_video", "music"]) {
+      await action.selectOption(value);
+      // Antes a ribbon passava da tela e ganhava barra de rolagem.
+      await expect.poll(overflow).toBeLessThanOrEqual(1);
+    }
+  });
+}
