@@ -295,10 +295,11 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   position: relative;
 }
 
-/* ── Item nested inside a Bloco ── */
-/* Pertencer ao bloco é dito pela faixa tonal na cor dele, que cobre a linha
-   inteira. Um recuo por cima disso desalinharia a coluna dos cartões: o item
-   solto, que não tem faixa, ficaria 12px à esquerda de todos os outros. */
+/* ── Item nested inside a Bloco ──
+ *  Pertencer ao bloco é dito pela faixa tonal na cor dele, que cobre a linha
+ *   inteira. Um recuo por cima disso desalinharia a coluna dos cartões: o item
+ *   solto, que não tem faixa, ficaria 12px à esquerda de todos os outros.
+*/
 .tl-item--in-bloco {
   padding: var(--lj-space-2) 0;
   background: color-mix(in srgb, var(--bloco-color, var(--lj-surface-border)) 6%, transparent);
