@@ -9,6 +9,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { openAnnouncementsWindow, openSiteWindow } from "@/helpers/ProjectionWindows";
 import { beginAnnouncementIntent } from "@/presentation/AnnouncementsPresentationState";
+import { loadAnnouncements } from "@/modules/announcements/storage";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import $idb from "@/helpers/IndexedDB";
@@ -376,19 +377,17 @@ export function useLiturgyExecution() {
   async function executeAnnouncements(item: LiturgyItem): Promise<boolean> {
     const announcementToken = beginAnnouncementIntent();
     try {
-      const all = (
-        await $idb.getAll<{
-          id: string;
-          nome: string;
-          ordem: number;
-          texto?: string;
-          imageData?: ArrayBuffer;
-          imageMime?: string;
-          videoData?: ArrayBuffer;
-          videoMime?: string;
-          style?: Record<string, unknown>;
-        }>(DB_TABLE.ANNOUNCEMENTS)
-      ).sort((a, b) => a.ordem - b.ordem);
+      const all = await loadAnnouncements<{
+        id: string;
+        nome: string;
+        ordem: number;
+        texto?: string;
+        imageData?: Blob;
+        imageMime?: string;
+        videoData?: Blob;
+        videoMime?: string;
+        style?: Record<string, unknown>;
+      }>();
 
       const ids = item.anuncios_ids;
       const selected = Array.isArray(ids) ? all.filter((a) => ids.includes(String(a.id))) : all;

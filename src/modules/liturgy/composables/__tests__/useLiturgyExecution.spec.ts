@@ -106,7 +106,9 @@ vi.mock("@/helpers/ProjectionWindows", () => ({
   openSiteWindow: mocks.openSiteWindow,
 }));
 vi.mock("@/helpers/AppData", () => ({ default: { get: vi.fn(), set: vi.fn() } }));
-vi.mock("@/helpers/IndexedDB", () => ({ default: { getAll: mocks.idbGetAll } }));
+vi.mock("@/helpers/IndexedDB", () => ({
+  default: { getAll: mocks.idbGetAll, rewriteRecords: vi.fn(async () => 0) },
+}));
 vi.mock("@/helpers/Overlay", () => ({
   readAllSlots: mocks.readAllOverlaySlots,
   writeSlot: mocks.writeOverlaySlot,

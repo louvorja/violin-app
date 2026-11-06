@@ -63,6 +63,7 @@ import { executeMusic } from "@/helpers/MusicExecution";
 import { LITURGY_VERSION_ACTION, MUSIC_EXECUTIONS } from "@/config/MusicAction";
 import { DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
+import { loadAnnouncements } from "@/modules/announcements/storage";
 import $docs from "@/helpers/DocStore";
 import ScheduledStore from "@/helpers/ScheduledStore";
 import ProjectionWindows from "@/helpers/ProjectionWindows";
@@ -1875,8 +1876,7 @@ $storage.hydrate().then(async () => {
                   }
                   case "anuncios": {
                     const announcementToken = beginAnnouncementIntent();
-                    const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
-                    const sorted = allAnn.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+                    const sorted = await loadAnnouncements();
                     overlayContext.availableAnnouncementIds = sorted.map((a) => String(a.id));
                     const selected = Array.isArray(litItem.anuncios_ids)
                       ? sorted.filter((a) => litItem.anuncios_ids.includes(String(a.id)))
@@ -2036,8 +2036,7 @@ $storage.hydrate().then(async () => {
               });
               break;
             case "announcements-list": {
-              const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
-              const sorted = allAnn.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+              const sorted = await loadAnnouncements();
               const simplified = sorted.map((a) => ({
                 id: String(a.id),
                 nome: a.nome,
@@ -2054,8 +2053,7 @@ $storage.hydrate().then(async () => {
             case "announcements-project": {
               const announcementToken = beginAnnouncementIntent();
               const ids = data.ids || [];
-              const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
-              const sorted = allAnn.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+              const sorted = await loadAnnouncements();
               const clickedId = ids.length ? ids[0] : null;
               const startIdx = clickedId
                 ? Math.max(
