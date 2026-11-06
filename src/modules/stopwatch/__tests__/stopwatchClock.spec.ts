@@ -37,6 +37,14 @@ describe("stopwatchClock", () => {
     expect(formatStopwatch(125, false)).toBe("02");
   });
 
+  it("sem segundos, o regressivo arredonda o minuto para cima", () => {
+    expect(formatStopwatch(280, false, true)).toBe("05");
+    expect(formatStopwatch(30, false, true)).toBe("01");
+    expect(formatStopwatch(0, false, true)).toBe("00");
+    expect(formatStopwatch(-30, false, true)).toBe("+00");
+    expect(formatStopwatch(3599, false, true)).toBe("1:00");
+  });
+
   it("aviso amarelo perto do fim e vermelho só depois de chegar ao zero", () => {
     expect(stopwatchAlert("down", 61, 60, false)).toBe("");
     expect(stopwatchAlert("down", 60, 60, false)).toBe("warning");

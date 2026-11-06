@@ -51,6 +51,7 @@ import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import ModuleAlertFrame from "@/components/ModuleAlertFrame.vue";
 import TimerEndActionDialogs from "@/components/TimerEndActionDialogs.vue";
 import $userdata from "@/helpers/UserData";
+import $appdata from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
@@ -260,13 +261,21 @@ function getTargetDate(): Date {
   return target;
 }
 
-function getDurationUntilTarget(): number {
-  const now = new Date();
+/*
+ * Segundos até o horário. Já passou há até 12 h: é o horário de hoje que
+ * passou (negativo). Passou há mais que isso: é o de amanhã (ex.: 01:00
+ * definido às 23:00). Antes, qualquer horário já passado virava o de amanhã,
+ * e Reiniciar depois do sermão mostrava 23:59:xx no telão.
+ */
+function secondsUntilTarget(): number {
+  const now = Date.now();
   const target = getTargetDate();
-  if (target.getTime() <= now.getTime()) {
-    target.setDate(target.getDate() + 1);
-  }
-  return Math.max(0, Math.ceil((target.getTime() - now.getTime()) / 1000));
+  if (now - target.getTime() > 12 * 3600 * 1000) target.setDate(target.getDate() + 1);
+  return Math.ceil((target.getTime() - now) / 1000);
+}
+
+function getDurationUntilTarget(): number {
+  return Math.max(0, secondsUntilTarget());
 }
 
 function updateFromTargetTime(): void {
@@ -338,17 +347,15 @@ function toggle(): void {
 
 function start(): void {
   /*
-   * Retomar depois de pausar no tempo excedido: o horário já passou hoje, e
-   * getDurationUntilTarget() o jogaria para amanhã (23h59 restantes). Segue
-   * contando o excedido a partir do horário de hoje.
+   * Retomar depois de pausar no tempo excedido segue contando o excedido sem
+   * disparar de novo o bipe e a ação "Ao terminar".
    */
   const resumingOvertime = alarmed.value && overtime.value && mode.value === "down";
   alarmed.value = resumingOvertime;
   fiveMinFired = resumingOvertime;
   oneMinFired = resumingOvertime;
-  durationSeconds.value = resumingOvertime
-    ? Math.ceil((getTargetDate().getTime() - Date.now()) / 1000)
-    : getDurationUntilTarget();
+  // Regressivo aceita horário já passado: começa direto no excedido (ou no zero).
+  durationSeconds.value = mode.value === "down" ? secondsUntilTarget() : getDurationUntilTarget();
   startedAt.value = Date.now();
   seconds.value = mode.value === "down" ? durationSeconds.value : 0;
   running.value = true;
@@ -378,9 +385,23 @@ function reset(): void {
   updateFromTargetTime();
 }
 
+// Fechar zera: com a contagem só pausada, a borda de aviso ficava no telão.
+// O horário continua salvo, então reabrir e iniciar retoma do ponto certo.
 function close(): void {
-  pause();
+  reset();
 }
+
+/*
+ * O X da aba fecha o módulo por Modules.close(), sem passar pelo @close do
+ * ModuleContainer — e o componente segue vivo no KeepAlive. Sem isto, a
+ * contagem continuava escondida e a borda ficava pulsando no telão.
+ */
+watch(
+  () => $appdata.get(`modules.timer_worship.show`),
+  (shown) => {
+    if (shown === false) close();
+  }
+);
 
 // Fechar o app com a contagem rodando deixava a chave em "true", e o botão da
 // ribbon abria em "Pausar" sem nada contando.

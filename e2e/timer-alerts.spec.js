@@ -120,3 +120,34 @@ test("timer: sem mexer no modo, conta regressivo como a ribbon mostra", async ({
   await page.clock.runFor(10_000);
   await expect(display).toContainText(/00:01:[45]\d/);
 });
+
+test("timer: horário de madrugada vira o de amanhã; horário que acabou de passar, não", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date(2026, 10, 5, 23, 0, 0) });
+  await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+  await page.route("**/json_db/**", (route) => route.fulfill({ json: [] }));
+  await page.goto("/");
+  await page
+    .locator('[data-testid="modules-ready"]')
+    .waitFor({ state: "attached", timeout: 30_000 });
+  await page.locator("#ribbon-tab-utilities").click();
+  await page.locator('[data-testid="ribbon-btn-timer"]').click();
+  const display = page.getByTestId("timer-display");
+  const time = page.locator('input[type="time"]').first();
+
+  // O módulo acabou de montar: repete até o ouvinte da ribbon estar de pé.
+  await expect(async () => {
+    await time.fill("01:00");
+    await time.dispatchEvent("change");
+    await expect(display).toContainText(/0[12]:5?\d:\d\d/, { timeout: 500 });
+  }).toPass();
+
+  // 22:30 passou há meia hora: é o de hoje, não o de amanhã (23h30 restantes).
+  await time.fill("22:30");
+  await time.dispatchEvent("change");
+  await expect(display).toContainText("00:00:00");
+  await page.getByTestId("ribbon-btn-timer_toggle").click();
+  await page.clock.runFor(2_000);
+  await expect(display).toContainText(/\+00:3\d:\d\d/);
+});

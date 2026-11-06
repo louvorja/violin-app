@@ -41,9 +41,17 @@ export function shownSeconds(
   return overtime ? left : Math.max(0, left);
 }
 
-/** `mm:ss`, `h:mm:ss` ou só os minutos; tempo excedido ganha um "+". */
-export function formatStopwatch(seconds: number, showSeconds: boolean): string {
-  const abs = Math.abs(seconds);
+/**
+ * `mm:ss`, `h:mm:ss` ou só os minutos; tempo excedido ganha um "+".
+ *
+ * Sem segundos no regressivo (`roundUp`), o minuto arredonda para cima: com
+ * 4:40 restantes mostra "05", e só chega a "00" quando o tempo acaba — como
+ * em qualquer contagem regressiva. Arredondando para baixo, o último minuto
+ * inteiro aparecia como "00".
+ */
+export function formatStopwatch(seconds: number, showSeconds: boolean, roundUp = false): string {
+  const abs =
+    !showSeconds && roundUp && seconds > 0 ? Math.ceil(seconds / 60) * 60 : Math.abs(seconds);
   const h = Math.floor(abs / 3600);
   const m = Math.floor((abs % 3600) / 60);
   const s = abs % 60;

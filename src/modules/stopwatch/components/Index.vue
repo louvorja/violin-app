@@ -162,6 +162,7 @@ import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useScreenProjection } from "@/composables/useScreenProjection";
 import $userdata from "@/helpers/UserData";
+import $appdata from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
 import {
   elapsedMs,
@@ -251,7 +252,9 @@ const elapsed = computed(() => elapsedMs(run.value, now.value));
 const seconds = computed(() =>
   shownSeconds(mode.value, targetSeconds.value, elapsed.value, overtime.value)
 );
-const display = computed(() => formatStopwatch(seconds.value, showSeconds.value));
+const display = computed(() =>
+  formatStopwatch(seconds.value, showSeconds.value, mode.value === "down")
+);
 const alert = computed(() =>
   stopwatchAlert(
     mode.value,
@@ -382,6 +385,18 @@ function setTimeFromPayload(payload) {
 function close() {
   reset();
 }
+
+/*
+ * O X da aba fecha o módulo por Modules.close(), sem passar pelo @close do
+ * ModuleContainer — e o componente segue vivo no KeepAlive. Sem isto, a
+ * contagem continuava escondida e a borda ficava pulsando no telão.
+ */
+watch(
+  () => $appdata.get(`modules.stopwatch.show`),
+  (shown) => {
+    if (shown === false) close();
+  }
+);
 
 let screenPoll = null;
 onMounted(() => {

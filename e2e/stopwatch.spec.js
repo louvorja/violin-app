@@ -65,3 +65,23 @@ test("contagem continua certa quando o relógio pula (janela minimizada)", async
   await page.clock.fastForward(90_000);
   await expect(page.getByTestId("stopwatch-display")).toHaveText("01:30");
 });
+
+test("fechar a aba no X para a contagem e tira a borda do telão", async ({ page, context }) => {
+  await openStopwatch(page);
+  await page.getByTestId("stopwatch-mode-down").click();
+  await page.getByTestId("stopwatch-preset-5").click();
+  const projection = await context.newPage();
+  await projection.goto("/projection/module?module=stopwatch");
+  await page.bringToFront();
+  await page.getByTestId("stopwatch-toggle").click();
+  await page.clock.runFor(5 * 60_000 + 5_000);
+  await expect(projection.getByTestId("module-projection-alert-danger")).toBeAttached();
+
+  await page.locator(".subtab-close").first().click();
+  await expect(projection.locator(".module-projection__alert")).toHaveCount(0);
+
+  await page.locator("#ribbon-tab-utilities").click();
+  await page.locator('[data-testid="ribbon-btn-stopwatch"]').click();
+  await expect(page.getByTestId("stopwatch-display")).toHaveText("05:00");
+  await expect(page.getByTestId("stopwatch-toggle")).toHaveAttribute("aria-label", "Iniciar");
+});
