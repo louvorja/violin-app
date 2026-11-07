@@ -1126,11 +1126,7 @@ async function _loadAudioSrc(
     }
   }
 
-  if (
-    !needsOpusDecode &&
-    (streamsFromDisk ||
-      ($appdata.get(KEYS.SHELL.IS_ONLINE) && $userdata.get(KEYS.MODULES.MEDIA.LAZY_LOAD)))
-  ) {
+  if (!needsOpusDecode && (streamsFromDisk || $appdata.get(KEYS.SHELL.IS_ONLINE))) {
     if (_activePlayback) {
       _activePlayback = { ..._activePlayback, lazy: true };
       if (!deferAudioContext) _audio.setTelemetryContext(_activePlayback);

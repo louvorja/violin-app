@@ -113,7 +113,6 @@ export const KEYS = {
     MEDIA: {
       IS_PLAYING: `${MODULES_MEDIA}.is_playing`,
       FADE_AUDIO: `${MODULES_MEDIA}.fade_audio`,
-      LAZY_LOAD: `${MODULES_MEDIA}.lazy_load`,
       MINIMIZED: `${MODULES_MEDIA}.minimized`,
       LOADING: `${MODULES_MEDIA}.loading`,
       SHOW: `${MODULES_MEDIA}.show`,

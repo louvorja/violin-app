@@ -67,9 +67,7 @@ const times = () => [0, 1, 2].map((i) => slides.timeForPosition(i, 0, 999));
 async function pendingModeSwitch(source: "custom" | "catalog") {
   const load = vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
-  const { default: userdata } = await import("@/helpers/UserData");
   const audio = (await import("@/composables/useAudioPlayback")).useAudioPlayback();
-  userdata.set(KEYS.MODULES.MEDIA.LAZY_LOAD, true);
   $appdata.set(KEYS.SHELL.IS_ONLINE, true);
   if (source === "custom") await media.openCustomSong(song(), MusicActionEnum.NO_AUDIO);
   else {

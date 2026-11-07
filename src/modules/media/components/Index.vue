@@ -30,9 +30,6 @@
         </template>
 
         <div class="media-options">
-          <LjTooltip :text="tm('inputs.lazy_load_tooltip')" side="bottom">
-            <LjSwitch v-model="lazy_load" :label="tm('inputs.lazy_load')" />
-          </LjTooltip>
           <LjTooltip :text="tm('inputs.fade_audio_tooltip')" side="bottom">
             <LjSwitch v-model="fade_audio" :label="tm('inputs.fade_audio')" />
           </LjTooltip>
@@ -257,11 +254,6 @@ watch(
 const fullscreen = computed({
   get: () => module_.value.config?.fullscreen,
   set: (value) => Media.fullscreen(value),
-});
-
-const lazy_load = computed({
-  get: () => UserData.get("modules.media.lazy_load"),
-  set: (value) => UserData.set("modules.media.lazy_load", value),
 });
 
 const fade_audio = computed({

@@ -1373,17 +1373,6 @@
       </div>
       <p class="opt-hint">{{ $t("options.player.fade_audio_hint") }}</p>
 
-      <div class="opt-row">
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="mediaLazyLoad"
-            @change="setMedia('lazy_load', $c($event))"
-          />
-          <span>{{ $t("options.player.lazy_load") }}</span>
-        </label>
-      </div>
-
       <div v-if="isDesktop" class="opt-row opt-row--col">
         <label class="opt-checkbox">
           <input
@@ -2010,9 +1999,6 @@ function restoreTextFormat(): void {
 
 const mediaFadeAudio: ComputedRef<boolean> = computed(
   () => $userdata.get<boolean>(KEYS.MODULES.MEDIA.FADE_AUDIO, false)!!
-);
-const mediaLazyLoad: ComputedRef<boolean> = computed(
-  () => $userdata.get<boolean>(KEYS.MODULES.MEDIA.LAZY_LOAD, true)!!
 );
 
 const videoProjFullscreen: ComputedRef<boolean> = computed(
