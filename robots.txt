@@ -1,0 +1,10 @@
+User-agent: *
+Disallow: /popup
+Disallow: /projection
+Disallow: /obs
+Disallow: /clock
+Disallow: /operator
+Disallow: /remote
+Disallow: /ui
+
+Sitemap: https://app-violin.louvorja.com.br/sitemap.xml

@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a1a2a9-5bc0-0000-a6fd-8795e0deebe0";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="864422ef-600d-5215-9087-8c9cf39098ed")}catch(e){}}();import{S as n}from"./Strings-WxJ1u8H2.js";function e(r){return n.escapeHtml(r||"").replace(/\r\n|\r|\n/g,"<br>")}function a(r){return r?typeof r.lyric=="string"&&r.lyric?r.lyric:r.cover===!0&&typeof r.name=="string"?r.name:"":""}export{e as p,a as s};
+
+//# chunkId=864422ef-600d-5215-9087-8c9cf39098ed
