@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { dbCachePattern } from "./swDbRoute.cjs";
+import { dbCachePattern, mediaCachePattern } from "./swDbRoute.cjs";
+import { DOMAINS } from "./cspDomains.cjs";
 
 const DB = "https://api.louvorja.workers.dev/json_db";
 
@@ -31,5 +32,41 @@ describe("rota do service worker para o banco", () => {
 
   it("não casa outras origens", () => {
     expect(pattern.test("https://outra.test/json_db/pt_musics")).toBe(false);
+  });
+});
+
+describe("rotas do service worker para a mídia baixada", () => {
+  const FILES = "https://api.louvorja.workers.dev/file";
+  const images = mediaCachePattern([FILES, ...DOMAINS.FILES], ["jpg", "jpeg", "png"]);
+  const audio = mediaCachePattern([FILES, ...DOMAINS.FILES], ["mp3", "opus"]);
+
+  it("cobre o armazenamento para onde o catálogo aponta capas, imagens e áudio", () => {
+    expect(images.test("https://files.louvorja.com.br/covers/2004.jpg")).toBe(true);
+    expect(images.test("https://files.louvorja.com.br/images/hasd_128A.JPG")).toBe(true);
+    expect(
+      audio.test("https://files.louvorja.com.br/musics/pt/Diversas/Vou%20Testemunhar.mp3")
+    ).toBe(true);
+  });
+
+  it("continua cobrindo o endereço antigo pela API", () => {
+    expect(images.test(`${FILES}/covers/2004.jpg?v=2`)).toBe(true);
+    expect(audio.test(`${FILES}/musics/pt/a.opus`)).toBe(true);
+  });
+
+  it("o curinga vale para subdomínios, não para hosts que só contêm o domínio", () => {
+    expect(images.test("https://louvorja.com.br/covers/a.jpg")).toBe(false);
+    expect(images.test("https://files.louvorja.com.br.outro.test/a.jpg")).toBe(false);
+    expect(images.test("https://outro.test/files.louvorja.com.br/a.jpg")).toBe(false);
+  });
+
+  it("cada rota só casa as extensões dela", () => {
+    expect(images.test("https://files.louvorja.com.br/musics/pt/a.mp3")).toBe(false);
+    expect(audio.test("https://files.louvorja.com.br/covers/a.jpg")).toBe(false);
+  });
+
+  it("sem origem configurada, casa pela extensão", () => {
+    const anyHost = mediaCachePattern([], ["jpg"]);
+    expect(anyHost.test("https://qualquer.test/a.jpg")).toBe(true);
+    expect(anyHost.test("https://qualquer.test/a.png")).toBe(false);
   });
 });
