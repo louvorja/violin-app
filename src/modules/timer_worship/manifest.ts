@@ -47,6 +47,7 @@ export const module: Module = {
     text_shadow: { type: "boolean", default: false },
     text_shadow_color: { type: "color", default: "#000000" },
     text_shadow_blur: { type: "font-size", default: 4 },
+    warning_color: { type: "color", default: "#F59E0B" },
     alert_color: { type: "color", default: "#E74C3C" },
     background_color: { type: "color", default: "#000000" },
     border_spacing: { type: "border-spacing", default: 10 },
@@ -115,17 +116,6 @@ export const contextualPages: RibbonPage[] = [
         title: "ribbon.groups.time",
         buttons: [
           {
-            id: `${moduleId}_mode`,
-            type: "select",
-            optionKey: KEYS.MODULES.TIMER_WORSHIP.MODE,
-            label: `${modulePath}.ribbon.mode`,
-            defaultValue: "down",
-            options: [
-              { value: "up", label: `${modulePath}.mode.up` },
-              { value: "down", label: `${modulePath}.mode.down` },
-            ],
-          },
-          {
             id: `${moduleId}_set_time`,
             type: "action_input",
             inputType: "time",
@@ -140,22 +130,31 @@ export const contextualPages: RibbonPage[] = [
             label: `${modulePath}.ribbon.show_target_time`,
             defaultValue: true,
           },
+        ],
+      },
+      {
+        /*
+         * Modo e aviso ("Destacar ao final" + segundos) desceram para a barra
+         * de baixo da tela (ModuleTimerDock), a um clique; aqui fica só o que
+         * se configura uma vez.
+         */
+        id: moduleCtxId + "_options",
+        title: `${modulePath}.ribbon.options`,
+        compactRows: 2,
+        buttons: [
           {
-            id: `${moduleId}_show_alert`,
+            id: `${moduleId}_count_overtime`,
             type: "checkbox",
-            optionKey: KEYS.MODULES.TIMER_WORSHIP.SHOW_ALERT,
-            label: `${modulePath}.ribbon.show_alert`,
+            optionKey: KEYS.MODULES.TIMER_WORSHIP.COUNT_OVERTIME,
+            label: `${modulePath}.ribbon.count_overtime`,
             defaultValue: true,
           },
           {
-            id: `${moduleId}_alert_seconds`,
-            type: "number",
-            optionKey: KEYS.MODULES.TIMER_WORSHIP.ALERT_SECONDS,
-            label: `${modulePath}.ribbon.alert_seconds`,
-            defaultValue: 60,
-            min: 5,
-            max: 600,
-            step: 5,
+            id: `${moduleId}_flash_borders`,
+            type: "checkbox",
+            optionKey: KEYS.MODULES.TIMER_WORSHIP.FLASH_BORDERS,
+            label: `${modulePath}.ribbon.flash_borders`,
+            defaultValue: true,
           },
         ],
       },
@@ -175,6 +174,9 @@ export const contextualPages: RibbonPage[] = [
       {
         id: moduleCtxId + "_sound",
         title: "ribbon.groups.sound",
+        // "Reproduzir" em cima da caixa: ao lado, a largura de alinhamento do
+        // rótulo empurrava a caixa e a ribbon passava da tela.
+        stackedFields: true,
         buttons: [
           {
             id: "tw_sound_start",
@@ -199,6 +201,9 @@ export const contextualPages: RibbonPage[] = [
             type: "select",
             optionKey: `${modulePath}.selected_sound`,
             label: `${modulePath}.sound.alarm_label`,
+            // Sem padrão a caixa nascia vazia e "Tocar" não tocava nada até
+            // alguém escolher um som.
+            defaultValue: SABBATH_SCHOOL_SOUNDS.OPENING.id,
             options: [
               {
                 value: SABBATH_SCHOOL_SOUNDS.OPENING.id,

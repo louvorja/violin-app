@@ -2,24 +2,42 @@
   <ModuleContainer :manifest="manifest" :style="{ minWidth: '300px' }" @close="close()">
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'timer'" :manifest="manifest" />
-      <div ref="container" class="timer-stage" style="gap: 16px" :style="rootStyle">
-        <ModuleBackgroundMedia
-          v-if="bgImage"
-          :src="bgImage"
-          class="sw-bg-img"
-          :style="imageStyle"
-        />
-        <!-- Display -->
+      <div class="timer-layout">
         <div
-          class="sw-display"
-          :class="{
-            'sw-warning': mode === 'down' && alertActive && seconds > 0,
-            'sw-done': mode === 'down' && seconds <= 0 && alarmed,
-          }"
-          :style="[textStyle, alertActive ? alertStyle : null]"
+          ref="container"
+          class="timer-stage"
+          style="gap: 16px"
+          :style="rootStyle"
+          data-testid="timer-stage"
+          :data-alert="alertLevel || 'none'"
         >
-          {{ projecao }}
+          <ModuleBackgroundMedia
+            v-if="bgImage"
+            :src="bgImage"
+            class="sw-bg-img"
+            :style="imageStyle"
+          />
+          <!-- Display -->
+          <div
+            class="sw-display"
+            :class="{
+              'sw-warning': mode === 'down' && alertActive && seconds > 0,
+              'sw-done': mode === 'down' && seconds <= 0 && alarmed && !overtime,
+            }"
+            :style="[textStyle, displayColorStyle]"
+            data-testid="timer-display"
+          >
+            {{ projecao }}
+          </div>
+          <ModuleAlertFrame :level="flashBorders ? alertLevel : ''" :color="displayColor" />
         </div>
+        <ModuleTimerDock
+          :mode="mode"
+          :warning-seconds="showAlert ? alertSeconds : 0"
+          :labels="dockLabels"
+          @update:mode="mode = $event"
+          @update:warning-seconds="setWarning"
+        />
       </div>
     </div>
 
@@ -33,10 +51,14 @@ import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
+import ModuleAlertFrame from "@/components/ModuleAlertFrame.vue";
+import ModuleTimerDock from "@/components/ModuleTimerDock.vue";
 import TimerEndActionDialogs from "@/components/TimerEndActionDialogs.vue";
 import { playBeep } from "@/helpers/AudioBeep";
 import $userdata from "@/helpers/UserData";
+import $appdata from "@/helpers/AppData";
 import { useModuleProjection } from "@/composables/useModuleProjection";
+import { useModuleI18n } from "@/composables/useModuleI18n";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useTimerEndAction } from "@/composables/useTimerEndAction";
@@ -46,7 +68,7 @@ import { MediaEnum } from "@/enums/MediaEnum";
 $userdata.setIfNull(KEYS.MODULES.TIMER.END_ACTION, MediaEnum.NONE);
 
 const { show_format } = useModuleFormat("timer", manifest);
-const { rootStyle, textStyle, alertStyle, bgImage, imageStyle, container } =
+const { rootStyle, textStyle, alertStyle, warningStyle, bgImage, imageStyle, container } =
   useModuleBodyStyle("timer");
 const endAction = useTimerEndAction("timer", KEYS.MODULES.TIMER);
 
@@ -83,7 +105,13 @@ const alarmed = ref<boolean>(false);
 let timer: ReturnType<typeof setInterval> | null = null;
 
 const mode = computed<TimerMode>({
-  get: () => $userdata.get<TimerMode>(KEYS.MODULES.TIMER.MODE, "up") ?? "up",
+  /*
+   * Padrão "down", o mesmo da ribbon (manifest) e do Temporizador de Culto. Com
+   * "up" aqui, quem nunca mexeu no seletor via "Regressivo" na ribbon enquanto
+   * o módulo contava progressivo: 00:00:00 parado ao definir a hora, subindo
+   * ao iniciar.
+   */
+  get: () => $userdata.get<TimerMode>(KEYS.MODULES.TIMER.MODE, "down") ?? "down",
   set: (v: TimerMode) => $userdata.set(KEYS.MODULES.TIMER.MODE, v),
 });
 
@@ -115,11 +143,59 @@ const alertActive = computed<boolean>(
     (seconds.value > 0 || alarmed.value)
 );
 
+const { tm } = useModuleI18n("timer");
+/*
+ * Cor do número (e da moldura): "Cor do aviso" nos segundos de destaque,
+ * "Cor do alerta" só depois do horário — as duas da Formatação. Antes, o destaque já pintava de vermelho
+ * enquanto a moldura ficava amarela.
+ */
+const displayColor = computed<string | undefined>(() => {
+  // Passou do horário: vermelho mesmo com o aviso em "Não".
+  if (mode.value === "down" && seconds.value <= 0 && alarmed.value) return alertStyle.value.color;
+  return alertActive.value ? warningStyle.value.color : undefined;
+});
+const displayColorStyle = computed(() =>
+  displayColor.value ? { color: displayColor.value } : null
+);
+
+function setWarning(value: number): void {
+  // "Não" desliga o destaque; os outros botões ligam e definem os segundos.
+  $userdata.set(KEYS.MODULES.TIMER.SHOW_ALERT, value > 0);
+  if (value > 0) $userdata.set(KEYS.MODULES.TIMER.ALERT_SECONDS, value);
+}
+
+const dockLabels = computed(() => ({
+  mode: tm("ribbon.mode"),
+  up: tm("mode.up"),
+  down: tm("mode.down"),
+  warning: tm("ribbon.warning"),
+  warnings: ["off", "m1", "m2", "m5", "m10"].map((k) => tm(`warning.${k}`)),
+}));
+
+const overtime = computed<boolean>(
+  () => $userdata.get<boolean>(KEYS.MODULES.TIMER.COUNT_OVERTIME, true) !== false
+);
+const flashBorders = computed<boolean>(
+  () => $userdata.get<boolean>(KEYS.MODULES.TIMER.FLASH_BORDERS, true) !== false
+);
+
+/*
+ * Aviso de tempo para a moldura (tela e telão): amarelo nos segundos de
+ * destaque, vermelho depois do zero. Só com a contagem iniciada — parado,
+ * mesmo perto do horário, nada pisca no telão.
+ */
+const alertLevel = computed<"" | "warning" | "danger">(() => {
+  if (mode.value !== "down" || startedAt.value === null) return "";
+  if (seconds.value <= 0) return alarmed.value ? "danger" : "";
+  return alertActive.value ? "warning" : "";
+});
+
 const display = computed<string>(() => {
   const abs = Math.abs(seconds.value);
   const h = Math.floor(abs / 3600);
   const m = Math.floor((abs % 3600) / 60);
   const s = abs % 60;
+  // Negativo é tempo excedido: "-00:02:10".
   const sign = seconds.value < 0 ? "-" : "";
 
   return `${sign}${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
@@ -132,12 +208,13 @@ const projecao = computed<string>(() => {
 watch(mode, () => reset());
 
 watch(
-  [projecao, alertActive],
+  [projecao, alertActive, alertLevel, flashBorders],
   () => {
     projection.emit({
       text: projecao.value,
       active: true,
-      color: alertActive.value ? alertStyle.value.color : undefined,
+      color: displayColor.value,
+      alert: flashBorders.value && alertLevel.value ? alertLevel.value : undefined,
     });
   },
   { immediate: true }
@@ -158,15 +235,21 @@ function getTargetDate(): Date {
   return target;
 }
 
-function getDurationUntilTarget(): number {
-  const now = new Date();
+/*
+ * Segundos até o horário. Já passou há até 12 h: é o horário de hoje que
+ * passou (negativo). Passou há mais que isso: é o de amanhã (ex.: 01:00
+ * definido às 23:00). Antes, qualquer horário já passado virava o de amanhã,
+ * e Reiniciar depois do sermão mostrava 23:59:xx no telão.
+ */
+function secondsUntilTarget(): number {
+  const now = Date.now();
   const target = getTargetDate();
+  if (now - target.getTime() > 12 * 3600 * 1000) target.setDate(target.getDate() + 1);
+  return Math.ceil((target.getTime() - now) / 1000);
+}
 
-  if (target.getTime() <= now.getTime()) {
-    target.setDate(target.getDate() + 1);
-  }
-
-  return Math.max(0, Math.ceil((target.getTime() - now.getTime()) / 1000));
+function getDurationUntilTarget(): number {
+  return Math.max(0, secondsUntilTarget());
 }
 
 function updateFromTargetTime(): void {
@@ -203,11 +286,13 @@ function updateRunningTime(): void {
     return;
   }
 
-  seconds.value = Math.max(durationSeconds.value - elapsedSeconds, 0);
+  const left = durationSeconds.value - elapsedSeconds;
+  seconds.value = overtime.value ? left : Math.max(left, 0);
 
-  if (seconds.value <= 0 && !alarmed.value) {
+  if (left <= 0 && !alarmed.value) {
     alarmed.value = true;
-    pause();
+    // Com tempo excedido a contagem segue (-00:00:01…); sem ele, para no zero.
+    if (!overtime.value) pause();
     playAlarm();
     endAction.triggerTimerEndAction();
   }
@@ -222,8 +307,14 @@ function toggle(): void {
 }
 
 function start(): void {
-  alarmed.value = false;
-  durationSeconds.value = getDurationUntilTarget();
+  /*
+   * Retomar depois de pausar no tempo excedido segue contando o excedido sem
+   * disparar de novo o bipe e a ação "Ao terminar".
+   */
+  const resumingOvertime = alarmed.value && overtime.value && mode.value === "down";
+  alarmed.value = resumingOvertime;
+  // Regressivo aceita horário já passado: começa direto no excedido (ou no zero).
+  durationSeconds.value = mode.value === "down" ? secondsUntilTarget() : getDurationUntilTarget();
   startedAt.value = Date.now();
   seconds.value = mode.value === "down" ? durationSeconds.value : 0;
   running.value = true;
@@ -248,9 +339,27 @@ function reset(): void {
   updateFromTargetTime();
 }
 
+// Fechar zera: com a contagem só pausada, a borda de aviso ficava no telão.
+// O horário continua salvo, então reabrir e iniciar retoma do ponto certo.
 function close(): void {
-  pause();
+  reset();
 }
+
+/*
+ * O X da aba fecha o módulo por Modules.close(), sem passar pelo @close do
+ * ModuleContainer — e o componente segue vivo no KeepAlive. Sem isto, a
+ * contagem continuava escondida e a borda ficava pulsando no telão.
+ */
+watch(
+  () => $appdata.get(`modules.timer.show`),
+  (shown) => {
+    if (shown === false) close();
+  }
+);
+
+// Fechar o app com a contagem rodando deixava a chave em "true", e o botão da
+// ribbon abria em "Pausar" sem nada contando.
+$userdata.set(KEYS.MODULES.TIMER.RUNNING, false);
 
 onBeforeUnmount(() => {
   if (timer !== null) clearInterval(timer);
@@ -263,7 +372,16 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
+.timer-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
 .timer-stage {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;

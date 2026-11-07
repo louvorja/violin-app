@@ -50,6 +50,7 @@ export const module: Module = {
     text_shadow: { type: "boolean", default: false },
     text_shadow_color: { type: "color", default: "#000000" },
     text_shadow_blur: { type: "font-size", default: 4 },
+    warning_color: { type: "color", default: "#F59E0B" },
     alert_color: { type: "color", default: "#E74C3C" },
     background_color: { type: "color", default: "#000000" },
     border_spacing: { type: "border-spacing", default: 10 },
@@ -118,28 +119,42 @@ export const contextualPages: RibbonPage[] = [
         title: "ribbon.groups.time",
         buttons: [
           {
-            id: `${moduleId}_mode`,
-            type: "select",
-            optionKey: KEYS.MODULES.STOPWATCH.MODE,
-            label: `${modulePath}.ribbon.mode`,
-            defaultValue: "up",
-            options: [
-              { value: "up", label: `${modulePath}.mode.up` },
-              { value: "down", label: `${modulePath}.mode.down` },
-            ],
-          },
-          {
             id: `${moduleId}_set_time`,
             customButton: TimeDurationInput,
             optionKey: KEYS.MODULES.STOPWATCH.TARGET_SECONDS,
             label: `${modulePath}.ribbon.set_time`,
             defaultValue: 600,
           },
+        ],
+      },
+      {
+        /*
+         * As três opções juntas, uma embaixo da outra. O modo e o aviso
+         * desceram para a barra de baixo da tela (ModuleTimerDock), a um
+         * clique; aqui fica só o que se configura uma vez.
+         */
+        id: "ctx_stopwatch_options",
+        title: `${modulePath}.ribbon.options`,
+        buttons: [
           {
             id: `${moduleId}_show_seconds`,
             type: "checkbox",
             optionKey: KEYS.MODULES.STOPWATCH.SHOW_SECONDS,
             label: `${modulePath}.ribbon.show_seconds`,
+            defaultValue: true,
+          },
+          {
+            id: `${moduleId}_count_overtime`,
+            type: "checkbox",
+            optionKey: KEYS.MODULES.STOPWATCH.COUNT_OVERTIME,
+            label: `${modulePath}.ribbon.count_overtime`,
+            defaultValue: true,
+          },
+          {
+            id: `${moduleId}_flash_borders`,
+            type: "checkbox",
+            optionKey: KEYS.MODULES.STOPWATCH.FLASH_BORDERS,
+            label: `${modulePath}.ribbon.flash_borders`,
             defaultValue: true,
           },
         ],

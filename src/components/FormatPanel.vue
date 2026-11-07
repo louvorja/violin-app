@@ -93,6 +93,7 @@ const FIELD_LABEL_KEYS = {
   text_border_opacity: "components.customization.text_border_opacity",
   text_border_radius: "components.customization.text_border_radius",
   text_border_width: "components.customization.text_border_width",
+  warning_color: "components.customization.warning_color",
   alert_color: "components.customization.alert_color",
   background_color: "components.customization.color",
   border_spacing: "components.customization.border",
