@@ -5,6 +5,7 @@ import pt from "@/lang/pt.json";
 
 const state = vi.hoisted(() => ({
   desktop: true,
+  connectionError: "",
   access: { writable: true, shared: true },
   locations: vi.fn(),
   clearFiles: vi.fn(),
@@ -53,8 +54,8 @@ vi.mock("@/composables/useSyncManager", async () => {
     CatalogIncompleteError: class extends Error {},
     useSyncManager: () => ({
       ftpChecking: ref(false),
-      ftpOk: ref(true),
-      ftpError: ref(null),
+      ftpOk: ref(!state.connectionError),
+      ftpError: ref(state.connectionError),
       scanProgress: ref({ done: 0, total: 0 }),
       bundleInstalling: ref(false),
       bundlePercent: ref(0),
@@ -139,14 +140,27 @@ async function storageTab() {
 beforeEach(() => {
   vi.clearAllMocks();
   state.desktop = true;
+  state.connectionError = "";
   state.access = { writable: true, shared: true };
   state.locations.mockImplementation(async () => ({ access: { media: { ...state.access } } }));
   state.confirm.mockResolvedValue(true);
-  state.yesno.mockImplementation((_: string, callback: (_value: string) => void) => callback("yes"));
+  state.yesno.mockImplementation((_: string, callback: (_value: string) => void) =>
+    callback("yes")
+  );
 });
 afterEach(() => wrapper?.unmount());
 
 describe("manutenção do acervo na tela de downloads", () => {
+  it("mostra a falta de conexão em texto normal e identifica o hinário completo", async () => {
+    state.desktop = false;
+    state.connectionError = pt.options.collections_download.network_error;
+    await render();
+    expect(wrapper.get(".opt-connection-error").text()).toBe(state.connectionError);
+    expect(wrapper.find(".opt-connection-box").exists()).toBe(false);
+    expect(wrapper.get(".opt-connection-badge").text()).toBe("Sem conexão");
+    expect(wrapper.get(".opt-stat-value").text()).toContain("Hinário completo");
+  });
+
   it.each([
     [{ writable: true, shared: true }, pt.options.storage.shared_hint],
     [{ writable: false, shared: false }, pt.options.storage.read_only_hint],

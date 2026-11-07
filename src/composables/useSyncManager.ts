@@ -1,6 +1,7 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { classifyLocalEnvironmentError } from "@/helpers/LocalEnvironmentErrors";
+import { classifyNetworkError } from "@/helpers/Http";
 import Platform from "@/helpers/Platform";
 import Database from "@/helpers/Database";
 import $idb from "@/helpers/IndexedDB";
@@ -290,6 +291,13 @@ export function useSyncManager() {
 
   // ─── FTP ────────────────────────────────────────────────────────
 
+  function connectionErrorMessage(error: unknown): string {
+    if (classifyNetworkError(error) === "network") {
+      return t("options.collections_download.network_error");
+    }
+    return error instanceof Error ? error.message : String(error);
+  }
+
   /**
    * @param force ignora o resultado em cache (botão "Verificar conexão").
    * Só o sucesso é cacheado — estando offline, cada abertura tenta de novo.
@@ -331,11 +339,13 @@ export function useSyncManager() {
           ftpError.value = r.msg;
         }
       } else {
-        ftpError.value = r.error || "Disconnected";
+        ftpError.value = r.error
+          ? connectionErrorMessage(r.error)
+          : t("options.collections_download.disconnected");
       }
     } catch (e) {
       console.error("[useSyncManager] checkFtp → exceção:", e);
-      ftpError.value = (e as Error).message;
+      ftpError.value = connectionErrorMessage(e);
     } finally {
       ftpChecking.value = false;
       ftpOkUntil = ftpOk.value ? Date.now() + FTP_OK_TTL_MS : 0;

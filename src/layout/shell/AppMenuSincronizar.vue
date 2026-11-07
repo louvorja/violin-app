@@ -17,7 +17,6 @@
             'opt-connection-status--checking': ftpChecking,
           }"
         >
-          <div v-if="ftpErrorText" class="opt-connection-box">{{ ftpErrorText }}</div>
           <span class="opt-connection-badge">
             {{
               ftpChecking
@@ -28,6 +27,9 @@
             }}
           </span>
         </div>
+        <p v-if="ftpErrorText" class="opt-hint opt-connection-error" role="status">
+          {{ ftpErrorText }}
+        </p>
         <div class="opt-folder-actions">
           <button
             type="button"
