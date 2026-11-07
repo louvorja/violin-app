@@ -48,7 +48,7 @@ describe("aviso persistente de atualização PWA", () => {
     await nextTick();
 
     expect(wrapper.text()).toContain("Atualização do app pronta");
-    expect(wrapper.text()).toContain("Salve suas alterações");
+    expect(wrapper.text()).toContain("aplicada automaticamente");
     expect(probe.apply).not.toHaveBeenCalled();
     await wrapper.get("button").trigger("click");
     expect(probe.apply).toHaveBeenCalledOnce();

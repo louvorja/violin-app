@@ -470,7 +470,7 @@
       "pwa_retry": "Tentar atualizar novamente",
       "pwa_unsupported": "Este navegador não oferece atualizações offline do app.",
       "pwa_apply": "Atualizar e recarregar",
-      "pwa_reload_hint": "Atualize agora para receber as correções. Salve suas alterações antes de recarregar. Ao abrir o app novamente, o código pronto será aplicado automaticamente.",
+      "pwa_reload_hint": "A atualização será aplicada automaticamente quando não houver reprodução, apresentação, edição ou downloads em andamento.",
       "pwa_blocked": "Encerre apresentações, reprodução de mídia e tarefas. Salve e feche o editor antes de atualizar.",
       "app_update_button": "Baixar nova versão (v{version})",
       "app_install_title": "Instalar atualização",

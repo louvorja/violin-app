@@ -143,6 +143,30 @@ describe("aplicação PWA preserva o trabalho atual", () => {
       callback({ status: "ready", ready: true, lastCheckedAt: null })
     );
 
+  it("aplica uma atualização detectada em segundo plano sem clique ou troca de aba", async () => {
+    setup();
+    ready();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.applied).toHaveBeenCalledOnce();
+    expect(h.flush).toHaveBeenCalledOnce();
+    expect(h.check).not.toHaveBeenCalled();
+  });
+
+  it("a atualização automática aguarda o trabalho terminar e a janela ficar visível", async () => {
+    setup();
+    h.playing = true;
+    ready();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.flush).not.toHaveBeenCalled();
+    h.playing = false;
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.flush).not.toHaveBeenCalled();
+    visibility.mockRestore();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.applied).toHaveBeenCalledOnce();
+  });
+
   it("recupera código após terminar a reprodução sem exigir novo clique", async () => {
     setup();
     h.playing = true;

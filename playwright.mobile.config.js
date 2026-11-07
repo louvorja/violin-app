@@ -13,7 +13,11 @@ const fixtureEnv = { ...base.webServer.env, VITE_TARGET: "web" };
 
 export default defineConfig({
   ...base,
-  testMatch: ["mobile-web.spec.js", "media-fullscreen.mobile.spec.js"],
+  testMatch: [
+    "mobile-web.spec.js",
+    "media-fullscreen.mobile.spec.js",
+    "pwa-auto-update.mobile.spec.js",
+  ],
   outputDir: "./test-results/mobile-playwright",
   use: {
     ...base.use,
@@ -34,7 +38,7 @@ export default defineConfig({
     },
     {
       name: "iphone-webkit",
-      testMatch: "media-fullscreen.mobile.spec.js",
+      testMatch: ["media-fullscreen.mobile.spec.js", "pwa-auto-update.mobile.spec.js"],
       use: { ...devices["iPhone 13"] },
     },
   ],

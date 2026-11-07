@@ -258,7 +258,7 @@ export default async ({ mode }) => {
     plugins.push(
       VitePWA({
         // Ativa o SW também para clientes legados. O documento só recarrega
-        // pela ação do operador em PwaUpdates; não importar o client virtual.
+        // após a guarda de atividade em usePwaUpdates; não importar o client virtual.
         registerType: "autoUpdate",
         injectRegister: false,
         devOptions: {

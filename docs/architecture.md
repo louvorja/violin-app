@@ -64,8 +64,10 @@ termine depois. O diagnóstico mantém a etapa e distingue `TimeoutError`;
 `update_status` preserva o estado textual no PostHog.
 
 A Shell e a seção Aplicativo em Atualizações avisam quando é preciso recarregar.
-A aplicação manual, a recuperação ao retomar o app e a recuperação de imports
-de código/CSS que falharam aguardam as escritas de liturgia e finalizam o save web pendente
+A atualização pronta é aplicada automaticamente assim que a janela estiver visível
+e sem trabalho ativo, inclusive se o download terminar após o boot ou numa verificação
+periódica. A aplicação manual e a recuperação de imports de código/CSS que falharam
+usam a mesma guarda: aguardam as escritas de liturgia e finalizam o save web pendente
 das preferências; fica bloqueada durante apresentação, reprodução, tarefas e
 enquanto o editor de slides está aberto ou há um campo/modal em edição. A recuperação
 solicitada fica pendente até o código novo estar pronto e o trabalho terminar;
