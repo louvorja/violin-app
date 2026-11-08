@@ -76,15 +76,7 @@ const isMobileWeb = computed(
 // Opened system modules also need their manifest, even when hidden from the Ribbon.
 const modules = getAllModules;
 const openModules = computed({
-  get() {
-    const modules = $appdata.get("modules") || {};
-    const skip = new Set(["media", "lyric", "album"]);
-    const order = $userdata.get(KEYS.MODULES.OPEN_ORDER, []);
-    const orderMap = new Map(order.map((id, i) => [id, i]));
-    return Object.values(modules)
-      .filter((m) => m && m.show === true && !skip.has(m.id) && m.popup !== true)
-      .sort((a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity));
-  },
+  get: () => $modules.tabs(),
   set() {},
 });
 

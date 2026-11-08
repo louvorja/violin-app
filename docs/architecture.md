@@ -759,6 +759,11 @@ Hotkeys não age. Por isso o `before-input-event` da janela principal
 (`electron/main/closeTabKey.js`) cancela a tecla nos três sistemas e a entrega ao Hotkeys
 pelo mesmo evento sintético do `/api/keyboard`; onde ele não age, nada fecha.
 
+A barra de abas, o Ctrl+Tab e o Ctrl+W leem as abas de `Modules.tabs()`, na ordem da
+barra (a que o operador arrasta). A ordem de registro dos módulos é alfabética por pasta,
+e usada por engano fazia o Ctrl+Tab saltar e o Ctrl+W fechar a aba errada. Fechar a aba
+ativa passa para a da direita; fechando a última, para a da esquerda.
+
 Tecla que só age com mídia aberta passa por `_ifMedia` com `preventDefault: false`: é ele
 que cancela quando age. Com o cancelamento automático do Hotkeys, PageUp não rolava lista
 nenhuma e Ctrl+← não pulava palavra em campo nenhum, com ou sem música.

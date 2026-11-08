@@ -603,41 +603,6 @@ if (import.meta.env.DEV) {
 // Helpers para obter o módulo ativo e a referência ao shell
 // ---------------------------------------------------------------------------
 
-/** Retorna o id do módulo visível mais recente (exceto media/lyric/album). */
-function _getActiveModuleId() {
-  const modules = AppData.get("modules") || {};
-  const skip = new Set(["media", "lyric", "album"]);
-  // Percorre as chaves em ordem reversa de inserção (último aberto)
-  const ids = Object.keys(modules).reverse();
-  for (const id of ids) {
-    if (skip.has(id)) continue;
-    if (modules[id]?.show === true) return id;
-  }
-  return null;
-}
-
-/** Retorna a lista de módulos embedded abertos (excluindo popups e mídia). */
-function _getOpenEmbeddedModules() {
-  const modules = AppData.get("modules") || {};
-  const skip = new Set(["media", "lyric", "album"]);
-  return Object.values(modules)
-    .filter((m) => m && m.show === true && !skip.has(m.id) && m.popup !== true)
-    .sort((a, b) => a.order - b.order);
-}
-
-/** Alterna para o próximo módulo aberto (direction: 1 = próximo, -1 = anterior). */
-function _cycleModule(direction) {
-  const openModules = _getOpenEmbeddedModules();
-  if (openModules.length < 2) return;
-  const activeId = AppData.get("active_module");
-  const currentIndex = openModules.findIndex((m) => m.id === activeId);
-  if (currentIndex === -1) {
-    Modules.open(openModules[0].id);
-    return;
-  }
-  const nextIndex = (currentIndex + direction + openModules.length) % openModules.length;
-  Modules.open(openModules[nextIndex].id);
-}
 function _mediaIsActive() {
   return AppData.get("modules.media.show", false) || AppData.get("modules.media.minimized", false);
 }
@@ -2965,31 +2930,21 @@ $storage.hydrate().then(async () => {
       }
     );
 
-    // Ctrl+Tab: próximo módulo aberto
-    Hotkeys.register(
-      HOTKEY.NEXT_MODULE,
-      () => {
-        _cycleModule(1);
-      },
-      {
-        context: "global",
-        description: "hotkeys.ctrl_tab",
-        group: "general",
-      }
-    );
-
-    // Ctrl+Shift+Tab: módulo anterior
-    Hotkeys.register(
-      HOTKEY.PREV_MODULE,
-      () => {
-        _cycleModule(-1);
-      },
-      {
-        context: "global",
-        description: "hotkeys.shift_ctrl_tab",
-        group: "general",
-      }
-    );
+    // Ctrl+Tab / Ctrl+Shift+Tab: próxima / anterior aba, na ordem da barra. Vale no
+    // campo de texto: a aba que chega põe o cursor na busca, e o Ctrl+Tab seguinte
+    // não pode parar ali.
+    Hotkeys.register(HOTKEY.NEXT_MODULE, () => Modules.cycleTab(1), {
+      context: "global",
+      description: "hotkeys.ctrl_tab",
+      group: "general",
+      allowInForm: true,
+    });
+    Hotkeys.register(HOTKEY.PREV_MODULE, () => Modules.cycleTab(-1), {
+      context: "global",
+      description: "hotkeys.shift_ctrl_tab",
+      group: "general",
+      allowInForm: true,
+    });
 
     // --- Navegação de slides (contexto: media ativa) ---
 
@@ -3189,7 +3144,7 @@ $storage.hydrate().then(async () => {
     Hotkeys.register(
       HOTKEY.LITURGY_NEW_ITEM,
       () => {
-        if (_getActiveModuleId() !== ModuleEnum.LITURGY) return;
+        if (AppData.get("active_module") !== ModuleEnum.LITURGY) return;
         Broadcast.send(BROADCAST_TYPE.LITURGY_RIBBON_ACTION, { action: "add" });
       },
       {
