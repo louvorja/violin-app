@@ -2,12 +2,16 @@
  * Formato `.llja` (Liturgia LouvorJA): um ZIP com a liturgia e os arquivos que
  * ela usa, para montar o culto num computador e abrir em outro.
  *
- *   liturgia.json   o mesmo JSON do export antigo (`name`, `items`), mais
- *                   `format`, `version`, `color` e a lista `files`;
- *   arquivos/       um arquivo por item do tipo "arquivo" que pôde ser lido.
+ * É o mesmo pacote do LouvorJA Classic (louvorja/desktop, `uLiturgiaLlja.pas`),
+ * para um programa abrir o arquivo do outro:
  *
- * O `.json` de antes só levava o caminho do arquivo (ou a referência ao que o
- * navegador guardou), e no outro computador o item aparecia mas não abria.
+ *   liturgia.json   o JSON de troca: `{ schema: 1, name, color, exportedAt, items }`
+ *                   (o Classic também lê `liturgia.lja` com esse nome antigo);
+ *   arquivos/       os arquivos dos itens do tipo "arquivo".
+ *
+ * Dentro do pacote, o item de arquivo tem `dir` relativo ao pacote
+ * (`arquivos/foto.jpg`) e `dir_info` "L". O "L" só existe aí: ao importar, o
+ * arquivo é guardado no aparelho e o item volta a ser um arquivo comum ("E").
  *
  * Leitura e gravação dos bytes entram por parâmetro (`readFile`/`storeFile`):
  * o formato não depende de onde o app guarda os arquivos, e os testes não
@@ -17,10 +21,13 @@ import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { LiturgyItem } from "@/types/Liturgy";
 
 export const LLJA_EXT = "llja";
-export const LLJA_FORMAT = "louvorja-liturgy";
-export const LLJA_VERSION = 1;
+/** Versão do JSON de troca. Ausente vale 1; outra, o arquivo é recusado (como no Classic). */
+export const LLJA_SCHEMA = 1;
 export const LLJA_MANIFEST = "liturgia.json";
+const LLJA_MANIFEST_ALT = "liturgia.lja";
 const FILES_DIR = "arquivos/";
+/** `dir_info` de item cujo `dir` é relativo ao pacote. */
+export const DIR_INFO_PACKAGE = "L";
 
 /** Um arquivo de item, como entra no pacote. */
 export interface PackedFile {
@@ -28,23 +35,12 @@ export interface PackedFile {
   data: Blob;
 }
 
-export interface LljaFileEntry {
-  /** `id` do item que usa o arquivo. */
-  item: string;
-  /** Caminho dentro do ZIP (`arquivos/...`). */
-  path: string;
-  /** Nome original, com extensão. */
-  name: string;
-}
-
 export interface LljaManifest {
-  format: typeof LLJA_FORMAT;
-  version: number;
+  schema: number;
   name: string;
   color?: string;
   exportedAt: string;
   items: LiturgyItem[];
-  files: LljaFileEntry[];
 }
 
 export interface BuildResult {
@@ -123,7 +119,6 @@ export async function buildLlja(
   const zip = new JSZip();
   const missing: string[] = [];
   const localOnly: string[] = [];
-  const files: LljaFileEntry[] = [];
   const usedPaths = new Set<string>();
 
   const items: LiturgyItem[] = [];
@@ -149,10 +144,11 @@ export async function buildLlja(
         }
         usedPaths.add(path.toLowerCase());
         zip.file(path, packed.data, { binary: true });
-        files.push({ item: item.id, path, name: fileName });
-        // No outro computador o caminho daqui não existe: fica só o nome,
-        // e o import troca pela referência de onde guardou o arquivo.
-        item.dir = fileName;
+        // No outro computador o caminho daqui não existe: o item aponta para
+        // dentro do pacote, como o Classic grava.
+        item.dir = path;
+        item.dir_info = DIR_INFO_PACKAGE;
+        item.subitem = `Arquivo ${path.slice(FILES_DIR.length)}`;
         delete item.ref_id;
       } else {
         missing.push(displayName(item));
@@ -164,13 +160,11 @@ export async function buildLlja(
   }
 
   const manifest: LljaManifest = {
-    format: LLJA_FORMAT,
-    version: LLJA_VERSION,
+    schema: LLJA_SCHEMA,
     name: input.name,
     ...(input.color ? { color: input.color } : {}),
     exportedAt: new Date().toISOString(),
     items,
-    files,
   };
   zip.file(LLJA_MANIFEST, JSON.stringify(manifest, null, 2));
 
@@ -196,9 +190,26 @@ export interface ReadResult {
   files: Map<string, PackedFile>;
 }
 
+/** `arquivos\foto.jpg` (Windows) e `arquivos/foto.jpg` são o mesmo lugar. */
+function normalizePath(path: string): string {
+  return path.trim().replace(/\\/g, "/");
+}
+
 /**
- * Abre um `.llja`. Lê só os caminhos que o `liturgia.json` lista, e só dentro
- * de `arquivos/` — nada do ZIP é gravado em disco por aqui.
+ * Caminho de dentro do pacote que pode ser lido: relativo, sem unidade, sem
+ * subir de pasta e dentro de `arquivos/`. ZIP de terceiro é entrada não confiável.
+ */
+export function safePackagePath(path: string): string | null {
+  const p = normalizePath(path);
+  if (!p || p.includes(":") || p.startsWith("/")) return null;
+  if (p.split("/").some((part) => part === "..")) return null;
+  if (!p.toLowerCase().startsWith(FILES_DIR)) return null;
+  return p;
+}
+
+/**
+ * Abre um `.llja`: devolve o `liturgia.json` e os arquivos que os itens
+ * apontam (`dir_info` "L"). Nada do ZIP é gravado em disco por aqui.
  */
 export async function readLlja(file: Blob): Promise<ReadResult | null> {
   const JSZip = await loadJsZip();
@@ -208,33 +219,35 @@ export async function readLlja(file: Blob): Promise<ReadResult | null> {
   } catch {
     return null;
   }
-  const entry = zip.file(LLJA_MANIFEST);
-  if (!entry) return null;
-  const json = await entry.async("string");
+  // Pacote feito no Windows pode trazer a barra invertida e outra caixa no nome.
+  const entries = new Map<string, import("jszip").JSZipObject>();
+  zip.forEach((path, entry) => {
+    if (!entry.dir) entries.set(normalizePath(path).toLowerCase(), entry);
+  });
 
-  let manifest: Partial<LljaManifest>;
+  const manifest = entries.get(LLJA_MANIFEST) ?? entries.get(LLJA_MANIFEST_ALT);
+  if (!manifest) return null;
+  // Sem o BOM, que o Delphi pode gravar.
+  const json = (await manifest.async("string")).replace(/^\uFEFF/, "");
+
+  let data: { schema?: unknown; items?: unknown };
   try {
-    manifest = JSON.parse(json);
+    data = JSON.parse(json);
   } catch {
     return null;
   }
+  if (data.schema !== undefined && Number(data.schema) !== LLJA_SCHEMA) return null;
+
   const files = new Map<string, PackedFile>();
-  for (const f of Array.isArray(manifest.files) ? manifest.files : []) {
-    if (
-      !f ||
-      typeof f.item !== "string" ||
-      typeof f.path !== "string" ||
-      !f.path.startsWith(FILES_DIR) ||
-      f.path.includes("..")
-    )
-      continue;
-    const data = zip.file(f.path);
-    if (!data) continue;
-    const name = safeFileName(
-      typeof f.name === "string" && f.name ? f.name : f.path.slice(FILES_DIR.length),
-      "arquivo"
-    );
-    files.set(f.item, { name, data: await data.async("blob") });
+  for (const raw of Array.isArray(data.items) ? data.items : []) {
+    const item = raw as Partial<LiturgyItem> | null;
+    if (!item || typeof item.id !== "string" || typeof item.dir !== "string") continue;
+    if (String(item.dir_info || "").toUpperCase() !== DIR_INFO_PACKAGE) continue;
+    const path = safePackagePath(item.dir);
+    const entry = path ? entries.get(path.toLowerCase()) : undefined;
+    if (!path || !entry) continue;
+    const name = safeFileName(path.split("/").pop() || "", "arquivo");
+    files.set(item.id, { name, data: await entry.async("blob") });
   }
   return { json, files };
 }
@@ -252,19 +265,29 @@ export async function attachPackedFiles(
   const failed: string[] = [];
   const out: LiturgyItem[] = [];
   for (const item of items) {
-    const packed = item.tipo === LiturgyItemTypeEnum.ARQUIVO ? files.get(item.id) : undefined;
-    if (!packed) {
+    const inPackage =
+      item.tipo === LiturgyItemTypeEnum.ARQUIVO &&
+      String(item.dir_info || "").toUpperCase() === DIR_INFO_PACKAGE;
+    if (!inPackage) {
       out.push(item);
+      continue;
+    }
+    // O "L" não sai do pacote: guardado ou não, o item volta a ser arquivo comum.
+    const plain = { ...item, dir_info: "E" };
+    const packed = files.get(item.id);
+    if (!packed) {
+      failed.push(displayName(item));
+      out.push(plain);
       continue;
     }
     try {
       const stored = await storeFile(
         new File([packed.data], packed.name, { type: packed.data.type || "" })
       );
-      out.push({ ...item, ...stored });
+      out.push({ ...plain, ...stored });
     } catch {
       failed.push(displayName(item));
-      out.push(item);
+      out.push(plain);
     }
   }
   return { items: out, failed };

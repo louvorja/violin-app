@@ -120,6 +120,48 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
     return parsed ? { ...parsed, files: new Map() } : null;
   }
 
+  /**
+   * `.json` da semana exportado pelo Classic: `{ schema, liturgies: [...] }`,
+   * uma liturgia por dia. Cada uma entra na biblioteca com o nome que trouxe
+   * (numerado se já existir), sem perguntas — como no `.ja`. O vínculo de dia
+   * não é trazido: carregaria liturgias sozinho nos dias de quem importou.
+   *
+   * Devolve quantas entraram, ou `null` se o arquivo não é uma coleção.
+   */
+  async function importCollection(text: string, ctx: Context): Promise<number | null> {
+    let data: { liturgies?: unknown };
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return null;
+    }
+    if (!data || !Array.isArray(data.liturgies)) return null;
+    const usados = new Set((await library.list()).map((l) => l.name.toLowerCase()));
+    let count = 0;
+    let items = 0;
+    for (const [index, raw] of data.liturgies.entries()) {
+      const parsed = library.parseImport(JSON.stringify(raw));
+      if (!parsed || parsed.items.length === 0) continue;
+      const base = parsed.name.trim() || nomePelaPosicao(index);
+      let nome = base;
+      for (let n = 1; usados.has(nome.toLowerCase()); n += 1) nome = `${base} ${n}`;
+      usados.add(nome.toLowerCase());
+      await library.save({
+        name: nome,
+        ...(parsed.color ? { color: parsed.color } : {}),
+        items: parsed.items,
+      });
+      count += 1;
+      items += parsed.items.length;
+    }
+    Telemetry.track("liturgy_import_completed", {
+      ...ctx.properties,
+      liturgy_count: count,
+      item_count: items,
+    });
+    return count;
+  }
+
   type Saved = { item: LiturgyLibraryItem | undefined; failed: string[] } | null;
   type Context = { format: "json" | "llja"; properties: ReturnType<typeof telemetryProperties> };
 
@@ -173,6 +215,10 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
           ctx.format = "llja";
         ctx.properties = telemetryProperties(file, ctx.format);
         Telemetry.track("liturgy_import_started", ctx.properties);
+        if (ctx.format === "json") {
+          const count = await importCollection(await file.text(), ctx);
+          if (count !== null) return count > 0 ? { collection: count } : { invalid: true as const };
+        }
         const parsed = await parse(file, ctx.format);
         if (!parsed) {
           Telemetry.track("liturgy_import_failed", {
@@ -192,6 +238,10 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
     });
     if ("invalid" in first) {
       invalid();
+      return;
+    }
+    if ("collection" in first) {
+      done();
       return;
     }
 
