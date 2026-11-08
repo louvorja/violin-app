@@ -43,6 +43,7 @@ const { randomUUID } = require("crypto");
 const fs = require("fs-extra");
 const { configureSystemCertificates } = require("./main/systemCertificates.js");
 const { safeSend } = require("./main/safeWebContents.js");
+const { closeTabKeyScript } = require("./main/closeTabKey.js");
 
 // O processo principal usa `https` para updater, catálogo e mídia. No
 // Windows, acrescente as raízes que o SO confia antes de qualquer módulo poder
@@ -897,20 +898,14 @@ function createWindow() {
     console.info("[lifecycle] Janela principal mantida em segundo plano:", projections);
   });
 
-  // ⌘W fecha a aba, como no Chrome. O menu nativo do macOS (Fechar janela)
-  // pegaria a tecla antes da página; aqui ela segue para o Hotkeys do renderer
-  // pelo mesmo evento sintético do /api/keyboard, e ele decide entre a aba e a
-  // janela. Segurar a tecla não repete: não pode ir fechando até a janela.
+  // ⌘W / Ctrl+W fecha a aba, nunca o programa de uma vez: ver closeTabKey.js.
   mainWindow.webContents.on("before-input-event", (event, input) => {
-    if (process.platform !== "darwin" || input.type !== "keyDown") return;
-    if (!input.meta || input.control || input.alt || input.shift) return;
-    if (input.key.toLowerCase() !== "w") return;
+    const script = closeTabKeyScript(input, process.platform);
+    if (script === null) return;
     event.preventDefault();
-    if (input.isAutoRepeat) return;
+    if (!script) return;
     mainWindow.webContents
-      .executeJavaScript(
-        'window.dispatchEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true, bubbles: true, cancelable: true }))'
-      )
+      .executeJavaScript(script)
       .catch(() => { /* janela recarregando ou destruída */ });
   });
 

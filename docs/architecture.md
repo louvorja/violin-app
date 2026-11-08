@@ -751,10 +751,13 @@ for o sistema. No navegador do Mac, ⌘N, ⇧⌘N e ⌘W ficam com o Chrome, ent
 mostra o Ctrl.
 
 ⌘W / Ctrl+W fecha a aba à vista, como no Chrome; sem aba, a janela — pelo mesmo
-`window:close` do botão de fechar, que com projeção no ar só tira a janela da frente. No
-Mac o menu nativo (Fechar janela) pegaria o ⌘W antes da página: o `before-input-event` da
-janela principal (`electron/main.cjs`) cancela a tecla e a entrega ao Hotkeys pelo mesmo
-evento sintético do `/api/keyboard`.
+`window:close` do botão de fechar, que com projeção no ar só tira a janela da frente. O
+app não define menu, e o "Fechar" do menu padrão do Electron usa essa tecla: no Mac ele a
+pega antes da página, e no Windows e no Linux age sempre que a página não a cancela — o
+que acontece com o foco num diálogo, num menu aberto ou com um alerta na tela, onde o
+Hotkeys não age. Por isso o `before-input-event` da janela principal
+(`electron/main/closeTabKey.js`) cancela a tecla nos três sistemas e a entrega ao Hotkeys
+pelo mesmo evento sintético do `/api/keyboard`; onde ele não age, nada fecha.
 
 Tecla que só age com mídia aberta passa por `_ifMedia` com `preventDefault: false`: é ele
 que cancela quando age. Com o cancelamento automático do Hotkeys, PageUp não rolava lista
