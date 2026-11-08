@@ -267,6 +267,8 @@ export default async ({ mode }) => {
         workbox: {
           skipWaiting: true,
           clientsClaim: true,
+          // O Workbox só escuta SKIP_WAITING sem `skipWaiting`; a página envia ao aplicar.
+          importScripts: ["sw-skip-waiting.js"],
           globPatterns: ["**/*.{html,js,css,svg,png,woff,woff2}", "app-build.json"],
           // O conversor de HEIC passa dos 2MiB que o workbox aceita precachear,
           // e o build falha por isso em vez de apenas avisar. Subir o limite

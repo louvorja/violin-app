@@ -56,6 +56,11 @@ Sem rede, a recuperação conserva o registro existente e pode aplicar código j
 guardado; não registra o HTML antigo sobre uma instalação mais recente.
 Antes da interface montar, também acompanha registros tardios e o fim da
 instalação para ativar um SW em espera; só recarrega após terminar a ativação.
+O `sw.js` importa `public/sw-skip-waiting.js`, que atende o `SKIP_WAITING` enviado
+pela página. No Chrome, só esse pedido feito depois da instalação encerra o SW antigo
+assim que ele fica livre. Sem ele, os pedidos da própria página mantinham o antigo
+ativo, e a versão nova esperava até 5 minutos (o limite do Chrome), com a aplicação
+falhando por timeout nesse meio-tempo.
 Falhas de registro, verificação e instalação têm novas tentativas automáticas
 com espera crescente de 15 segundos até 5 minutos, somente online e visível.
 O timeout de 30 segundos limita a espera sem descartar um registro nativo que
