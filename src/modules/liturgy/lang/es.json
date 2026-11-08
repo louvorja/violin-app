@@ -263,7 +263,19 @@
     "weekday_friday": "Viernes",
     "weekday_saturday": "Sábado",
     "manage_success": "Liturgia actualizada.",
-    "import_invalid": "Archivo inválido."
+    "import_invalid": "Archivo inválido.",
+    "exporting": "Exportando liturgia...",
+    "export_success": "Liturgia exportada.",
+    "export_error": "No se pudo exportar la liturgia.",
+    "export_empty": "La liturgia de este día está vacía.",
+    "export_missing": "Exportada, pero estos archivos no se encontraron y se exportaron sin el archivo:",
+    "export_local_only": "Estos ítems usan cosas que solo existen en esta computadora (música personalizada, biblioteca de medios, sonido de fondo, anuncios o superposición) y pueden no abrir en otra:",
+    "import_conflict": "Ya existe una liturgia llamada \"{name}\". ¿Qué desea hacer?",
+    "import_replace": "Reemplazar",
+    "import_as_copy": "Importar como copia",
+    "import_open": "¿Abrir \"{name}\" ahora en {day}?",
+    "import_open_replace": "¿Abrir \"{name}\" ahora en {day}? Los ítems que están allí serán reemplazados.",
+    "import_files_failed": "Liturgia importada, pero {n} archivo(s) no se pudieron guardar en este dispositivo."
   },
   "alerts": {
     "file_choose_again_web": "Este archivo está vinculado a una carpeta del equipo. Edita el ítem de la liturgia y usa Elegir archivo para abrirlo en este navegador.",

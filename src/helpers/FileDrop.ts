@@ -1,5 +1,6 @@
 /**
- * Arrastar um arquivo .slja para dentro do app e projetá-lo.
+ * Arrastar um arquivo .slja para dentro do app e projetá-lo — ou um .llja, que
+ * abre na Liturgia.
  *
  * Vale para a janela principal, no navegador e no Electron. Zonas de soltar dos
  * módulos (biblioteca de mídia, liturgia, fundos) tratam o próprio evento e
@@ -8,6 +9,7 @@
  * principal sairia do ar no meio do culto.
  */
 import { openSlja } from "@/helpers/SljaPlayer";
+import { LLJA_RE, openLiturgyPackage } from "@/helpers/LiturgyFileOpen";
 import $snackbar from "@/helpers/Snackbar";
 import { i18nAtual } from "@/i18n";
 
@@ -77,8 +79,12 @@ export function installFileDrop(): void {
     event.preventDefault();
 
     const files = Array.from(event.dataTransfer?.files ?? []);
+    // Liturgia (.llja) vai para a tela da Liturgia importar.
+    const llja = files.filter((file) => LLJA_RE.test(file.name));
+    for (const file of llja) openLiturgyPackage(file);
     const slja = files.filter((file) => SLJA_RE.test(file.name));
     if (!slja.length) {
+      if (llja.length) return;
       if (files.length) {
         $snackbar.warning(t("messages.drop_slja_invalid", "Só arquivos .slja podem ser abertos aqui."));
       }
