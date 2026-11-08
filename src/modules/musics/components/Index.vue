@@ -219,7 +219,6 @@
                 :has_instrumental_music="item.has_instrumental_music"
                 :custom-song-id="item.custom_song_id"
                 :has-audio="item.has_audio !== false"
-                :show-playlist-menu="true"
                 defer-quick-actions
               />
             </div>

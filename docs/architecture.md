@@ -1242,7 +1242,7 @@ MusicMenuTable → usePlaylists.addSong() → playlist song
 **MusicMenuTable (context menu):**
 
 - Submenu "Adicionar à playlist" com todas as playlists
-- Só aparece quando `showPlaylistMenu={true}` (módulo músicas)
+- Aparece em toda lista de músicas do acervo (Músicas, Hinário, Ctrl+M…); não na música personalizada
 - Marca músicas já existentes na playlist
 
 ---

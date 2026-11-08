@@ -116,6 +116,40 @@ function _parseImportedSong(data: unknown): PlaylistSong | null {
   };
 }
 
+let _hydrating: Promise<void> | null = null;
+
+async function _hydrate(): Promise<void> {
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+  try {
+    _playlists.value = await $docs.getAll<Playlist>(TABLE_PLAYLISTS);
+    _hydrated.value = true;
+    const durationMs = Math.max(
+      0,
+      Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt)
+    );
+    Telemetry.track("music_playlists_hydrated", {
+      playlist_count: _playlists.value.length,
+      songs_count: _playlists.value.reduce((n, p) => n + p.songs.length, 0),
+      duration_ms: durationMs,
+    });
+    Telemetry.histogram("louvorja.music.playlists.hydrate.duration", durationMs, {
+      outcome: "completed",
+    });
+    $dev.write("playlists:hydrated", { count: _playlists.value.length });
+  } catch (e) {
+    $dev.write("playlists:hydrate_error", { error: String(e) });
+    const durationMs = Math.max(
+      0,
+      Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt)
+    );
+    Telemetry.captureException(e, { source: "music_playlists_hydrate" });
+    Telemetry.track("music_playlists_hydrate_failed", { duration_ms: durationMs });
+    Telemetry.histogram("louvorja.music.playlists.hydrate.duration", durationMs, {
+      outcome: "failed",
+    });
+  }
+}
+
 export function usePlaylists() {
   return {
     playlists: _playlists,
@@ -123,41 +157,13 @@ export function usePlaylists() {
     selectedPlaylist,
     hydrated: _hydrated,
 
-    async hydrate(): Promise<void> {
-      if (_hydrated.value) return;
-      const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
-      try {
-        _playlists.value = await $docs.getAll<Playlist>(TABLE_PLAYLISTS);
-        _hydrated.value = true;
-        const durationMs = Math.max(
-          0,
-          Math.round(
-            (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
-          )
-        );
-        Telemetry.track("music_playlists_hydrated", {
-          playlist_count: _playlists.value.length,
-          songs_count: _playlists.value.reduce((n, p) => n + p.songs.length, 0),
-          duration_ms: durationMs,
-        });
-        Telemetry.histogram("louvorja.music.playlists.hydrate.duration", durationMs, {
-          outcome: "completed",
-        });
-        $dev.write("playlists:hydrated", { count: _playlists.value.length });
-      } catch (e) {
-        $dev.write("playlists:hydrate_error", { error: String(e) });
-        const durationMs = Math.max(
-          0,
-          Math.round(
-            (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
-          )
-        );
-        Telemetry.captureException(e, { source: "music_playlists_hydrate" });
-        Telemetry.track("music_playlists_hydrate_failed", { duration_ms: durationMs });
-        Telemetry.histogram("louvorja.music.playlists.hydrate.duration", durationMs, {
-          outcome: "failed",
-        });
-      }
+    /** Uma leitura por sessão: as linhas das listas de música chamam ao montar. */
+    hydrate(): Promise<void> {
+      if (_hydrated.value) return Promise.resolve();
+      _hydrating ??= _hydrate().finally(() => {
+        _hydrating = null;
+      });
+      return _hydrating;
     },
 
     createPlaylist,
