@@ -1639,7 +1639,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { AUTO_THEME_ID, isThemePreference, THEME_IDS } from "@/config/Themes";
 import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
-import { estiloDeFundo } from "@/helpers/BackgroundStyle";
+import { estiloDeFundo, opcoesDeAjuste } from "@/helpers/BackgroundStyle";
 import { FONT } from "@/config/Fonts";
 import { refreshReturnBg, refreshSlideBg } from "@/composables/useSlideStyle";
 
@@ -1743,13 +1743,7 @@ const opcoesIdioma = computed(() => [
   { value: "es", label: "Español" },
 ]);
 
-const opcoesPosicaoFundo = computed(() => [
-  { value: "cover", label: t("options.slides.pos_cover") },
-  { value: "contain", label: t("options.slides.pos_contain") },
-  { value: "center", label: t("options.slides.pos_center") },
-  { value: "stretch", label: t("options.slides.pos_stretch") },
-  { value: "tile", label: t("options.slides.pos_tile") },
-]);
+const opcoesPosicaoFundo = computed(() => opcoesDeAjuste(t));
 
 const opcoesAlinhamento = computed(() => [
   { value: "top", label: t("options.slides.align_top") },

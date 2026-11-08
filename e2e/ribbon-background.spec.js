@@ -38,10 +38,12 @@ test("fundo personalizado: cor, ajuste e imagem cabem na altura da ribbon", asyn
 
     await grupo.locator("#rfps-custom-background").check();
     await expect(grupo.locator('input[type="color"]')).toHaveCount(1);
-    await expect(grupo.locator("select")).toHaveCount(1);
+    const ajuste = '.rfps-select [role="combobox"]';
+    await expect(grupo.locator(ajuste)).toHaveCount(1);
+    await expect(grupo.locator(ajuste)).toContainText("Preencher");
     await expect(grupo.locator(".opt-bg-pick")).toHaveCount(1);
 
-    for (const alvo of ['input[type="color"]', "select", ".opt-bg-pick"]) {
+    for (const alvo of ['input[type="color"]', ajuste, ".opt-bg-pick"]) {
       const box = await grupo.locator(alvo).first().boundingBox();
       expect(box, `${alvo} não renderizou`).not.toBeNull();
       expect(
