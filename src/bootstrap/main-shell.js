@@ -22,6 +22,7 @@ import $alert from "@helpers/Alert";
 import Platform from "@/helpers/Platform";
 import WakeLock from "@/helpers/WakeLock";
 import { installFileDrop } from "@/helpers/FileDrop";
+import { LLJA_RE, openLiturgyPackage, openLiturgyPackagePath } from "@/helpers/LiturgyFileOpen";
 import {
   auditWebStorage,
   migrateLegacyMediaKeys,
@@ -2648,11 +2649,17 @@ $storage.hydrate().then(async () => {
     // recebem comandos pelo BroadcastChannel.
     if (isAuxiliaryRenderer) return;
 
-    // Arquivos .slja que o sistema mandou abrir aqui (duplo clique, "Abrir
-    // com"). Cada um assume a projeção no lugar do anterior, então só o último
-    // de uma entrega em lote importa.
+    // Arquivos que o sistema mandou abrir aqui (duplo clique, "Abrir com").
+    // .llja (liturgia) vai para a Liturgia importar, um por um. .slja assume a
+    // projeção no lugar do anterior, então só o último de um lote importa.
     Platform.onOpenFiles((files) => {
-      const file = files[files.length - 1];
+      for (const file of files.filter((f) => LLJA_RE.test(f))) {
+        openLiturgyPackagePath(file).catch((e) =>
+          console.warn("[openFiles] não foi possível abrir a liturgia:", e)
+        );
+      }
+      const slja = files.filter((f) => !LLJA_RE.test(f));
+      const file = slja[slja.length - 1];
       if (file) void openSlja(Path.local(file), { origin: "system" });
     });
 
@@ -2667,7 +2674,9 @@ $storage.hydrate().then(async () => {
         const handle = params.files?.[params.files.length - 1];
         if (!handle) return;
         try {
-          void openSlja(await handle.getFile(), { origin: "system" });
+          const file = await handle.getFile();
+          if (LLJA_RE.test(file.name)) openLiturgyPackage(file);
+          else void openSlja(file, { origin: "system" });
         } catch (e) {
           console.warn("[launchQueue] não foi possível ler o arquivo:", e);
         }

@@ -80,6 +80,25 @@ export function retainLiturgyFileUrl(url: string, slot: "audio" | "projection"):
   if (previous && previous !== url) releaseLiturgyFileUrl(previous);
 }
 
+/** Bytes e nome de um arquivo guardado, para exportar a liturgia com ele. */
+export async function readLiturgyFile(id: string): Promise<{ name: string; data: Blob } | null> {
+  if (!/^[\da-f-]{36}$/i.test(id)) return null;
+  const raw = await $idb.get<unknown>(DB_TABLE.LITURGY_FILES, id);
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Partial<LiturgyFileRecord>;
+  if (
+    record.id !== id ||
+    typeof record.name !== "string" ||
+    !(record.data instanceof ArrayBuffer) ||
+    !record.data.byteLength
+  )
+    return null;
+  return {
+    name: record.name,
+    data: new Blob([record.data], { type: typeof record.mime === "string" ? record.mime : "" }),
+  };
+}
+
 /** Recria a URL a cada sessão; nunca salva blob URLs na liturgia. */
 export async function resolveLiturgyFile(
   id: string

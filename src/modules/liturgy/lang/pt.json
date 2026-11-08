@@ -249,7 +249,19 @@
     "weekday_friday": "Sexta",
     "weekday_saturday": "Sábado",
     "manage_success": "Liturgia atualizada.",
-    "import_invalid": "Arquivo inválido."
+    "import_invalid": "Arquivo inválido.",
+    "exporting": "Exportando liturgia...",
+    "export_success": "Liturgia exportada.",
+    "export_error": "Não foi possível exportar a liturgia.",
+    "export_empty": "A liturgia deste dia está vazia.",
+    "export_missing": "Exportada, mas estes arquivos não foram encontrados e foram sem o arquivo:",
+    "export_local_only": "Estes itens usam coisas que só existem neste computador (música personalizada, biblioteca de mídia, som de fundo, anúncios ou sobreposição) e podem não abrir em outro:",
+    "import_conflict": "Já existe uma liturgia chamada \"{name}\". O que deseja fazer?",
+    "import_replace": "Substituir",
+    "import_as_copy": "Importar como cópia",
+    "import_open": "Abrir \"{name}\" agora em {day}?",
+    "import_open_replace": "Abrir \"{name}\" agora em {day}? Os itens que estão lá serão substituídos.",
+    "import_files_failed": "Liturgia importada, mas {n} arquivo(s) não puderam ser guardados neste aparelho."
   },
   "alerts": {
     "media_not_found": "Item não encontrado na biblioteca. Ele pode ter sido removido.",

@@ -1,4 +1,5 @@
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
+import { requestLiturgyImport } from "../openRequests";
 import {
   agendaParaPersistir,
   agruparPorBloco,
@@ -777,6 +778,11 @@ export function useLiturgyItems(
     const files = Array.from(e.dataTransfer?.files || []);
     if (!files.length) return;
     for (const file of files) {
+      // Liturgia inteira (.llja) não vira item: entra pelo import, com as perguntas dele.
+      if (/\.llja$/i.test(file.name)) {
+        requestLiturgyImport(file);
+        continue;
+      }
       await _addDroppedFile(file, e);
     }
     items.value = [...items.value];

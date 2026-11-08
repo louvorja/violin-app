@@ -62,7 +62,7 @@ compression: maximum
 asar: true
 
 # ---------------------------------------------------------------------------
-# Associação de arquivos — .slja (apresentação de slides do LouvorJA)
+# Associação de arquivos — .slja (slides) e .llja (liturgia) do LouvorJA
 # ---------------------------------------------------------------------------
 # Faz o sistema reconhecer o formato como do app e oferecê-lo em "Abrir com":
 #   Windows — o NSIS registra no escopo escolhido, como louvorja://;
@@ -79,6 +79,14 @@ fileAssociations:
     description: Apresentação de slides do LouvorJA
     mimeType: application/x-louvorja-slides
     role: Viewer
+  # Liturgia montada em outro computador, com os arquivos dentro (ZIP).
+  # Sem `icon` também: usa o ícone do Violin, e não o do Classic/Piano que o
+  # Windows mostra no .ja.
+  - ext: llja
+    name: Liturgia LouvorJA
+    description: Liturgia do LouvorJA com os arquivos
+    mimeType: application/x-louvorja-liturgy
+    role: Editor
 
 # ---------------------------------------------------------------------------
 # Publicação de releases — GitHub Releases (electron-updater)

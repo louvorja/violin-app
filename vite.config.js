@@ -287,11 +287,11 @@ export default async ({ mode }) => {
           display: "standalone",
           background_color: "#000000",
           theme_color: "#000000",
-          // Chrome/ChromeOS desktop: "Abrir com" LouvorJA para músicas .slja.
+          // Chrome/ChromeOS desktop: "Abrir com" LouvorJA para músicas .slja e liturgias .llja.
           file_handlers: [
             {
               action: process.env.VITE_BASE_URL ?? "/",
-              accept: { "application/zip": [".slja"] },
+              accept: { "application/zip": [".slja", ".llja"] },
             },
           ],
           icons: [
