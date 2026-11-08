@@ -355,6 +355,41 @@ describe("useLiturgyImport — depois de importar", () => {
   });
 });
 
+describe("useLiturgyImport — .json da semana do Classic", () => {
+  it("cada liturgia de `liturgies` entra com o nome que trouxe, numerado se repetir", async () => {
+    list.mockResolvedValue([{ name: "Sábado" }]);
+    const semana = JSON.stringify({
+      schema: 1,
+      exportedAt: "2026-11-05T23:07:04",
+      liturgies: [
+        {
+          name: "Sábado",
+          color: "#AA0000",
+          binding: { type: "day_of_week", value: 6 },
+          items: [{ id: "item_1", tipo: "anotacao", item: "Abertura" }],
+        },
+        { name: "Domingo", items: [{ id: "item_2", tipo: "bloco", item: "Culto" }] },
+        { name: "Segunda-feira", items: [] },
+      ],
+    });
+    const { importFile } = setup();
+    const done = importFile(file("semana.json", semana));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(save.mock.calls.map(([d]) => d)).toEqual([
+      {
+        name: "Sábado 1",
+        color: "#AA0000",
+        items: [expect.objectContaining({ item: "Abertura" })],
+      },
+      { name: "Domingo", items: [expect.objectContaining({ tipo: "bloco" })] },
+    ]);
+    expect(questions).toHaveLength(0);
+    expect(success).toHaveBeenCalledOnce();
+  });
+});
+
 describe("useLiturgyImport — arquivo .ja do Delphi", () => {
   it("cada liturgia do arquivo entra na biblioteca, e o aviso vem uma vez, depois do loader", async () => {
     const { busy, importFile } = setup();

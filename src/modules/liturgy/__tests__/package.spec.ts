@@ -6,7 +6,7 @@ import {
   isLlja,
   readLlja,
   safeFileName,
-  LLJA_FORMAT,
+  safePackagePath,
 } from "../package";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { LiturgyItem } from "@/types/Liturgy";
@@ -94,16 +94,12 @@ describe(".llja — ida e volta", () => {
     const pack = await readLlja(result.blob);
     expect(pack).not.toBeNull();
     const manifest = JSON.parse(pack!.json);
-    expect(manifest).toMatchObject({
-      format: LLJA_FORMAT,
-      version: 1,
-      name: "Culto de Sábado",
-      color: "#AA0000",
-    });
+    // O mesmo envelope do JSON de troca do Classic.
+    expect(manifest).toMatchObject({ schema: 1, name: "Culto de Sábado", color: "#AA0000" });
     expect(manifest.items.map((i: LiturgyItem) => i.id)).toEqual(["nota", "video", "foto", "site"]);
-    // No outro computador o caminho daqui não vale: fica o nome, sem a referência local.
+    // No outro computador o caminho daqui não vale: o item aponta para dentro do pacote.
     const v = manifest.items.find((i: LiturgyItem) => i.id === "video");
-    expect(v.dir).toBe("abertura.mp4");
+    expect(v).toMatchObject({ dir: "arquivos/abertura.mp4", dir_info: "L" });
     const f = manifest.items.find((i: LiturgyItem) => i.id === "foto");
     expect(f.ref_id).toBeUndefined();
     expect(manifest.items.find((i: LiturgyItem) => i.id === "site").dir).toBe("https://a.b/c.pdf");
@@ -118,7 +114,11 @@ describe(".llja — ida e volta", () => {
     });
     expect(failed).toEqual([]);
     expect(stored.sort()).toEqual(["abertura.mp4:VIDEO-BYTES", "foto.jpg:FOTO-BYTES"]);
-    expect(items.find((i) => i.id === "video")!.ref_id).toBe("ref-abertura.mp4");
+    expect(items.find((i) => i.id === "video")).toMatchObject({
+      ref_id: "ref-abertura.mp4",
+      dir: "abertura.mp4",
+      dir_info: "E",
+    });
     expect(items.find((i) => i.id === "nota")).toEqual(nota);
   });
 
@@ -139,7 +139,7 @@ describe(".llja — ida e volta", () => {
       data: new Blob(["x"]),
     }));
     const manifest = JSON.parse((await readLlja(r.blob))!.json);
-    expect(manifest.files.map((f: { path: string }) => f.path)).toEqual([
+    expect(manifest.items.map((i: LiturgyItem) => i.dir)).toEqual([
       "arquivos/abertura.mp4",
       "arquivos/abertura (2).mp4",
     ]);
@@ -156,7 +156,7 @@ describe(".llja — ida e volta", () => {
       }
     );
     expect(failed).toEqual(["Vídeo de abertura"]);
-    expect(items[0].dir).toBe("abertura.mp4");
+    expect(items[0]).toMatchObject({ dir: "arquivos/abertura.mp4", dir_info: "E" });
   });
 
   it("não é ZIP, ou ZIP sem liturgia.json: inválido", async () => {
@@ -167,7 +167,50 @@ describe(".llja — ida e volta", () => {
     expect(await readLlja(await zip.generateAsync({ type: "blob" }))).toBeNull();
   });
 
-  it("ignora caminhos fora de arquivos/ listados no liturgia.json", async () => {
+  it("abre o .llja do Classic: barra invertida, BOM e caixa diferente no nome", async () => {
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    zip.file(
+      "liturgia.json",
+      "\uFEFF" +
+        JSON.stringify({
+          schema: 1,
+          name: "Domingo",
+          color: "#00004F",
+          exportedAt: "2026-11-05T23:07:04",
+          items: [
+            {
+              id: "item_1_avulso",
+              tipo: "arquivo",
+              item: "Hino",
+              dir: "arquivos\\Hino.MP3",
+              dir_info: "L",
+            },
+            { id: "item_2_avulso", tipo: "musica", item: "Louvor", musica: 12, escolha: false },
+          ],
+        })
+    );
+    zip.file("arquivos/Hino.MP3", "AUDIO");
+    const pack = await readLlja(await zip.generateAsync({ type: "blob" }));
+    expect(pack).not.toBeNull();
+    expect(await pack!.files.get("item_1_avulso")!.data.text()).toBe("AUDIO");
+    expect(pack!.files.get("item_1_avulso")!.name).toBe("Hino.MP3");
+  });
+
+  it("schema de versão que não conhece é recusado", async () => {
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    zip.file("liturgia.json", JSON.stringify({ schema: 2, name: "x", items: [] }));
+    expect(await readLlja(await zip.generateAsync({ type: "blob" }))).toBeNull();
+  });
+
+  it("não lê caminho fora de arquivos/, absoluto ou que sobe de pasta", async () => {
+    expect(safePackagePath("arquivos\\foto.jpg")).toBe("arquivos/foto.jpg");
+    expect(safePackagePath("segredo.txt")).toBeNull();
+    expect(safePackagePath("arquivos/../segredo.txt")).toBeNull();
+    expect(safePackagePath("C:\\Windows\\win.ini")).toBeNull();
+    expect(safePackagePath("/etc/passwd")).toBeNull();
+
     const JSZip = (await import("jszip")).default;
     const zip = new JSZip();
     zip.file("segredo.txt", "x");
@@ -175,11 +218,7 @@ describe(".llja — ida e volta", () => {
       "liturgia.json",
       JSON.stringify({
         name: "x",
-        items: [],
-        files: [
-          { item: "a", path: "segredo.txt", name: "s.txt" },
-          { item: "b", path: "arquivos/../segredo.txt", name: "s.txt" },
-        ],
+        items: [{ id: "a", tipo: "arquivo", dir: "arquivos/../segredo.txt", dir_info: "L" }],
       })
     );
     const pack = await readLlja(await zip.generateAsync({ type: "blob" }));
