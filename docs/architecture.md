@@ -768,6 +768,39 @@ Tecla que só age com mídia aberta passa por `_ifMedia` com `preventDefault: fa
 que cancela quando age. Com o cancelamento automático do Hotkeys, PageUp não rolava lista
 nenhuma e Ctrl+← não pulava palavra em campo nenhum, com ou sem música.
 
+Atalho com `when` só age quando a condição vale; senão é pulado sem cancelar a tecla, e
+ela segue para o próximo registrado com a mesma combinação — como acontece com o campo de
+texto sem `allowInForm`.
+
+### O teclado é do player ou da tela
+
+Setas (também com Ctrl), PageUp/PageDown, Home/End e espaço passam o slide só quando o player tem o teclado
+(`src/helpers/PlayerKeyboard.ts`), como no Delphi, onde só agiam com a janela da música
+ou a do operador ativa. Antes, com uma música aberta, a seta passava o slide de qualquer
+lugar, até com o cursor num campo; uma seta para rolar uma lista em outro módulo avançou
+o slide no meio do culto.
+
+- **O player tem o teclado** com a janela da mídia na tela (ela é modal), depois de um
+  clique numa área `[data-lj-player]` (o rodapé, a barra da Biblioteca) e quando o
+  operador põe algo no ar — `PlayerKeyboard.claim()` nos métodos
+  de abertura do `useMedia` e no início da projeção de anúncios. Só conta a ativação
+  recente do usuário na própria janela: o que entra no ar sozinho (fim da música,
+  playlist, temporizador, controle remoto) não tira as teclas de onde ele está.
+- **A tela retoma as teclas** com um clique fora do player, com a troca de aba
+  (`lj:module-open`) e ao minimizar a janela da mídia (pelo botão ou pelo clique fora,
+  que devolve o cursor à busca). O foco movido pelo próprio app não conta: ele
+  acompanha o clique, e a ordem entre os dois não é garantida.
+- **Campo de texto fica com as setas** da tecla real; só o controle remoto passa o slide
+  com o cursor num campo do desktop.
+- **Valem em qualquer foco:** o controle remoto (evento sintético, `isTrusted: false`),
+  o ESC e a tecla Pause.
+- **As janelas de projeção e de retorno** passam o slide pelas mesmas teclas
+  (`useProjectionSlideKeys`), pedindo à principal.
+- **A Bíblia** só anda no versículo pela seta com ela à vista e o teclado fora do player.
+- **Exceção:** a página da web projetada (`takeSiteKey`) ainda recebe as teclas de
+  qualquer tela, porque não há na janela principal um controle dela para clicar e
+  devolver as teclas.
+
 ### Cartão da biblioteca: projetar ou enfileirar
 
 O card da grade tem **duas** ações que uma vez eram a mesma coisa:
@@ -793,7 +826,7 @@ o clique; o que muda é o estado de lista em volta.
 
 ### Quem responde às setas
 
-`←`/`→` são registrados **uma única vez**, em `main-shell.js`, e chegam em
+`←`/`→` da mídia são registrados **uma única vez**, em `main-shell.js`, e chegam em
 `Media.nextSlide()`/`prevSlide()`. Quem responde depende do que está no telão, e a
 ordem é o contrato:
 

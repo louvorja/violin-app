@@ -77,6 +77,7 @@ import Telemetry from "@/helpers/Telemetry";
 import { withTelemetryActionSource } from "@/helpers/TelemetryAction";
 import { installRouteTelemetry } from "@/helpers/RouteTelemetry";
 import Hotkeys from "@/helpers/Hotkeys";
+import PlayerKeyboard from "@/helpers/PlayerKeyboard";
 import { HOTKEY } from "@/constants/HotkeyCombos";
 import { clearDatabaseCache } from "@/helpers/DatabaseCache";
 import { useShell } from "@/composables/useShell";
@@ -2586,6 +2587,7 @@ $storage.hydrate().then(async () => {
         { capture: true }
       );
       Hotkeys.init();
+      PlayerKeyboard.init();
     }
 
     // No navegador/PWA a tela do tablet apagaria no meio de um slide parado; o
@@ -2956,7 +2958,12 @@ $storage.hydrate().then(async () => {
          * mostrando um PDF projetado fora da playlist (aba Canva), e esse caso
          * não liga `modules.media.show` — sem a extensão as setas morriam em
          * silêncio enquanto a música não estivesse aberta.
+         *
+         * Tecla de verdade fora do player é da tela: rola a lista, anda na
+         * Bíblia. Ver PlayerKeyboard. `qualquerFoco` é para a tecla Pause, que
+         * ninguém aperta por engano.
          */
+        if (!opts.qualquerFoco && !PlayerKeyboard.hasKeys(e)) return;
         if (_mediaIsActive() || (opts.arquivo === true && _fileProjectionIsActive())) {
           // preventDefault bloqueia ação default do browser (back/forward, scroll).
           // stopImmediatePropagation impede que a trava de foco do diálogo veja
@@ -3030,8 +3037,7 @@ $storage.hydrate().then(async () => {
       }
     );
 
-    // Setas puras ← / → / ↑ / ↓ navegam slides quando media está ativa
-    // (replica FormKeyUp Delphi: setas funcionam em qualquer janela com fMusica visível).
+    // Setas puras ← / → / ↑ / ↓ navegam slides quando o player tem o teclado.
     // PageUp/PageDown também navegam slides puros.
     /* Arrows + PageUp/PageDown: valem também com um arquivo no telão. */
     const _prevSlide = _ifMedia(() => Media.prevSlide(), { arquivo: true });
@@ -3041,35 +3047,36 @@ $storage.hydrate().then(async () => {
     // se media está ativa, chama preventDefault + stopImmediatePropagation;
     // senão, libera o evento para o browser/inputs (PageUp rola a lista,
     // Ctrl+← pula palavra no campo).
-    // allowInForm: true replica o FormKeyUp Delphi — setas navegam slides em
-    // qualquer janela com a música aberta, mesmo com foco em um campo.
+    // No campo de texto as setas são do cursor; só o controle remoto, que manda
+    // evento sintético, passa o slide com o cursor num campo do desktop.
+    const _remoteInForm = (e) => !e.isTrusted;
     Hotkeys.register("ArrowLeft", _prevSlide, {
       context: "media",
       description: "hotkeys.prev_slide",
       group: "navigation",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("ArrowRight", _nextSlide, {
       context: "media",
       description: "hotkeys.next_slide",
       group: "navigation",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("ArrowUp", _prevSlide, {
       context: "media",
       description: "hotkeys.prev_slide",
       group: "navigation",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("ArrowDown", _nextSlide, {
       context: "media",
       description: "hotkeys.next_slide",
       group: "navigation",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("PageUp", _prevSlide, {
       context: "media",
@@ -3086,8 +3093,8 @@ $storage.hydrate().then(async () => {
 
     // ⌘← / ⌘→ (Ctrl fora do Mac): música anterior / próxima
     // Media.js não tem next()/prev() para álbum — emite broadcast para o módulo ouvir.
-    // No campo de texto o ⌘←/→ é início/fim da linha no Mac: ali só o Ctrl troca a música.
-    const _musicStepInForm = (e) => !e.metaKey;
+    // No campo de texto são do cursor (início/fim da linha no Mac, palavra fora dele);
+    // só o controle remoto troca a música dali.
     Hotkeys.register(
       HOTKEY.PREV_MUSIC,
       _ifMedia(() => {
@@ -3098,7 +3105,7 @@ $storage.hydrate().then(async () => {
         description: "hotkeys.ctrl_left",
         group: "navigation",
         preventDefault: false,
-        allowInForm: _musicStepInForm,
+        allowInForm: _remoteInForm,
       }
     );
     Hotkeys.register(
@@ -3111,26 +3118,26 @@ $storage.hydrate().then(async () => {
         description: "hotkeys.ctrl_right",
         group: "navigation",
         preventDefault: false,
-        allowInForm: _musicStepInForm,
+        allowInForm: _remoteInForm,
       }
     );
 
     // Space / Pause: toggle play/pause (só quando media ativa)
-    const _togglePlayPause = _ifMedia(() => {
+    const _playPause = () => {
       const isPaused = AppData.get("modules.media.config.is_paused", true);
       // Apenas faz sentido quando há áudio carregado
       const hasAudio = AppData.get("modules.media.config.audio", "") !== "";
       if (!hasAudio) return;
       if (isPaused) Media.play();
       else Media.pause();
-    });
-    Hotkeys.register("Space", _togglePlayPause, {
+    };
+    Hotkeys.register("Space", _ifMedia(_playPause), {
       context: "media",
       description: "hotkeys.space",
       group: "media",
       preventDefault: false,
     });
-    Hotkeys.register("Pause", _togglePlayPause, {
+    Hotkeys.register("Pause", _ifMedia(_playPause, { qualquerFoco: true }), {
       context: "media",
       preventDefault: false,
       allowInForm: true,

@@ -2,6 +2,7 @@
   <footer
     id="footer-bar"
     ref="footerEl"
+    data-lj-player
     class="footer"
     :class="{
       'footer--active': footerActive,

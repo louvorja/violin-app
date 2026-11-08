@@ -20,45 +20,19 @@
 <script setup>
 import { onMounted, onBeforeUnmount } from "vue";
 import { useProjectionState } from "@/composables/useProjectionState";
-import $broadcast from "@/helpers/Broadcast";
-import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { useProjectionSlideKeys } from "@/composables/useProjectionSlideKeys";
 import Slide from "@/components/Slide.vue";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import LibrasOverlay from "@/views/LibrasOverlay.vue";
 
 const { slide, progress, title, slideIndex, totalSlides, sessionId } = useProjectionState();
 
-function _goTo(index) {
-  if (totalSlides.value <= 0) return;
-  const clamped = Math.max(0, Math.min(totalSlides.value - 1, index));
-  $broadcast.send(BROADCAST_TYPE.GO_TO_SLIDE, {
-    index: clamped,
-    _command_ts: Date.now(),
-    ...(sessionId.value ? { presentation_session: sessionId.value } : {}),
-  });
-}
+useProjectionSlideKeys({ slideIndex, totalSlides, sessionId });
 
 function _onKey(e) {
   if (e.key === "Escape") {
     e.preventDefault();
     setTimeout(() => window.close(), 200);
-  } else if (
-    e.key === "ArrowRight" ||
-    e.key === "ArrowDown" ||
-    e.key === "PageDown" ||
-    e.key === " "
-  ) {
-    e.preventDefault();
-    _goTo(slideIndex.value + 1);
-  } else if (e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "PageUp") {
-    e.preventDefault();
-    _goTo(slideIndex.value - 1);
-  } else if (e.key === "Home") {
-    e.preventDefault();
-    _goTo(0);
-  } else if (e.key === "End") {
-    e.preventDefault();
-    _goTo(totalSlides.value - 1);
   }
 }
 

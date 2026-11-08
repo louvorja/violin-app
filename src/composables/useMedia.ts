@@ -43,6 +43,7 @@ import AudioLibrary from "@/helpers/AudioLibrary";
 import { slideTimes } from "@/helpers/CustomSongs";
 import { plainSlideText } from "@/helpers/SlideText";
 import Telemetry from "@/helpers/Telemetry";
+import PlayerKeyboard from "@/helpers/PlayerKeyboard";
 import { decodeOpusToWav, isOpusUrl, opusNeedsFallback } from "@/helpers/OpusFallback";
 import Platform from "@/helpers/Platform";
 import * as OnlineVideo from "@/helpers/OnlineVideo";
@@ -1511,6 +1512,7 @@ const _self = {
   },
 
   async open(params: MediaOpenParams | string | number): Promise<boolean> {
+    PlayerKeyboard.claim();
     params = _openParams(params);
     const requestedId = params.id_music;
     if (
@@ -2037,6 +2039,7 @@ const _self = {
     song: CustomSongSource,
     mode: MusicActionEnum | string = MusicActionEnum.AUDIO
   ): Promise<boolean> {
+    PlayerKeyboard.claim();
     if (mode === MusicActionEnum.INSTRUMENTAL && !song?.playback_token) {
       Telemetry.track("custom_music_open_failed", {
         name: song?.nome,
@@ -2181,6 +2184,7 @@ const _self = {
     song: CustomSongSource,
     mode: MusicActionEnum | string = MusicActionEnum.AUDIO
   ): Promise<boolean> {
+    PlayerKeyboard.claim();
     const playback = mode === MusicActionEnum.INSTRUMENTAL;
     const token = playback ? song?.playback_token : song?.audio_token;
     const url = token ? await AudioLibrary.resolveAudio(token) : null;
@@ -2344,6 +2348,7 @@ const _self = {
     videoAudioUrl?: string,
     { stopExistingAudio = false }: { stopExistingAudio?: boolean } = {}
   ): Promise<boolean> {
+    PlayerKeyboard.claim();
     if (
       !payload ||
       typeof payload.url !== "string" ||
@@ -2559,6 +2564,7 @@ const _self = {
     params: MediaOpenParams | string | number,
     preserveProjectionStage = false
   ): Promise<void> {
+    PlayerKeyboard.claim();
     params = _openParams(params);
     _closeAlbumForPresentation();
     const stageEpoch = preserveProjectionStage ? _stageEpoch : ++_stageEpoch;
@@ -2763,6 +2769,7 @@ const _self = {
     title: string,
     options: { preferStream?: boolean } = {}
   ): Promise<boolean> {
+    PlayerKeyboard.claim();
     const id = OnlineVideo.videoIdFromUrl(url);
     // Dois cliques no mesmo vídeo enquanto ele abre partilham a tentativa em
     // curso; um segundo vídeo de fato revoga a primeira tentativa.
@@ -2824,6 +2831,7 @@ const _self = {
     title: string,
     expectedStageEpoch?: number
   ): Promise<void> {
+    PlayerKeyboard.claim();
     const stageEpoch = expectedStageEpoch ?? ++_stageEpoch;
     if (stageEpoch !== _stageEpoch) return;
     const fallbackOrigin =
