@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useLiturgyImport } from "../useLiturgyImport";
+import { useLiturgyImport, weekEntries } from "../useLiturgyImport";
 import { useLiturgyLibrary } from "../useLiturgyLibrary";
 import { buildPackage } from "../../package/format";
 import type { InstallDeps } from "../../package/install";
@@ -704,5 +704,89 @@ describe("useLiturgyImport — pacote .llja", () => {
     await importFile(new File([blob], "Culto.llja"));
     expect(media.size).toBe(0);
     expect(error).toHaveBeenCalledWith("library.import_invalid");
+  });
+});
+
+describe("useLiturgyImport — várias liturgias vão para a semana", () => {
+  function setupWeek() {
+    const onImported = vi.fn();
+    const onImportedWeek = vi.fn();
+    let n = 0;
+    save.mockImplementation(async (data: object) => ({ id: `lit-${++n}`, ...data }));
+    const library = {
+      parseImport: useLiturgyLibrary().parseImport,
+      getByName: (name: string) => getByName(name),
+      save: (data: unknown) => save(data),
+      list: () => list(),
+    } as unknown as Parameters<typeof useLiturgyImport>[0];
+    const api = useLiturgyImport(library, report, { onImported, onImportedWeek });
+    return { ...api, onImported, onImportedWeek };
+  }
+
+  it(".ja com duas liturgias: oferece pôr a 1ª no domingo e a 2ª na segunda", async () => {
+    const { importFile, onImported, onImportedWeek } = setupWeek();
+    const done = importFile(file("liturgia.ja", JA_TWO_LITURGIES));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(onImported).not.toHaveBeenCalled();
+    expect(onImportedWeek).toHaveBeenCalledOnce();
+    const entries = onImportedWeek.mock.calls[0][0] as { item: { id: string }; day: number }[];
+    expect(entries.map((e) => [e.item.id, e.day])).toEqual([
+      ["lit-1", 0],
+      ["lit-2", 1],
+    ]);
+  });
+
+  it(".ja com uma liturgia só: oferece abrir, como o .json", async () => {
+    const { importFile, onImported, onImportedWeek } = setupWeek();
+    const done = importFile(file("liturgia.ja", JA_V26_7, "utf8-bom"));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(onImportedWeek).not.toHaveBeenCalled();
+    expect(onImported).toHaveBeenCalledWith(expect.objectContaining({ id: "lit-1" }));
+  });
+
+  it(".json da semana usa o dia do vínculo; sem vínculo, a posição", async () => {
+    const semana = JSON.stringify({
+      schema: 1,
+      liturgies: [
+        {
+          name: "Culto de sábado",
+          binding: { type: "day_of_week", value: 6 },
+          items: [{ id: "a", tipo: "anotacao", item: "Abertura" }],
+        },
+        { name: "Sem vínculo", items: [{ id: "b", tipo: "anotacao", item: "B" }] },
+      ],
+    });
+    const { importFile, onImportedWeek } = setupWeek();
+    const done = importFile(file("semana.json", semana));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    const entries = onImportedWeek.mock.calls[0][0] as { item: { name: string }; day: number }[];
+    expect(entries.map((e) => [e.item.name, e.day])).toEqual([
+      ["Culto de sábado", 6],
+      ["Sem vínculo", 1],
+    ]);
+  });
+});
+
+describe("weekEntries", () => {
+  const lit = (id: string) => ({ id, name: id, items: [] }) as never;
+  it("só a primeira de cada dia entra, e dia fora da semana fica de fora", () => {
+    expect(
+      weekEntries([
+        { item: lit("a"), day: 0 },
+        { item: lit("b"), day: 1 },
+        { item: lit("c"), day: 0 },
+        { item: lit("d"), day: 7 },
+        { day: 2 },
+      ]).map((e) => [e.item.id, e.day])
+    ).toEqual([
+      ["a", 0],
+      ["b", 1],
+    ]);
   });
 });

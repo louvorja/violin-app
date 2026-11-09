@@ -39,6 +39,11 @@ export interface ImportOptions {
    * Não é chamado no `.ja` com várias liturgias.
    */
   onImported?: (_item: LiturgyLibraryItem) => void;
+  /**
+   * Chamado quando o arquivo trouxe várias liturgias (`.ja` ou `.json` da semana),
+   * com o dia da semana de cada uma — para a tela oferecer montar a semana.
+   */
+  onImportedWeek?: (_entries: WeekEntry[]) => void;
   /** Onde gravar os arquivos do pacote (padrão: IndexedDB e os arquivos da liturgia). */
   installDeps?: Partial<InstallDeps>;
   /** Inicia o download de um vídeo do YouTube que entrou na lista (padrão: Vídeos Online). */
@@ -60,6 +65,35 @@ export function copyName(name: string, taken: Iterable<string>): string {
     const candidate = `${name} (${n})`;
     if (!used.has(candidate.toLowerCase())) return candidate;
   }
+}
+
+/** Liturgia gravada a partir de um arquivo com várias, e o dia (0 = domingo) a que pertence. */
+export interface WeekEntry {
+  item: LiturgyLibraryItem;
+  day: number;
+}
+
+/**
+ * Um dia para cada liturgia: o vínculo de dia da semana, quando o arquivo traz
+ * (`.json` da semana do Classic), senão a POSIÇÃO (1ª = domingo...). Só a
+ * primeira de cada dia entra; as outras ficam só na biblioteca.
+ */
+export function weekEntries(saved: { item?: LiturgyLibraryItem; day: number }[]): WeekEntry[] {
+  const used = new Set<number>();
+  const out: WeekEntry[] = [];
+  for (const { item, day } of saved) {
+    if (!item || !Number.isInteger(day) || day < 0 || day > 6 || used.has(day)) continue;
+    used.add(day);
+    out.push({ item, day });
+  }
+  return out;
+}
+
+function bindingDay(raw: unknown): number | null {
+  const binding = (raw as { binding?: { type?: unknown; value?: unknown } } | null)?.binding;
+  if (!binding || binding.type !== "day_of_week") return null;
+  const day = Number(binding.value);
+  return Number.isInteger(day) && day >= 0 && day <= 6 ? day : null;
 }
 
 /** Uma liturgia lida do arquivo, ainda não gravada. */
@@ -168,7 +202,10 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
    *
    * Devolve quantas entraram, ou `null` se o arquivo não é uma coleção.
    */
-  async function importCollection(text: string, ctx: Context): Promise<number | null> {
+  async function importCollection(
+    text: string,
+    ctx: Context
+  ): Promise<{ item?: LiturgyLibraryItem; day: number }[] | null> {
     let data: { liturgies?: unknown };
     try {
       data = JSON.parse(text);
@@ -177,7 +214,7 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
     }
     if (!data || !Array.isArray(data.liturgies)) return null;
     const usados = new Set((await library.list()).map((l) => l.name.toLowerCase()));
-    let count = 0;
+    const saved: { item?: LiturgyLibraryItem; day: number }[] = [];
     let items = 0;
     for (const [index, raw] of data.liturgies.entries()) {
       const parsed = library.parseImport(JSON.stringify(raw));
@@ -186,20 +223,20 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
       let nome = base;
       for (let n = 1; usados.has(nome.toLowerCase()); n += 1) nome = `${base} ${n}`;
       usados.add(nome.toLowerCase());
-      await library.save({
+      const item = await library.save({
         name: nome,
         ...(parsed.color ? { color: parsed.color } : {}),
         items: parsed.items,
       });
-      count += 1;
+      saved.push({ item, day: bindingDay(raw) ?? index });
       items += parsed.items.length;
     }
     Telemetry.track("liturgy_import_completed", {
       ...ctx.properties,
-      liturgy_count: count,
+      liturgy_count: saved.length,
       item_count: items,
     });
-    return count;
+    return saved;
   }
 
   type Saved = {
@@ -300,6 +337,21 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
     );
   }
 
+  /**
+   * Depois de gravar várias liturgias: uma só, a tela oferece abrir (como no
+   * `.llja`); várias, oferece montar a semana com cada uma no seu dia.
+   */
+  function offerOpen(saved: { item?: LiturgyLibraryItem; day: number }[]): void {
+    const real = saved.filter((s): s is WeekEntry => !!s.item);
+    if (real.length === 1) {
+      options.onImported?.(real[0].item);
+      return;
+    }
+    const week = weekEntries(real);
+    if (week.length > 1) options.onImportedWeek?.(week);
+    else if (week.length === 1) options.onImported?.(week[0].item);
+  }
+
   async function importOne(file: File): Promise<void> {
     const ctx: Context = { format: "json", properties: telemetryProperties(file, "json") };
 
@@ -313,8 +365,9 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
         ctx.properties = telemetryProperties(file, ctx.format);
         Telemetry.track("liturgy_import_started", ctx.properties);
         if (ctx.format === "json") {
-          const count = await importCollection(await file.text(), ctx);
-          if (count !== null) return count > 0 ? { collection: count } : { invalid: true as const };
+          const collection = await importCollection(await file.text(), ctx);
+          if (collection !== null)
+            return collection.length > 0 ? { collection } : { invalid: true as const };
         }
         const read = await parse(file, ctx.format);
         if ("error" in read) {
@@ -342,6 +395,7 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
     }
     if ("collection" in first) {
       done();
+      offerOpen(first.collection ?? []);
       return;
     }
 
@@ -367,7 +421,9 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
 
   // O `.ja` do Delphi é INI em Windows-1252 até a v26.6 e UTF-8 com BOM depois:
   // `decodeJaText` escolhe como o próprio clássico escolhe.
-  async function importJa(file: File): Promise<Notice> {
+  async function importJa(
+    file: File
+  ): Promise<{ notice: Notice; saved: { item?: LiturgyLibraryItem; day: number }[] }> {
     const properties = telemetryProperties(file, "ja");
     Telemetry.track("liturgy_import_started", properties);
     try {
@@ -380,7 +436,7 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
           encoding,
           reason: "invalid_format",
         });
-        return invalid;
+        return { notice: invalid, saved: [] };
       }
       /**
        * Um `.ja` pode trazer várias liturgias salvas juntas (ex.: culto e escola
@@ -392,12 +448,14 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
        * sem isso, dois grupos do mesmo dia viravam duas liturgias com o mesmo nome.
        **/
       const usados = new Set((await library.list()).map((liturgia) => liturgia.name.toLowerCase()));
+      const saved: { item?: LiturgyLibraryItem; day: number }[] = [];
       for (const [index, liturgy] of parsed.entries()) {
         const base = nomePelaPosicao(index);
         let nome = base;
         for (let n = 1; usados.has(nome.toLowerCase()); n += 1) nome = `${base} ${n}`;
         usados.add(nome.toLowerCase());
-        await library.save({ name: nome, items: liturgy.items });
+        const item = await library.save({ name: nome, items: liturgy.items });
+        saved.push({ item, day: index });
       }
       Telemetry.track("liturgy_import_completed", {
         ...properties,
@@ -405,11 +463,11 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
         liturgy_count: parsed.length,
         item_count: parsed.reduce((total, liturgy) => total + liturgy.items.length, 0),
       });
-      return done;
+      return { notice: done, saved };
     } catch (error) {
       report(error, "import_ja", properties);
       console.error("[Liturgia] leitura do .ja falhou:", error);
-      return invalid;
+      return { notice: invalid, saved: [] };
     }
   }
 
@@ -422,8 +480,10 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
     try {
       const name = file.name.toLowerCase();
       if (name.endsWith(".ja")) {
-        const notice = await run(() => importJa(file));
-        notice?.();
+        const result = await run(() => importJa(file));
+        if (!result) return;
+        result.notice?.();
+        offerOpen(result.saved);
         return;
       }
       await importOne(file);
