@@ -394,6 +394,7 @@ export const ICONS = {
     GRID_LARGE: "layout-grid",
     HARDDISK: "server",
     HELP: "help-circle",
+    HELP_SOLID: "help-circle-filled",
     HISTORY: "history",
     IMAGE_OFF: "photo-off",
     IMAGE_OUTLINE: "photo",
