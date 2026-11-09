@@ -164,6 +164,22 @@ describe("ProjectionReturn", () => {
     send.mockRestore();
   });
 
+  it("espaço e Pause pedem à principal o mesmo tocar/pausar, sem passar o slide", async () => {
+    montar();
+    enviar(slide("Aleluia"), null, 3, 12);
+    await nextTick();
+    const send = vi.spyOn(Broadcast, "send");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Pause" }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", repeat: true }));
+    const tipos = send.mock.calls.map(([tipo, dados]) => [tipo, (dados as { key?: string }).key]);
+    expect(tipos).toEqual([
+      [BROADCAST_TYPE.MEDIA_PLAY_PAUSE, "space"],
+      [BROADCAST_TYPE.MEDIA_PLAY_PAUSE, "pause"],
+    ]);
+    send.mockRestore();
+  });
+
   it("o título tem a própria faixa e não fica sobre a letra", async () => {
     const w = montar();
     enviar(slide("Aleluia"), null);

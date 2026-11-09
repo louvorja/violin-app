@@ -3144,6 +3144,13 @@ $storage.hydrate().then(async () => {
       description: "hotkeys.pause",
       group: "media",
     });
+    // As mesmas teclas com o foco na projeção ou no retorno. Sem áudio ("Sem
+    // áudio"), o espaço lá continua passando o slide, como sempre passou.
+    Broadcast.listen((msg) => {
+      if (msg?.type !== BROADCAST_TYPE.MEDIA_PLAY_PAUSE || !_mediaIsActive()) return;
+      if (AppData.get("modules.media.config.audio", "") !== "") _playPause();
+      else if (msg.payload?.key === "space") Media.nextSlide();
+    });
 
     // --- Liturgia ---
 

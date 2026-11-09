@@ -3,10 +3,11 @@ import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 
 /**
- * Setas, PageUp/PageDown, espaço, Home e End passam o slide com o foco numa janela
+ * Setas, PageUp/PageDown, Home e End passam o slide com o foco numa janela
  * projetada (a de projeção ou a de retorno). Na janela principal elas só valem com
  * o player em foco, então estas janelas são o outro lugar de onde o operador passa
  * o slide pelo teclado. O pedido vai à principal, que é quem anda no deck.
+ * Espaço e Pause tocam/pausam, como na principal (sem áudio, o espaço passa o slide).
  */
 export function useProjectionSlideKeys(state: {
   slideIndex: Ref<number>;
@@ -28,12 +29,15 @@ export function useProjectionSlideKeys(state: {
       ArrowRight: 1,
       ArrowDown: 1,
       PageDown: 1,
-      " ": 1,
       ArrowLeft: -1,
       ArrowUp: -1,
       PageUp: -1,
     }[e.key];
-    if (target !== undefined) {
+    if (e.key === " " || e.key === "Pause") {
+      e.preventDefault();
+      if (e.repeat) return;
+      $broadcast.send(BROADCAST_TYPE.MEDIA_PLAY_PAUSE, { key: e.key === " " ? "space" : "pause" });
+    } else if (target !== undefined) {
       e.preventDefault();
       goTo(state.slideIndex.value + target);
     } else if (e.key === "Home") {
