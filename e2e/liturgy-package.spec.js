@@ -233,3 +233,78 @@ test("exportar sem ter salvo usa o nome do dia, e liturgia vazia avisa", async (
   const name = (await download).suggestedFilename();
   if (UTF8_LOCALE || /^[\x20-\x7e]+$/.test(day)) expect(name).toBe(`${day}.llja`);
 });
+
+test("item da Biblioteca de Mídia com os bytes guardados toca (o blob: salvo já morreu)", async ({
+  page,
+}) => {
+  const pageErrors = [];
+  page.on("pageerror", (e) => pageErrors.push(e.message));
+  await openLiturgy(page);
+  // WAV de 0,3 s gerado aqui, guardado como a importação guarda.
+  await page.evaluate(async () => {
+    const rate = 8000;
+    const samples = rate * 0.3;
+    const buffer = new ArrayBuffer(44 + samples * 2);
+    const v = new DataView(buffer);
+    const str = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    str(0, "RIFF");
+    v.setUint32(4, 36 + samples * 2, true);
+    str(8, "WAVEfmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true);
+    v.setUint32(28, rate * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    str(36, "data");
+    v.setUint32(40, samples * 2, true);
+    for (let i = 0; i < samples; i++)
+      v.setInt16(44 + i * 2, Math.sin((2 * Math.PI * 440 * i) / rate) * 8000, true);
+    const { default: idb } = await import("/src/helpers/IndexedDB.ts");
+    const { default: liturgy } = await import("/src/helpers/Liturgy.ts");
+    // Um blob: criado e revogado: é o que fica salvo de uma sessão anterior.
+    const stale = URL.createObjectURL(new Blob([]));
+    URL.revokeObjectURL(stale);
+    await idb.put("media_library", {
+      id: "file_audio",
+      name: "vinheta.wav",
+      path: stale,
+      type: "audio",
+      addedAt: 1,
+      data: buffer,
+      mime: "audio/wav",
+      categoryId: "importados",
+    });
+    liturgy.add(
+      {
+        id: "item-audio",
+        tipo: "biblioteca-midia",
+        item: "Vinheta",
+        ref_id: "file_audio",
+        subtipo: "audio",
+      },
+      liturgy.getActiveDay()
+    );
+  });
+  await page.getByRole("button", { name: "Fechar: Liturgia", exact: true }).click();
+  const item = page
+    .locator(".shell-sidebar.liturgy-panel .liturgy-item")
+    .filter({ hasText: "Vinheta" });
+  await item.click();
+
+  // O player carrega o áudio de verdade — sem "Não foi possível tocar este áudio".
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          [...document.querySelectorAll("audio, video")].some(
+            (m) => m.currentSrc.startsWith("blob:") && m.readyState >= 1 && !m.error
+          )
+        ),
+      { timeout: 10_000 }
+    )
+    .toBe(true);
+  await expect(page.getByText("Não foi possível tocar este áudio")).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
