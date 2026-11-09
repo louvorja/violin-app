@@ -308,6 +308,36 @@ describe("useAudioPlayback lifecycle", () => {
     }
   );
 
+  it("fade-out interrompido avisa quem espera por ele, sem chamar o callback de fim", () => {
+    const el = audio.getElement();
+    Object.defineProperty(el, "paused", { configurable: true, value: false });
+    el.volume = 1;
+    const finished = vi.fn();
+    const interrupted = vi.fn();
+    audio.fadeOut(finished, interrupted);
+    vi.advanceTimersByTime(40);
+
+    audio.pause();
+    vi.advanceTimersByTime(500);
+
+    expect(interrupted).toHaveBeenCalledOnce();
+    expect(finished).not.toHaveBeenCalled();
+  });
+
+  it("fade-out que chega ao fim não dispara o aviso de interrupção", () => {
+    const el = audio.getElement();
+    Object.defineProperty(el, "paused", { configurable: true, value: false });
+    el.volume = 1;
+    const finished = vi.fn();
+    const interrupted = vi.fn();
+    audio.fadeOut(finished, interrupted);
+    vi.advanceTimersByTime(500);
+    audio.stop();
+
+    expect(finished).toHaveBeenCalledOnce();
+    expect(interrupted).not.toHaveBeenCalled();
+  });
+
   it("retomar durante o fade de pausa cancela a pausa antiga e termina o fade", () => {
     const el = audio.getElement();
     Object.defineProperty(el, "paused", { configurable: true, value: false });

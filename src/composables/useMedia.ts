@@ -1636,11 +1636,14 @@ const _self = {
       _existingAudio.src &&
       $userdata.get(KEYS.MODULES.MEDIA.FADE_AUDIO, false)
     ) {
+      // Pausa, parada ou outra música no meio do fade o cancelam sem chamar o
+      // callback: a abertura segue mesmo assim, ou ficaria esperando para sempre.
       await new Promise<void>((resolve) => {
-        _audio.fadeOut(() => {
+        const encerrar = (): void => {
           _audio.stop();
           resolve();
-        });
+        };
+        _audio.fadeOut(encerrar, encerrar);
       });
     } else {
       _audio.stop();

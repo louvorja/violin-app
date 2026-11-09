@@ -57,7 +57,8 @@ export interface AudioPlayback {
   seekTo: (time: number) => void;
   advanceTime: (delta: number) => void;
   fadeIn: (maxVolume: number, callback?: () => void) => void;
-  fadeOut: (callback?: () => void) => void;
+  /** `onInterrupted`: outro comando cancelou o fade antes do fim; `callback` não virá. */
+  fadeOut: (callback?: () => void, onInterrupted?: () => void) => void;
   onTimeUpdate: (cb: TimeCallback) => () => void;
   reset: () => void;
   cleanup: () => void;
@@ -80,6 +81,7 @@ function _create(): AudioPlayback {
   let _clockTimer: ReturnType<typeof setInterval> | null = null;
   let _fadeTimer: ReturnType<typeof setInterval> | null = null;
   let _fadeInTarget: number | null = null;
+  let _onFadeInterrupted: (() => void) | null = null;
   let _playbackSequence = 0;
   let _playRequestSequence = 0;
   let _pendingTakeOver: HTMLMediaElement | null = null;
@@ -683,6 +685,9 @@ function _create(): AudioPlayback {
     _fadeTimer = null;
     _fadeInTarget = null;
     isFading.value = false;
+    const interrupted = _onFadeInterrupted;
+    _onFadeInterrupted = null;
+    interrupted?.();
   }
 
   /** Pending playback/fade callbacks belong to the source that requested them. */
@@ -940,7 +945,7 @@ function _create(): AudioPlayback {
     }, _FADE_INTERVAL_MS);
   }
 
-  function fadeOut(callback?: () => void): void {
+  function fadeOut(callback?: () => void, onInterrupted?: () => void): void {
     _cancelFade();
     const el = getElement();
     if (el.paused) {
@@ -948,10 +953,12 @@ function _create(): AudioPlayback {
       return;
     }
     isFading.value = true;
+    _onFadeInterrupted = onInterrupted ?? null;
     _fadeTimer = setInterval(() => {
       if (el.volume > 0) {
         el.volume = Math.max(el.volume - _FADE_STEP, 0);
       } else {
+        _onFadeInterrupted = null;
         _cancelFade();
         if (callback) callback();
       }
