@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLiturgyImport } from "../useLiturgyImport";
 import { useLiturgyLibrary } from "../useLiturgyLibrary";
+import { buildPackage } from "../../package/format";
+import type { InstallDeps } from "../../package/install";
 
 const success = vi.fn();
 const error = vi.fn();
@@ -22,6 +24,8 @@ vi.mock("@/helpers/Alert", () => ({
   escapeHtml: (text: string) => text,
   default: {
     show: (options: Question["options"], answer: Question["answer"]) =>
+      questions.push({ options, answer }),
+    info: (options: Question["options"], answer: Question["answer"]) =>
       questions.push({ options, answer }),
   },
 }));
@@ -487,7 +491,7 @@ describe("useLiturgyImport — o seletor de arquivo", () => {
     expect(created).toHaveLength(1);
     const [input] = created;
     expect(input.type).toBe("file");
-    expect(input.accept).toBe(".llja,.json,.ja");
+    expect(input.accept).toBe(".llja,.zip,.json,.ja");
     expect(input.click).toHaveBeenCalledOnce();
 
     Object.defineProperty(input, "files", { value: [file("culto.json", JSON_LITURGY)] });
@@ -594,5 +598,111 @@ describe("useLiturgyImport — nome do .ja pela posição", () => {
     await done;
 
     expect(nomesSalvos()).toEqual(["Domingo"]);
+  });
+});
+
+describe("useLiturgyImport — pacote .llja", () => {
+  // O JSZip usa os timers de verdade.
+  beforeEach(() => vi.useRealTimers());
+
+  it("grava os arquivos nas bibliotecas, avisa o que faltou e só depois oferece abrir", async () => {
+    const tables = new Map<string, Map<string, Record<string, unknown>>>();
+    const table = (t: string) => {
+      if (!tables.has(t)) tables.set(t, new Map());
+      return tables.get(t)!;
+    };
+    const installDeps: Partial<InstallDeps> = {
+      get: async (t, id) => table(t).get(id),
+      getAll: async (t) => [...table(t).values()],
+      put: async (t, r) => void table(t).set(String(r.id), r),
+      del: async (t, id) => void table(t).delete(id),
+    };
+    const startVideoDownload = vi.fn();
+    const onImported = vi.fn();
+    save.mockImplementation(async (data: object) => ({ id: "novo", ...data }));
+    const library = {
+      parseImport: useLiturgyLibrary().parseImport,
+      getByName: (name: string) => getByName(name),
+      save: (data: unknown) => save(data),
+      list: () => list(),
+    } as unknown as Parameters<typeof useLiturgyImport>[0];
+    const { importFile } = useLiturgyImport(library, report, {
+      installDeps,
+      startVideoDownload,
+      onImported,
+    });
+
+    const blob = await buildPackage({
+      liturgy: {
+        name: "Culto",
+        color: "#AA0000",
+        items: [
+          { id: "a", tipo: "biblioteca-midia", item: "Foto", ref_id: "m1" },
+          { id: "b", tipo: "som-de-fundo", item: "Chuva", ref_id: "sumiu" },
+          { id: "c", tipo: "video-online", item: "Clipe", url: "https://youtu.be/DDDDDDDDDDD" },
+        ] as never,
+      },
+      files: [
+        {
+          source: "media",
+          sourceId: "m1",
+          name: "foto.png",
+          mime: "image/png",
+          data: new Blob(["PNG"]),
+        },
+      ],
+    });
+    await importFile(new File([blob], "Culto.llja"));
+
+    const media = [...table("media_library").values()];
+    expect(media).toHaveLength(1);
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Culto",
+        color: "#AA0000",
+        items: [
+          expect.objectContaining({ ref_id: media[0].id }),
+          expect.not.objectContaining({ ref_id: "sumiu" }),
+          expect.objectContaining({ tipo: "video-online" }),
+        ],
+      })
+    );
+    expect(startVideoDownload).toHaveBeenCalledWith("DDDDDDDDDDD", "Clipe");
+    // Aviso do que faltou primeiro; a pergunta de abrir vem depois que ele fecha.
+    expect(questions).toHaveLength(1);
+    expect(questions[0].options.text).toContain("Chuva");
+    expect(onImported).not.toHaveBeenCalled();
+    questions[0].answer("close");
+    expect(onImported).toHaveBeenCalledWith(expect.objectContaining({ id: "novo" }));
+  });
+
+  it("se a liturgia não grava, desfaz o que entrou nas bibliotecas", async () => {
+    const media = new Map<string, unknown>();
+    const installDeps: Partial<InstallDeps> = {
+      get: async () => undefined,
+      getAll: async () => [],
+      put: async (t, r) => void (t === "media_library" && media.set(String(r.id), r)),
+      del: async (t, id) => void media.delete(id),
+    };
+    save.mockRejectedValue(new Error("disco cheio"));
+    const library = {
+      parseImport: useLiturgyLibrary().parseImport,
+      getByName: (name: string) => getByName(name),
+      save: (data: unknown) => save(data),
+      list: () => list(),
+    } as unknown as Parameters<typeof useLiturgyImport>[0];
+    const { importFile } = useLiturgyImport(library, report, { installDeps });
+    const blob = await buildPackage({
+      liturgy: {
+        name: "Culto",
+        items: [{ id: "a", tipo: "biblioteca-midia", item: "Foto", ref_id: "m1" }] as never,
+      },
+      files: [
+        { source: "media", sourceId: "m1", name: "foto.png", mime: "", data: new Blob(["P"]) },
+      ],
+    });
+    await importFile(new File([blob], "Culto.llja"));
+    expect(media.size).toBe(0);
+    expect(error).toHaveBeenCalledWith("library.import_invalid");
   });
 });

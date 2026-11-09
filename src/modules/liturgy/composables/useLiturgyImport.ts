@@ -1,9 +1,19 @@
 import { useLiturgyI18n } from "../i18n";
 import { parseJaImport, WEEKDAY_KEYS, type useLiturgyLibrary } from "./useLiturgyLibrary";
 import { decodeJaText } from "../jaText";
-import { attachPackedFiles, isLlja, LLJA_EXT, readLlja, type PackedFile } from "../package";
+import {
+  isZip,
+  PACKAGE_EXT,
+  readPackage,
+  type PackageFile,
+  type ReadError,
+} from "../package/format";
+import { readClassicPackage } from "../package/classic";
+import { installPackage, type InstallDeps } from "../package/install";
 import { useBusy } from "@/composables/useBusy";
-import { importLiturgyFile } from "@/helpers/LiturgyFiles";
+import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
+import { importLiturgyFile, removeLiturgyFile } from "@/helpers/LiturgyFiles";
+import $idb from "@/helpers/IndexedDB";
 import $alert, { escapeHtml } from "@/helpers/Alert";
 import $snackbar from "@/helpers/Snackbar";
 import Telemetry from "@/helpers/Telemetry";
@@ -29,8 +39,10 @@ export interface ImportOptions {
    * Não é chamado no `.ja` com várias liturgias.
    */
   onImported?: (_item: LiturgyLibraryItem) => void;
-  /** Onde guardar os arquivos que vêm dentro do `.llja` (padrão: o mesmo dos arquivos da liturgia). */
-  storeFile?: (_file: File) => Promise<{ dir: string; ref_id: string }>;
+  /** Onde gravar os arquivos do pacote (padrão: IndexedDB e os arquivos da liturgia). */
+  installDeps?: Partial<InstallDeps>;
+  /** Inicia o download de um vídeo do YouTube que entrou na lista (padrão: Vídeos Online). */
+  startVideoDownload?: (_id: string, _name: string) => unknown;
 }
 
 function telemetryProperties(file: File, format: Format) {
@@ -55,8 +67,14 @@ interface Parsed {
   name: string;
   color?: string;
   items: LiturgyItem[];
-  files: Map<string, PackedFile>;
+  files: PackageFile[];
 }
+
+/** Mensagem do erro de leitura (chave em `library.*`). */
+const READ_ERROR_KEY: Partial<Record<ReadError, string>> = {
+  too_large: "library.import_too_large",
+  unsupported_version: "library.import_unsupported_version",
+};
 
 /**
  * Importar uma liturgia para a biblioteca, de um `.llja` (pacote com os
@@ -67,7 +85,19 @@ interface Parsed {
 export function useLiturgyImport(library: Library, report: Report, options: ImportOptions = {}) {
   const { t } = useLiturgyI18n();
   const { busy, run } = useBusy();
-  const storeFile = options.storeFile ?? importLiturgyFile;
+  const installDeps: InstallDeps = {
+    get: (table, id) => $idb.get(table, id),
+    getAll: (table) => $idb.getAll(table),
+    put: (table, record) => $idb.put(table, record as { id: string }),
+    del: (table, id) => $idb.del(table, id),
+    storeLiturgyFile: importLiturgyFile,
+    removeLiturgyFile,
+    importedCategoryName: t("library.imported_category"),
+    ...options.installDeps,
+  };
+  const startVideoDownload =
+    options.startVideoDownload ??
+    ((id: string, name: string) => useOnlineVideoDownloads().startForNewLink(id, name));
 
   /**
    * Nome-base de uma liturgia do `.ja`, pela POSIÇÃO no arquivo.
@@ -108,16 +138,26 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
     });
   }
 
-  /** Lê `.llja` ou `.json` até a liturgia, sem gravar nada. */
-  async function parse(file: File, format: "json" | "llja"): Promise<Parsed | null> {
+  /**
+   * Lê o arquivo até a liturgia, sem gravar nada: pacote do Violin, `.llja` do
+   * Classic (mapper) ou `.json`.
+   */
+  async function parse(
+    file: File,
+    format: "json" | "llja"
+  ): Promise<{ parsed: Parsed } | { error: ReadError }> {
     if (format === "llja") {
-      const pack = await readLlja(file);
-      if (!pack) return null;
-      const parsed = library.parseImport(pack.json);
-      return parsed ? { ...parsed, files: pack.files } : null;
+      const pack = await readPackage(file);
+      if (pack && !pack.ok) return { error: pack.error };
+      const source = pack?.ok
+        ? { json: pack.liturgyJson, files: pack.files }
+        : await readClassicPackage(file).then((c) => c && { json: c.liturgyJson, files: c.files });
+      if (!source) return { error: "not_liturgy" };
+      const parsed = library.parseImport(source.json);
+      return parsed ? { parsed: { ...parsed, files: source.files } } : { error: "invalid" };
     }
     const parsed = library.parseImport(await file.text());
-    return parsed ? { ...parsed, files: new Map() } : null;
+    return parsed ? { parsed: { ...parsed, files: [] } } : { error: "invalid" };
   }
 
   /**
@@ -162,7 +202,13 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
     return count;
   }
 
-  type Saved = { item: LiturgyLibraryItem | undefined; failed: string[] } | null;
+  type Saved = {
+    item: LiturgyLibraryItem | undefined;
+    missing: string[];
+    unsupported: string[];
+    stored: number;
+    videos: number;
+  } | null;
   type Context = { format: "json" | "llja"; properties: ReturnType<typeof telemetryProperties> };
 
   /** Guarda os arquivos do pacote e grava a liturgia. Roda dentro do loader. */
@@ -172,6 +218,7 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
     existing: LiturgyLibraryItem | undefined,
     ctx: Context
   ): Promise<Saved> {
+    let installed: Awaited<ReturnType<typeof installPackage>> | null = null;
     try {
       let name = parsed.name;
       if (choice === "copy") {
@@ -180,28 +227,69 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
           (await library.list()).map((l) => l.name)
         );
       }
-      const { items, failed } = await attachPackedFiles(parsed.items, parsed.files, storeFile);
+      // Bibliotecas primeiro; a liturgia por último. Se ela não gravar, desfaz.
+      installed = await installPackage(parsed.items, parsed.files, installDeps);
       const data = {
         ...(choice === "replace" && existing ? { id: existing.id } : {}),
         name,
         ...(parsed.color ? { color: parsed.color } : {}),
-        items,
+        items: installed.items,
       };
       const item = await library.save(data);
+      for (const video of installed.youtube) {
+        try {
+          void Promise.resolve(startVideoDownload(video.id, video.name)).catch(() => {});
+        } catch {
+          // O vídeo ficou na lista; o download pode ser feito por lá.
+        }
+      }
       Telemetry.track("liturgy_import_completed", {
         ...ctx.properties,
         overwritten: choice === "replace",
         as_copy: choice === "copy",
-        item_count: items.length,
-        file_count: parsed.files.size,
-        failed_files: failed.length,
+        item_count: installed.items.length,
+        file_count: parsed.files.length,
+        stored_files: installed.stored,
+        missing_files: installed.missing.length,
+        unsupported_files: installed.unsupported.length,
+        youtube_count: installed.youtube.length,
       });
-      return { item, failed };
+      return {
+        item,
+        missing: installed.missing,
+        unsupported: installed.unsupported,
+        stored: installed.stored,
+        videos: installed.youtube.length,
+      };
     } catch (error) {
+      if (installed) await installed.rollback().catch(() => {});
       report(error, `import_${ctx.format}_save`, ctx.properties);
       console.error(`[Liturgia] import ${ctx.format} falhou:`, error);
       return null;
     }
+  }
+
+  /**
+   * Resumo ao operador: tudo certo, ou o que ficou para trás. `next` vem depois
+   * que ele fecha o aviso — o app mostra um diálogo de cada vez.
+   */
+  function reportImported(saved: NonNullable<Saved>, next: () => void): void {
+    const lost = [...saved.missing, ...saved.unsupported];
+    if (!lost.length) {
+      done();
+      next();
+      return;
+    }
+    const shown = lost.slice(0, 5).map((n) => `• ${escapeHtml(n)}`);
+    if (lost.length > 5) shown.push(`… +${lost.length - 5}`);
+    $alert.info(
+      {
+        title: escapeHtml(t("library.import_title")),
+        text: `${escapeHtml(t("library.import_partial"))}<br>${shown.join("<br>")}`,
+        translate: false,
+      },
+      () => next()
+    );
   }
 
   async function importOne(file: File): Promise<void> {
@@ -211,7 +299,8 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
     const first = await run(async () => {
       try {
         // Pelo conteúdo, não só pela extensão: um .llja renomeado continua sendo ZIP.
-        if (file.name.toLowerCase().endsWith(`.${LLJA_EXT}`) || (await isLlja(file)))
+        const lower = file.name.toLowerCase();
+        if (lower.endsWith(`.${PACKAGE_EXT}`) || lower.endsWith(".zip") || (await isZip(file)))
           ctx.format = "llja";
         ctx.properties = telemetryProperties(file, ctx.format);
         Telemetry.track("liturgy_import_started", ctx.properties);
@@ -219,14 +308,15 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
           const count = await importCollection(await file.text(), ctx);
           if (count !== null) return count > 0 ? { collection: count } : { invalid: true as const };
         }
-        const parsed = await parse(file, ctx.format);
-        if (!parsed) {
+        const read = await parse(file, ctx.format);
+        if ("error" in read) {
           Telemetry.track("liturgy_import_failed", {
             ...ctx.properties,
-            reason: "invalid_format",
+            reason: read.error === "invalid" ? "invalid_format" : read.error,
           });
-          return { invalid: true as const };
+          return { invalid: true as const, reason: read.error };
         }
+        const parsed = read.parsed;
         const existing = await library.getByName(parsed.name);
         if (existing) return { parsed, existing };
         return { saved: await store(parsed, null, undefined, ctx) };
@@ -237,7 +327,9 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
       }
     });
     if ("invalid" in first) {
-      invalid();
+      const key = "reason" in first && first.reason ? READ_ERROR_KEY[first.reason] : undefined;
+      if (key) $snackbar.error(t(key));
+      else invalid();
       return;
     }
     if ("collection" in first) {
@@ -258,13 +350,11 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
       invalid();
       return;
     }
-    if (saved.failed.length) {
-      $snackbar.warning(t("library.import_files_failed", { n: saved.failed.length }));
-    } else {
-      done();
-    }
+    const item = saved.item;
     // `save` de teste pode não devolver nada; a tela só oferece abrir o que existe.
-    if (saved.item && options.onImported) options.onImported(saved.item);
+    reportImported(saved, () => {
+      if (item && options.onImported) options.onImported(item);
+    });
   }
 
   // O `.ja` do Delphi é INI em Windows-1252 até a v26.6 e UTF-8 com BOM depois:
@@ -339,7 +429,7 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
     if (busy.value || importing) return;
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = `.${LLJA_EXT},.json,.ja`;
+    input.accept = `.${PACKAGE_EXT},.zip,.json,.ja`;
     input.onchange = () => {
       const file = input.files?.[0];
       if (file) void importFile(file);

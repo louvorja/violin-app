@@ -35,24 +35,44 @@ async function addFileItem(page, name) {
   await expect(dialog).not.toBeVisible();
 }
 
-async function storedFiles(page) {
-  return page.evaluate(async () => {
+/** Registros de uma tabela do IndexedDB do app, sem os bytes. */
+async function rows(page, table) {
+  return page.evaluate(async (table) => {
     const db = await new Promise((resolve, reject) => {
       const request = indexedDB.open("louvorja-violin");
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
     try {
+      if (!db.objectStoreNames.contains(table)) return [];
       return await new Promise((resolve, reject) => {
-        const request = db.transaction("liturgy.files").objectStore("liturgy.files").getAll();
+        const request = db.transaction(table).objectStore(table).getAll();
         request.onsuccess = () =>
-          resolve(request.result.map((r) => ({ name: r.name, bytes: r.data.byteLength })));
+          resolve(
+            request.result.map((r) => ({
+              id: r.id,
+              name: r.name,
+              type: r.type,
+              categoryId: r.categoryId,
+              bytes: r.data ? r.data.byteLength : 0,
+            }))
+          );
         request.onerror = () => reject(request.error);
       });
     } finally {
       db.close();
     }
-  });
+  }, table);
+}
+
+/** Exportar: abre a janela de opções e confirma com o que vem marcado. */
+async function exportNow(page) {
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: /Exportar Liturgia$/ }).click();
+  const dialog = page.getByTestId("liturgy-export-dialog");
+  await expect(dialog).toBeVisible();
+  await page.getByTestId("liturgy-export-confirm").click();
+  return download;
 }
 
 async function importFile(page, path) {
@@ -67,8 +87,10 @@ test("exportar o que está na tela num computador e importar com o arquivo no ou
   test.setTimeout(90_000);
 
   // Computador A: monta a liturgia, salva, muda depois de salvar e exporta.
+  const pageErrors = [];
   const a = await browser.newContext();
   const pageA = await a.newPage();
+  pageA.on("pageerror", (e) => pageErrors.push(e.message));
   await openLiturgy(pageA);
   await addFileItem(pageA, "Foto de abertura");
   await pageA.getByRole("button", { name: /Salvar Liturgia$/ }).click();
@@ -82,9 +104,29 @@ test("exportar o que está na tela num computador e importar com o arquivo no ou
     liturgy.add({ tipo: "anotacao", item: "Aviso de última hora" }, liturgy.getActiveDay());
   });
 
-  const download = pageA.waitForEvent("download");
-  await pageA.getByRole("button", { name: /Exportar Liturgia$/ }).click();
-  const file = await download;
+  // Um item da Biblioteca de Mídia também: vai junto (opção marcada por padrão).
+  await pageA.evaluate(
+    async (bytes) => {
+      const { default: idb } = await import("/src/helpers/IndexedDB.ts");
+      const { default: liturgy } = await import("/src/helpers/Liturgy.ts");
+      await idb.put("media_library", {
+        id: "file_origem",
+        name: "logo da igreja.png",
+        path: "blob:sessao-antiga",
+        type: "image",
+        addedAt: 1,
+        data: new Uint8Array(bytes).buffer,
+        mime: "image/png",
+      });
+      liturgy.add(
+        { tipo: "biblioteca-midia", item: "Logo", ref_id: "file_origem", subtipo: "image" },
+        liturgy.getActiveDay()
+      );
+    },
+    [...image]
+  );
+
+  const file = await exportNow(pageA);
   // Com locale "C" (sem UTF-8) o Chromium do Linux troca nome não-ASCII por "download".
   if (UTF8_LOCALE) expect(file.suggestedFilename()).toBe("Culto de Sábado — Missão.llja");
   const path = test.info().outputPath("culto.llja");
@@ -95,8 +137,9 @@ test("exportar o que está na tela num computador e importar com o arquivo no ou
   // Computador B: nada salvo, importa o arquivo.
   const b = await browser.newContext();
   const pageB = await b.newPage();
+  pageB.on("pageerror", (e) => pageErrors.push(e.message));
   await openLiturgy(pageB);
-  expect(await storedFiles(pageB)).toEqual([]);
+  expect(await rows(pageB, "media_library")).toEqual([]);
 
   await importFile(pageB, path);
   const ask = pageB.getByRole("alertdialog").or(pageB.getByRole("dialog")).last();
@@ -106,20 +149,39 @@ test("exportar o que está na tela num computador e importar com o arquivo no ou
   const list = pageB.locator(".liturgy-page");
   await expect(list).toContainText("Foto de abertura");
   await expect(list).toContainText("Aviso de última hora");
-  // O arquivo veio dentro do pacote e foi guardado neste aparelho.
-  expect(await storedFiles(pageB)).toEqual([{ name: "foto do culto.png", bytes: image.length }]);
+  await expect(list).toContainText("Logo");
+  // Os arquivos vieram no pacote e entraram na Biblioteca de Mídia, em "Importados";
+  // a foto do item de arquivo virou item da biblioteca.
+  const media = await rows(pageB, "media_library");
+  expect(media.map((m) => [m.name, m.type, m.categoryId, m.bytes]).sort()).toEqual([
+    ["foto do culto.png", "image", "importados", image.length],
+    ["logo da igreja.png", "image", "importados", image.length],
+  ]);
+  expect(await rows(pageB, "liturgy.files")).toEqual([]);
+  expect((await rows(pageB, "media_library.category")).map((c) => c.name)).toEqual(["Importados"]);
 
-  const ref = await pageB.evaluate(async () => {
+  const refs = await pageB.evaluate(async () => {
     const { default: liturgy } = await import("/src/helpers/Liturgy.ts");
-    const { resolveLiturgyFile } = await import("/src/helpers/LiturgyFiles.ts");
-    const item = liturgy.list(liturgy.getActiveDay()).find((i) => i.item === "Foto de abertura");
-    const resolved = item?.ref_id ? await resolveLiturgyFile(item.ref_id) : null;
-    return resolved && { name: resolved.name, kind: resolved.kind };
+    return liturgy
+      .list(liturgy.getActiveDay())
+      .filter((i) => i.ref_id)
+      .map((i) => ({ item: i.item, tipo: i.tipo, ref_id: i.ref_id }));
   });
-  expect(ref).toEqual({ name: "foto do culto.png", kind: "image" });
+  const idOf = (name) => media.find((m) => m.name === name).id;
+  expect(refs).toEqual([
+    { item: "Foto de abertura", tipo: "biblioteca-midia", ref_id: idOf("foto do culto.png") },
+    { item: "Logo", tipo: "biblioteca-midia", ref_id: idOf("logo da igreja.png") },
+  ]);
 
-  // Importar de novo: o nome já existe — três saídas; "como cópia" cria outra.
-  await importFile(pageB, path);
+  // Importar de novo, agora pelo caminho do duplo clique / arrastar (fila da
+  // Liturgia): o nome já existe — três saídas; "como cópia" cria outra.
+  await pageB.evaluate(
+    async (bytes) => {
+      const { requestLiturgyImport } = await import("/src/modules/liturgy/openRequests.ts");
+      requestLiturgyImport(new File([new Uint8Array(bytes)], "culto.llja"));
+    },
+    [...fs.readFileSync(path)]
+  );
   const conflict = pageB.getByRole("alertdialog").or(pageB.getByRole("dialog")).last();
   await expect(conflict).toContainText("Já existe uma liturgia chamada");
   await expect(conflict.getByRole("button", { name: "Substituir" })).toBeVisible();
@@ -134,6 +196,24 @@ test("exportar o que está na tela num computador e importar com o arquivo no ou
     return (await useLiturgyLibrary().list()).map((l) => l.name);
   });
   expect(names).toEqual(["Culto de Sábado — Missão", "Culto de Sábado — Missão (2)"]);
+  // Importar de novo não duplicou nada na biblioteca. E os dois aparecem com imagem (a URL é recriada a partir dos bytes).
+  expect(await rows(pageB, "media_library")).toHaveLength(2);
+  await pageB.locator("#ribbon-tab-worship").click();
+  await pageB.getByTestId("ribbon-btn-media_library").click();
+  const grid = pageB.locator(".media-root");
+  await expect(grid).toBeVisible({ timeout: 15_000 });
+  await expect(grid).toContainText("foto do culto.png");
+  await expect(grid).toContainText("Importados");
+  await expect
+    .poll(() =>
+      grid
+        .locator("img.media-grid-item-thumb")
+        .evaluateAll((imgs) => imgs.filter((i) => i.complete && i.naturalWidth > 0).length)
+    )
+    .toBe(2);
+
+  // Nenhum erro na página (um laço de reatividade já passou despercebido aqui).
+  expect(pageErrors).toEqual([]);
   await b.close();
 });
 
@@ -146,8 +226,7 @@ test("exportar sem ter salvo usa o nome do dia, e liturgia vazia avisa", async (
     const { default: liturgy } = await import("/src/helpers/Liturgy.ts");
     liturgy.add({ tipo: "anotacao", item: "Boas-vindas" }, liturgy.getActiveDay());
   });
-  const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: /Exportar Liturgia$/ }).click();
+  const download = exportNow(page);
   const day = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"][
     new Date().getDay()
   ];
