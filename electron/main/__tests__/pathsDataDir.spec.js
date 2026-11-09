@@ -31,6 +31,23 @@ afterEach(() => {
   vi.restoreAllMocks(); vi.unstubAllEnvs(); delete require.cache[require.resolve("../paths.js")]; fs.removeSync(root);
 });
 describe("perfil privado e destinos independentes", () => {
+  it("mantém a origem de Mover quando o boot é interrompido antes de publicar o layout", () => {
+    paths.configureProfile();
+    const source = path.join(root, "private-media"), target = path.join(root, "moved-media");
+    fs.outputFileSync(path.join(source, "musics/song.mp3"), "original audio");
+    fs.ensureDirSync(target);
+    const current = { ...paths.storageLayout(), mediaDir: source, mediaShared: false,
+      pending: { id: "11111111-1111-4111-8111-111111111111", mediaDir: target,
+        videosDir: paths.videosDir(), mediaAction: "move", videosAction: "reuse" } };
+    paths.saveLayout(current);
+    const layout = require("../storageLayout.js");
+    expect(() => layout.initialize({ ...paths.migrationOptions(), onProgress(event) {
+      if (event.phase === "publishing") throw new Error("parent closed before publication");
+    } })).toThrow("parent closed before publication");
+    expect(fs.readFileSync(path.join(source, "musics/song.mp3"), "utf8")).toBe("original audio");
+    expect(fs.readJsonSync(path.join(bootstrap, "storage-layout.json"))).toEqual(current);
+  });
+
   it("instalação nova usa perfil privado, acervo comum e vídeos na pasta nativa", () => {
     paths.configureProfile();
     expect(paths.dataDir()).toBe(path.join(bootstrap, "profile"));

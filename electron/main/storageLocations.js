@@ -8,7 +8,7 @@ const roots = require("./storageRoots.js");
 const { canonical, overlaps } = roots;
 let changeError = null;
 let configuring = false;
-const { validateContents, probe, preflightCopy, copyCollection, applyPendingLayout } = require("./storageCollectionMigration.js");
+const { validateContents, probe, preflightCopy, copyCollection, applyPendingLayout, finishPendingMoves } = require("./storageCollectionMigration.js");
 const { defaultLocations } = require("./storageLayout.js");
 function normalized(p) { const s = path.resolve(p); return process.platform === "win32" ? s.toLowerCase() : s; }
 function validateRoots(mediaDir, videosDir) {
@@ -68,7 +68,10 @@ async function configure(input) {
 function applyPending() {
   const c = paths.storageLayout();
   const next = applyPendingLayout(c, { profileDir: paths.dataDir(), programDir: paths.programDir(), workDir: path.join(paths.dataDir(), "temp", "migrations") });
-  if (next !== c) paths.saveLayout(next);
+  if (next !== c) {
+    paths.saveLayout(next);
+    finishPendingMoves(c, next);
+  }
   changeError = next.pendingError || null;
 }
 function completeSetup() {
