@@ -141,6 +141,7 @@ import { DB_TABLE } from "@/constants/DbTables";
 import $alert from "@/helpers/Alert";
 import { fetchWithTimeout } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
+import Platform from "@/helpers/Platform";
 
 function arquivo(dir: string, item = "Arquivo"): LiturgyItem {
   return { id: "1", tipo: LiturgyItemTypeEnum.ARQUIVO, item, dir } as LiturgyItem;
@@ -177,6 +178,7 @@ function music(mode = "sung"): LiturgyItem {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  Platform.isDesktop = true;
   resetarSessaoOverlayVinculado();
   mocks.systemPlayer = false;
   mocks.stage = 0;
@@ -208,6 +210,21 @@ beforeEach(() => {
 });
 
 describe("liturgia — arquivo escolhido na web", () => {
+  it.each([
+    "G:\\Meu Drive\\Culto\\Informativo.mp4",
+    "\\\\servidor\\culto\\aviso.png",
+    "file:///C:/Culto/aviso.pdf",
+    "louvorja://local/Users/operador/aviso.png",
+  ])("orienta a escolher novamente o arquivo local importado na web: %s", async (dir) => {
+    Platform.isDesktop = false;
+    const ui = useLiturgyExecution();
+    await ui.executeItem(arquivo(dir));
+    expect($alert.error).toHaveBeenCalledWith({ text: "alerts.file_choose_again_web" });
+    expect(mocks.projectFile).not.toHaveBeenCalled();
+    expect(mocks.openAudio).not.toHaveBeenCalled();
+    expect(Telemetry.captureException).not.toHaveBeenCalled();
+  });
+
   it("projeta bytes locais pela referência após reabrir, sem tratar o nome como caminho", async () => {
     mocks.resolveLiturgyFile.mockResolvedValue({
       url: "blob:local",

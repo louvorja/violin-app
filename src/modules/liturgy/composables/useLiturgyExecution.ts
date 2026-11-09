@@ -624,6 +624,19 @@ export function useLiturgyExecution() {
         libRef: { table: DB_TABLE.LITURGY_FILES, id: item.ref_id },
       };
     } else {
+      // Uma liturgia importada pode guardar o caminho do computador de origem.
+      // O navegador precisa que o operador escolha os bytes pelo seletor: não
+      // pode abrir esse caminho nem tratá-lo como um endereço do acervo.
+      if (
+        !Platform.isDesktop &&
+        (/^[A-Za-z]:[\\/]/.test(dir) ||
+          dir.startsWith("\\\\") ||
+          /^(?:file:|louvorja:\/\/local\/)/i.test(dir))
+      ) {
+        reportMissingResource("open_file", "local_file_selection");
+        $alert.error({ text: chaveLiturgia("alerts.file_choose_again_web") });
+        return false;
+      }
       const status = await _localFileStatus(dir);
       // Outro item pode ter sido pedido enquanto o disco era consultado.
       if (intent !== fileOpenIntent) return false;
