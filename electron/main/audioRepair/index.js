@@ -17,6 +17,7 @@
  */
 
 const fs = require("node:fs");
+const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { readAudioTrack, Mp4AudioUnsupported } = require("./mp4AudioTrack.js");
 
@@ -74,6 +75,9 @@ function _replacement(entry, size) {
  * @returns {Promise<Record<string, unknown>>}
  */
 async function begin(caminho) {
+  // A mesma chave para qualquer grafia do arquivo: no Windows a URL chega
+  // como `C:/...` e o caminho nativo é `C:\...`.
+  caminho = path.normalize(caminho);
   let stat;
   try {
     stat = await fs.promises.stat(caminho);
@@ -230,7 +234,7 @@ function report(token, result) {
  * @param {{ size: number, mtimeMs: number }} stat
  */
 function forFile(caminho, stat) {
-  const entry = _files.get(caminho);
+  const entry = _files.get(path.normalize(caminho));
   if (!entry || !_sameFile(entry, stat)) return null;
   if (entry.state !== "scanning" && entry.patches.length === 0) return null;
   return {

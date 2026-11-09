@@ -10,7 +10,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 import fs from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import Path from "@/helpers/Path";
 
@@ -147,6 +147,15 @@ describe("entrega pelo louvorja://local", () => {
     const part = await body(video.url, `bytes=${from}-${to}`);
     expect(part.status).toBe(206);
     expect(part.bytes).toEqual(want.subarray(from, to + 1));
+  });
+
+  it("a varredura registrada por outra grafia do caminho vale para o protocolo", async () => {
+    const video = newVideo();
+    // No Windows a URL vira `C:/...` e o caminho nativo é `C:\...`; aqui, `/./`.
+    const outraGrafia = `${dirname(video.path)}${sep}.${sep}${basename(video.path)}`;
+    const plan = await audioRepair.begin(outraGrafia);
+    audioRepair.report(plan.token, { upto: plan.count, bad: [3], done: true });
+    expect((await body(video.url)).bytes).toEqual(expected(video, [3]));
   });
 
   it("arquivo sem quadro recusado segue pelo caminho de sempre", async () => {
