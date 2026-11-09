@@ -14,12 +14,13 @@
  * @returns {boolean}
  */
 function safeSend(target, channel, payload) {
-  const webContents = target && target.webContents ? target.webContents : target;
-  if (!webContents || typeof webContents.isDestroyed !== "function" || webContents.isDestroyed()) {
-    return false;
-  }
-
   try {
+    // O getter nativo de BrowserWindow também lança após a destruição; a
+    // proteção precisa começar antes de resolver o destinatário.
+    const webContents = target?.webContents ?? target;
+    if (!webContents || typeof webContents.isDestroyed !== "function" || webContents.isDestroyed()) {
+      return false;
+    }
     webContents.send(channel, payload);
     return true;
   } catch (error) {

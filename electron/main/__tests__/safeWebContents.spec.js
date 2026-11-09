@@ -13,6 +13,11 @@ function makeWebContents({ destroyed = false, sendImpl } = {}) {
 }
 
 describe("safeSend", () => {
+  it("descarta janela destruída cujo getter webContents lança", () => {
+    const target = { get webContents() { throw new Error("Object has been destroyed"); } };
+    expect(() => safeSend(target, "canal", {})).not.toThrow();
+    expect(safeSend(target, "canal", {})).toBe(false);
+  });
   it("retorna false e não lança quando target é null/undefined", () => {
     expect(safeSend(null, "canal", { a: 1 })).toBe(false);
     expect(safeSend(undefined, "canal", { a: 1 })).toBe(false);
