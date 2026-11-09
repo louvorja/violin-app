@@ -235,14 +235,14 @@ function forFile(caminho, stat) {
   if (entry.state !== "scanning" && entry.patches.length === 0) return null;
   return {
     /** Resolve quando os bytes até `until` (exclusive) já foram conferidos. */
-    waitFor(until) {
-      if (entry.state !== "scanning" || entry.frontier >= until) return null;
+    waitFor(until, maxMs = CHUNK_WAIT_MAX_MS) {
+      if (entry.state !== "scanning" || entry.frontier >= until || !(maxMs > 0)) return null;
       return new Promise((resolve) => {
         const waiter = { until, resolve };
         waiter.timer = setTimeout(() => {
           entry.waiters.delete(waiter);
           resolve();
-        }, CHUNK_WAIT_MAX_MS);
+        }, Math.min(maxMs, CHUNK_WAIT_MAX_MS));
         entry.waiters.add(waiter);
       });
     },

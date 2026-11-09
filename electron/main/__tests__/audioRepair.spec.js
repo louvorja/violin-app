@@ -205,6 +205,30 @@ describe("entrega pelo louvorja://local", () => {
     expect(released).toBe(true);
   });
 
+  it("um pedido de vários pedaços espera no total o teto, não o teto por pedaço", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "setTimeout", "Date"] });
+    // ~10 pedaços de 64 KB: o salto para longe do ponto conferido.
+    const video = newVideo({ sizes: Array(10).fill(70_000), perChunk: [4, 3, 3] });
+    const plan = await audioRepair.begin(video.path);
+    let settled = false;
+    const pending = body(video.url).then((r) => {
+      settled = true;
+      return r;
+    });
+    let elapsed = 0;
+    // A varredura dá sinal de vida, mas não avança: só o teto libera a entrega.
+    while (!settled && elapsed <= audioRepair.CHUNK_WAIT_MAX_MS * 4) {
+      await audioRepair.read(plan.token, 0, 1);
+      vi.advanceTimersByTime(250);
+      elapsed += 250;
+      // Leituras do disco são I/O de verdade: dê voltas ao laço para concluírem.
+      for (let k = 0; k < 30 && !settled; k++) await new Promise((r) => setImmediate(r));
+    }
+    expect(settled).toBe(true);
+    expect(elapsed).toBeLessThanOrEqual(audioRepair.CHUNK_WAIT_MAX_MS + 500);
+    expect((await pending).bytes).toEqual(video.file);
+  });
+
   it("arquivo alterado no disco perde a troca antiga", async () => {
     const video = newVideo();
     await scanAll(video, [3]);
