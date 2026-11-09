@@ -270,6 +270,7 @@
     "export_too_large": "El archivo superaría 2 GB. Desmarque alguna biblioteca o quite videos grandes de la liturgia e intente de nuevo.",
     "imported_category": "Importados",
     "import_partial": "Liturgia importada, pero estos ítems quedaron sin el archivo. Elija de nuevo en el ítem:",
+    "import_unsupported": "Estos archivos vinieron juntos, pero la app aún no guarda este tipo (PowerPoint, por ejemplo), así que el ítem quedó sin él:",
     "import_too_large": "El archivo de la liturgia es demasiado grande (más de 2 GB).",
     "import_unsupported_version": "Este archivo fue hecho en una versión más nueva de LouvorJA. Actualice la app para abrirlo."
   },

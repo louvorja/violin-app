@@ -274,18 +274,26 @@ export function useLiturgyImport(library: Library, report: Report, options: Impo
    * que ele fecha o aviso — o app mostra um diálogo de cada vez.
    */
   function reportImported(saved: NonNullable<Saved>, next: () => void): void {
-    const lost = [...saved.missing, ...saved.unsupported];
-    if (!lost.length) {
+    if (!saved.missing.length && !saved.unsupported.length) {
       done();
       next();
       return;
     }
-    const shown = lost.slice(0, 5).map((n) => `• ${escapeHtml(n)}`);
-    if (lost.length > 5) shown.push(`… +${lost.length - 5}`);
+    const list = (names: string[]) => {
+      const shown = names.slice(0, 5).map((n) => `• ${escapeHtml(n)}`);
+      if (names.length > 5) shown.push(`… +${names.length - 5}`);
+      return shown.join("<br>");
+    };
+    const parts: string[] = [];
+    if (saved.missing.length)
+      parts.push(`${escapeHtml(t("library.import_partial"))}<br>${list(saved.missing)}`);
+    // Veio no pacote, mas nenhuma biblioteca do app guarda esse tipo (PowerPoint, por exemplo).
+    if (saved.unsupported.length)
+      parts.push(`${escapeHtml(t("library.import_unsupported"))}<br>${list(saved.unsupported)}`);
     $alert.info(
       {
         title: escapeHtml(t("library.import_title")),
-        text: `${escapeHtml(t("library.import_partial"))}<br>${shown.join("<br>")}`,
+        text: parts.join("<br><br>"),
         translate: false,
       },
       () => next()

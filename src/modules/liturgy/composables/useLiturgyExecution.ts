@@ -41,6 +41,37 @@ import {
 import { canLinkOverlay, youtubeVideoId } from "../overlayLink";
 import { ativarOverlayVinculado, prepararExecucao } from "../linkedOverlay";
 
+interface MediaLibraryRecord {
+  path?: string;
+  type?: string;
+  data?: ArrayBuffer | ArrayBufferView | Blob;
+  mime?: string;
+}
+
+/**
+ * URL viva para os bytes de um registro da Biblioteca de Mídia, uma por
+ * registro durante a sessão (sem criar outra a cada clique no item).
+ */
+const liveMediaUrls = new Map<string, string>();
+function liveUrlFor(id: string, rec: MediaLibraryRecord): string {
+  const cached = liveMediaUrls.get(id);
+  if (cached) return cached;
+  const data = rec.data;
+  if (!data) return "";
+  const size =
+    typeof Blob !== "undefined" && data instanceof Blob
+      ? data.size
+      : (data as ArrayBuffer | ArrayBufferView).byteLength;
+  if (!size) return "";
+  const blob =
+    typeof Blob !== "undefined" && data instanceof Blob
+      ? data
+      : new Blob([data as BlobPart], { type: rec.mime || "" });
+  const url = URL.createObjectURL(blob);
+  liveMediaUrls.set(id, url);
+  return url;
+}
+
 // A shell e o módulo podem pedir arquivos ao mesmo tempo. Uma leitura/abertura
 // antiga que termina depois não assume a URL da solicitação mais recente.
 let fileOpenIntent = 0;
@@ -350,12 +381,14 @@ export function useLiturgyExecution() {
       let target = item.dir;
       let typeHint = item.subtipo || undefined;
       if (item.ref_id) {
-        const rec = await $idb.get<{ path?: string; type?: string }>(
-          DB_TABLE.MEDIA_LIBRARY,
-          item.ref_id
-        );
+        const rec = await $idb.get<MediaLibraryRecord>(DB_TABLE.MEDIA_LIBRARY, item.ref_id);
         if (rec?.path) target = rec.path;
         if (rec?.type) typeHint = rec.type;
+        // Registro com os bytes guardados (web, HEIC, importado de um pacote): o
+        // `blob:` salvo morreu com a sessão em que foi criado. O telão relê pela
+        // `libRef`, mas o player daqui (áudio e o som do vídeo) usa esta URL — sem
+        // recriar, dava "Não foi possível tocar este áudio".
+        if (target.startsWith("blob:") && rec) target = liveUrlFor(item.ref_id, rec) || target;
       }
       if (!target) {
         reportMissingResource("execute_media_library", "media_library_item");
