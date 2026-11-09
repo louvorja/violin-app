@@ -6,6 +6,16 @@ test.use({ serviceWorkers: "block" });
  * Temporizador e Temporizador de Culto contam até um horário. O relógio da
  * página começa às 10:58 e o horário é 11:00: dois minutos de contagem.
  */
+const START = new Date(2026, 10, 5, 10, 58, 0);
+
+/**
+ * A carga da página pode levar dezenas de segundos numa máquina lenta, e o
+ * relógio instalado segue andando: volta para 10:58 com o módulo já na tela.
+ */
+async function backToStart(page) {
+  await page.clock.setSystemTime(START);
+}
+
 const MODULES = [
   { id: "timer", tab: "utilities", stage: "timer-stage", display: "timer-display" },
   {
@@ -27,6 +37,7 @@ async function openModule(page, mod) {
   await page.locator(`#ribbon-tab-${mod.tab}`).click();
   await page.locator(`[data-testid="ribbon-btn-${mod.id}"]`).click();
   await expect(page.getByTestId(mod.display)).toBeVisible();
+  await backToStart(page);
   // Regressivo, sem os sons do Temporizador de Culto (no teste não há áudio).
   await page.evaluate(async (id) => {
     const { default: userdata } = await import("/src/helpers/UserData.ts");
@@ -108,6 +119,7 @@ test("timer: sem mexer no modo, conta regressivo como a tela mostra", async ({ p
   await page.locator('[data-testid="ribbon-btn-timer"]').click();
   const display = page.getByTestId("timer-display");
   await expect(display).toBeVisible();
+  await backToStart(page);
   // O modo fica na barra de baixo: sem mexer, já vem em Regressivo.
   await expect(page.getByRole("tab", { name: "Regressivo" })).toHaveAttribute(
     "aria-selected",

@@ -33,6 +33,11 @@ test("regressivo mostra a meta, avisa em amarelo e passa do zero em vermelho", a
   await projection.goto("/projection/module?module=stopwatch");
   await expect(projection.locator(".module-projection__text")).toHaveText("05:00");
 
+  // Com o telão já de pé, o relógio da página para: daqui em diante o tempo só
+  // anda com runFor. Solto, ele seguia correndo entre um passo e outro, e numa
+  // máquina lenta (a esteira) a tela mostrava segundos a mais ou a menos.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+
   await page.bringToFront();
   await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
   await page.clock.runFor(5 * 60_000 - 30_000);
@@ -52,6 +57,8 @@ test("regressivo mostra a meta, avisa em amarelo e passa do zero em vermelho", a
   await expect(display).toHaveText("00:48");
   await expect(stage).toHaveAttribute("data-alert", "warning");
 
+  // O resto não depende de segundos; solto, o clique não espera a animação parar.
+  await page.clock.resume();
   await page.getByTestId("ribbon-btn-stopwatch_reset").click();
   await expect(display).toHaveText("06:00");
   await expect(stage).toHaveAttribute("data-alert", "none");
