@@ -19,7 +19,8 @@ vi.mock("@/helpers/AppData", () => ({
 }));
 vi.mock("@/helpers/UserData", () => ({
   default: {
-    get: (key, fallback) => (key in prefs ? [...prefs[key]] : fallback),
+    get: (key, fallback) =>
+      key in prefs ? (Array.isArray(prefs[key]) ? [...prefs[key]] : prefs[key]) : fallback,
     set: (key, value) => {
       prefs[key] = [...value];
     },
@@ -78,6 +79,18 @@ describe("⌘W / Ctrl+W fecha abas como no Chrome", () => {
     // O álbum é diálogo (popup), não aba: não conta.
     expect(Modules.closeActiveTab()).toBe(false);
     expect(state.modules.album.show).toBe(true);
+  });
+
+  it.each([
+    ["música aberta no player", () => (state.modules.media = { id: "media", is_playing: true })],
+    ["player visível", () => (state.modules.media = { id: "media", show: true })],
+    ["som de fundo tocando", () => (prefs["modules.background_sound.is_playing"] = true)],
+  ])("sem aba e com %s, não pede para fechar a janela", (_caso, noAr) => {
+    state.modules = { media: { id: "media", show: false } };
+    state.active_module = null;
+    noAr();
+    expect(Modules.closeActiveTab()).toBe(true);
+    delete prefs["modules.background_sound.is_playing"];
   });
 
   it("na tela inicial, com abas na barra e nenhuma à vista, não fecha nenhuma", () => {

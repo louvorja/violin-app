@@ -2860,8 +2860,8 @@ $storage.hydrate().then(async () => {
       (e) => {
         // Segurar a tecla não pode ir fechando abas até derrubar a janela.
         if (e?.repeat) return;
-        // Sem aba, a janela: o mesmo que o botão de fechar (com projeção no ar,
-        // ela só sai da frente).
+        // Sem aba e nada no ar, a janela: o mesmo que o botão de fechar (com
+        // projeção aberta, ela só sai da frente).
         if (!Modules.closeActiveTab()) void Platform.api?.window?.close?.();
       },
       {

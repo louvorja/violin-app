@@ -23,6 +23,17 @@ import Telemetry from "@/helpers/Telemetry";
 // Diálogos do player, não abas — mesmo com `show`.
 const NOT_TABS = new Set(["media", "lyric", "album"]);
 
+/** Música, letra, arquivo, vídeo ou som no ar: o Ctrl+W sem aba não encerra o programa. */
+function _somethingOnAir() {
+  return (
+    $appdata.get(KEYS.MODULES.MEDIA.IS_PLAYING, false) === true ||
+    $appdata.get(KEYS.MODULES.MEDIA.SHOW, false) === true ||
+    $userdata.get(KEYS.MODULES.BACKGROUND_SOUND.IS_PLAYING, false) === true ||
+    $userdata.get(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false) === true ||
+    $userdata.get(KEYS.MODULES.MEDIA_LIBRARY.IS_PLAYING, false) === true
+  );
+}
+
 export default {
   /** Verifica se o módulo está registrado (em $appdata.modules.<id>). */
   check(id) {
@@ -113,12 +124,14 @@ export default {
 
   /**
    * ⌘W / Ctrl+W, como no Chrome: fecha a aba à vista. Devolve `false` quando não
-   * sobrou aba — aí quem chamou fecha a janela. Com abas na barra e nenhuma à vista
-   * (a tela inicial), não fecha nada: adivinhar uma seria fechar a aba errada.
+   * sobrou aba e nada está no ar — aí quem chamou fecha a janela. Com o player ou
+   * um som no ar, sem aba, não faz nada: um toque a mais encerrava o programa no
+   * meio da música. Com abas na barra e nenhuma à vista (a tela inicial), não
+   * fecha nada: adivinhar uma seria fechar a aba errada.
    */
   closeActiveTab() {
     const tabs = this.tabs();
-    if (tabs.length === 0) return false;
+    if (tabs.length === 0) return _somethingOnAir();
     const active = $appdata.get("active_module");
     if (tabs.some((m) => m.id === active)) this.close(active);
     return true;
