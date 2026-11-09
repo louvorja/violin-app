@@ -3234,22 +3234,26 @@ const _self = {
     const fade_audio = $userdata.get(KEYS.MODULES.MEDIA.FADE_AUDIO, false);
     const isVideo = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE);
 
+    // O estado muda no pedido, não quando o áudio responde: o próximo toque no
+    // botão ou no espaço lê "pausado" já durante o fade e retoma, em vez de
+    // pausar de novo e parecer que travou.
     if (bool) {
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
       if (fade_audio && !isVideo) {
         _audio.fadeOut(() => {
           _audio.pause(callback);
-          $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
           $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_FADING, false);
         });
       } else {
         _audio.pause(callback);
-        $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
       }
       _broadcastVideoState();
     } else {
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);
       const self = this;
       _audio.play(
         (e) => {
+          $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
           // O "tocar já" do YouTube tem um fallback próprio (volta ao embed e
           // inicia o download). Um 403 do CDN no meio da trilha não pode abrir
           // o modal de áudio: o operador acabaria fechando um erro que o app

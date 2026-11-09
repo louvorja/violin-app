@@ -100,6 +100,40 @@ function acompanhar(promise: Promise<boolean>) {
   return state;
 }
 
+describe("pausar e retomar com fade", () => {
+  it("o estado muda no pedido: o segundo toque durante o fade retoma, não pausa de novo", async () => {
+    const el = await tocandoMusicaAtual();
+    el.play = vi.fn(() => Promise.resolve()) as unknown as HTMLMediaElement["play"];
+    const { default: appdata } = await import("@/helpers/AppData");
+    const pausado = () => appdata.get(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED);
+
+    media.pause();
+    expect(pausado()).toBe(true);
+    await vi.advanceTimersByTimeAsync(60);
+
+    // O botão e o espaço decidem por este estado (main-shell `_playPause`).
+    if (pausado()) media.play();
+    else media.pause();
+    expect(pausado()).toBe(false);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(el.play).toHaveBeenCalled();
+    expect(pausado()).toBe(false);
+  });
+
+  it("play que falha volta a mostrar pausado", async () => {
+    const el = await tocandoMusicaAtual();
+    const erro = new Error("no supported source");
+    erro.name = "NotSupportedError";
+    el.play = vi.fn(() => Promise.reject(erro)) as unknown as HTMLMediaElement["play"];
+    const { default: appdata } = await import("@/helpers/AppData");
+
+    media.play();
+    expect(appdata.get(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED)).toBe(false);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(appdata.get(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED)).toBe(true);
+  });
+});
+
 describe("fade ao trocar de música", () => {
   it("abre a próxima música mesmo se o operador pausar durante o fade", async () => {
     await tocandoMusicaAtual();
