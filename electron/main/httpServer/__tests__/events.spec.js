@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 import { EventEmitter, once } from "node:events";
 import { createServer } from "node:http";
+import { MusicPresentationCore } from "../../../../src/presentation/MusicPresentationCore";
 
 const require = createRequire(import.meta.url);
 const events = require("../events.js");
@@ -52,6 +53,27 @@ describe("HTTP SSE — backpressure", () => {
       slide: { lyric },
       nextSlide: null,
     },
+  });
+
+  it("relays and replays the last timed slide when unmarked slides follow it", () => {
+    const client = openClient();
+    const core = new MusicPresentationCore("timed-song", [
+      { lyric: "Verse" }, { lyric: "Last timed verse" }, { lyric: "Unmarked" },
+    ], [0, 10, 0], "Song");
+    const snapshot = core.dispatch({
+      type: "clock", position: 15, sessionId: "timed-song", commandId: 1,
+    });
+    expect(snapshot).toMatchObject({ slideIndex: 1, totalSlides: 3, nextSlide: null });
+    const packet = { ...canonicalSnapshot(1, "unused"), snapshot };
+    events.publish({ type: "music_presentation_snapshot", payload: packet });
+    expect(messages(client.writes)).toEqual([{ type: "music_presentation_snapshot", payload: packet }]);
+    expect(messages(openClient().writes)).toEqual([{ type: "music_presentation_snapshot",
+      payload: { ...packet, delivery: { kind: "replay" } } }]);
+
+    events.publish({ type: "music_presentation_snapshot", payload: {
+      ...packet, snapshot: { ...snapshot, slideIndex: 2, nextSlide: { lyric: "Invalid" } },
+    } });
+    expect(messages(client.writes)).toHaveLength(1);
   });
 
   it("replays the latest canonical music snapshot to a late SSE client and purges it on close", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { musicCommandSessionRejectionReason, readMusicPresentationPacket } from "../MusicPresentationPacket";
+import { MusicPresentationCore } from "../MusicPresentationCore";
 
 const snapshot = {
   sessionId: "song-a", revision: 1, active: true, title: "Song", slideIndex: 0,
@@ -16,6 +17,18 @@ const snapshot = {
 const envelope = { schema: 1, selectionRevision: 4, playbackId: "play-a", progress: 25, slideProgress: 30, emittedAt: 1_000 };
 
 describe("production music presentation packet boundary", () => {
+  it("delivers the last timed slide even when unmarked slides follow it", () => {
+    const core = new MusicPresentationCore("timed-song", [
+      { lyric: "Verse" }, { lyric: "Last timed verse" }, { lyric: "Unmarked" },
+    ], [0, 10, 0], "Song");
+    const lastTimed = core.dispatch({
+      type: "clock", position: 15, sessionId: "timed-song", commandId: 1,
+    });
+    expect(lastTimed).toMatchObject({ slideIndex: 1, totalSlides: 3, nextSlide: null });
+    expect(readMusicPresentationPacket({ ...envelope, snapshot: lastTimed })?.snapshot)
+      .toEqual(lastTimed);
+  });
+
   it("preserves both slides' visual fields and strips unrelated objects", () => {
     const packet = readMusicPresentationPacket({ ...envelope, snapshot });
     expect(packet?.snapshot.slide).toEqual({
@@ -32,6 +45,7 @@ describe("production music presentation packet boundary", () => {
   it("rejects malformed state and oversize payloads before delivery", () => {
     expect(readMusicPresentationPacket({ ...envelope, schema: 2, snapshot })).toBeNull();
     expect(readMusicPresentationPacket({ ...envelope, snapshot: { ...snapshot, slideIndex: 2 } })).toBeNull();
+    expect(readMusicPresentationPacket({ ...envelope, snapshot: { ...snapshot, slideIndex: 1 } })).toBeNull();
     expect(readMusicPresentationPacket({ ...envelope, snapshot: { ...snapshot, slide: { lyric: "x", id_music: {} } } })).toBeNull();
     expect(readMusicPresentationPacket({ ...envelope, snapshot: { ...snapshot, slide: { lyric: "x".repeat(100_001) } } })).toBeNull();
     expect(readMusicPresentationPacket({ ...envelope, snapshot: { ...snapshot, slide: { lyric: "x", url_image: "data:" + "x".repeat(8_193) } } })).toBeNull();
