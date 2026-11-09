@@ -94,6 +94,7 @@ export const KEYS = {
       DAY_NOTES: `${MODULES_LITURGY}.day_notes`,
       SCHEDULED_ITEMS: `${MODULES_LITURGY}.scheduled_items`,
       SCHEDULED_CATEGORIES: `${MODULES_LITURGY}.scheduled_categories`,
+      SCHEDULED_MIGRATED: `${MODULES_LITURGY}.scheduled_migrated`,
       LEGACY_ITEMS: `${MODULES_LITURGY}.items`,
       LEGACY_WEEKS: `${MODULES_LITURGY}.weeks`,
       LEGACY_ACTIVE_WEEK: `${MODULES_LITURGY}.active_week`,
