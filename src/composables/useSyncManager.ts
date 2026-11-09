@@ -261,6 +261,22 @@ export function syncBibleChaptersProgress(done: number, total: number): number {
 // baixadas ou removidas). As telas que mostram "o que está baixado" — Bíblia e
 // Sincronizar — releem quando ele muda, em vez de ficar com a foto de quando
 // abriram.
+/**
+ * Categoria de uma falha de arquivo da fila, para a telemetria: o código do
+ * sistema ou o status HTTP. A mensagem crua traz o caminho do usuário.
+ */
+export function downloadErrorKind(message: unknown): string {
+  if (typeof message !== "string" || !message) return "unknown";
+  const http = /\bHTTP (\d{3})\b/.exec(message);
+  if (http) return `http_${http[1]}`;
+  const code = /\b(E[A-Z]{2,15})\b/.exec(message);
+  if (code) return code[1];
+  if (/timeout/i.test(message)) return "timeout";
+  if (/somente para leitura|em uso por outra conta/i.test(message)) return "collection_readonly";
+  if (/incompleto|parcial/i.test(message)) return "incomplete";
+  return "other";
+}
+
 const bibleRevision = ref(0);
 function bumpBibleRevision(): void {
   bibleRevision.value += 1;
@@ -1272,8 +1288,10 @@ export function useSyncManager() {
         };
       })
     );
+    let firstError: string | null = null;
     cleanupFns.push(
-      Platform.download.onFileError(() => {
+      Platform.download.onFileError((d: { error?: unknown } | null) => {
+        firstError ??= downloadErrorKind(d?.error);
         downloadFailedCount.value += 1;
         downloadProgress.value = {
           ...downloadProgress.value,
@@ -1313,7 +1331,11 @@ export function useSyncManager() {
             // funcional de erro, inclusive quando o renderer ainda está montando.
             void import("@/helpers/Telemetry")
               .then(({ default: Telemetry }) => {
-                Telemetry.track("download_queue_failed", { code, failed_count: failed });
+                Telemetry.track("download_queue_failed", {
+                  code,
+                  failed_count: failed,
+                  first_error: firstError,
+                });
               })
               .catch(() => {});
           } else {

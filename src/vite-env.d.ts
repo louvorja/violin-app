@@ -300,7 +300,7 @@ declare global {
         cb: (d: { file?: string; total: number; downloaded?: number; failed?: number }) => void
       ) => void;
       onFileDone: (cb: () => void) => void;
-      onFileError: (cb: () => void) => void;
+      onFileError: (cb: (d: { file?: string; error?: string } | null) => void) => void;
       onQueueDone: (
         cb: (d: {
           queued?: number;
