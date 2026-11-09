@@ -275,6 +275,8 @@
     "import_as_copy": "Importar como copia",
     "import_open": "¿Abrir \"{name}\" ahora en {day}?",
     "import_open_replace": "¿Abrir \"{name}\" ahora en {day}? Los ítems que están allí serán reemplazados.",
+    "import_week": "¿Poner cada una de las {count} liturgias en su día ({days})?",
+    "import_week_replace": "¿Poner cada una de las {count} liturgias en su día ({days})? Los días que ya tienen ítems serán reemplazados.",
     "export_dialog_hint": "Elija qué va junto en el archivo. Los archivos de los ítems de la liturgia van siempre.",
     "export_opt_liturgy": "Archivos de los ítems de la liturgia",
     "export_opt_media": "Biblioteca de Medios usada en la liturgia",

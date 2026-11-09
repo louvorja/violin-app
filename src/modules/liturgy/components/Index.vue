@@ -198,7 +198,7 @@ import LiturgyExportDialog from "./LiturgyExportDialog.vue";
 import LiturgyLoadDialog from "./LiturgyLoadDialog.vue";
 import LiturgyManageDialog from "./LiturgyManageDialog.vue";
 import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
-import { useLiturgyImport } from "../composables/useLiturgyImport";
+import { useLiturgyImport, type WeekEntry } from "../composables/useLiturgyImport";
 import { countExportFiles, useLiturgyExport } from "../composables/useLiturgyExport";
 import { DEFAULT_EXPORT_OPTIONS, type ExportCounts, type ExportOptions } from "../package/collect";
 import { pendingLiturgyFiles, takeLiturgyImport } from "../openRequests";
@@ -427,7 +427,36 @@ const {
   busy: importing,
   doImport,
   importFile,
-} = useLiturgyImport(liturgyLibrary, reportLiturgyError, { onImported: offerOpenImported });
+} = useLiturgyImport(liturgyLibrary, reportLiturgyError, {
+  onImported: offerOpenImported,
+  onImportedWeek: offerPlaceWeek,
+});
+
+/**
+ * O `.ja` (e o `.json` da semana do Classic) traz uma liturgia por dia: oferece
+ * pôr cada uma no seu dia, de uma vez, em vez de deixar tudo só na biblioteca.
+ */
+function offerPlaceWeek(entries: WeekEntry[]) {
+  const days = entries.map((e) => dayLabels.value[e.day]).join(", ");
+  const replacing = entries.some((e) => $liturgy.list(e.day).length > 0);
+  const text = t(replacing ? "library.import_week_replace" : "library.import_week", {
+    count: entries.length,
+    days,
+  });
+  $alert.yesno(
+    { title: escapeHtml(t("library.import_title")), text: escapeHtml(text), translate: false },
+    (btn?: string) => {
+      if (btn !== "yes") return;
+      for (const { item, day } of entries) {
+        $liturgy.set(item.items, day);
+        $liturgy.setDayLiturgyId(day, item.id);
+      }
+      const today = entries.find((e) => e.day === activeDay.value);
+      if (today) $liturgy.setCurrentLiturgyId(today.item.id);
+      void onLiturgyLoaded();
+    }
+  );
+}
 
 /**
  * Depois de importar, oferece abrir a liturgia no dia que está na tela — sem

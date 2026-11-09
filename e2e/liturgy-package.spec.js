@@ -308,3 +308,35 @@ test("item da Biblioteca de Mídia com os bytes guardados toca (o blob: salvo j�
   await expect(page.getByText("Não foi possível tocar este áudio")).toHaveCount(0);
   expect(pageErrors).toEqual([]);
 });
+
+test(".ja com várias liturgias: cada uma vai para o seu dia da semana", async ({ page }) => {
+  await openLiturgy(page);
+  const ja = [
+    "[Geral]",
+    "1=item_a;",
+    "2=item_b;",
+    "[item_a]",
+    "tipo=anotacao",
+    "item=Abertura de domingo",
+    "[item_b]",
+    "tipo=anotacao",
+    "item=Oração de segunda",
+    "",
+  ].join("\r\n");
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: /Importar Liturgia$/ }).click();
+  await (await chooser).setFiles({ name: "semana.ja", mimeType: "", buffer: Buffer.from(ja) });
+
+  const ask = page.getByRole("alertdialog").or(page.getByRole("dialog")).last();
+  await expect(ask).toContainText("Colocar cada uma das 2 liturgias no seu dia");
+  await ask.getByRole("button", { name: "Sim", exact: true }).click();
+
+  const tabs = page.locator(".lit-daytab");
+  const list = page.locator(".liturgy-page");
+  await tabs.nth(0).click();
+  await expect(list).toContainText("Abertura de domingo");
+  await expect(list).not.toContainText("Oração de segunda");
+  await tabs.nth(1).click();
+  await expect(list).toContainText("Oração de segunda");
+  await expect(list).not.toContainText("Abertura de domingo");
+});
