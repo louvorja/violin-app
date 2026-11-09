@@ -3361,3 +3361,40 @@ via `KEYS.<GROUP>.<KEY>` no código.
 - `src/helpers/BroadcastTypes.ts` — Contratos e payloads do BroadcastChannel
 - `docs/adr/0002-vue-router-version.md` — Vue Router 5
 - `docs/adr/0003-modules-core-flat.md` — Sem diretório `modules/core/`
+
+## 📦 Pacote da liturgia (`.llja`)
+
+Exportar Liturgia gera um ZIP com a liturgia que está **na tela** e os arquivos
+que ela usa, para montar o culto num computador e abrir em outro:
+
+```text
+manifest.json   { format: "louvorja-liturgy-package", version: 1, exportedAt, appVersion, liturgy, files[] }
+liturgy.json    { name, color?, items }
+files/
+  liturgy/<ref-ou-item>/<nome>               arquivos dos itens do tipo arquivo (sempre)
+  media/<id>/<nome>                          Biblioteca de Mídia usada (opção, marcada)
+  background-sound/<id>/<nome>               Som de Fundo usado (opção, marcada)
+  background-projection/<id>/<nome>          Projeção de Fundo inteira (opção, desmarcada)
+```
+
+Cada entrada de `files[]` diz a origem (`source`) e o registro de origem
+(`sourceId`); os itens continuam com o `ref_id` antigo e a importação troca pelo
+novo. Binários vão sem compressão, JSONs comprimidos; acima de 2 GB a exportação
+é recusada (o JSZip monta tudo na memória).
+
+| Parte                                                       | Arquivo                                  |
+| ----------------------------------------------------------- | ---------------------------------------- |
+| Montar e ler o ZIP, travas (caminho, tamanho, versão)       | `src/modules/liturgy/package/format.ts`  |
+| Juntar os arquivos para exportar                            | `src/modules/liturgy/package/collect.ts` |
+| Gravar nas bibliotecas ao importar, com `rollback()`        | `src/modules/liturgy/package/install.ts` |
+| `.llja` do LouvorJA Classic (`liturgia.json` + `arquivos/`) | `src/modules/liturgy/package/classic.ts` |
+
+Na importação, imagem/vídeo/áudio/PDF de item de arquivo vira **um** registro na
+Biblioteca de Mídia e o item passa a ser da biblioteca; `.slja` continua item de
+arquivo (`liturgy.files`). Tudo entra na categoria "Importados" (id fixo
+`importados`, reaproveitada; importar o mesmo pacote de novo não duplica).
+Referência que não veio e não existe aqui é limpa e avisada. Links do YouTube
+entram em Vídeos Online sem duplicar e o download respeita a opção automática.
+A liturgia é gravada por último; se falhar, o que entrou nas bibliotecas é
+apagado. A importação aceita ainda o `.json` antigo, o `.json` da semana e o
+`.ja` do Classic. `.llja` é registrado no sistema (duplo clique, arrastar).

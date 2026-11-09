@@ -15,9 +15,15 @@ export function requestLiturgyImport(file: File): void {
   pendingLiturgyFiles.value = [...pendingLiturgyFiles.value, file];
 }
 
-/** Tira e devolve o próximo da fila. */
+/**
+ * Tira e devolve o próximo da fila. Fila vazia não é regravada: quem observa
+ * `pendingLiturgyFiles` e chama isto a cada mudança entraria em laço, porque
+ * um array novo (mesmo vazio) já conta como mudança.
+ */
 export function takeLiturgyImport(): File | undefined {
-  const [next, ...rest] = pendingLiturgyFiles.value;
+  const queue = pendingLiturgyFiles.value;
+  if (!queue.length) return undefined;
+  const [next, ...rest] = queue;
   pendingLiturgyFiles.value = rest;
   return next;
 }

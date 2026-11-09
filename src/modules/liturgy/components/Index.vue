@@ -152,6 +152,7 @@
     </LjDialog>
 
     <LiturgySaveDialog v-model="saveDialog" :items="safeItems" @saved="onLiturgySaved" />
+    <LiturgyExportDialog v-model="exportDialog" :counts="exportCounts" @confirm="confirmExport" />
     <LiturgyLoadDialog v-model="loadDialog" :items="safeItems" @loaded="onLiturgyLoaded" />
     <LiturgyManageDialog v-model="manageDialog" @managed="onLiturgyManaged" />
 
@@ -193,11 +194,13 @@ import { musicTitle } from "@root/config/musicCatalog.mjs";
 import { ACTION_LITURGY_VERSION } from "@/config/MusicAction";
 import type { MusicActionEnum } from "@/enums/MusicActionEnum";
 import LiturgySaveDialog from "./LiturgySaveDialog.vue";
+import LiturgyExportDialog from "./LiturgyExportDialog.vue";
 import LiturgyLoadDialog from "./LiturgyLoadDialog.vue";
 import LiturgyManageDialog from "./LiturgyManageDialog.vue";
 import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
 import { useLiturgyImport } from "../composables/useLiturgyImport";
-import { useLiturgyExport } from "../composables/useLiturgyExport";
+import { countExportFiles, useLiturgyExport } from "../composables/useLiturgyExport";
+import { DEFAULT_EXPORT_OPTIONS, type ExportCounts, type ExportOptions } from "../package/collect";
 import { pendingLiturgyFiles, takeLiturgyImport } from "../openRequests";
 import { useLiturgyAutoLoad } from "../composables/useLiturgyAutoLoad";
 import Telemetry from "@/helpers/Telemetry";
@@ -449,13 +452,22 @@ function offerOpenImported(item: LiturgyLibraryItem) {
 }
 
 // Duplo clique num .llja (ou arrastar para a janela): a shell enfileira, a tela importa.
+// Um de cada vez: tirar da fila também muda a fila, e o watch dispararia de novo
+// no meio de um import — o segundo seria recusado pela trava e o arquivo, perdido.
+let drainingImports = false;
 watch(
   pendingLiturgyFiles,
   async () => {
-    let file = takeLiturgyImport();
-    while (file) {
-      await importFile(file);
-      file = takeLiturgyImport();
+    if (drainingImports) return;
+    drainingImports = true;
+    try {
+      let file = takeLiturgyImport();
+      while (file) {
+        await importFile(file);
+        file = takeLiturgyImport();
+      }
+    } finally {
+      drainingImports = false;
     }
   },
   { immediate: true }
@@ -640,12 +652,28 @@ function clearDayDialog() {
   });
 }
 
+const exportDialog = ref(false);
+const exportCounts = ref<ExportCounts>({
+  liturgy: 0,
+  media: 0,
+  backgroundSound: 0,
+  backgroundProjection: 0,
+});
+let pendingExport: { name: string; color?: string; items: LiturgyItem[] } | null = null;
+
 /**
  * Exporta o que está NA TELA — não a versão salva na biblioteca, que pode estar
  * atrás das últimas mudanças. O nome e a cor vêm da liturgia salva deste dia,
- * quando houver; sem ela, o nome é o do dia ("Sábado").
+ * quando houver; sem ela, o nome é o do dia ("Sábado"). Antes, a janela pergunta
+ * o que das bibliotecas vai junto.
  */
 async function doExport() {
+  if (exporting.value) return;
+  const items = safeItems.value;
+  if (!items.length) {
+    await exportLiturgy({ name: "", items }, DEFAULT_EXPORT_OPTIONS);
+    return;
+  }
   const id = $liturgy.getCurrentLiturgyId();
   let name = dayLabels.value[activeDay.value];
   let color: string | undefined;
@@ -660,7 +688,19 @@ async function doExport() {
       reportLiturgyError(error, "export_lookup", { has_liturgy_id: true });
     }
   }
-  await exportLiturgy({ name, color, items: safeItems.value });
+  pendingExport = { name, color, items };
+  try {
+    exportCounts.value = await countExportFiles(items);
+  } catch (error) {
+    reportLiturgyError(error, "export_count");
+  }
+  exportDialog.value = true;
+}
+
+async function confirmExport(options: ExportOptions) {
+  const input = pendingExport;
+  pendingExport = null;
+  if (input) await exportLiturgy(input, options);
 }
 
 /*
