@@ -947,11 +947,18 @@ async function _loadAudioSrc(
   audioUrl: string,
   idCheck: string | number | null,
   retryFn: (id: string | number) => void,
-  onSource: (src: string, lazy: boolean, _sourceDetails?: Record<string, unknown>) => void = (
+  onSource: (
+    src: string,
+    lazy: boolean,
+    _sourceDetails?: Record<string, unknown>,
+    _ownsSource?: boolean
+  ) => void = (
     src,
-    lazy
+    lazy,
+    _sourceDetails,
+    ownsSource = false
   ) => {
-    _audio.setSrc(src, lazy);
+    _audio.setSrc(src, lazy, ownsSource);
     _self.pause(false);
   },
   deferAudioContext = false
@@ -1061,7 +1068,7 @@ async function _loadAudioSrc(
     if (cacheStatus !== "hit" && ehRemota(audioUrl)) reportNetworkResult(true, "media");
     const finish = (blob: Blob): void => {
       if (!isCurrentLoad()) return;
-      onSource(URL.createObjectURL(blob), false, requestContext?.original_source);
+      onSource(URL.createObjectURL(blob), false, requestContext?.original_source, true);
     };
     if (needsOpusDecode) {
       $appdata.set(KEYS.MODULES.MEDIA.LOADING, true);
@@ -1956,12 +1963,15 @@ const _self = {
       audioUrl,
       idMusic,
       custom ? reopen : (id) => _self.open(id),
-      (src, lazy, sourceDetails) => {
+      (src, lazy, sourceDetails, ownsSource) => {
         _audio
-          .prepare(src, lazy, _audio.currentTime.value, {
-            ...switchContext,
-            original_source: sourceDetails,
-          })
+          .prepare(
+            src,
+            lazy,
+            _audio.currentTime.value,
+            { ...switchContext, original_source: sourceDetails },
+            ownsSource
+          )
           .then((faixa) => {
             // Fechar, abrir outra música ou mudar de modo invalida o preparo,
             // mesmo quando o ID da música continua igual.
@@ -1985,13 +1995,19 @@ const _self = {
             );
 
             return _audio
-              .takeOver(faixa, (d) => _slides.timeForPosition(slideIndex, fraction, d), playing)
+              .takeOver(
+                faixa,
+                (d) => _slides.timeForPosition(slideIndex, fraction, d),
+                playing,
+                isCurrentSwitch
+              )
               .then(() => {
+                if (!isCurrentSwitch()) return;
                 _setPlaybackContext(switchContext);
                 _slides.setPlaybackId(switchPlaybackId);
                 _slides.bindAudio(_audio);
-                $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, !playing);
-                if (!playing) _self.broadcastSlide();
+                $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, _audio.isPaused.value);
+                if (_audio.isPaused.value) _self.broadcastSlide();
                 Telemetry.track(
                   "music_mode_switch_completed",
                   _telemetryFor(switchContext, { id_music: idMusic, mode, previous_mode: current })
