@@ -110,6 +110,7 @@ const { createCpuProfileCapture } = require("./main/cpuProfileCapture.js");
 const { createRuntimeIncidentJournal } = require("./main/runtimeIncidentJournal.js");
 const storageLocations = require("./main/storageLocations.js");
 const storageAccess = require("./main/storageAccess.js");
+const collectionAccounts = require("./main/collectionAccounts.js");
 const storageRecovery = require("./main/storageRecovery.js");
 const { createPresentationActivity } = require("./main/presentationActivity.js");
 const { buildCsp } = require("./main/csp.js");
@@ -210,6 +211,14 @@ try {
     paths.configureProfile();
   }
   storageAccess.initialize(paths.storageLayout());
+  // Antes de apagar músicas, a tela sabe se outra conta do computador também as usa.
+  try {
+    collectionAccounts.sign(paths.storageLayout().mediaDir, {
+      shared: storageAccess.status().media?.shared === true,
+    });
+  } catch (error) {
+    console.warn("[storage] Não foi possível registrar esta conta no acervo:", error.message);
+  }
 } catch (error) {
   console.error("[storage] Não foi possível preparar os dados:", error);
   dialog.showErrorBox("Não foi possível preparar os dados do LouvorJA", error.message);
