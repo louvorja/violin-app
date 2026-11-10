@@ -186,6 +186,8 @@ let _customPlayback: {
 let _activePlayback: AudioTelemetryContext | null = null;
 let _mediaActivitySent = false;
 const _videoStateRevisions = new VideoStateRevisionCounter();
+const _VOLUME_BREADCRUMB_MERGE_MS = 1000;
+let _volumeChange: { from: number; at: number } | null = null;
 
 // typeof null === "object": sem tratar null aqui, open(null) estourava lendo params.mode.
 function _openParams(
@@ -3308,14 +3310,23 @@ const _self = {
   },
 
   setVolume(val: number): void {
-    const previous = _audio.volume.value;
+    const now = Date.now();
+    if (!_volumeChange || now - _volumeChange.at >= _VOLUME_BREADCRUMB_MERGE_MS) {
+      _volumeChange = { from: _audio.volume.value, at: now };
+    }
+    _volumeChange.at = now;
     _audio.setVolume(val);
-    Telemetry.breadcrumb?.("media_volume_changed", {
-      playback_id: _activePlayback?.playback_id,
-      from_volume: previous,
-      requested_volume: val,
-      volume: _audio.volume.value,
-    });
+    Telemetry.breadcrumb?.(
+      "media_volume_changed",
+      {
+        playback_id: _activePlayback?.playback_id,
+        from_volume: _volumeChange.from,
+        requested_volume: val,
+        volume: _audio.volume.value,
+      },
+      "action",
+      { mergeWithinMs: _VOLUME_BREADCRUMB_MERGE_MS }
+    );
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VOLUME, val);
     if (_isYouTube()) {
       $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, {

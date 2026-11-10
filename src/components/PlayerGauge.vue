@@ -8,7 +8,12 @@
       icon-only
       @click="emit('toggle')"
     />
-    <div class="player-gauge__bar" @click="onClick">
+    <div
+      class="player-gauge__bar"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @lostpointercapture="dragging = false"
+    >
       <LjProgress :value="volume" :height="10" />
     </div>
   </div>
@@ -25,13 +30,30 @@ defineProps({
 
 const emit = defineEmits(["toggle", "seek"]);
 
-// A barra é só apresentação: o volume novo sai da posição do clique dentro dela.
-function onClick(e) {
-  const el = e.currentTarget;
-  if (!el) return;
-  const { left, width } = el.getBoundingClientRect();
-  const pct = Math.round(((e.clientX - left) / width) * 100);
-  emit("seek", Math.max(0, Math.min(pct, 100)));
+let dragging = false;
+let lastEmitted = null;
+
+// A barra é só apresentação: o volume novo sai da posição do ponteiro dentro dela.
+function emitAt(e) {
+  const { left, width } = e.currentTarget.getBoundingClientRect();
+  if (!width) return;
+  const pct = Math.max(0, Math.min(100, Math.round(((e.clientX - left) / width) * 100)));
+  if (pct === lastEmitted) return;
+  lastEmitted = pct;
+  emit("seek", pct);
+}
+
+// Com a captura, o arrasto segue valendo quando o ponteiro sai da barra.
+function onPointerDown(e) {
+  if (e.button !== 0) return;
+  dragging = true;
+  lastEmitted = null;
+  e.currentTarget.setPointerCapture?.(e.pointerId);
+  emitAt(e);
+}
+
+function onPointerMove(e) {
+  if (dragging) emitAt(e);
 }
 </script>
 
@@ -48,6 +70,8 @@ function onClick(e) {
   flex-grow: 1;
   min-width: 100px;
   cursor: pointer;
+  touch-action: none;
+  user-select: none;
   /* A janela do Mídia é chrome escuro: o acento do tema desaparece nela, e a
      barra de volume era branca antes da migração. */
   --lj-ui-accent: var(--lj-white);
