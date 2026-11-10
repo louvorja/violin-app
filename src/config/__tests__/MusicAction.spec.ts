@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   ACTION_LITURGY_VERSION,
   LITURGY_VERSION_ACTION,
+  MUSIC_ACTION,
   MUSIC_EXECUTIONS,
   canExecute,
+  musicActionIcon,
 } from "@/config/MusicAction";
+import { ICONS } from "@/config/Icons";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 
 const enabled = (tracks: { sung: boolean; playback: boolean }) =>
@@ -57,5 +60,26 @@ describe("versão do item de liturgia", () => {
       expect(version, action).toBeDefined();
       expect(LITURGY_VERSION_ACTION[version!]).toBe(action);
     }
+  });
+});
+
+describe("ícone de cada modo (#52)", () => {
+  it("cada modo tem o seu, diferente do botão Letra", () => {
+    const icons = [...MUSIC_EXECUTIONS.map((item) => item.icon), ICONS.MUSIC.LYRIC];
+    expect(new Set(icons).size).toBe(icons.length);
+  });
+
+  it("a versão da liturgia mostra o ícone do modo que ela toca", () => {
+    for (const version of ["sung", "pb", "lyric"]) {
+      expect(MUSIC_ACTION[version].icon, version).toBe(
+        musicActionIcon(LITURGY_VERSION_ACTION[version])
+      );
+    }
+    expect(MUSIC_ACTION[MusicActionEnum.AUDIO_ONLY].icon).toBe(
+      musicActionIcon(LITURGY_VERSION_ACTION.audio)
+    );
+    expect(MUSIC_ACTION[MusicActionEnum.PLAYBACK_ONLY].icon).toBe(
+      musicActionIcon(LITURGY_VERSION_ACTION.audio_pb)
+    );
   });
 });

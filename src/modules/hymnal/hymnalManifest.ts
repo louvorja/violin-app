@@ -5,6 +5,8 @@ import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
 import { ModuleEnum } from "@/enums/ModuleEnum"
 import { getModulePath } from "@/helpers/ModulePath"
 import { ICONS } from "@/config/Icons";
+import { musicActionIcon } from "@/config/MusicAction";
+import { MusicActionEnum } from "@/enums/MusicActionEnum";
 
 interface HymnalManifestConfig {
   id: ModuleEnum;
@@ -58,9 +60,9 @@ export function createHymnalManifest({
           id: `${moduleCtxId}_slide`,
           title: "ribbon.groups.slide",
           buttons: [
-            { id: "sing", icon: ICONS.MUSIC.MUSIC, label: "ribbon.btn.sing", action: `${id}_sing`, color: "#27ae60" },
-            { id: "playback", icon: ICONS.MUSIC.PLAYBACK_MULTIPLE, label: "ribbon.btn.playback", action: `${id}_playback`, color: "#3498db" },
-            { id: "no_audio", icon: ICONS.MUSIC.OFF, label: "ribbon.btn.no_audio", action: `${id}_no_audio`, color: "#7f8c8d" },
+            { id: "sing", icon: musicActionIcon(MusicActionEnum.AUDIO), label: "ribbon.btn.sing", action: `${id}_sing`, color: "#27ae60" },
+            { id: "playback", icon: musicActionIcon(MusicActionEnum.INSTRUMENTAL), label: "ribbon.btn.playback", action: `${id}_playback`, color: "#3498db" },
+            { id: "no_audio", icon: musicActionIcon(MusicActionEnum.NO_AUDIO), label: "ribbon.btn.no_audio", action: `${id}_no_audio`, color: "#7f8c8d" },
             { id: "sequence", icon: ICONS.FORMAT.LIST_NUMBERED, label: "ribbon.btn.play_all", action: `${id}_sequence`, color: "#9b59b6" },
           ],
         },
@@ -68,8 +70,8 @@ export function createHymnalManifest({
           id: `${moduleCtxId}_audio`,
           title: "ribbon.groups.audio_file",
           buttons: [
-            { id: "audio_play", icon: ICONS.PLAYER.VOLUME_HIGH, label: "ribbon.btn.sing", action: `${id}_audio_sing`, color: "#27ae60" },
-            { id: "audio_inst", icon: ICONS.MUSIC.PIANO, label: "ribbon.btn.playback", action: `${id}_audio_playback`, color: "#3498db" },
+            { id: "audio_play", icon: musicActionIcon(MusicActionEnum.AUDIO_ONLY), label: "ribbon.btn.sing", action: `${id}_audio_sing`, color: "#27ae60" },
+            { id: "audio_inst", icon: musicActionIcon(MusicActionEnum.PLAYBACK_ONLY), label: "ribbon.btn.playback", action: `${id}_audio_playback`, color: "#3498db" },
           ],
         },
         {
