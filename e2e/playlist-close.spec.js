@@ -87,6 +87,10 @@ test("fechar a música de uma playlist pergunta antes e só encerra depois do Si
     await page.getByRole("menuitem", { name: "Adicionar à Playlist" }).hover();
     await page.getByRole("menuitem", { name: "Culto" }).click();
   }
+  // Pelo menu ⋮, as músicas entravam com 0:00 e o painel dizia "2 música".
+  await expect(page.locator(".playlist-panel-item").filter({ hasText: "Culto" })).toContainText(
+    "2 músicas · 8:06"
+  );
 
   const playlistBar = page.locator(".playlist-bar");
   const player = page.locator("#footer-bar .player");

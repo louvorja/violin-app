@@ -1,7 +1,7 @@
 /** @category deve-virar-composable — Usa UserData + AppData (Pinia); requer renderer. */
 import $userdata from "@/helpers/UserData";
 import $dev from "@/helpers/Dev";
-import $database from "@/helpers/Database";
+import { findCatalogMusic } from "@/helpers/CatalogMusic";
 import DateTime from "@/helpers/DateTime";
 import ScheduledStore from "@/helpers/ScheduledStore";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -372,13 +372,7 @@ export default {
     musicSubtitle = ""
   ): Promise<LiturgyItem> {
     // A versão é escolhida na hora de tocar; a agenda conta a cantada, como o formulário.
-    const lang = $userdata.get<string>(KEYS.OPTIONS.LANGUAGE, "pt") || "pt";
-    const catalog = await $database
-      .getLocal<Record<string, unknown>[]>(`${lang}_musics`)
-      .catch(() => null);
-    const music = Array.isArray(catalog)
-      ? catalog.find((m) => Number(m.id_music) === Number(id_music))
-      : undefined;
+    const music = await findCatalogMusic(id_music);
     const duration = (music && musicDurationMinutes(music, "sung")) || 0;
     return this.add(
       {
