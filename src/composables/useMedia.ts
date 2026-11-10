@@ -76,6 +76,7 @@ function _closeAlbumForPresentation(): void {
 let _loadingId: string | number | null = null;
 let _playlistOnEnd: (() => boolean) | null = null;
 let _playlistOnClose: (() => void) | null = null;
+let _playlistOnPlayback: ((_idMusic: unknown) => void) | null = null;
 /**
  * O que está carregado no player agora é um ARQUIVO DE ÁUDIO avulso (Biblioteca
  * de Mídia), não uma música?
@@ -245,6 +246,8 @@ function _warnNoTrack(playback: boolean): void {
 
 function _setPlaybackContext(context: AudioTelemetryContext | null): void {
   _activePlayback = context;
+  // Toda reprodução nova passa por aqui: música, música personalizada, arquivo e vídeo.
+  if (context) _playlistOnPlayback?.(context.id_music);
   const active = context !== null;
   if (active !== _mediaActivitySent) {
     _mediaActivitySent = active;
@@ -2555,6 +2558,7 @@ const _self = {
       params = { id_music: params };
     }
     _closeAlbumForPresentation();
+    _playlistOnPlayback?.(params.id_music);
     Telemetry.track("music_lyrics_opened", {
       id_music: params.id_music,
       id_album: params.id_album,
@@ -3389,6 +3393,14 @@ const _self = {
 
   unregisterPlaylistCloseHandler(): void {
     _playlistOnClose = null;
+  },
+
+  registerPlaylistPlaybackHandler(handler: (_idMusic: unknown) => void): void {
+    _playlistOnPlayback = handler;
+  },
+
+  unregisterPlaylistPlaybackHandler(): void {
+    _playlistOnPlayback = null;
   },
 };
 

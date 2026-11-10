@@ -5,16 +5,21 @@ import type { Playlist } from "@/types/Music";
 const open = vi.fn();
 const close = vi.fn();
 let mediaClosed: () => void = () => {};
+let songEnded: () => boolean = () => false;
+let playbackStarted: (_idMusic: unknown) => void = () => {};
 let playlists: Playlist[] = [];
 let preferences: Record<string, boolean> = {};
 vi.mock("@/composables/useMedia", () => ({
   default: {
     open: (...args: unknown[]) => open(...args),
     close: (...args: unknown[]) => close(...args),
-    registerPlaylistEndHandler: vi.fn(),
+    registerPlaylistEndHandler: (handler: () => boolean) => (songEnded = handler),
     unregisterPlaylistEndHandler: vi.fn(),
     registerPlaylistCloseHandler: (handler: () => void) => (mediaClosed = handler),
     unregisterPlaylistCloseHandler: vi.fn(),
+    registerPlaylistPlaybackHandler: (handler: (_idMusic: unknown) => void) =>
+      (playbackStarted = handler),
+    unregisterPlaylistPlaybackHandler: vi.fn(),
     getActivePlaybackId: () => "playback",
   },
 }));
@@ -107,5 +112,56 @@ describe("fechar a música (#54)", () => {
     expect(playback.isActive.value).toBe(false);
     expect(playback.currentPlaylist.value).toBeNull();
     expect(close).not.toHaveBeenCalled();
+  });
+});
+
+describe("Tocar Todas: fila provisória", () => {
+  const hymns = [1, 2, 3].map((id_music) => ({
+    id_music,
+    name: `Hino ${id_music}`,
+    duration: 180,
+    has_instrumental_music: false,
+  }));
+  const played = () => open.mock.calls.map(([song]) => song.id_music);
+  const finishSong = () => {
+    vi.advanceTimersByTime(1000);
+    return songEnded();
+  };
+
+  it("vai do primeiro ao último, mesmo com aleatório e repetição ligados nas playlists", () => {
+    preferences[KEYS.MODULES.MUSICS.PLAYLIST_SHUFFLE] = true;
+    preferences[KEYS.MODULES.MUSICS.PLAYLIST_REPEAT] = true;
+    playback.playSequence("Hinário Adventista", hymns);
+    expect(playback.currentPlaylist.value?.name).toBe("Hinário Adventista");
+    expect(playback.totalSongs.value).toBe(3);
+
+    finishSong();
+    finishSong();
+    expect(played()).toEqual([1, 2, 3]);
+
+    finishSong();
+    expect(played()).toEqual([1, 2, 3]);
+    expect(playback.isActive.value).toBe(false);
+    expect(playback.currentPlaylist.value).toBeNull();
+    expect(close).toHaveBeenCalledWith(true);
+  });
+
+  it("outra música que entra no player encerra a fila, e ela não volta quando essa música acaba", () => {
+    playback.playSequence("Hinário Adventista", hymns);
+    playbackStarted(1);
+    playbackStarted("1");
+    expect(playback.isActive.value).toBe(true);
+
+    playbackStarted(99);
+    expect(playback.isActive.value).toBe(false);
+    expect(playback.currentPlaylist.value).toBeNull();
+    expect(finishSong()).toBe(false);
+    expect(played()).toEqual([1]);
+  });
+
+  it("um arquivo ou vídeo sem música do acervo também encerra a playlist", () => {
+    playback.playPlaylist(playlist);
+    playbackStarted(null);
+    expect(playback.isActive.value).toBe(false);
   });
 });

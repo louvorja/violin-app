@@ -69,12 +69,6 @@ async function start(page) {
   await page
     .locator('[data-testid="modules-ready"]')
     .waitFor({ state: "attached", timeout: 30_000 });
-}
-
-test("fechar a música de uma playlist pergunta antes e só encerra depois do Sim (#54)", async ({
-  page,
-}) => {
-  await start(page);
   await page.locator("#ribbon-tab-collections").click();
   await page.locator('[data-testid="ribbon-btn-musics"]').click();
   await expect(page.locator('[data-testid="music-row-42"]')).toBeVisible();
@@ -87,6 +81,12 @@ test("fechar a música de uma playlist pergunta antes e só encerra depois do Si
     await page.getByRole("menuitem", { name: "Adicionar à Playlist" }).hover();
     await page.getByRole("menuitem", { name: "Culto" }).click();
   }
+}
+
+test("fechar a música de uma playlist pergunta antes e só encerra depois do Sim (#54)", async ({
+  page,
+}) => {
+  await start(page);
   // Pelo menu ⋮, as músicas entravam com 0:00 e o painel dizia "2 música".
   await expect(page.locator(".playlist-panel-item").filter({ hasText: "Culto" })).toContainText(
     "2 músicas · 8:06"
@@ -131,5 +131,23 @@ test("fechar a música de uma playlist pergunta antes e só encerra depois do Si
   await mediaWindow.locator(".lj-window-btn--close").click();
   await confirm.getByRole("button", { name: "Sim" }).click();
   await expect(mediaWindow).not.toBeVisible();
+  await expect(playlistBar).not.toBeVisible();
+});
+
+test("tocar outra música no meio da playlist encerra a playlist na hora", async ({ page }) => {
+  await start(page);
+  const playlistBar = page.locator(".playlist-bar");
+  const mediaWindow = page.locator(".lj-window").filter({ has: page.locator(".media-body") });
+  await page.locator(".playlist-panel-item").filter({ hasText: "Culto" }).click();
+  await page.locator(".playlist-songs-play-btn").click();
+  await expect(playlistBar).toBeVisible();
+  await expect(mediaWindow.locator(".lj-window-title")).toHaveText(SONGS[0].name);
+  await mediaWindow.getByTitle("Minimizar").click();
+
+  // Antes, a barra continuava na tela e, quando essa música acabava, a playlist voltava sozinha.
+  await page.getByRole("button", { name: new RegExp(`${SONGS[1].name}$`) }).click();
+  await page.getByRole("menuitem", { name: "Executar" }).hover();
+  await page.getByRole("menuitem", { name: /disc-filled Cantado/ }).click();
+  await expect(mediaWindow.locator(".lj-window-title")).toHaveText(SONGS[1].name);
   await expect(playlistBar).not.toBeVisible();
 });
