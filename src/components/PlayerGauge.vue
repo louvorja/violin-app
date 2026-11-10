@@ -76,4 +76,10 @@ function onPointerMove(e) {
      barra de volume era branca antes da migração. */
   --lj-ui-accent: var(--lj-white);
 }
+
+/* A transição do LjProgress recomeça a cada movimento e deixa o preenchimento
+   correndo atrás do ponteiro: aqui a barra é um controle, não um indicador. */
+.player-gauge__bar :deep(.lj-progress__bar) {
+  transition: none;
+}
 </style>
