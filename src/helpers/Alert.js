@@ -56,8 +56,12 @@ export default {
       {
         ...data,
         buttons: [
-          { text: "alert.no", color: "error", value: "no" },
-          { text: "alert.yes", color: "info", value: "yes" },
+          { text: "alert.no", value: "no" },
+          {
+            text: data.confirmText || "alert.yes",
+            color: data.destructive ? "error" : "info",
+            value: "yes",
+          },
         ],
       },
       (resp, ret) => {
@@ -85,7 +89,7 @@ export default {
       {
         ...data,
         buttons: [
-          { text: "alert.cancel", color: "error", value: "cancel" },
+          { text: "alert.cancel", value: "cancel" },
           { text: "alert.ok", color: "info", value: "ok" },
         ],
       },
@@ -131,10 +135,14 @@ export default {
    * Substituem window.confirm/alert: no Electron para Windows o diálogo nativo
    * deixa os campos de texto sem teclado até a janela perder e retomar o foco.
    * O texto é escapado porque o layout o renderiza com v-html.
+   * @param {string} text
+   * @param {{ confirmText?: string, destructive?: boolean }} [options]
    */
-  confirm(text) {
+  confirm(text, options = {}) {
     return new Promise((resolve) => {
-      this.yesno({ text: escapeHtml(text), translate: false }, (value) => resolve(value === "yes"));
+      this.yesno({ ...options, text: escapeHtml(text), translate: false }, (value) =>
+        resolve(value === "yes")
+      );
     });
   },
 
