@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import $appdata from "@/helpers/AppData";
+import $alert from "@/helpers/Alert";
 import { KEYS } from "@/constants/UserDataKeys";
 
 type Media = typeof import("@/composables/useMedia").default;
@@ -96,5 +97,38 @@ describe("Media.toogleVolume — mudo", () => {
     expect(volume()).toBe(0);
     media.toogleVolume();
     expect(volume()).toBe(70);
+  });
+});
+
+describe("Media.close — playlist (#54)", () => {
+  afterEach(() => {
+    media.unregisterPlaylistCloseHandler();
+    vi.restoreAllMocks();
+  });
+
+  it("o pedido de fechar espera o Sim para encerrar a playlist; o Não a mantém", () => {
+    const playlistClosed = vi.fn();
+    media.registerPlaylistCloseHandler(playlistClosed);
+    let answer: ((btn?: string) => void) | undefined;
+    const yesno = vi
+      .spyOn($alert, "yesno")
+      .mockImplementation((_data, callback) => (answer = callback));
+
+    media.close();
+    expect(yesno).toHaveBeenCalledTimes(1);
+    expect(playlistClosed).not.toHaveBeenCalled();
+    answer?.("no");
+    expect(playlistClosed).not.toHaveBeenCalled();
+
+    media.close();
+    answer?.("yes");
+    expect(playlistClosed).toHaveBeenCalledTimes(1);
+  });
+
+  it("o fechamento direto (paleta, atalho, controle remoto, outro módulo) também encerra a playlist", () => {
+    const playlistClosed = vi.fn();
+    media.registerPlaylistCloseHandler(playlistClosed);
+    media.close(true);
+    expect(playlistClosed).toHaveBeenCalledTimes(1);
   });
 });

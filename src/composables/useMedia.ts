@@ -75,6 +75,7 @@ function _closeAlbumForPresentation(): void {
 }
 let _loadingId: string | number | null = null;
 let _playlistOnEnd: (() => boolean) | null = null;
+let _playlistOnClose: (() => void) | null = null;
 /**
  * O que está carregado no player agora é um ARQUIVO DE ÁUDIO avulso (Biblioteca
  * de Mídia), não uma música?
@@ -2456,6 +2457,8 @@ const _self = {
     keepProjectionWindows = false,
     preserveStageEpoch = false
   ): void {
+    // Só o fechamento efetivo encerra a playlist: o pedido sem `force` ainda espera o "Sim".
+    if (force) _playlistOnClose?.();
     if (force && !preserveStageEpoch) {
       ++_stageEpoch;
       _opening.value = null;
@@ -3378,6 +3381,14 @@ const _self = {
 
   unregisterPlaylistEndHandler(): void {
     _playlistOnEnd = null;
+  },
+
+  registerPlaylistCloseHandler(handler: () => void): void {
+    _playlistOnClose = handler;
+  },
+
+  unregisterPlaylistCloseHandler(): void {
+    _playlistOnClose = null;
   },
 };
 

@@ -4,6 +4,7 @@ import type { Playlist } from "@/types/Music";
 
 const open = vi.fn();
 const close = vi.fn();
+let mediaClosed: () => void = () => {};
 let playlists: Playlist[] = [];
 let preferences: Record<string, boolean> = {};
 vi.mock("@/composables/useMedia", () => ({
@@ -12,6 +13,8 @@ vi.mock("@/composables/useMedia", () => ({
     close: (...args: unknown[]) => close(...args),
     registerPlaylistEndHandler: vi.fn(),
     unregisterPlaylistEndHandler: vi.fn(),
+    registerPlaylistCloseHandler: (handler: () => void) => (mediaClosed = handler),
+    unregisterPlaylistCloseHandler: vi.fn(),
     getActivePlaybackId: () => "playback",
   },
 }));
@@ -48,7 +51,7 @@ const playlist: Playlist = {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  playback.stopPlaylist();
+  mediaClosed();
   playlists = [playlist];
   preferences = {};
   open.mockClear();
@@ -90,5 +93,19 @@ describe("playlist com álbuns desativados", () => {
     expect(playback.isActive.value).toBe(false);
     playback.playPlaylist(playlist, 0, () => false);
     expect(open).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("fechar a música (#54)", () => {
+  it("a playlist só acaba quando a música fecha de fato, e não pede o fechamento por conta própria", () => {
+    playback.playPlaylist(playlist);
+    expect(playback.isActive.value).toBe(true);
+    expect(close).not.toHaveBeenCalled();
+
+    mediaClosed();
+
+    expect(playback.isActive.value).toBe(false);
+    expect(playback.currentPlaylist.value).toBeNull();
+    expect(close).not.toHaveBeenCalled();
   });
 });

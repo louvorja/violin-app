@@ -225,6 +225,7 @@ function playPrev(): void {
 }
 
 Media.registerPlaylistEndHandler(_onSongEnded);
+Media.registerPlaylistCloseHandler(_stopInternal);
 
 $broadcast.listen((msg) => {
   if (msg.type === BROADCAST_TYPE.MEDIA_PREV_MUSIC && _isActive.value) playPrev();
@@ -233,6 +234,7 @@ $broadcast.listen((msg) => {
 
 onUnmounted(() => {
   Media.unregisterPlaylistEndHandler();
+  Media.unregisterPlaylistCloseHandler();
 });
 
 export function usePlaylistPlayback() {
@@ -282,11 +284,5 @@ export function usePlaylistPlayback() {
 
     playNext,
     playPrev,
-
-    stopPlaylist(): void {
-      $dev.write("playlist:stop");
-      _stopInternal();
-      Media.close(true);
-    },
   };
 }
