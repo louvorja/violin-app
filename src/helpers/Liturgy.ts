@@ -1,6 +1,8 @@
 /** @category deve-virar-composable — Usa UserData + AppData (Pinia); requer renderer. */
 import $userdata from "@/helpers/UserData";
 import $dev from "@/helpers/Dev";
+import $database from "@/helpers/Database";
+import DateTime from "@/helpers/DateTime";
 import ScheduledStore from "@/helpers/ScheduledStore";
 import { KEYS } from "@/constants/UserDataKeys";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
@@ -15,6 +17,21 @@ export function toLocalDate(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/** Minutos que a versão ocupa na agenda; null quando o catálogo não traz a duração. */
+export function musicDurationMinutes(
+  music: Record<string, unknown>,
+  version: string
+): number | null {
+  const useInstrumental = version === "pb" || version === "audio_pb";
+  const time = (
+    useInstrumental
+      ? music.instrumental_duration || music.duration
+      : music.duration || music.instrumental_duration
+  ) as string | undefined;
+  if (!time) return null;
+  return Math.ceil(DateTime.toNumber(time) / 60);
 }
 
 function uid(prefix = "item_"): string {
@@ -346,14 +363,23 @@ export default {
     );
   },
 
-  addMusic(
+  async addMusic(
     id_music: number,
     name: string,
     has_instrumental_music = false,
     cor = DEFAULT_COLOR,
     day?: number,
     musicSubtitle = ""
-  ): LiturgyItem {
+  ): Promise<LiturgyItem> {
+    // A versão é escolhida na hora de tocar; a agenda conta a cantada, como o formulário.
+    const lang = $userdata.get<string>(KEYS.OPTIONS.LANGUAGE, "pt") || "pt";
+    const catalog = await $database
+      .getLocal<Record<string, unknown>[]>(`${lang}_musics`)
+      .catch(() => null);
+    const music = Array.isArray(catalog)
+      ? catalog.find((m) => Number(m.id_music) === Number(id_music))
+      : undefined;
+    const duration = (music && musicDurationMinutes(music, "sung")) || 0;
     return this.add(
       {
         tipo: LiturgyItemTypeEnum.MUSICA,
@@ -365,6 +391,7 @@ export default {
         has_instrumental_music: !!has_instrumental_music,
         id_music,
         cor,
+        duration,
       } as Partial<LiturgyItem>,
       day
     );
