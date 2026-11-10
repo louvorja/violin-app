@@ -51,6 +51,8 @@ import Media from "@/composables/useMedia";
 import { SABBATH_SCHOOL_SOUNDS } from "@/config/SabbathSchool";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { ModuleEnum } from "@/enums/ModuleEnum";
+import { formatTimerSeconds, timerProjectionText } from "@/helpers/TimerText";
+import { worshipShowsTarget, worshipTargetTime } from "../projectionText";
 
 type TimerMode = "up" | "down";
 
@@ -71,19 +73,14 @@ const mode = computed<TimerMode>({
 const running = ref<boolean>(false);
 const seconds = ref<number>(0);
 const targetTime = computed<string>({
-  get: () => {
-    const v = $userdata.get<string>(KEYS.MODULES.TIMER_WORSHIP.LAST_TARGET_TIME, "");
-    return typeof v === "string" && /^\d{2}:\d{2}$/.test(v) ? v : getCurrentTimeValue();
-  },
+  get: () => worshipTargetTime(),
   set: (v: string) => $userdata.set(KEYS.MODULES.TIMER_WORSHIP.LAST_TARGET_TIME, v),
 });
 const durationSeconds = ref<number>(0);
 const startedAt = ref<number | null>(null);
 const alarmed = ref<boolean>(false);
 
-const showTargetTime = computed<boolean>(
-  () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.SHOW_TARGET_TIME, true) ?? true
-);
+const showTargetTime = computed<boolean>(() => worshipShowsTarget());
 
 const showAlert = computed<boolean>(
   () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.SHOW_ALERT, true) ?? true
@@ -105,18 +102,11 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let fiveMinFired = false;
 let oneMinFired = false;
 
-const display = computed<string>(() => {
-  const abs = Math.abs(seconds.value);
-  const h = Math.floor(abs / 3600);
-  const m = Math.floor((abs % 3600) / 60);
-  const s = abs % 60;
-  const sign = seconds.value < 0 ? "-" : "";
-  return `${sign}${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-});
+const display = computed<string>(() => formatTimerSeconds(seconds.value));
 
-const projecao = computed<string>(() => {
-  return showTargetTime.value ? `${display.value}\n${targetTime.value}` : display.value;
-});
+const projecao = computed<string>(() =>
+  timerProjectionText(display.value, showTargetTime.value, targetTime.value)
+);
 
 // Defaults sonoros — setIfNull garante que existam antes do primeiro uso
 $userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.SOUND_START, true);
@@ -218,11 +208,6 @@ watch(
   },
   { immediate: true }
 );
-
-function getCurrentTimeValue(): string {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-}
 
 function getTargetDate(): Date {
   const [hours, minutes] = targetTime.value.split(":").map(Number);

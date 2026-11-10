@@ -24,6 +24,7 @@ import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
+import { COUNTER_START } from "../projectionText";
 
 const { show_format } = useModuleFormat("counter", manifest);
 
@@ -38,7 +39,7 @@ const projection = useModuleProjection("counter", {
   },
 });
 
-const count = ref(0);
+const count = ref(COUNTER_START);
 
 watch(
   count,
@@ -55,10 +56,10 @@ function decrement() {
   count.value--;
 }
 function reset() {
-  count.value = 0;
+  count.value = COUNTER_START;
 }
 function close() {
-  count.value = 0;
+  count.value = COUNTER_START;
 }
 </script>
 

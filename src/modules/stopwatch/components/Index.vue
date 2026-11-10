@@ -54,6 +54,7 @@ import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
+import { formatStopwatch, stopwatchShowsSeconds } from "../projectionText";
 
 const { show_format } = useModuleFormat("stopwatch", manifest);
 const { rootStyle, textStyle, alertStyle, bgImage, imageStyle, container } =
@@ -110,23 +111,9 @@ const seconds = ref(0);
 const alarmed = ref(false);
 let timer = null;
 
-const showSeconds = computed(() => $userdata.get(KEYS.MODULES.STOPWATCH.SHOW_SECONDS, true));
+const showSeconds = computed(() => stopwatchShowsSeconds());
 
-const display = computed(() => {
-  const abs = Math.abs(seconds.value);
-  const h = Math.floor(abs / 3600);
-  const m = Math.floor((abs % 3600) / 60);
-  const s = abs % 60;
-  const sign = seconds.value < 0 ? "-" : "";
-  if (h > 0) {
-    return showSeconds.value
-      ? `${sign}${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-      : `${sign}${h}:${String(m).padStart(2, "0")}`;
-  }
-  return showSeconds.value
-    ? `${sign}${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-    : `${sign}${String(m).padStart(2, "0")}`;
-});
+const display = computed(() => formatStopwatch(seconds.value, showSeconds.value));
 
 const tm = (key) => moduleContainer.value?.tm(key) || key;
 
