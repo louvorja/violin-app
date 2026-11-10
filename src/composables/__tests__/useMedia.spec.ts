@@ -1,7 +1,7 @@
 /**
  * useMedia.spec.ts — Estado do player que a janela de Mídia lê.
  */
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import $appdata from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -54,5 +54,47 @@ describe("Media — preparações externas", () => {
     const current = media.captureStageGuard();
     expect(await media.open(null as unknown as number)).toBe(false);
     expect(current()).toBe(true);
+  });
+});
+
+describe("Media.toogleVolume — mudo", () => {
+  const volume = () => $appdata.get(KEYS.MODULES.MEDIA.CONFIG.VOLUME);
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("silencia direto de qualquer volume, sem passar por 100, e desfaz para o volume de antes", () => {
+    media.setVolume(35);
+    media.toogleVolume();
+    expect(volume()).toBe(0);
+    media.toogleVolume();
+    expect(volume()).toBe(35);
+  });
+
+  it("depois de arrastar até o zero, desfazer volta ao volume de antes do arrasto, não a 1%", () => {
+    vi.useFakeTimers();
+    media.setVolume(60);
+    vi.advanceTimersByTime(2000);
+    for (let v = 59; v >= 0; v--) {
+      media.setVolume(v);
+      vi.advanceTimersByTime(16);
+    }
+    media.toogleVolume();
+    expect(volume()).toBe(60);
+  });
+
+  it("silenciar logo depois de arrastar guarda o volume em que o arrasto parou", () => {
+    vi.useFakeTimers();
+    media.setVolume(35);
+    vi.advanceTimersByTime(2000);
+    for (let v = 36; v <= 70; v++) {
+      media.setVolume(v);
+      vi.advanceTimersByTime(16);
+    }
+    media.toogleVolume();
+    expect(volume()).toBe(0);
+    media.toogleVolume();
+    expect(volume()).toBe(70);
   });
 });

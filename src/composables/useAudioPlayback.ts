@@ -53,7 +53,6 @@ export interface AudioPlayback {
   pause: (callback?: () => void) => void;
   stop: (callback?: () => void) => void;
   setVolume: (val: number) => void;
-  toggleVolume: () => void;
   seekTo: (time: number) => void;
   advanceTime: (delta: number) => void;
   fadeIn: (maxVolume: number, callback?: () => void) => void;
@@ -906,10 +905,6 @@ function _create(): AudioPlayback {
     if (_fadeInTarget !== null) _fadeInTarget = val / 100;
   }
 
-  function toggleVolume(): void {
-    setVolume(volume.value < 100 ? 100 : 0);
-  }
-
   function seekTo(time: number): void {
     const el = getElement();
     if (!Number.isFinite(time) || time < 0) return;
@@ -1043,7 +1038,6 @@ function _create(): AudioPlayback {
     pause,
     stop,
     setVolume,
-    toggleVolume,
     seekTo,
     advanceTime,
     fadeIn,

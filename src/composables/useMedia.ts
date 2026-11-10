@@ -188,6 +188,7 @@ let _mediaActivitySent = false;
 const _videoStateRevisions = new VideoStateRevisionCounter();
 const _VOLUME_BREADCRUMB_MERGE_MS = 1000;
 let _volumeChange: { from: number; at: number } | null = null;
+let _volumeBeforeMute = 100;
 
 // typeof null === "object": sem tratar null aqui, open(null) estourava lendo params.mode.
 function _openParams(
@@ -3315,6 +3316,8 @@ const _self = {
       _volumeChange = { from: _audio.volume.value, at: now };
     }
     _volumeChange.at = now;
+    // Arrastar até o zero também silencia: desfazer volta ao volume de antes do arrasto, não a 1%.
+    if (val <= 0 && _volumeChange.from > 0) _volumeBeforeMute = _volumeChange.from;
     _audio.setVolume(val);
     Telemetry.breadcrumb?.(
       "media_volume_changed",
@@ -3338,8 +3341,13 @@ const _self = {
   },
 
   toogleVolume(): void {
-    const volume = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.VOLUME) as number;
-    this.setVolume(volume < 100 ? 100 : 0);
+    const volume = Number($appdata.get(KEYS.MODULES.MEDIA.CONFIG.VOLUME) ?? 0);
+    if (volume > 0) {
+      this.setVolume(0);
+      _volumeBeforeMute = volume;
+    } else {
+      this.setVolume(_volumeBeforeMute);
+    }
   },
 
   fullscreen(value = true): void {
