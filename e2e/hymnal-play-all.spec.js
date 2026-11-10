@@ -27,29 +27,32 @@ function silentWav(seconds, rate = 8000) {
 }
 
 const NAMES = { 1: "Castelo Forte", 2: "Grandioso És Tu", 3: "Sublime Graça" };
+const nameOf = (id) => NAMES[id] ?? `Hino ${id}`;
 const song = (id) => ({
   ...music1,
   id_music: id,
-  name: NAMES[id],
+  name: nameOf(id),
   url_music: `musics/pt/Teste/${id}.wav`,
-  lyric: { 1: { ...music1.lyric[1], lyric: NAMES[id], order: 1, time: "00:00:01" } },
+  lyric: { 1: { ...music1.lyric[1], lyric: nameOf(id), order: 1, time: "00:00:01" } },
 });
-const hymnal = [1, 2, 3].map((id) => ({
-  id_music: id,
-  name: NAMES[id],
-  track: id,
-  duration: "00:00:03",
-  has_instrumental_music: 0,
-}));
+// Fora de ordem de propósito: a tabela ordena pelo número.
+const hymnal = (count) =>
+  Array.from({ length: count }, (_, i) => count - i).map((id) => ({
+    id_music: id,
+    name: nameOf(id),
+    track: id,
+    duration: "00:00:03",
+    has_instrumental_music: 0,
+  }));
 
 test.use({ serviceWorkers: "block" });
 
-async function start(page, seconds) {
+async function start(page, seconds, count = 3) {
   const audio = silentWav(seconds);
   await page.context().route("**/*", (route) => {
     const url = new URL(route.request().url());
     if (/\/pt_musics(?:\.|$)/.test(url.pathname)) return route.fulfill({ json: [] });
-    if (/\/pt_hymnal(?:\.|$)/.test(url.pathname)) return route.fulfill({ json: hymnal });
+    if (/\/pt_hymnal(?:\.|$)/.test(url.pathname)) return route.fulfill({ json: hymnal(count) });
     const music = url.pathname.match(/\/music_(\d+)(?:\.|$)/);
     if (music) return route.fulfill({ json: song(Number(music[1])) });
     if (url.pathname.endsWith(".wav"))
@@ -64,7 +67,7 @@ async function start(page, seconds) {
     .waitFor({ state: "attached", timeout: 30_000 });
   await page.locator("#ribbon-tab-collections").click();
   await page.locator('[data-testid="ribbon-btn-hymnal"]').click();
-  await expect(page.locator(".lj-music-row")).toHaveCount(3);
+  await expect(page.locator(".lj-music-row").first()).toBeVisible();
   // Cada hino que a janela de Mídia abre, na ordem.
   await page.evaluate(() => {
     window.__opened = [];
@@ -120,4 +123,29 @@ test("tocar outro hino no meio encerra a fila na hora", async ({ page }) => {
   await page.locator('[data-testid="ribbon-btn-sing"]').click();
   await expect(page.locator(".playlist-bar")).not.toBeVisible();
   await expect.poll(() => opened(page)).toEqual([NAMES[1], NAMES[3]]);
+});
+
+test("Tocar Todas enfileira o hinário inteiro, não só as linhas já desenhadas na tela", async ({
+  page,
+}) => {
+  await start(page, 30, 120);
+  expect(await page.locator(".lj-music-row").count()).toBeLessThan(120);
+  await page.locator('[data-testid="ribbon-btn-sequence"]').click();
+  await expect(page.locator(".playlist-bar")).toContainText("/120");
+  await expect.poll(() => opened(page)).toEqual([NAMES[1]]);
+});
+
+test("Em Sequência toca do hino escolhido em diante, mesmo achado pela busca (#38)", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await start(page, 3, 120);
+  await page.getByPlaceholder("Digite o número ou nome do hino...").fill("30");
+  await page.locator(".lj-music-row").filter({ hasText: "Hino 30" }).first().click();
+  await page.locator('[data-testid="ribbon-btn-in_sequence"]').click();
+
+  await expect(page.locator(".playlist-bar")).toContainText("/91");
+  await expect
+    .poll(() => opened(page), { timeout: 15_000 })
+    .toEqual(["Hino 30", "Hino 31", "Hino 32"]);
 });

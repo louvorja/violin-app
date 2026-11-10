@@ -205,8 +205,9 @@ function hasScroll(val) {
   has_scroll.value = val;
 }
 
-function playAll() {
-  const songs = (data.value?.data || [])
+// O hinário inteiro em ordem numérica: a lista da tela tem a busca e só as linhas já desenhadas.
+function hymnSongs() {
+  return (table.value?.allRows() || [])
     .filter((item) => item.id_music != null)
     .map((item) => ({
       id_music: item.id_music,
@@ -214,7 +215,17 @@ function playAll() {
       duration: item.duration,
       has_instrumental_music: !!item.has_instrumental_music,
     }));
+}
+
+function playAll() {
+  const songs = hymnSongs();
   if (songs.length) playlistPlayback.playSequence(tm("title"), songs);
+}
+
+function playFromSelected() {
+  const songs = hymnSongs();
+  const start = songs.findIndex((song) => song.id_music === selectedId.value);
+  if (start >= 0) playlistPlayback.playSequence(tm("title"), songs.slice(start));
 }
 
 const HYMN_ACTIONS = {
@@ -236,6 +247,7 @@ const HYMN_ACTIONS = {
   audio_playback: () => {
     void executeMusic({ id_music: selectedId.value }, MusicActionEnum.PLAYBACK_ONLY);
   },
+  in_sequence: () => playFromSelected(),
   sequence: () => playAll(),
   report_error: () =>
     window.open("https://louvorja.com.br/telegram", "_blank", "noopener,noreferrer"),

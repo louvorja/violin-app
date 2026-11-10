@@ -280,6 +280,8 @@ export const ICONS = {
     FORWARD_10: "rewind-forward-10",
     FULLSCREEN: "maximize",
     FULLSCREEN_EXIT: "minimize",
+    /** Do item escolhido em diante, em ordem crescente. */
+    IN_SEQUENCE: "sort-ascending-numbers",
     LOOP: "repeat",
     LOOP_OFF: "repeat-off",
     NEXT: "player-skip-forward",

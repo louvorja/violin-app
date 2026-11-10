@@ -17,6 +17,11 @@
         <div class="album-summary__copy">
           <h2 class="album-summary__name">{{ albumName }}</h2>
           <p v-if="!loading" class="album-summary__count">{{ trackCountLabel }}</p>
+          <div v-if="!loading && tracks.length" class="album-summary__actions">
+            <LjButton size="sm" :icon="ICONS.FORMAT.LIST_NUMBERED" @click="playAll">
+              {{ $t("ribbon.btn.play_all") }}
+            </LjButton>
+          </div>
         </div>
       </div>
 
@@ -110,6 +115,7 @@ import { useDisabledAlbums } from "@/composables/useMusicCatalog";
 import { useListNavigation } from "@/composables/useListNavigation";
 import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 import { isAlbumEnabled } from "@root/config/musicCatalog.mjs";
+import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
 
 const { module, t, $path, $datetime } = useModule(manifest);
 const { loading, close: closeAlbum } = useAlbum();
@@ -158,6 +164,21 @@ function onTracksKey(event) {
   if (nav.handleArrow(event) || !isQuickPlayEnter(event)) return;
   event.preventDefault();
   quickPlay(nav.active.value, event.shiftKey);
+}
+
+const playlistPlayback = usePlaylistPlayback();
+
+/** O CD inteiro, na ordem das faixas, pela mesma fila das playlists. */
+function playAll() {
+  playlistPlayback.playSequence(
+    albumName.value,
+    tracks.value.map((item) => ({
+      id_music: Number(item.id_music),
+      name: item.name,
+      duration: item.duration,
+      has_instrumental_music: !!item.has_instrumental_music,
+    }))
+  );
 }
 
 const trackCountLabel = computed(
@@ -251,6 +272,10 @@ watch(disabledAlbums, (disabled) => {
 
 .album-summary__copy {
   min-width: 0;
+}
+
+.album-summary__actions {
+  margin-top: var(--lj-space-4);
 }
 
 .album-summary__name {

@@ -701,7 +701,12 @@ function searching() {
   return Boolean(fileData) && appliedSearch() !== "" && searchableKeys().length > 0;
 }
 
-defineExpose({ flush, searching });
+/** Todas as linhas na ordem da tabela, sem a busca e sem a paginação da tela. */
+function allRows() {
+  return all_data.value;
+}
+
+defineExpose({ flush, searching, allRows });
 </script>
 
 <style>

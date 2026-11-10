@@ -63,6 +63,7 @@ export function createHymnalManifest({
             { id: "sing", icon: musicActionIcon(MusicActionEnum.AUDIO), label: "ribbon.btn.sing", action: `${id}_sing`, color: "#27ae60" },
             { id: "playback", icon: musicActionIcon(MusicActionEnum.INSTRUMENTAL), label: "ribbon.btn.playback", action: `${id}_playback`, color: "#3498db" },
             { id: "no_audio", icon: musicActionIcon(MusicActionEnum.NO_AUDIO), label: "ribbon.btn.no_audio", action: `${id}_no_audio`, color: "#7f8c8d" },
+            { id: "in_sequence", icon: ICONS.PLAYER.IN_SEQUENCE, label: "ribbon.btn.sequence", action: `${id}_in_sequence`, color: "#9b59b6" },
             { id: "sequence", icon: ICONS.FORMAT.LIST_NUMBERED, label: "ribbon.btn.play_all", action: `${id}_sequence`, color: "#9b59b6" },
           ],
         },
