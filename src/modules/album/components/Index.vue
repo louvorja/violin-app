@@ -25,15 +25,19 @@
         </div>
       </div>
 
+      <!-- Conferir o disco leva um instante: o espaço do aviso fica reservado desde a abertura,
+           senão o diálogo, centralizado, pula para cima quando ele aparece. -->
       <div
-        v-if="!loading && tracks.length && canDownload && albumDownloaded !== null"
+        v-if="!loading && tracks.length && canDownload"
         class="album-download"
+        :class="{ 'album-download--pending': albumDownloaded === null }"
+        :aria-hidden="albumDownloaded === null ? 'true' : undefined"
       >
         <template v-if="albumDownloaded">
           <LjIcon :icon="ICONS.UI.CHECK" :size="16" class="album-download__icon" />
           <p class="album-download__hint">{{ t("downloaded_hint") }}</p>
         </template>
-        <template v-else>
+        <template v-else-if="albumDownloaded === false">
           <p class="album-download__hint">{{ t("download_hint") }}</p>
           <LjButton size="sm" :icon="ICONS.ACTIONS.DOWNLOAD" @click="goDownload">
             {{ t("download") }}
@@ -305,6 +309,10 @@ watch(disabledAlbums, (disabled) => {
   border: 1px solid var(--lj-surface-border);
   border-radius: var(--lj-radius-md);
   background: var(--lj-surface-bg-soft);
+}
+
+.album-download--pending {
+  visibility: hidden;
 }
 
 .album-download__icon {
