@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, type VueWrapper } from "@vue/test-utils";
-import { computed, ref } from "vue";
+import { computed, h, ref } from "vue";
+import { TooltipProvider } from "reka-ui";
 import { mountUi } from "@/components/ui/__tests__/mountUi";
 
 const tracks = [
@@ -9,6 +10,7 @@ const tracks = [
 ];
 let finishCheck: (_downloaded: string | false) => void = () => {};
 const playSequence = vi.fn();
+const requestAlbumDownload = vi.fn();
 
 vi.mock("@/composables/useModule", () => ({
   useModule: () => ({
@@ -24,7 +26,9 @@ vi.mock("@/composables/useAlbum", () => ({
 vi.mock("@/helpers/Platform", () => ({
   default: { download: {}, storage: { checkLocal: vi.fn() } },
 }));
-vi.mock("@/helpers/SyncIntent", () => ({ requestAlbumDownload: vi.fn() }));
+vi.mock("@/helpers/SyncIntent", () => ({
+  requestAlbumDownload: (...args: unknown[]) => requestAlbumDownload(...args),
+}));
 vi.mock("@/composables/useSyncManager", () => ({
   useSyncManager: () => ({
     collectAlbumFileList: async () => [],
@@ -43,6 +47,9 @@ vi.mock("@/components/MusicMenuTable.vue", () => ({
 }));
 
 const Index = (await import("../Index.vue")).default;
+// A dica do download só funciona sob o TooltipProvider do App.vue.
+const mountDialog = () =>
+  mountUi({ render: () => h(TooltipProvider, () => h(Index)) }, { attachTo: document.body });
 
 let wrapper: VueWrapper | null = null;
 afterEach(() => {
@@ -50,25 +57,36 @@ afterEach(() => {
   wrapper = null;
 });
 
-const banner = () => document.querySelector(".album-download") as HTMLElement | null;
+const actions = () => document.querySelector(".album-summary__actions") as HTMLElement;
+const buttons = () => [...actions().querySelectorAll("button")].map((b) => b.textContent?.trim());
 
 describe("diálogo do CD no desktop", () => {
-  it("reserva o espaço do aviso enquanto confere o disco, para o diálogo não pular ao abrir", async () => {
-    wrapper = mountUi(Index, { attachTo: document.body });
+  it("a situação do download entra na linha do Tocar Todas, sem faixa própria", async () => {
+    wrapper = mountDialog();
     await flushPromises();
-
-    expect(banner()?.classList.contains("album-download--pending")).toBe(true);
-    expect(banner()?.getAttribute("aria-hidden")).toBe("true");
+    // Conferindo o disco: só o Tocar Todas; a linha já existe, então nada muda de altura depois.
+    expect(buttons()).toEqual(["Tocar Todas"]);
 
     finishCheck("own");
     await flushPromises();
-    expect(banner()?.classList.contains("album-download--pending")).toBe(false);
-    expect(banner()?.getAttribute("aria-hidden")).toBeNull();
-    expect(banner()?.textContent).toContain("downloaded_hint");
+    expect(buttons()).toEqual(["Tocar Todas"]);
+    expect(actions().querySelector(".album-downloaded")?.textContent?.trim()).toBe("downloaded");
+  });
+
+  it("CD não baixado: botão Baixar álbum ao lado, que leva ao Sincronizar", async () => {
+    wrapper = mountDialog();
+    await flushPromises();
+    finishCheck(false);
+    await flushPromises();
+
+    expect(buttons()).toEqual(["Tocar Todas", "download"]);
+    expect(actions().querySelector(".album-downloaded")).toBeNull();
+    (actions().querySelectorAll("button")[1] as HTMLElement).click();
+    expect(requestAlbumDownload).toHaveBeenCalledWith(7);
   });
 
   it("Tocar Todas enfileira as faixas do CD na ordem, com o nome do CD (#50)", async () => {
-    wrapper = mountUi(Index, { attachTo: document.body });
+    wrapper = mountDialog();
     await flushPromises();
 
     (document.querySelector(".album-summary__actions button") as HTMLElement).click();

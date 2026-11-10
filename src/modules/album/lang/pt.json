@@ -14,5 +14,6 @@
   },
   "download": "Baixar álbum",
   "download_hint": "Baixe este álbum em Sincronizar para ouvir sem internet.",
+  "downloaded": "Baixado",
   "downloaded_hint": "Álbum baixado: toca mesmo sem internet."
 }

@@ -21,28 +21,19 @@
             <LjButton size="sm" :icon="ICONS.FORMAT.LIST_NUMBERED" @click="playAll">
               {{ $t("ribbon.btn.play_all") }}
             </LjButton>
+            <LjTooltip v-if="albumDownloaded === false" :text="t('download_hint')">
+              <LjButton size="sm" :icon="ICONS.ACTIONS.DOWNLOAD" @click="goDownload">
+                {{ t("download") }}
+              </LjButton>
+            </LjTooltip>
+            <LjTooltip v-else-if="albumDownloaded" :text="t('downloaded_hint')">
+              <span class="album-downloaded" tabindex="0">
+                <LjIcon :icon="ICONS.UI.CHECK" :size="14" class="album-downloaded__icon" />
+                {{ t("downloaded") }}
+              </span>
+            </LjTooltip>
           </div>
         </div>
-      </div>
-
-      <!-- Conferir o disco leva um instante: o espaço do aviso fica reservado desde a abertura,
-           senão o diálogo, centralizado, pula para cima quando ele aparece. -->
-      <div
-        v-if="!loading && tracks.length && canDownload"
-        class="album-download"
-        :class="{ 'album-download--pending': albumDownloaded === null }"
-        :aria-hidden="albumDownloaded === null ? 'true' : undefined"
-      >
-        <template v-if="albumDownloaded">
-          <LjIcon :icon="ICONS.UI.CHECK" :size="16" class="album-download__icon" />
-          <p class="album-download__hint">{{ t("downloaded_hint") }}</p>
-        </template>
-        <template v-else-if="albumDownloaded === false">
-          <p class="album-download__hint">{{ t("download_hint") }}</p>
-          <LjButton size="sm" :icon="ICONS.ACTIONS.DOWNLOAD" @click="goDownload">
-            {{ t("download") }}
-          </LjButton>
-        </template>
       </div>
 
       <LjProgress v-if="loading" indeterminate :label="t('loading')" />
@@ -109,7 +100,15 @@ import { computed, ref, watch } from "vue";
 import { module as manifest } from "../manifest";
 import { useModule } from "@/composables/useModule";
 import { useAlbum } from "@/composables/useAlbum";
-import { LjButton, LjDialog, LjEmpty, LjIcon, LjProgress, LjTable } from "@/components/ui";
+import {
+  LjButton,
+  LjDialog,
+  LjEmpty,
+  LjIcon,
+  LjProgress,
+  LjTable,
+  LjTooltip,
+} from "@/components/ui";
 import Platform from "@/helpers/Platform";
 import { requestAlbumDownload } from "@/helpers/SyncIntent";
 import { useSyncManager } from "@/composables/useSyncManager";
@@ -279,7 +278,23 @@ watch(disabledAlbums, (disabled) => {
 }
 
 .album-summary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lj-space-4);
   margin-top: var(--lj-space-4);
+}
+
+.album-downloaded {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
+}
+
+.album-downloaded__icon {
+  color: var(--lj-success);
 }
 
 .album-summary__name {
@@ -295,36 +310,6 @@ watch(disabledAlbums, (disabled) => {
   margin: var(--lj-space-3) 0 0;
   color: var(--lj-text-muted);
   font-size: var(--lj-text-base);
-}
-
-.album-download {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--lj-space-4);
-  /* Altura do botão: baixado ou não, a tabela começa no mesmo ponto. */
-  min-height: calc(var(--lj-ui-h-sm) + 2 * var(--lj-space-4) + 2px);
-  margin-bottom: var(--lj-space-6);
-  padding: var(--lj-space-4) var(--lj-space-5);
-  border: 1px solid var(--lj-surface-border);
-  border-radius: var(--lj-radius-md);
-  background: var(--lj-surface-bg-soft);
-}
-
-.album-download--pending {
-  visibility: hidden;
-}
-
-.album-download__icon {
-  flex: 0 0 auto;
-  color: var(--lj-success);
-}
-
-.album-download__hint {
-  flex: 1 1 200px;
-  margin: 0;
-  color: var(--lj-text-muted);
-  font-size: var(--lj-text-sm);
 }
 
 .album-tracks {
