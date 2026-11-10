@@ -152,6 +152,10 @@ describe("slide editor projection cancellation", () => {
 
   it("still publishes the current slide while projection remains active", async () => {
     mocks.resolveImage.mockImplementation(async (token: string) => `blob:${token}`);
+    const song = songWithImages();
+    song.slides[0].letra = "Capa\nSegunda linha";
+    song.slides[0].letra_aux = "Auxiliar\r\nSegunda linha";
+    sessionStorage.setItem("slide_editor_song_v2", JSON.stringify(song));
     mountEditor();
     await flushPromises();
 
@@ -162,7 +166,11 @@ describe("slide editor projection cancellation", () => {
       BROADCAST_TYPE.SLIDE_CHANGE,
       expect.objectContaining({
         slide_index: 0,
-        slide: expect.objectContaining({ url_image: "blob:cover-token" }),
+        slide: expect.objectContaining({
+          url_image: "blob:cover-token",
+          lyric: "Capa<br>Segunda linha",
+          aux_lyric: "Auxiliar<br>Segunda linha",
+        }),
         next_slide: expect.objectContaining({ url_image: "blob:next-token" }),
       })
     );

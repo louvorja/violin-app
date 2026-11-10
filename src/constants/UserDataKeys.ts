@@ -94,6 +94,7 @@ export const KEYS = {
       DAY_NOTES: `${MODULES_LITURGY}.day_notes`,
       SCHEDULED_ITEMS: `${MODULES_LITURGY}.scheduled_items`,
       SCHEDULED_CATEGORIES: `${MODULES_LITURGY}.scheduled_categories`,
+      SCHEDULED_MIGRATED: `${MODULES_LITURGY}.scheduled_migrated`,
       LEGACY_ITEMS: `${MODULES_LITURGY}.items`,
       LEGACY_WEEKS: `${MODULES_LITURGY}.weeks`,
       LEGACY_ACTIVE_WEEK: `${MODULES_LITURGY}.active_week`,
@@ -113,7 +114,6 @@ export const KEYS = {
     MEDIA: {
       IS_PLAYING: `${MODULES_MEDIA}.is_playing`,
       FADE_AUDIO: `${MODULES_MEDIA}.fade_audio`,
-      LAZY_LOAD: `${MODULES_MEDIA}.lazy_load`,
       MINIMIZED: `${MODULES_MEDIA}.minimized`,
       LOADING: `${MODULES_MEDIA}.loading`,
       SHOW: `${MODULES_MEDIA}.show`,
@@ -363,6 +363,8 @@ export const KEYS = {
     SKIP_STARTUP_CHECK: `${OPTIONS}.skip_startup_check`,
     /** A verificação inicial já foi apresentada uma vez; é de instalação nova. */
     STARTUP_CHECK_DONE: `${OPTIONS}.startup_check_done`,
+    /** Exibe a dica de abertura na próxima inicialização. */
+    SHOW_STARTUP_TIPS: `${OPTIONS}.show_startup_tips`,
     USE_BETA_UPDATES: `${OPTIONS}.use_beta_updates`,
     CHECK_UPDATES_ON_START: `${OPTIONS}.check_updates_on_start`,
     AUTO_DOWNLOAD_UPDATES: `${OPTIONS}.auto_download_updates`,

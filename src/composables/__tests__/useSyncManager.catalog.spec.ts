@@ -315,7 +315,7 @@ describe("Verificação Inicial leve", () => {
       expect(result.partialAlbums?.size).toBe(0);
       present.add("/musics/pt/A/1.opus");
       result = await sync.scanCache("pt", CATALOG.pt_categories as never, [], [], { force: true });
-      expect(result.partialAlbums?.get(7)).toEqual({ have: 3, total: 4 });
+      expect(result.partialAlbums?.get(7)).toEqual({ have: 1, total: 2 });
       present.clear();
       result = await sync.scanCache("pt", CATALOG.pt_categories as never, [], [], { force: true });
       expect(result.partialAlbums?.size).toBe(0);

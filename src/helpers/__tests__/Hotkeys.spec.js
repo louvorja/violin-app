@@ -172,6 +172,32 @@ describe("Hotkeys — KeyboardEvent sintético (POST /api/keyboard)", () => {
     input.remove();
   });
 
+  it("com `when` falso o atalho é pulado sem cancelar, e a tecla segue para o anterior", () => {
+    const fired = [];
+    const tela = () => fired.push("tela");
+    const player = () => fired.push("player");
+    let playerTemTeclado = false;
+    Hotkeys.register("ArrowRight", tela, { preventDefault: false });
+    Hotkeys.register("ArrowRight", player, { when: () => playerTemTeclado });
+    const press = () => {
+      const event = new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        bubbles: true,
+        cancelable: true,
+      });
+      window.dispatchEvent(event);
+      return event;
+    };
+
+    expect(press().defaultPrevented).toBe(false);
+    playerTemTeclado = true;
+    expect(press().defaultPrevented).toBe(true);
+    expect(fired).toEqual(["tela", "player"]);
+
+    Hotkeys.unregister("ArrowRight", tela);
+    Hotkeys.unregister("ArrowRight", player);
+  });
+
   it("preserva Space para ativar o botão focado", () => {
     const button = document.createElement("button");
     document.body.append(button);

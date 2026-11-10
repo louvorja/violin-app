@@ -26,7 +26,7 @@
           class="overlay-slot__text"
           :style="textStyle(slot)"
         >
-          {{ moduleValues[slot.source_module || ""] || "\u2014" }}
+          {{ mirrorText(slot.source_module) }}
         </div>
       </div>
     </TransitionGroup>
@@ -41,7 +41,7 @@ import type { OverlaySlot } from "@/types/Overlay";
 const {
   enabled,
   activeSlots,
-  moduleValues,
+  mirrorText,
   slotImage,
   slotStyle,
   imageStyle,

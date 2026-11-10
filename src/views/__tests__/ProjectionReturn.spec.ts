@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { createPinia, setActivePinia } from "pinia";
@@ -147,6 +147,37 @@ describe("ProjectionReturn", () => {
     enviar(slide("Aleluia"), null, 3, 12);
     await nextTick();
     expect(w.find(".return-counter").text()).toBe("4 / 12");
+  });
+
+  it("as setas passam o slide com o foco na tela de retorno, pedindo à principal", async () => {
+    montar();
+    enviar(slide("Aleluia"), null, 3, 12);
+    await nextTick();
+    const send = vi.spyOn(Broadcast, "send");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "PageUp" }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "End" }));
+    const pedidos = send.mock.calls
+      .filter(([tipo]) => tipo === BROADCAST_TYPE.GO_TO_SLIDE)
+      .map(([, dados]) => (dados as { index: number }).index);
+    expect(pedidos).toEqual([4, 2, 11]);
+    send.mockRestore();
+  });
+
+  it("espaço e Pause pedem à principal o mesmo tocar/pausar, sem passar o slide", async () => {
+    montar();
+    enviar(slide("Aleluia"), null, 3, 12);
+    await nextTick();
+    const send = vi.spyOn(Broadcast, "send");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Pause" }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", repeat: true }));
+    const tipos = send.mock.calls.map(([tipo, dados]) => [tipo, (dados as { key?: string }).key]);
+    expect(tipos).toEqual([
+      [BROADCAST_TYPE.MEDIA_PLAY_PAUSE, "space"],
+      [BROADCAST_TYPE.MEDIA_PLAY_PAUSE, "pause"],
+    ]);
+    send.mockRestore();
   });
 
   it("o título tem a própria faixa e não fica sobre a letra", async () => {

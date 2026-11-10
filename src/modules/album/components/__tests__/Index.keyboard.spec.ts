@@ -30,6 +30,9 @@ vi.mock("@/helpers/Platform", () => ({ default: {} }));
 vi.mock("@/helpers/SyncIntent", () => ({ requestAlbumDownload: vi.fn() }));
 vi.mock("@/composables/useSyncManager", () => ({ useSyncManager: () => ({}) }));
 vi.mock("@/composables/useMusicCatalog", () => ({ useDisabledAlbums: () => ref([]) }));
+vi.mock("@/modules/musics/composables/usePlaylistPlayback", () => ({
+  usePlaylistPlayback: () => ({ playSequence: vi.fn() }),
+}));
 vi.mock("@/components/MusicMenuTable.vue", () => ({
   default: { template: '<button type="button" class="stub-menu">⋮</button>' },
 }));

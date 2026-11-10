@@ -272,7 +272,7 @@
         índice vira "Página X / Y", porque "1 / 1" não diz nada quando o
         documento tem cinco.
       -->
-      <div v-if="mostrarBarra" class="media-playerbar">
+      <div v-if="mostrarBarra" class="media-playerbar" data-lj-player>
         <div class="media-playerbar-info">
           <LjIcon :icon="barraIcone" :size="16" />
           <span class="media-playerbar-name">{{ barraTitulo }}</span>

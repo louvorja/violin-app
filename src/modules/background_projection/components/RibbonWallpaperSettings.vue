@@ -6,13 +6,15 @@
         <label class="rbw-label">{{ tm("bg_color") }}</label>
       </div>
       <div class="rbw-group">
-        <select class="rbw-select" :value="wpPosition" @change="onPos">
-          <option value="cover">Cover</option>
-          <option value="contain">Contain</option>
-          <option value="center">Center</option>
-          <option value="stretch">Stretch</option>
-          <option value="tile">Tile</option>
-        </select>
+        <span class="rbw-select">
+          <LjSelect
+            size="sm"
+            :model-value="wpPosition"
+            :items="opcoesAjuste"
+            :aria-label="tm('bg_position')"
+            @update:model-value="onPos"
+          />
+        </span>
         <label class="rbw-label">{{ tm("bg_position") }}</label>
       </div>
       <div class="rbw-group">
@@ -43,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjIcon } from "@/components/ui";
+import { LjButton, LjIcon, LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { useI18n } from "vue-i18n";
@@ -54,11 +56,13 @@ import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Broadcast from "@/helpers/Broadcast";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
+import { opcoesDeAjuste } from "@/helpers/BackgroundStyle";
 
 const { t: i18nT } = useI18n();
 const modulePrefix = $modules.getPath(ModuleEnum.BACKGROUND_PROJECTION);
 const tm = (key: string) => i18nT(`modules.background_projection.${key}`);
 const currentBgImage = computed(() => wpImageUrl.value);
+const opcoesAjuste = computed(() => opcoesDeAjuste(i18nT));
 
 const wpColor = ref(DEFAULT_BACKGROUND_COLOR);
 const wpImageUrl = ref("");
@@ -89,8 +93,8 @@ function onColor(e: Event): void {
   scheduleSave();
 }
 
-function onPos(e: Event): void {
-  wpPosition.value = (e.target as HTMLSelectElement).value;
+function onPos(value: string | number): void {
+  wpPosition.value = String(value);
   scheduleSave();
 }
 
@@ -208,14 +212,7 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 .rbw-select {
-  height: 22px;
-  width: 80px;
-  padding: 0 4px;
-  border: 1px solid #555;
-  border-radius: var(--lj-radius-xs);
-  font-size: 10px;
-  font-family: inherit;
-  outline: none;
+  width: 104px;
 }
 .opt-bg-pick {
   display: flex;

@@ -280,6 +280,8 @@ export const ICONS = {
     FORWARD_10: "rewind-forward-10",
     FULLSCREEN: "maximize",
     FULLSCREEN_EXIT: "minimize",
+    /** Do item escolhido em diante, em ordem crescente. */
+    IN_SEQUENCE: "sort-ascending-numbers",
     LOOP: "repeat",
     LOOP_OFF: "repeat-off",
     NEXT: "player-skip-forward",
@@ -394,6 +396,7 @@ export const ICONS = {
     GRID_LARGE: "layout-grid",
     HARDDISK: "server",
     HELP: "help-circle",
+    HELP_SOLID: "help-circle-filled",
     HISTORY: "history",
     IMAGE_OFF: "photo-off",
     IMAGE_OUTLINE: "photo",
@@ -470,7 +473,7 @@ export const ICONS = {
   },
   PROJETOS: {
     WEB: "world",
-    ELECTRON: "atom",
+    DESKTOP: "device-laptop",
     DELPHI: "device-imac",
     API: "api",
   },

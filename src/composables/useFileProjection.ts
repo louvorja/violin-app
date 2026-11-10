@@ -5,13 +5,15 @@
  * Segue o padrão de useBackgroundSound: refs module-level (singleton).
  *
  * Atalhos de teclado (setas/espaço) são registrados via Hotkeys.js
- * quando a projeção inicia, garantindo captura antes do media module
- * e funcionando de qualquer módulo ativo.
+ * quando a projeção inicia, garantindo captura antes do media module.
+ * Valem enquanto o player tem o teclado (ver PlayerKeyboard): fora dele,
+ * a tecla segue para a tela em que o operador está.
  */
 import { ref } from "vue";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $broadcast from "@/helpers/Broadcast";
 import Hotkeys from "@/helpers/Hotkeys";
+import PlayerKeyboard from "@/helpers/PlayerKeyboard";
 
 export type ProjectionType = "file" | "announcements";
 
@@ -29,16 +31,19 @@ function _registerProjectionHotkeys(): void {
     context: "announcements",
     description: "hotkeys.announcements_next",
     group: "announcements",
+    when: PlayerKeyboard.hasKeys,
   });
   Hotkeys.register("ArrowLeft", _hotkeyPrev, {
     context: "announcements",
     description: "hotkeys.announcements_prev",
     group: "announcements",
+    when: PlayerKeyboard.hasKeys,
   });
   Hotkeys.register("Space", _hotkeyNext, {
     context: "announcements",
     description: "hotkeys.announcements_next",
     group: "announcements",
+    when: PlayerKeyboard.hasKeys,
   });
   _hotkeysRegistered = true;
 }
@@ -75,6 +80,7 @@ function start(
   currentIndex.value = startIdx;
   playlistLength.value = total;
   _registerProjectionHotkeys();
+  PlayerKeyboard.claim();
 }
 
 function stop(): void {

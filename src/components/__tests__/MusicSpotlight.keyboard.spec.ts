@@ -42,9 +42,16 @@ function campo(): HTMLInputElement {
   return document.querySelector(".music-search__bar input") as HTMLInputElement;
 }
 
-async function digitar(texto: string) {
+async function digitarSemPausa(texto: string) {
   campo().value = texto;
   campo().dispatchEvent(new Event("input"));
+  await nextTick();
+}
+
+/** A lista acompanha o campo depois da pausa de digitação. */
+async function digitar(texto: string) {
+  await digitarSemPausa(texto);
+  await new Promise((resolve) => setTimeout(resolve, 200));
   await nextTick();
 }
 
@@ -96,6 +103,21 @@ describe("MusicSpotlight (Ctrl+M) pelo teclado", () => {
     await digitar("castelo ");
     await digitar("castelo");
     expect(destacada()).toBe("Castelo Forte");
+  });
+
+  it("Enter logo após digitar toca o que está escrito, sem esperar a pausa", async () => {
+    await abrir();
+    await digitar("castelo");
+    await digitarSemPausa("castelo e");
+    await tecla("Enter");
+    expect(quickPlay).toHaveBeenCalledWith(musics[2], false);
+  });
+
+  it("↓ logo após digitar anda na lista do que está escrito", async () => {
+    await abrir();
+    await digitarSemPausa("castelo");
+    await tecla("ArrowDown");
+    expect(destacada()).toBe("Castelo Seguro");
   });
 
   it("o mouse leva o destaque, e o Enter toca a que está marcada", async () => {

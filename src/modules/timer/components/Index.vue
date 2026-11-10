@@ -64,6 +64,8 @@ import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useTimerEndAction } from "@/composables/useTimerEndAction";
 import { KEYS } from "@/constants/UserDataKeys";
 import { MediaEnum } from "@/enums/MediaEnum";
+import { formatTimerSeconds, timerProjectionText } from "@/helpers/TimerText";
+import { timerShowsTarget, timerTargetTime } from "../projectionText";
 
 $userdata.setIfNull(KEYS.MODULES.TIMER.END_ACTION, MediaEnum.NONE);
 
@@ -116,16 +118,11 @@ const mode = computed<TimerMode>({
 });
 
 const targetTime = computed<string>({
-  get: () => {
-    const v = $userdata.get<string>(KEYS.MODULES.TIMER.TARGET_TIME, "");
-    return v || getCurrentTimeValue();
-  },
+  get: () => timerTargetTime(),
   set: (v: string) => $userdata.set(KEYS.MODULES.TIMER.TARGET_TIME, v),
 });
 
-const showTargetTime = computed<boolean>(
-  () => $userdata.get<boolean>(KEYS.MODULES.TIMER.SHOW_TARGET_TIME, true) ?? true
-);
+const showTargetTime = computed<boolean>(() => timerShowsTarget());
 
 const showAlert = computed<boolean>(
   () => $userdata.get<boolean>(KEYS.MODULES.TIMER.SHOW_ALERT, true) ?? true
@@ -190,20 +187,11 @@ const alertLevel = computed<"" | "warning" | "danger">(() => {
   return alertActive.value ? "warning" : "";
 });
 
-const display = computed<string>(() => {
-  const abs = Math.abs(seconds.value);
-  const h = Math.floor(abs / 3600);
-  const m = Math.floor((abs % 3600) / 60);
-  const s = abs % 60;
-  // Negativo é tempo excedido: "-00:02:10".
-  const sign = seconds.value < 0 ? "-" : "";
+const display = computed<string>(() => formatTimerSeconds(seconds.value));
 
-  return `${sign}${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-});
-
-const projecao = computed<string>(() => {
-  return showTargetTime.value ? `${display.value}\n${targetTime.value}` : display.value;
-});
+const projecao = computed<string>(() =>
+  timerProjectionText(display.value, showTargetTime.value, targetTime.value)
+);
 
 watch(mode, () => reset());
 
@@ -219,12 +207,6 @@ watch(
   },
   { immediate: true }
 );
-
-function getCurrentTimeValue(): string {
-  const now = new Date();
-
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-}
 
 function getTargetDate(): Date {
   const [hours, minutes] = targetTime.value.split(":").map(Number);

@@ -7,44 +7,6 @@ export interface MusicAction {
   color: string;
 }
 
-export const MUSIC_ACTION: Record<string, MusicAction> = {
-  [MusicActionEnum.AUDIO]: {
-    action: MusicActionEnum.AUDIO,
-    icon: ICONS.MUSIC.AUDIO,
-    color: "#0034d9",
-  },
-  [MusicActionEnum.INSTRUMENTAL]: {
-    action: MusicActionEnum.INSTRUMENTAL,
-    icon: ICONS.MUSIC.PLAYBACK,
-    color: "#00560b",
-  },
-  [MusicActionEnum.LYRIC]: {
-    action: MusicActionEnum.LYRIC,
-    icon: ICONS.MUSIC.LYRIC,
-    color: "#7f8c8d",
-  },
-  [MusicActionEnum.SUNG]: {
-    action: MusicActionEnum.SUNG,
-    icon: ICONS.MUSIC.SING,
-    color: "#c0392b",
-  },
-  [MusicActionEnum.PLAYBACK]: {
-    action: MusicActionEnum.PLAYBACK,
-    icon: ICONS.MUSIC.PLAYBACK,
-    color: "#1b4f8a",
-  },
-  [MusicActionEnum.AUDIO_ONLY]: {
-    action: MusicActionEnum.AUDIO_ONLY,
-    icon: ICONS.MUSIC.AUDIO,
-    color: "#27ae60",
-  },
-  [MusicActionEnum.PLAYBACK_ONLY]: {
-    action: MusicActionEnum.PLAYBACK_ONLY,
-    icon: ICONS.MUSIC.AUDIO_PLAYBACK,
-    color: "#8e44ad",
-  },
-};
-
 export interface MusicExecution {
   action: MusicActionEnum;
   /** Identificador estável do botão nas listas (`mmt-btn-<id>`). */
@@ -104,6 +66,52 @@ export const MUSIC_EXECUTIONS: MusicExecution[] = [
     audioOnly: true,
   },
 ];
+
+/** Ícone do modo: o mesmo na linha da música, nos menus, na ribbon, na liturgia e no controle remoto. */
+export function musicActionIcon(action: MusicActionEnum): string {
+  const execution = MUSIC_EXECUTIONS.find((item) => item.action === action);
+  if (!execution) throw new Error(`Modo de execução sem botão: ${action}`);
+  return execution.icon;
+}
+
+// As chaves `sung`, `pb` e `lyric` são versões da liturgia; o ícone é o do modo que elas tocam.
+export const MUSIC_ACTION: Record<string, MusicAction> = {
+  [MusicActionEnum.AUDIO]: {
+    action: MusicActionEnum.AUDIO,
+    icon: musicActionIcon(MusicActionEnum.AUDIO),
+    color: "#0034d9",
+  },
+  [MusicActionEnum.INSTRUMENTAL]: {
+    action: MusicActionEnum.INSTRUMENTAL,
+    icon: musicActionIcon(MusicActionEnum.INSTRUMENTAL),
+    color: "#00560b",
+  },
+  [MusicActionEnum.LYRIC]: {
+    action: MusicActionEnum.LYRIC,
+    icon: musicActionIcon(MusicActionEnum.NO_AUDIO),
+    color: "#7f8c8d",
+  },
+  [MusicActionEnum.SUNG]: {
+    action: MusicActionEnum.SUNG,
+    icon: musicActionIcon(MusicActionEnum.AUDIO),
+    color: "#c0392b",
+  },
+  [MusicActionEnum.PLAYBACK]: {
+    action: MusicActionEnum.PLAYBACK,
+    icon: musicActionIcon(MusicActionEnum.INSTRUMENTAL),
+    color: "#1b4f8a",
+  },
+  [MusicActionEnum.AUDIO_ONLY]: {
+    action: MusicActionEnum.AUDIO_ONLY,
+    icon: musicActionIcon(MusicActionEnum.AUDIO_ONLY),
+    color: "#27ae60",
+  },
+  [MusicActionEnum.PLAYBACK_ONLY]: {
+    action: MusicActionEnum.PLAYBACK_ONLY,
+    icon: musicActionIcon(MusicActionEnum.PLAYBACK_ONLY),
+    color: "#8e44ad",
+  },
+};
 
 /**
  * Versão gravada no item de liturgia → ação do player. Os nomes não coincidem:

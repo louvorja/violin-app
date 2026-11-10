@@ -91,7 +91,11 @@
         <div class="playlist-panel-item-info">
           <span class="playlist-panel-item-name">{{ playlist.name }}</span>
           <span class="playlist-panel-item-meta">
-            {{ tm("playlists.song_count", { n: playlist.songs.length }) }}
+            {{
+              playlist.songs.length === 1
+                ? tm("playlists.song_count", { n: 1 })
+                : tm("playlists.song_count_plural", { n: playlist.songs.length })
+            }}
             · {{ formatDuration(getPlaylistDuration(playlist)) }}
           </span>
         </div>

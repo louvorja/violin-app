@@ -20,10 +20,38 @@ import Telemetry from "@/helpers/Telemetry";
  *   e mantém os demais em cache para alternância rápida.
  */
 
+// Diálogos do player, não abas — mesmo com `show`.
+const NOT_TABS = new Set(["media", "lyric", "album"]);
+
+/** Música, letra, arquivo, vídeo ou som no ar: o Ctrl+W sem aba não encerra o programa. */
+function _somethingOnAir() {
+  return (
+    $appdata.get(KEYS.MODULES.MEDIA.IS_PLAYING, false) === true ||
+    $appdata.get(KEYS.MODULES.MEDIA.SHOW, false) === true ||
+    $userdata.get(KEYS.MODULES.BACKGROUND_SOUND.IS_PLAYING, false) === true ||
+    $userdata.get(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false) === true ||
+    $userdata.get(KEYS.MODULES.MEDIA_LIBRARY.IS_PLAYING, false) === true
+  );
+}
+
 export default {
   /** Verifica se o módulo está registrado (em $appdata.modules.<id>). */
   check(id) {
     return $appdata.exists(`modules.${id}`);
+  },
+
+  /**
+   * As abas abertas na ordem da barra, que o operador reordena arrastando. A barra,
+   * o Ctrl+Tab e o Ctrl+W leem daqui: a ordem de registro dos módulos é alfabética
+   * por pasta e, usada por engano, fazia o atalho saltar ou fechar a aba errada.
+   */
+  tabs() {
+    const modules = $appdata.get("modules") || {};
+    const order = $userdata.get(KEYS.MODULES.OPEN_ORDER, []);
+    const position = new Map(order.map((id, i) => [id, i]));
+    return Object.values(modules)
+      .filter((m) => m && m.show === true && m.popup !== true && !NOT_TABS.has(m.id))
+      .sort((a, b) => (position.get(a.id) ?? Infinity) - (position.get(b.id) ?? Infinity));
   },
 
   /**
@@ -74,6 +102,7 @@ export default {
     $dev.write("close", id);
     Telemetry.markCancel("module.open", id);
 
+    const tabs = this.tabs();
     $appdata.set(`modules.${id}.show`, false);
 
     // Remove from open order
@@ -84,12 +113,10 @@ export default {
       $userdata.set(KEYS.MODULES.OPEN_ORDER, order);
     }
 
+    // Como no Chrome: assume a aba da direita; fechando a última, a da esquerda.
     if ($appdata.get("active_module") === id) {
-      const all = $appdata.get("modules") || {};
-      const next = Object.values(all)
-        .filter((m) => m && m.id !== id && m.show === true && m.popup !== true)
-        .at(-1);
-
+      const i = tabs.findIndex((m) => m.id === id);
+      const next = i === -1 ? tabs.at(-1) : (tabs[i + 1] ?? tabs[i - 1]);
       $appdata.set("active_module", next?.id || null);
     }
     Telemetry.track("module_closed", { module_id: id });
@@ -97,17 +124,29 @@ export default {
 
   /**
    * ⌘W / Ctrl+W, como no Chrome: fecha a aba à vista. Devolve `false` quando não
-   * sobrou aba — aí quem chamou fecha a janela.
+   * sobrou aba e nada está no ar — aí quem chamou fecha a janela. Com o player ou
+   * um som no ar, sem aba, não faz nada: um toque a mais encerrava o programa no
+   * meio da música. Com abas na barra e nenhuma à vista (a tela inicial), não
+   * fecha nada: adivinhar uma seria fechar a aba errada.
    */
   closeActiveTab() {
-    const tabs = Object.values($appdata.get("modules") || {}).filter(
-      (m) => m && m.show === true && m.popup !== true
-    );
+    const tabs = this.tabs();
+    if (tabs.length === 0) return _somethingOnAir();
     const active = $appdata.get("active_module");
-    const tab = tabs.find((m) => m.id === active) ?? tabs.at(-1);
-    if (!tab) return false;
-    this.close(tab.id);
+    if (tabs.some((m) => m.id === active)) this.close(active);
     return true;
+  },
+
+  /** Ctrl+Tab / Ctrl+Shift+Tab: a próxima aba na ordem da barra (direction: 1 ou -1). */
+  cycleTab(direction) {
+    const tabs = this.tabs();
+    if (tabs.length < 2) return;
+    const current = tabs.findIndex((m) => m.id === $appdata.get("active_module"));
+    if (current === -1) {
+      this.open(tabs[0].id);
+      return;
+    }
+    this.open(tabs[(current + direction + tabs.length) % tabs.length].id);
   },
 
   /**

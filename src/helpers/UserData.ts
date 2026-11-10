@@ -137,7 +137,7 @@ export default {
     }, 300);
   },
 
-  /** Finaliza apenas o save web pendente antes da recarga manual da PWA. */
+  /** Finaliza o save web pendente antes de recarregar ou ocultar a página. */
   flushPendingWebSave(): void {
     if (Platform.isDesktop || _saveTimer === null) return;
     clearTimeout(_saveTimer);
@@ -283,9 +283,28 @@ export default {
         console.warn("[UserData] IPC onPatch falhou:", e);
       }
     }
+    // Fechar/recarregar antes do debounce também precisa preservar a última
+    // edição. No mobile, hidden costuma ser o último evento antes da suspensão.
+    const flushWebSave = () => {
+      try {
+        this.flushPendingWebSave();
+      } catch (error) {
+        // O save permanece pendente para outra tentativa; não declare sucesso.
+        console.warn("[UserData] Falha ao salvar antes de sair:", error);
+      }
+    };
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") flushWebSave();
+    };
+    if (!Platform.isDesktop) {
+      window.addEventListener("pagehide", flushWebSave);
+      document.addEventListener("visibilitychange", flushWhenHidden);
+    }
     _crossWindowCleanup = () => {
       try { offBroadcast(); } catch (_) { /* ignore */ }
       try { offIpc?.(); } catch (_) { /* ignore */ }
+      window.removeEventListener("pagehide", flushWebSave);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
     };
   },
 

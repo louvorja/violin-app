@@ -63,6 +63,7 @@ import { executeMusic } from "@/helpers/MusicExecution";
 import { LITURGY_VERSION_ACTION, MUSIC_EXECUTIONS } from "@/config/MusicAction";
 import { DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
+import { loadAnnouncements } from "@/modules/announcements/storage";
 import $docs from "@/helpers/DocStore";
 import ScheduledStore from "@/helpers/ScheduledStore";
 import ProjectionWindows from "@/helpers/ProjectionWindows";
@@ -72,10 +73,12 @@ import {
   writeSlot as writeOverlaySlot,
 } from "@/helpers/Overlay";
 import Shortcuts from "@/helpers/Shortcuts";
+import PlayerMediaSession from "@/helpers/PlayerMediaSession";
 import Telemetry from "@/helpers/Telemetry";
 import { withTelemetryActionSource } from "@/helpers/TelemetryAction";
 import { installRouteTelemetry } from "@/helpers/RouteTelemetry";
 import Hotkeys from "@/helpers/Hotkeys";
+import PlayerKeyboard from "@/helpers/PlayerKeyboard";
 import { HOTKEY } from "@/constants/HotkeyCombos";
 import { clearDatabaseCache } from "@/helpers/DatabaseCache";
 import { useShell } from "@/composables/useShell";
@@ -602,41 +605,6 @@ if (import.meta.env.DEV) {
 // Helpers para obter o módulo ativo e a referência ao shell
 // ---------------------------------------------------------------------------
 
-/** Retorna o id do módulo visível mais recente (exceto media/lyric/album). */
-function _getActiveModuleId() {
-  const modules = AppData.get("modules") || {};
-  const skip = new Set(["media", "lyric", "album"]);
-  // Percorre as chaves em ordem reversa de inserção (último aberto)
-  const ids = Object.keys(modules).reverse();
-  for (const id of ids) {
-    if (skip.has(id)) continue;
-    if (modules[id]?.show === true) return id;
-  }
-  return null;
-}
-
-/** Retorna a lista de módulos embedded abertos (excluindo popups e mídia). */
-function _getOpenEmbeddedModules() {
-  const modules = AppData.get("modules") || {};
-  const skip = new Set(["media", "lyric", "album"]);
-  return Object.values(modules)
-    .filter((m) => m && m.show === true && !skip.has(m.id) && m.popup !== true)
-    .sort((a, b) => a.order - b.order);
-}
-
-/** Alterna para o próximo módulo aberto (direction: 1 = próximo, -1 = anterior). */
-function _cycleModule(direction) {
-  const openModules = _getOpenEmbeddedModules();
-  if (openModules.length < 2) return;
-  const activeId = AppData.get("active_module");
-  const currentIndex = openModules.findIndex((m) => m.id === activeId);
-  if (currentIndex === -1) {
-    Modules.open(openModules[0].id);
-    return;
-  }
-  const nextIndex = (currentIndex + direction + openModules.length) % openModules.length;
-  Modules.open(openModules[nextIndex].id);
-}
 function _mediaIsActive() {
   return AppData.get("modules.media.show", false) || AppData.get("modules.media.minimized", false);
 }
@@ -745,9 +713,16 @@ $storage.hydrate().then(async () => {
 
   _bootStage("remote_config_ready");
 
-  // D6 — Atalhos globais pertencem à janela principal. Registrar o mesmo
-  // conjunto em cada projeção só cria trabalho e pode disputar o registro IPC.
-  if (!isAuxiliaryRenderer) Shortcuts.init();
+  // Atalhos globais e controles nativos de mídia pertencem à janela principal,
+  // que controla a reprodução e aplica o fade também às teclas multimídia.
+  if (!isAuxiliaryRenderer) {
+    Shortcuts.init();
+    PlayerMediaSession.init();
+    app.onUnmount(() => {
+      Shortcuts.destroy();
+      PlayerMediaSession.destroy();
+    });
+  }
 
   // D5 — Conectar eventos do servidor HTTP às ações do app.
   if (Platform.isDesktop && !isAuxiliaryRenderer) {
@@ -1875,8 +1850,7 @@ $storage.hydrate().then(async () => {
                   }
                   case "anuncios": {
                     const announcementToken = beginAnnouncementIntent();
-                    const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
-                    const sorted = allAnn.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+                    const sorted = await loadAnnouncements();
                     overlayContext.availableAnnouncementIds = sorted.map((a) => String(a.id));
                     const selected = Array.isArray(litItem.anuncios_ids)
                       ? sorted.filter((a) => litItem.anuncios_ids.includes(String(a.id)))
@@ -2036,8 +2010,7 @@ $storage.hydrate().then(async () => {
               });
               break;
             case "announcements-list": {
-              const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
-              const sorted = allAnn.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+              const sorted = await loadAnnouncements();
               const simplified = sorted.map((a) => ({
                 id: String(a.id),
                 nome: a.nome,
@@ -2054,8 +2027,7 @@ $storage.hydrate().then(async () => {
             case "announcements-project": {
               const announcementToken = beginAnnouncementIntent();
               const ids = data.ids || [];
-              const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
-              const sorted = allAnn.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+              const sorted = await loadAnnouncements();
               const clickedId = ids.length ? ids[0] : null;
               const startIdx = clickedId
                 ? Math.max(
@@ -2623,6 +2595,7 @@ $storage.hydrate().then(async () => {
         { capture: true }
       );
       Hotkeys.init();
+      PlayerKeyboard.init();
     }
 
     // No navegador/PWA a tela do tablet apagaria no meio de um slide parado; o
@@ -2895,8 +2868,8 @@ $storage.hydrate().then(async () => {
       (e) => {
         // Segurar a tecla não pode ir fechando abas até derrubar a janela.
         if (e?.repeat) return;
-        // Sem aba, a janela: o mesmo que o botão de fechar (com projeção no ar,
-        // ela só sai da frente).
+        // Sem aba e nada no ar, a janela: o mesmo que o botão de fechar (com
+        // projeção aberta, ela só sai da frente).
         if (!Modules.closeActiveTab()) void Platform.api?.window?.close?.();
       },
       {
@@ -2967,31 +2940,21 @@ $storage.hydrate().then(async () => {
       }
     );
 
-    // Ctrl+Tab: próximo módulo aberto
-    Hotkeys.register(
-      HOTKEY.NEXT_MODULE,
-      () => {
-        _cycleModule(1);
-      },
-      {
-        context: "global",
-        description: "hotkeys.ctrl_tab",
-        group: "general",
-      }
-    );
-
-    // Ctrl+Shift+Tab: módulo anterior
-    Hotkeys.register(
-      HOTKEY.PREV_MODULE,
-      () => {
-        _cycleModule(-1);
-      },
-      {
-        context: "global",
-        description: "hotkeys.shift_ctrl_tab",
-        group: "general",
-      }
-    );
+    // Ctrl+Tab / Ctrl+Shift+Tab: próxima / anterior aba, na ordem da barra. Vale no
+    // campo de texto: a aba que chega põe o cursor na busca, e o Ctrl+Tab seguinte
+    // não pode parar ali.
+    Hotkeys.register(HOTKEY.NEXT_MODULE, () => Modules.cycleTab(1), {
+      context: "global",
+      description: "hotkeys.ctrl_tab",
+      group: "general",
+      allowInForm: true,
+    });
+    Hotkeys.register(HOTKEY.PREV_MODULE, () => Modules.cycleTab(-1), {
+      context: "global",
+      description: "hotkeys.shift_ctrl_tab",
+      group: "general",
+      allowInForm: true,
+    });
 
     // --- Navegação de slides (contexto: media ativa) ---
 
@@ -3003,7 +2966,12 @@ $storage.hydrate().then(async () => {
          * mostrando um PDF projetado fora da playlist (aba Canva), e esse caso
          * não liga `modules.media.show` — sem a extensão as setas morriam em
          * silêncio enquanto a música não estivesse aberta.
+         *
+         * Tecla de verdade fora do player é da tela: rola a lista, anda na
+         * Bíblia. Ver PlayerKeyboard. `qualquerFoco` é para a tecla Pause, que
+         * ninguém aperta por engano.
          */
+        if (!opts.qualquerFoco && !PlayerKeyboard.hasKeys(e)) return;
         if (_mediaIsActive() || (opts.arquivo === true && _fileProjectionIsActive())) {
           // preventDefault bloqueia ação default do browser (back/forward, scroll).
           // stopImmediatePropagation impede que a trava de foco do diálogo veja
@@ -3077,8 +3045,7 @@ $storage.hydrate().then(async () => {
       }
     );
 
-    // Setas puras ← / → / ↑ / ↓ navegam slides quando media está ativa
-    // (replica FormKeyUp Delphi: setas funcionam em qualquer janela com fMusica visível).
+    // Setas puras ← / → / ↑ / ↓ navegam slides quando o player tem o teclado.
     // PageUp/PageDown também navegam slides puros.
     /* Arrows + PageUp/PageDown: valem também com um arquivo no telão. */
     const _prevSlide = _ifMedia(() => Media.prevSlide(), { arquivo: true });
@@ -3088,35 +3055,36 @@ $storage.hydrate().then(async () => {
     // se media está ativa, chama preventDefault + stopImmediatePropagation;
     // senão, libera o evento para o browser/inputs (PageUp rola a lista,
     // Ctrl+← pula palavra no campo).
-    // allowInForm: true replica o FormKeyUp Delphi — setas navegam slides em
-    // qualquer janela com a música aberta, mesmo com foco em um campo.
+    // No campo de texto as setas são do cursor; só o controle remoto, que manda
+    // evento sintético, passa o slide com o cursor num campo do desktop.
+    const _remoteInForm = (e) => !e.isTrusted;
     Hotkeys.register("ArrowLeft", _prevSlide, {
       context: "media",
       description: "hotkeys.prev_slide",
       group: "navigation",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("ArrowRight", _nextSlide, {
       context: "media",
       description: "hotkeys.next_slide",
       group: "navigation",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("ArrowUp", _prevSlide, {
       context: "media",
       description: "hotkeys.prev_slide",
       group: "navigation",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("ArrowDown", _nextSlide, {
       context: "media",
       description: "hotkeys.next_slide",
       group: "navigation",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("PageUp", _prevSlide, {
       context: "media",
@@ -3133,8 +3101,8 @@ $storage.hydrate().then(async () => {
 
     // ⌘← / ⌘→ (Ctrl fora do Mac): música anterior / próxima
     // Media.js não tem next()/prev() para álbum — emite broadcast para o módulo ouvir.
-    // No campo de texto o ⌘←/→ é início/fim da linha no Mac: ali só o Ctrl troca a música.
-    const _musicStepInForm = (e) => !e.metaKey;
+    // No campo de texto são do cursor (início/fim da linha no Mac, palavra fora dele);
+    // só o controle remoto troca a música dali.
     Hotkeys.register(
       HOTKEY.PREV_MUSIC,
       _ifMedia(() => {
@@ -3145,7 +3113,7 @@ $storage.hydrate().then(async () => {
         description: "hotkeys.ctrl_left",
         group: "navigation",
         preventDefault: false,
-        allowInForm: _musicStepInForm,
+        allowInForm: _remoteInForm,
       }
     );
     Hotkeys.register(
@@ -3158,31 +3126,38 @@ $storage.hydrate().then(async () => {
         description: "hotkeys.ctrl_right",
         group: "navigation",
         preventDefault: false,
-        allowInForm: _musicStepInForm,
+        allowInForm: _remoteInForm,
       }
     );
 
     // Space / Pause: toggle play/pause (só quando media ativa)
-    const _togglePlayPause = _ifMedia(() => {
+    const _playPause = () => {
       const isPaused = AppData.get("modules.media.config.is_paused", true);
       // Apenas faz sentido quando há áudio carregado
       const hasAudio = AppData.get("modules.media.config.audio", "") !== "";
       if (!hasAudio) return;
       if (isPaused) Media.play();
       else Media.pause();
-    });
-    Hotkeys.register("Space", _togglePlayPause, {
+    };
+    Hotkeys.register("Space", _ifMedia(_playPause), {
       context: "media",
       description: "hotkeys.space",
       group: "media",
       preventDefault: false,
     });
-    Hotkeys.register("Pause", _togglePlayPause, {
+    Hotkeys.register("Pause", _ifMedia(_playPause, { qualquerFoco: true }), {
       context: "media",
       preventDefault: false,
       allowInForm: true,
       description: "hotkeys.pause",
       group: "media",
+    });
+    // As mesmas teclas com o foco na projeção ou no retorno. Sem áudio ("Sem
+    // áudio"), o espaço lá continua passando o slide, como sempre passou.
+    Broadcast.listen((msg) => {
+      if (msg?.type !== BROADCAST_TYPE.MEDIA_PLAY_PAUSE || !_mediaIsActive()) return;
+      if (AppData.get("modules.media.config.audio", "") !== "") _playPause();
+      else if (msg.payload?.key === "space") Media.nextSlide();
     });
 
     // --- Liturgia ---
@@ -3191,7 +3166,7 @@ $storage.hydrate().then(async () => {
     Hotkeys.register(
       HOTKEY.LITURGY_NEW_ITEM,
       () => {
-        if (_getActiveModuleId() !== ModuleEnum.LITURGY) return;
+        if (AppData.get("active_module") !== ModuleEnum.LITURGY) return;
         Broadcast.send(BROADCAST_TYPE.LITURGY_RIBBON_ACTION, { action: "add" });
       },
       {

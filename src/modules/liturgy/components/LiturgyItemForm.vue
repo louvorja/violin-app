@@ -465,8 +465,7 @@ import {
   LjTooltip,
 } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import Liturgy from "@/helpers/Liturgy";
-import DateTime from "@/helpers/DateTime";
+import Liturgy, { musicDurationMinutes } from "@/helpers/Liturgy";
 import LiturgyVideoSearch, { type VideoSearchItem } from "./LiturgyVideoSearch.vue";
 import LiturgyLibrarySearch, { type LibrarySearchItem } from "./LiturgyLibrarySearch.vue";
 import $idb from "@/helpers/IndexedDB";
@@ -644,14 +643,8 @@ function updateDurationForVersion(version: string) {
   if (musicId <= 0) return;
   const m = props.musicsList?.find((x) => Number(x.id_music) === musicId);
   if (!m) return;
-  const raw = m as Record<string, unknown>;
-  const useInstrumental = version === "pb" || version === "audio_pb";
-  const timeStr: string = useInstrumental
-    ? (raw.instrumental_duration as string) || (raw.duration as string) || ""
-    : (raw.duration as string) || (raw.instrumental_duration as string) || "";
-  if (!timeStr) return;
-  const totalSeconds = DateTime.toNumber(timeStr);
-  const minutes = Math.ceil(totalSeconds / 60);
+  const minutes = musicDurationMinutes(m, version);
+  if (minutes === null) return;
   props.setFormField("duration", minutes);
 }
 

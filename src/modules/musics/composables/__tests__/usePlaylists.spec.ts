@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
     del: vi.fn(),
     getPreference: vi.fn(() => null),
     setPreference: vi.fn(),
+    findCatalogMusic: vi.fn(),
   };
 });
 
@@ -24,6 +25,7 @@ vi.mock("@/helpers/UserData", () => ({
   default: { get: mocks.getPreference, set: mocks.setPreference },
 }));
 vi.mock("@/helpers/Dev", () => ({ default: { write: vi.fn() } }));
+vi.mock("@/helpers/CatalogMusic", () => ({ findCatalogMusic: mocks.findCatalogMusic }));
 vi.mock("@/helpers/Telemetry", () => ({ default: { track: vi.fn(), histogram: vi.fn() } }));
 
 const song: PlaylistSong = {
@@ -45,6 +47,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.documents.clear();
   mocks.documents.set(existing.id, structuredClone(existing));
+  mocks.findCatalogMusic.mockResolvedValue(undefined);
 });
 
 describe("usePlaylists com funções destruturadas", () => {
@@ -135,5 +138,49 @@ describe("usePlaylists com funções destruturadas", () => {
     expect(playlists.value).toEqual([existing]);
     expect([...mocks.documents.values()]).toEqual([existing]);
     expect(mocks.put).not.toHaveBeenCalled();
+  });
+});
+
+describe("duração das músicas vindas do menu ⋮", () => {
+  const CATALOG: Record<number, Record<string, unknown>> = {
+    42: { id_music: 42, duration: "00:04:03", instrumental_duration: "00:04:10" },
+  };
+
+  it("a música sem duração entra com a da cantada no catálogo baixado", async () => {
+    mocks.findCatalogMusic.mockImplementation(async (id: number) => CATALOG[id]);
+    const { usePlaylists } = await import("../usePlaylists");
+    const { hydrate, addSong, playlists, getPlaylistDuration } = usePlaylists();
+    await hydrate();
+
+    await addSong(existing.id, { ...song, duration: 0 });
+
+    expect(playlists.value[0].songs.at(-1)).toEqual({ ...song, duration: 243 });
+    expect(getPlaylistDuration(playlists.value[0])).toBe(185 + 243);
+    expect(mocks.documents.get(existing.id)?.songs.at(-1)?.duration).toBe(243);
+  });
+
+  it("sem catálogo baixado a música entra mesmo assim, com 0:00", async () => {
+    const { usePlaylists } = await import("../usePlaylists");
+    const { hydrate, addSong, playlists } = usePlaylists();
+    await hydrate();
+
+    await addSong(existing.id, { ...song, duration: 0 });
+
+    expect(playlists.value[0].songs.at(-1)).toEqual({ ...song, duration: 0 });
+  });
+
+  it("a playlist salva com 0:00 recebe a duração ao carregar, sem mudar a data de edição", async () => {
+    const saved = { ...existing, songs: [...existing.songs, { ...song, duration: 0 }] };
+    mocks.documents.set(existing.id, structuredClone(saved));
+    mocks.findCatalogMusic.mockImplementation(async (id: number) => CATALOG[id]);
+    const { usePlaylists } = await import("../usePlaylists");
+    const { hydrate, playlists } = usePlaylists();
+
+    await hydrate();
+
+    const repaired = { ...saved, songs: [...existing.songs, { ...song, duration: 243 }] };
+    await vi.waitFor(() => expect(mocks.documents.get(existing.id)).toEqual(repaired));
+    expect(playlists.value).toEqual([repaired]);
+    expect(mocks.findCatalogMusic).toHaveBeenCalledTimes(1);
   });
 });

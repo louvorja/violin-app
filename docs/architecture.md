@@ -56,6 +56,11 @@ Sem rede, a recuperação conserva o registro existente e pode aplicar código j
 guardado; não registra o HTML antigo sobre uma instalação mais recente.
 Antes da interface montar, também acompanha registros tardios e o fim da
 instalação para ativar um SW em espera; só recarrega após terminar a ativação.
+O `sw.js` importa `public/sw-skip-waiting.js`, que atende o `SKIP_WAITING` enviado
+pela página. No Chrome, só esse pedido feito depois da instalação encerra o SW antigo
+assim que ele fica livre. Sem ele, os pedidos da própria página mantinham o antigo
+ativo, e a versão nova esperava até 5 minutos (o limite do Chrome), com a aplicação
+falhando por timeout nesse meio-tempo.
 Falhas de registro, verificação e instalação têm novas tentativas automáticas
 com espera crescente de 15 segundos até 5 minutos, somente online e visível.
 O timeout de 30 segundos limita a espera sem descartar um registro nativo que
@@ -64,8 +69,10 @@ termine depois. O diagnóstico mantém a etapa e distingue `TimeoutError`;
 `update_status` preserva o estado textual no PostHog.
 
 A Shell e a seção Aplicativo em Atualizações avisam quando é preciso recarregar.
-A aplicação manual, a recuperação ao retomar o app e a recuperação de imports
-de código/CSS que falharam aguardam as escritas de liturgia e finalizam o save web pendente
+A atualização pronta é aplicada automaticamente assim que a janela estiver visível
+e sem trabalho ativo, inclusive se o download terminar após o boot ou numa verificação
+periódica. A aplicação manual e a recuperação de imports de código/CSS que falharam
+usam a mesma guarda: aguardam as escritas de liturgia e finalizam o save web pendente
 das preferências; fica bloqueada durante apresentação, reprodução, tarefas e
 enquanto o editor de slides está aberto ou há um campo/modal em edição. A recuperação
 solicitada fica pendente até o código novo estar pronto e o trabalho terminar;
@@ -615,6 +622,17 @@ adaptador `helpers/WebFileStore.ts`, que grava no Cache Storage (`louvorja-audio
 plataforma: o PWA mostra só a aba Coletâneas (Bíblia, pasta de dados e versão
 clássica seguem exclusivos do desktop).
 
+- **Disponibilidade por música.** Os indicadores das coletâneas contam IDs de
+  músicas com todos os áudios declarados disponíveis (cantado/playback), sem
+  incluir imagens nem músicas sem áudio. Capas e fundos são cache compartilhado:
+  remover uma coletânea apaga seus áudios e preserva as imagens.
+  A limpeza geral de mídia continua removendo ambos apenas em acervo privado.
+  Em pasta compartilhada, o escritor ativo pode excluir manualmente os downloads
+  selecionados após confirmação; a limpeza geral e automática permanece bloqueada.
+  Cada conta assina o acervo ao abrir (`electron/main/collectionAccounts.js`, pasta
+  `.louvorja-contas/`), e a confirmação nomeia as outras contas que abriram nos
+  últimos 90 dias. Só esta conta, com assinatura de 30 dias ou mais, é tratada
+  como pasta privada; antes disso, o aviso é genérico.
 - **URL é a chave.** O arquivo é guardado sob a mesma URL que o player pede
   (`Path.file`), então o service worker o serve sem nenhuma mudança nos consumidores.
 - **Service worker** (`vite.config.js`): as rotas de áudio e imagem não têm
@@ -729,6 +747,13 @@ No Windows, os dois `Program Files` e as pastas expostas por
 
 Atalhos in-window registrados em `src/bootstrap/main-shell.js` via `Hotkeys.register()`.
 
+O Play/Pause multimídia nativo passa por `src/helpers/PlayerMediaSession.ts`
+(`navigator.mediaSession`) e chama o mesmo `useMedia` do Space e dos botões, respeitando
+o fade. Só a janela principal instala esses controles, enquanto há mídia carregada.
+Durante o fade, cada toque inverte o pedido atual: o sistema pode enviar `pause`
+novamente porque o elemento ainda toca durante o fade-out. Os atalhos globais opcionais
+do Electron também enviam sempre à principal, mesmo com projeção ou retorno em foco.
+
 ### Command no Mac
 
 As combinações com modificador moram em `src/constants/HotkeyCombos.ts` (`HOTKEY.*`),
@@ -744,14 +769,55 @@ for o sistema. No navegador do Mac, ⌘N, ⇧⌘N e ⌘W ficam com o Chrome, ent
 mostra o Ctrl.
 
 ⌘W / Ctrl+W fecha a aba à vista, como no Chrome; sem aba, a janela — pelo mesmo
-`window:close` do botão de fechar, que com projeção no ar só tira a janela da frente. No
-Mac o menu nativo (Fechar janela) pegaria o ⌘W antes da página: o `before-input-event` da
-janela principal (`electron/main.cjs`) cancela a tecla e a entrega ao Hotkeys pelo mesmo
-evento sintético do `/api/keyboard`.
+`window:close` do botão de fechar, que com projeção no ar só tira a janela da frente. O
+app não define menu, e o "Fechar" do menu padrão do Electron usa essa tecla: no Mac ele a
+pega antes da página, e no Windows e no Linux age sempre que a página não a cancela — o
+que acontece com o foco num diálogo, num menu aberto ou com um alerta na tela, onde o
+Hotkeys não age. Por isso o `before-input-event` da janela principal
+(`electron/main/closeTabKey.js`) cancela a tecla nos três sistemas e a entrega ao Hotkeys
+pelo mesmo evento sintético do `/api/keyboard`; onde ele não age, nada fecha.
+
+A barra de abas, o Ctrl+Tab e o Ctrl+W leem as abas de `Modules.tabs()`, na ordem da
+barra (a que o operador arrasta). A ordem de registro dos módulos é alfabética por pasta,
+e usada por engano fazia o Ctrl+Tab saltar e o Ctrl+W fechar a aba errada. Fechar a aba
+ativa passa para a da direita; fechando a última, para a da esquerda.
 
 Tecla que só age com mídia aberta passa por `_ifMedia` com `preventDefault: false`: é ele
 que cancela quando age. Com o cancelamento automático do Hotkeys, PageUp não rolava lista
 nenhuma e Ctrl+← não pulava palavra em campo nenhum, com ou sem música.
+
+Atalho com `when` só age quando a condição vale; senão é pulado sem cancelar a tecla, e
+ela segue para o próximo registrado com a mesma combinação — como acontece com o campo de
+texto sem `allowInForm`.
+
+### O teclado é do player ou da tela
+
+Setas (também com Ctrl), PageUp/PageDown, Home/End e espaço passam o slide só quando o player tem o teclado
+(`src/helpers/PlayerKeyboard.ts`), como no Delphi, onde só agiam com a janela da música
+ou a do operador ativa. Antes, com uma música aberta, a seta passava o slide de qualquer
+lugar, até com o cursor num campo; uma seta para rolar uma lista em outro módulo avançou
+o slide no meio do culto.
+
+- **O player tem o teclado** com a janela da mídia na tela (ela é modal), depois de um
+  clique numa área `[data-lj-player]` (o rodapé, a barra da Biblioteca) e quando o
+  operador põe algo no ar — `PlayerKeyboard.claim()` nos métodos
+  de abertura do `useMedia` e no início da projeção de anúncios. Só conta a ativação
+  recente do usuário na própria janela: o que entra no ar sozinho (fim da música,
+  playlist, temporizador, controle remoto) não tira as teclas de onde ele está.
+- **A tela retoma as teclas** com um clique fora do player, com a troca de aba
+  (`lj:module-open`) e ao minimizar a janela da mídia (pelo botão ou pelo clique fora,
+  que devolve o cursor à busca). O foco movido pelo próprio app não conta: ele
+  acompanha o clique, e a ordem entre os dois não é garantida.
+- **Campo de texto fica com as setas** da tecla real; só o controle remoto passa o slide
+  com o cursor num campo do desktop.
+- **Valem em qualquer foco:** o controle remoto (evento sintético, `isTrusted: false`),
+  o ESC e a tecla Pause.
+- **As janelas de projeção e de retorno** passam o slide pelas mesmas teclas
+  (`useProjectionSlideKeys`), pedindo à principal.
+- **A Bíblia** só anda no versículo pela seta com ela à vista e o teclado fora do player.
+- **Exceção:** a página da web projetada (`takeSiteKey`) ainda recebe as teclas de
+  qualquer tela, porque não há na janela principal um controle dela para clicar e
+  devolver as teclas.
 
 ### Cartão da biblioteca: projetar ou enfileirar
 
@@ -778,7 +844,7 @@ o clique; o que muda é o estado de lista em volta.
 
 ### Quem responde às setas
 
-`←`/`→` são registrados **uma única vez**, em `main-shell.js`, e chegam em
+`←`/`→` da mídia são registrados **uma única vez**, em `main-shell.js`, e chegam em
 `Media.nextSlide()`/`prevSlide()`. Quem responde depende do que está no telão, e a
 ordem é o contrato:
 
@@ -1194,7 +1260,7 @@ MusicMenuTable → usePlaylists.addSong() → playlist song
 **MusicMenuTable (context menu):**
 
 - Submenu "Adicionar à playlist" com todas as playlists
-- Só aparece quando `showPlaylistMenu={true}` (módulo músicas)
+- Aparece em toda lista de músicas do acervo (Músicas, Hinário, Ctrl+M…); não na música personalizada
 - Marca músicas já existentes na playlist
 
 ---

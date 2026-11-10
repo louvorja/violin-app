@@ -136,6 +136,7 @@ import { MusicLibraryAlbum, MusicItem, SearchMusicItem } from "@/types/Music";
 import type { ChooseLaterItem } from "@/types/Liturgy";
 import { apiFetch, postApi } from "@/helpers/ApiClient";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
+import { musicActionIcon } from "@/config/MusicAction";
 import { musicAlbumLabel } from "@root/config/musicCatalog.mjs";
 import { serverImageUrl } from "@/helpers/serverImageUrl";
 import { httpErrorMessage } from "@/helpers/httpErrorMessage";
@@ -262,31 +263,31 @@ const MUSIC_VERSIONS: {
   {
     mode: MusicActionEnum.AUDIO,
     labelKey: "remote_control.music.mode_sung",
-    icon: ICONS.MUSIC.SING,
+    icon: musicActionIcon(MusicActionEnum.AUDIO),
     needsPlayback: false,
   },
   {
     mode: MusicActionEnum.INSTRUMENTAL,
     labelKey: "remote_control.music.mode_playback",
-    icon: ICONS.MUSIC.PLAYBACK,
+    icon: musicActionIcon(MusicActionEnum.INSTRUMENTAL),
     needsPlayback: true,
   },
   {
     mode: MusicActionEnum.NO_AUDIO,
     labelKey: "remote_control.music.mode_lyric",
-    icon: ICONS.MUSIC.LYRIC,
+    icon: musicActionIcon(MusicActionEnum.NO_AUDIO),
     needsPlayback: false,
   },
   {
     mode: MusicActionEnum.AUDIO_ONLY,
     labelKey: "remote_control.music.mode_audio_only",
-    icon: ICONS.MUSIC.AUDIO,
+    icon: musicActionIcon(MusicActionEnum.AUDIO_ONLY),
     needsPlayback: false,
   },
   {
     mode: MusicActionEnum.PLAYBACK_ONLY,
     labelKey: "remote_control.music.mode_playback_only",
-    icon: ICONS.MUSIC.AUDIO_PLAYBACK,
+    icon: musicActionIcon(MusicActionEnum.PLAYBACK_ONLY),
     needsPlayback: true,
   },
 ];

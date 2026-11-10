@@ -252,6 +252,7 @@
     "import_invalid": "Arquivo inválido."
   },
   "alerts": {
+    "file_choose_again_web": "Este arquivo está vinculado a uma pasta do computador. Edite o item da liturgia e use Escolher arquivo para abri-lo neste navegador.",
     "media_not_found": "Item não encontrado na biblioteca. Ele pode ter sido removido.",
     "file_unsupported": "Escolha uma imagem, vídeo, áudio, PDF ou apresentação .slja.",
     "file_import_failed": "Não foi possível guardar o arquivo neste aparelho. Verifique o espaço disponível e tente novamente."

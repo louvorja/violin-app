@@ -14,8 +14,11 @@ function set(path: string, value: unknown) {
   o[keys.at(-1)!] = value;
 }
 vi.mock("@/helpers/AppData", () => ({ default: { get, set } }));
+vi.mock("@/helpers/Dev", () => ({ default: { write: vi.fn() } }));
+vi.mock("@/stores/appStore", () => ({ useAppStore: () => state }));
 
 const Alert = (await import("../Alert.vue")).default;
+const dialogs = (await import("@/helpers/Alert")).default;
 const Hotkeys = (await import("@/helpers/Hotkeys")).default;
 
 let wrapper: VueWrapper | null = null;
@@ -33,7 +36,7 @@ function abrirPergunta(title = "Deseja fechar este slide?", default_button: stri
     translate: false,
     default_button,
     buttons: [
-      { text: "alert.no", color: "error", value: "no" },
+      { text: "alert.no", value: "no" },
       { text: "alert.yes", color: "info", value: "yes" },
     ],
   };
@@ -137,5 +140,43 @@ describe("Alert — pergunta pelo teclado", () => {
     expect(marcado()).toBeUndefined();
     tecla("Enter");
     expect(get("alert.show")).toBe(true);
+  });
+
+  it("a confirmação comum mantém Não neutro e Sim azul, e Esc cancela", async () => {
+    await montar("Pergunta anterior", null);
+    const answer = dialogs.confirm("Continuar?");
+    await nextTick();
+
+    const dialog = Array.from(document.querySelectorAll(".alert")).at(-1)!;
+    const buttons = dialog.querySelectorAll("button");
+    expect(buttons[0].textContent?.trim()).toBe("alert.no");
+    expect(buttons[0].classList.contains("alert-btn--default")).toBe(true);
+    expect(buttons[1].textContent?.trim()).toBe("alert.yes");
+    expect(buttons[1].classList.contains("alert-btn--info")).toBe(true);
+
+    tecla("Escape");
+    await expect(answer).resolves.toBe(false);
+  });
+
+  it("a exclusão destaca Apagar em vermelho e exige uma escolha deliberada", async () => {
+    await montar("Pergunta anterior", null);
+    const answer = dialogs.confirm('Apagar "<hinos>"?', {
+      confirmText: "options.collections_download.partial_discard",
+      destructive: true,
+    });
+    await nextTick();
+
+    const dialog = Array.from(document.querySelectorAll(".alert")).at(-1)!;
+    const buttons = dialog.querySelectorAll<HTMLButtonElement>("button");
+    expect(buttons[0].classList.contains("alert-btn--default")).toBe(true);
+    expect(buttons[1].textContent?.trim()).toBe("options.collections_download.partial_discard");
+    expect(buttons[1].classList.contains("alert-btn--error")).toBe(true);
+    expect(dialog.querySelector(".alert-text")?.textContent).toBe('Apagar "<hinos>"?');
+    expect(marcado()).toBeUndefined();
+    tecla("Enter");
+    expect(get("alert.show")).toBe(true);
+
+    buttons[1].click();
+    await expect(answer).resolves.toBe(true);
   });
 });

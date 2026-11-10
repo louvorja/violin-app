@@ -33,29 +33,31 @@ export interface AudioPlayback {
   /** Troca o elemento de mídia usado pelo player sem perder o estado reativo. */
   setElementKind: (kind: MediaElementKind) => HTMLMediaElement;
   setTelemetryContext: (context: AudioTelemetryContext | null) => void;
-  setSrc: (src: string, lazy?: boolean) => void;
+  setSrc: (src: string, lazy?: boolean, ownsSource?: boolean) => void;
   prepare: (
     src: string,
     lazy?: boolean,
     seekHint?: number,
-    telemetryContext?: AudioTelemetryContext
+    telemetryContext?: AudioTelemetryContext,
+    ownsSource?: boolean
   ) => Promise<HTMLAudioElement>;
   release: (el: HTMLMediaElement) => void;
   takeOver: (
     next: HTMLMediaElement,
     startTime: (duration: number) => number,
-    play: boolean
+    play: boolean,
+    isCurrent?: () => boolean
   ) => Promise<void>;
   setDurationHint: (seconds: number) => void;
   play: (onError?: (e: unknown) => void, onStarted?: () => void) => void;
   pause: (callback?: () => void) => void;
   stop: (callback?: () => void) => void;
   setVolume: (val: number) => void;
-  toggleVolume: () => void;
   seekTo: (time: number) => void;
   advanceTime: (delta: number) => void;
   fadeIn: (maxVolume: number, callback?: () => void) => void;
-  fadeOut: (callback?: () => void) => void;
+  /** `onInterrupted`: outro comando cancelou o fade antes do fim; `callback` não virá. */
+  fadeOut: (callback?: () => void, onInterrupted?: () => void) => void;
   onTimeUpdate: (cb: TimeCallback) => () => void;
   reset: () => void;
   cleanup: () => void;
@@ -76,10 +78,18 @@ function _create(): AudioPlayback {
   let _el: HTMLMediaElement | null = null;
   let _elementKind: MediaElementKind = "audio";
   let _clockTimer: ReturnType<typeof setInterval> | null = null;
+  let _fadeTimer: ReturnType<typeof setInterval> | null = null;
+  let _fadeInTarget: number | null = null;
+  let _onFadeInterrupted: (() => void) | null = null;
+  let _playbackSequence = 0;
+  let _playRequestSequence = 0;
+  let _pendingTakeOver: HTMLMediaElement | null = null;
+  let _pendingTakeOverShouldPlay = false;
   let _playing = false;
   const _timeCallbacks: TimeCallback[] = [];
   let _telemetryContext: AudioTelemetryContext | null = null;
   const _elementTelemetryContext = new WeakMap<HTMLMediaElement, AudioTelemetryContext>();
+  const _ownedSources = new WeakMap<HTMLMediaElement, string>();
   const _listening = new WeakSet<HTMLMediaElement>();
   let _bufferingSince = 0;
   let _lastProgressAt = 0;
@@ -515,12 +525,11 @@ function _create(): AudioPlayback {
   function setElementKind(kind: MediaElementKind): HTMLMediaElement {
     if (kind !== "audio" && kind !== "video") kind = "audio";
     if (_elementKind === kind && _el) return getElement();
+    _invalidatePlayback();
     if (_el) {
       _stopClock();
       _unlisten(_el);
-      _el.pause();
-      _detachSource(_el);
-      _el.remove();
+      _descartar(_el);
       _el = null;
     }
     _elementKind = kind;
@@ -536,7 +545,8 @@ function _create(): AudioPlayback {
     src: string,
     lazy = false,
     seekHint = 0,
-    telemetryContext?: AudioTelemetryContext
+    telemetryContext?: AudioTelemetryContext,
+    ownsSource = false
   ): Promise<HTMLAudioElement> {
     return new Promise((resolve, reject) => {
       const el = document.createElement("audio");
@@ -546,6 +556,7 @@ function _create(): AudioPlayback {
       el.autoplay = false;
       el.volume = volume.value / 100;
       el.dataset.lazy = lazy ? "1" : "";
+      if (ownsSource && src.startsWith("blob:")) _ownedSources.set(el, src);
       el.src = src;
       for (const eventName of [
         "loadstart",
@@ -649,17 +660,45 @@ function _create(): AudioPlayback {
     });
   }
 
-  function _descartar(el: HTMLMediaElement): void {
-    el.pause();
-    if (el.src && el.src.startsWith("blob:")) {
+  function _releaseOwnedSource(el: HTMLMediaElement): void {
+    const src = _ownedSources.get(el);
+    _ownedSources.delete(el);
+    if (src) {
       try {
-        URL.revokeObjectURL(el.src);
+        URL.revokeObjectURL(src);
       } catch (_) {
         /* ignore */
       }
     }
+  }
+
+  function _descartar(el: HTMLMediaElement): void {
+    el.pause();
+    _releaseOwnedSource(el);
     _detachSource(el);
     el.remove();
+  }
+
+  function _cancelFade(): void {
+    if (_fadeTimer) clearInterval(_fadeTimer);
+    _fadeTimer = null;
+    _fadeInTarget = null;
+    isFading.value = false;
+    const interrupted = _onFadeInterrupted;
+    _onFadeInterrupted = null;
+    interrupted?.();
+  }
+
+  /** Pending playback/fade callbacks belong to the source that requested them. */
+  function _invalidatePlayback(): void {
+    ++_playbackSequence;
+    ++_playRequestSequence;
+    _cancelFade();
+    if (_pendingTakeOver) {
+      const pending = _pendingTakeOver;
+      _pendingTakeOver = null;
+      _descartar(pending);
+    }
   }
 
   /**
@@ -670,8 +709,13 @@ function _create(): AudioPlayback {
   function takeOver(
     next: HTMLMediaElement,
     startTime: (duration: number) => number,
-    play: boolean
+    play: boolean,
+    isCurrent: () => boolean = () => true
   ): Promise<void> {
+    _invalidatePlayback();
+    const sequence = _playbackSequence;
+    _pendingTakeOver = next;
+    _pendingTakeOverShouldPlay = play;
     const d = isNaN(next.duration) || !isFinite(next.duration) ? 0 : next.duration;
     const alvo = startTime(d);
     if (Number.isFinite(alvo) && alvo > 0) {
@@ -680,6 +724,14 @@ function _create(): AudioPlayback {
     next.volume = volume.value / 100;
 
     const promover = (): void => {
+      if (sequence !== _playbackSequence || !isCurrent()) {
+        if (_pendingTakeOver === next) {
+          _pendingTakeOver = null;
+          _descartar(next);
+        }
+        throw new DOMException("A reprodução foi substituída.", "AbortError");
+      }
+      _pendingTakeOver = null;
       const anterior = _el;
       if (anterior && anterior !== next) {
         _unlisten(anterior);
@@ -707,36 +759,44 @@ function _create(): AudioPlayback {
 
     const tocando = (): void => {
       promover();
+      // A pausa pedida enquanto o navegador aguardava play() vale também
+      // para a faixa preparada, sem reabrir a música nem perder a posição.
+      if (!_pendingTakeOverShouldPlay) next.pause();
       _playing = !next.paused;
       isPaused.value = next.paused;
       if (_playing) {
         _startClock();
         _startWatchdog();
-      }
+      } else _stopClock();
     };
-    const p = next.play();
+    let p: Promise<void> | undefined;
+    try {
+      p = next.play();
+    } catch (error) {
+      _pendingTakeOver = null;
+      _descartar(next);
+      return Promise.reject(error);
+    }
     if (!p) {
       tocando();
       return Promise.resolve();
     }
     return p.then(tocando, (error) => {
-      _descartar(next);
+      if (_pendingTakeOver === next) {
+        _pendingTakeOver = null;
+        _descartar(next);
+      }
       throw error;
     });
   }
 
-  function setSrc(src: string, lazy = false): void {
+  function setSrc(src: string, lazy = false, ownsSource = false): void {
+    _invalidatePlayback();
     const el = getElement();
-    // Revoga blob URL anterior — sem isso, cada troca de música acumula
-    // memória do Blob (URL.createObjectURL não é GC'd até revoke). Em sessões
-    // longas com muitas trocas de faixa, vira leak considerável.
-    if (el.src && el.src.startsWith("blob:")) {
-      try {
-        URL.revokeObjectURL(el.src);
-      } catch (_) {
-        /* ignore */
-      }
-    }
+    // Só as cópias criadas pelo player pertencem a ele. URLs da AudioLibrary
+    // continuam no cache dela e precisam sobreviver à troca cantado/playback.
+    _releaseOwnedSource(el);
+    if (ownsSource && src.startsWith("blob:")) _ownedSources.set(el, src);
     isLazy.value = lazy;
     el.src = src;
     el.load();
@@ -747,6 +807,10 @@ function _create(): AudioPlayback {
   }
 
   function play(onError?: (e: unknown) => void, onStarted?: () => void): void {
+    _cancelFade();
+    _pendingTakeOverShouldPlay = true;
+    const sequence = _playbackSequence;
+    const requestSequence = ++_playRequestSequence;
     const el = getElement();
     // Sem fonte anexada o play() rejeita com NotSupportedError e vira um
     // alerta de "erro ao carregar áudio" — mas aqui o áudio só ainda não
@@ -766,7 +830,8 @@ function _create(): AudioPlayback {
     if (playPromise) {
       playPromise
         .then(() => {
-          if (el.paused) return;
+          if (sequence !== _playbackSequence || requestSequence !== _playRequestSequence ||
+            _el !== el || el.paused) return;
           _playing = true;
           isPaused.value = false;
           _startClock();
@@ -780,6 +845,8 @@ function _create(): AudioPlayback {
           // reportar viraria um alerta de erro a cada troca rápida de música.
           if ((e as { name?: string } | null)?.name === "AbortError") return;
           const stale =
+            sequence !== _playbackSequence ||
+            requestSequence !== _playRequestSequence ||
             requestSource !== el.getAttribute("src") ||
             requestContext.playback_id !==
               (_elementTelemetryContext.get(el) || _telemetryContext)?.playback_id;
@@ -794,7 +861,7 @@ function _create(): AudioPlayback {
           };
           Telemetry.track("music_playback_failed", diagnostics);
           Telemetry.log("error", "music play promise rejected", diagnostics);
-          if (onError) onError(e);
+          if (!stale && onError) onError(e);
         });
     } else if (!el.paused) {
       _playing = true;
@@ -806,6 +873,9 @@ function _create(): AudioPlayback {
   }
 
   function pause(callback?: () => void): void {
+    _cancelFade();
+    ++_playRequestSequence;
+    _pendingTakeOverShouldPlay = false;
     _stopClock();
     isPaused.value = true;
     const el = getElement();
@@ -814,10 +884,12 @@ function _create(): AudioPlayback {
   }
 
   function stop(callback?: () => void): void {
+    _invalidatePlayback();
     _stopClock();
     if (_el) {
       _el.onerror = null;
       _el.pause();
+      _releaseOwnedSource(_el);
       _detachSource(_el);
     }
     isPaused.value = true;
@@ -827,10 +899,10 @@ function _create(): AudioPlayback {
   function setVolume(val: number): void {
     volume.value = val;
     if (_el) _el.volume = val / 100;
-  }
-
-  function toggleVolume(): void {
-    setVolume(volume.value < 100 ? 100 : 0);
+    if (_pendingTakeOver) _pendingTakeOver.volume = val / 100;
+    // A retomada não pode restaurar o volume anterior depois de silenciar ou
+    // ajustar o controle. O fade de pausa continua até parar, como solicitado.
+    if (_fadeInTarget !== null) _fadeInTarget = val / 100;
   }
 
   function seekTo(time: number): void {
@@ -853,33 +925,36 @@ function _create(): AudioPlayback {
   const _FADE_INTERVAL_MS = 20;
 
   function fadeIn(maxVolume: number, callback?: () => void): void {
+    _cancelFade();
     isFading.value = true;
-    const target = maxVolume / 100;
+    _fadeInTarget = maxVolume / 100;
     const el = getElement();
-    const id = setInterval(() => {
+    _fadeTimer = setInterval(() => {
+      const target = _fadeInTarget ?? el.volume;
       if (el.volume < target) {
         el.volume = Math.min(el.volume + _FADE_STEP, target);
       } else {
-        isFading.value = false;
-        clearInterval(id);
+        _cancelFade();
         if (callback) callback();
       }
     }, _FADE_INTERVAL_MS);
   }
 
-  function fadeOut(callback?: () => void): void {
+  function fadeOut(callback?: () => void, onInterrupted?: () => void): void {
+    _cancelFade();
     const el = getElement();
     if (el.paused) {
       if (callback) callback();
       return;
     }
     isFading.value = true;
-    const id = setInterval(() => {
+    _onFadeInterrupted = onInterrupted ?? null;
+    _fadeTimer = setInterval(() => {
       if (el.volume > 0) {
         el.volume = Math.max(el.volume - _FADE_STEP, 0);
       } else {
-        isFading.value = false;
-        clearInterval(id);
+        _onFadeInterrupted = null;
+        _cancelFade();
         if (callback) callback();
       }
     }, _FADE_INTERVAL_MS);
@@ -894,6 +969,7 @@ function _create(): AudioPlayback {
   }
 
   function reset(): void {
+    _invalidatePlayback();
     _stopClock();
     volume.value = 100;
     currentTime.value = 0;
@@ -920,10 +996,11 @@ function _create(): AudioPlayback {
   }
 
   function cleanup(): void {
+    _invalidatePlayback();
     _stopClock();
     if (_el) {
       _unlisten(_el);
-      if (_el.parentNode) _el.parentNode.removeChild(_el);
+      _descartar(_el);
       _el = null;
     }
   }
@@ -961,7 +1038,6 @@ function _create(): AudioPlayback {
     pause,
     stop,
     setVolume,
-    toggleVolume,
     seekTo,
     advanceTime,
     fadeIn,

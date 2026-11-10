@@ -17,7 +17,6 @@
             'opt-connection-status--checking': ftpChecking,
           }"
         >
-          <div v-if="ftpErrorText" class="opt-connection-box">{{ ftpErrorText }}</div>
           <span class="opt-connection-badge">
             {{
               ftpChecking
@@ -28,6 +27,9 @@
             }}
           </span>
         </div>
+        <p v-if="ftpErrorText" class="opt-hint opt-connection-error" role="status">
+          {{ ftpErrorText }}
+        </p>
         <div class="opt-folder-actions">
           <button
             type="button"
@@ -193,7 +195,7 @@
                         preparing ||
                         scanningCache ||
                         saving ||
-                        (!canMaintainMedia && cachedHymnalBaseline)
+                        (!canRemoveMedia && cachedHymnalBaseline)
                       "
                       @change="onHymnalToggle(($event.target as HTMLInputElement).checked)"
                     />
@@ -222,7 +224,7 @@
                   </label>
                   <div v-if="partialHymnal && !cachedHymnalBaseline" class="opt-partial">
                     <span class="opt-partial__info">
-                      {{ $t("options.collections_download.partial_files", partialHymnal) }}
+                      {{ $t("options.collections_download.partial_songs", partialHymnal) }}
                     </span>
                     <LjButton
                       size="sm"
@@ -234,7 +236,7 @@
                     <LjButton
                       size="sm"
                       variant="danger"
-                      :disabled="partialBusy || !canMaintainMedia"
+                      :disabled="partialBusy || !canRemoveMedia"
                       @click="discardPartial({ hymnal: 'main' })"
                     >
                       {{ $t("options.collections_download.partial_discard") }}
@@ -256,7 +258,7 @@
                         preparing ||
                         scanningCache ||
                         saving ||
-                        (!canMaintainMedia && cachedHymnal1996Baseline)
+                        (!canRemoveMedia && cachedHymnal1996Baseline)
                       "
                       @change="onHymnal1996Toggle(($event.target as HTMLInputElement).checked)"
                     />
@@ -285,7 +287,7 @@
                   </label>
                   <div v-if="partialHymnal1996 && !cachedHymnal1996Baseline" class="opt-partial">
                     <span class="opt-partial__info">
-                      {{ $t("options.collections_download.partial_files", partialHymnal1996) }}
+                      {{ $t("options.collections_download.partial_songs", partialHymnal1996) }}
                     </span>
                     <LjButton
                       size="sm"
@@ -297,7 +299,7 @@
                     <LjButton
                       size="sm"
                       variant="danger"
-                      :disabled="partialBusy || !canMaintainMedia"
+                      :disabled="partialBusy || !canRemoveMedia"
                       @click="discardPartial({ hymnal: '1996' })"
                     >
                       {{ $t("options.collections_download.partial_discard") }}
@@ -317,7 +319,7 @@
                         preparing ||
                         scanningCache ||
                         saving ||
-                        (!canMaintainMedia && isCategoryFullyCached(cat))
+                        (!canRemoveMedia && isCategoryFullyCached(cat))
                       "
                       @change="toggleCategory(cat, ($event.target as HTMLInputElement).checked)"
                     />
@@ -338,7 +340,7 @@
                             preparing ||
                             scanningCache ||
                             saving ||
-                            (!canMaintainMedia && cachedAlbumsBaseline.has(album.id_album)) ||
+                            (!canRemoveMedia && cachedAlbumsBaseline.has(album.id_album)) ||
                             classicAlbums.has(album.id_album)
                           "
                           @change="
@@ -386,7 +388,7 @@
                         <span class="opt-partial__info">
                           {{
                             $t(
-                              "options.collections_download.partial_files",
+                              "options.collections_download.partial_songs",
                               partialAlbums.get(album.id_album)!
                             )
                           }}
@@ -401,7 +403,7 @@
                         <LjButton
                           size="sm"
                           variant="danger"
-                          :disabled="partialBusy || !canMaintainMedia"
+                          :disabled="partialBusy || !canRemoveMedia"
                           @click="discardPartial({ album: album.id_album, name: album.name })"
                         >
                           {{ $t("options.collections_download.partial_discard") }}
@@ -476,7 +478,7 @@
                   v-if="hasPendingRemovals || saving"
                   type="button"
                   class="opt-btn opt-btn--danger"
-                  :disabled="saving || scanningCache || !canMaintainMedia"
+                  :disabled="saving || scanningCache || !canRemoveMedia"
                   @click="confirmRemoval"
                 >
                   <LjIcon :icon="ICONS.ACTIONS.DELETE_FILLED" size="14" />
@@ -973,6 +975,10 @@ const bundleEta = computed(() => {
 
 const isDesktop = computed<boolean>(() => Platform.isDesktop);
 const mediaAccess = ref<{ writable: boolean; shared: boolean } | null>(null);
+const mediaAccounts = ref<StorageLocations["mediaAccounts"]>(null);
+// Exclusão escolhida pelo operador exige escrita; limpeza geral/automática
+// continua indisponível quando o acervo é compartilhado.
+const canRemoveMedia = computed(() => !isDesktop.value || mediaAccess.value?.writable === true);
 const canMaintainMedia = computed(
   () => !isDesktop.value || (mediaAccess.value?.writable === true && !mediaAccess.value.shared)
 );
@@ -1244,7 +1250,7 @@ function isCategoryFullyCached(cat: Category): boolean {
 
 function toggleCategory(cat: Category, checked: boolean): void {
   cat.albums?.forEach((a) => {
-    if (!checked && !canMaintainMedia.value && cachedAlbumsBaseline.value.has(a.id_album)) return;
+    if (!checked && !canRemoveMedia.value && cachedAlbumsBaseline.value.has(a.id_album)) return;
     if (checked) selectedAlbums.value.add(a.id_album);
     else selectedAlbums.value.delete(a.id_album);
   });
@@ -1252,19 +1258,19 @@ function toggleCategory(cat: Category, checked: boolean): void {
 }
 
 function toggleAlbum(id: number, checked: boolean): void {
-  if (!checked && !canMaintainMedia.value && cachedAlbumsBaseline.value.has(id)) return;
+  if (!checked && !canRemoveMedia.value && cachedAlbumsBaseline.value.has(id)) return;
   if (checked) selectedAlbums.value.add(id);
   else selectedAlbums.value.delete(id);
   selectedAlbums.value = new Set(selectedAlbums.value);
 }
 
 function onHymnalToggle(checked: boolean): void {
-  if (!checked && !canMaintainMedia.value && cachedHymnalBaseline.value) return;
+  if (!checked && !canRemoveMedia.value && cachedHymnalBaseline.value) return;
   selectedHymnal.value = checked;
 }
 
 function onHymnal1996Toggle(checked: boolean): void {
-  if (!checked && !canMaintainMedia.value && cachedHymnal1996Baseline.value) return;
+  if (!checked && !canRemoveMedia.value && cachedHymnal1996Baseline.value) return;
   selectedHymnal1996.value = checked;
 }
 
@@ -1283,7 +1289,7 @@ function selectAll(): void {
 }
 
 function deselectAll(): void {
-  selectedAlbums.value = canMaintainMedia.value
+  selectedAlbums.value = canRemoveMedia.value
     ? new Set()
     : new Set([...cachedAlbumsBaseline.value, ...classicAlbums.value]);
   onHymnalToggle(false);
@@ -1420,16 +1426,47 @@ async function startDownloads(): Promise<void> {
 
 async function confirmRemoval(): Promise<void> {
   await refreshMediaAccess();
-  if (!canMaintainMedia.value) return;
+  if (!canRemoveMedia.value) return;
   const ok = await $alert.confirm(
-    t("options.collections_download.remove_confirm", { n: pendingRemovalCount.value })
+    withSharedWarning(
+      t("options.collections_download.remove_confirm", { n: pendingRemovalCount.value })
+    ),
+    { confirmText: "options.collections_download.partial_discard", destructive: true }
   );
   if (ok) await saveSelection();
 }
 
+/**
+ * Quem mais perde as músicas apagadas. Pasta compartilhada só com esta conta, e
+ * com assinatura antiga o bastante, é tratada como privada: sem aviso.
+ */
+function withSharedWarning(question: string): string {
+  if (!mediaAccess.value?.shared) return question;
+  const accounts = mediaAccounts.value;
+  const others = accounts?.others ?? [];
+  if (others.length === 1) {
+    const days = Math.max(
+      0,
+      Math.floor((Date.now() - Date.parse(others[0].lastSeen)) / 86_400_000)
+    );
+    const when =
+      days === 0
+        ? t("options.collections_download.shared_when_today")
+        : days === 1
+          ? t("options.collections_download.shared_when_yesterday")
+          : t("options.collections_download.shared_when_days", { n: days });
+    return `${question} ${t("options.collections_download.shared_one", { name: others[0].name, when })}`;
+  }
+  if (others.length > 1) {
+    const names = others.map((account) => `"${account.name}"`).join(", ");
+    return `${question} ${t("options.collections_download.shared_many", { names })}`;
+  }
+  if (accounts?.known && accounts.settled) return question;
+  return `${question} ${t("options.collections_download.shared_unknown")}`;
+}
+
 async function saveSelection(): Promise<void> {
-  if (!canMaintainMedia.value || !hasPendingRemovals.value || !Platform.storage?.removeFiles)
-    return;
+  if (!canRemoveMedia.value || !hasPendingRemovals.value || !Platform.storage?.removeFiles) return;
 
   saving.value = true;
   let removedAlbums = 0;
@@ -1494,7 +1531,10 @@ const partialBusy = computed(
   () => downloading.value || preparing.value || scanningCache.value || saving.value
 );
 
-/** Nunca mostra 100% para algo incompleto (199 de 200 arredondaria para 100). */
+/**
+ * Nunca mostra 100% para algo incompleto (199 de 200 arredondaria para 100), nem
+ * 0% para o que já começou: áudios sem nenhuma música completa ainda são 1%.
+ */
 function partialPercent(progress: PartialProgress): string {
   const raw = progress.total > 0 ? (progress.have / progress.total) * 100 : 0;
   const percent = Math.max(1, Math.min(99, Math.floor(raw)));
@@ -1544,7 +1584,7 @@ async function continuePartial(target: PartialTarget): Promise<void> {
 /** Apaga o que chegou do disco, depois de confirmar. Não mexe em outras coleções. */
 async function discardPartial(target: PartialTarget): Promise<void> {
   await refreshMediaAccess();
-  if (!canMaintainMedia.value) return;
+  if (!canRemoveMedia.value) return;
   if (partialBusy.value || !Platform.storage?.removeFiles) return;
   const progress =
     target.album !== undefined
@@ -1560,10 +1600,13 @@ async function discardPartial(target: PartialTarget): Promise<void> {
         : "options.collections_download.hymnal"
     );
   const ok = await $alert.confirm(
-    t("options.collections_download.partial_discard_confirm", {
-      n: progress?.have ?? 0,
-      name,
-    })
+    withSharedWarning(
+      t("options.collections_download.partial_discard_songs_confirm", {
+        n: progress?.have ?? 0,
+        name,
+      })
+    ),
+    { confirmText: "options.collections_download.partial_discard", destructive: true }
   );
   if (!ok) return;
 
@@ -1735,9 +1778,12 @@ const quotaGb = computed({
 async function refreshMediaAccess(): Promise<void> {
   if (!isDesktop.value) return;
   try {
-    mediaAccess.value = (await Platform.api?.storage.locations())?.access?.media ?? null;
+    const locations = await Platform.api?.storage.locations();
+    mediaAccess.value = locations?.access?.media ?? null;
+    mediaAccounts.value = locations?.mediaAccounts ?? null;
   } catch (error) {
     mediaAccess.value = null;
+    mediaAccounts.value = null;
     console.warn("[Sincronizar] storage.locations falhou:", error);
   }
 }

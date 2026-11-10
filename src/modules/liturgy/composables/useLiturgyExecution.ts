@@ -9,6 +9,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { openAnnouncementsWindow, openSiteWindow } from "@/helpers/ProjectionWindows";
 import { beginAnnouncementIntent } from "@/presentation/AnnouncementsPresentationState";
+import { loadAnnouncements } from "@/modules/announcements/storage";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import $idb from "@/helpers/IndexedDB";
@@ -28,6 +29,8 @@ import { LITURGY_VERSION_ACTION } from "@/config/MusicAction";
 import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
+import { localFileStatus, type LocalFileStatus } from "@/helpers/LocalFileStatus";
+import { mediaSourceDetails } from "@/helpers/MediaDiagnostics";
 import Telemetry from "@/helpers/Telemetry";
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
 import {
@@ -376,19 +379,17 @@ export function useLiturgyExecution() {
   async function executeAnnouncements(item: LiturgyItem): Promise<boolean> {
     const announcementToken = beginAnnouncementIntent();
     try {
-      const all = (
-        await $idb.getAll<{
-          id: string;
-          nome: string;
-          ordem: number;
-          texto?: string;
-          imageData?: ArrayBuffer;
-          imageMime?: string;
-          videoData?: ArrayBuffer;
-          videoMime?: string;
-          style?: Record<string, unknown>;
-        }>(DB_TABLE.ANNOUNCEMENTS)
-      ).sort((a, b) => a.ordem - b.ordem);
+      const all = await loadAnnouncements<{
+        id: string;
+        nome: string;
+        ordem: number;
+        texto?: string;
+        imageData?: Blob;
+        imageMime?: string;
+        videoData?: Blob;
+        videoMime?: string;
+        style?: Record<string, unknown>;
+      }>();
 
       const ids = item.anuncios_ids;
       const selected = Array.isArray(ids) ? all.filter((a) => ids.includes(String(a.id))) : all;
@@ -531,40 +532,41 @@ export function useLiturgyExecution() {
   }
 
   /**
-   * O arquivo ainda existe no caminho salvo? O protocolo `louvorja://local`
-   * devolve 404 para caminho ausente; pedir 1 byte evita abrir a projeção e
-   * deixar a tela preta/erro de áudio quando o arquivo foi movido ou apagado.
-   * Só vale para caminhos locais absolutos; URLs remotas/blob seguem o fluxo
-   * normal (a falha ali é de rede/formato, não de arquivo ausente).
+   * O arquivo ainda pode ser lido no caminho salvo? Pedir 1 byte evita abrir a
+   * projeção e deixar a tela preta/erro de áudio quando o arquivo foi movido,
+   * apagado ou ficou inacessível. Só vale para caminhos locais absolutos;
+   * URLs remotas/blob seguem o fluxo normal (a falha ali é de rede/formato).
    */
-  async function _localFileExists(dir: string): Promise<boolean> {
-    if (!dir || !Platform.isDesktop) return true;
-    if (/^(blob|data):/i.test(dir)) return true;
+  async function _localFileStatus(dir: string): Promise<LocalFileStatus> {
+    if (!dir || !Platform.isDesktop) return "ok";
+    if (/^(blob|data):/i.test(dir)) return "ok";
     const hasProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir);
-    if (hasProtocol && !/^louvorja:\/\/local\//i.test(dir)) return true;
+    if (hasProtocol && !/^louvorja:\/\/local\//i.test(dir)) return "ok";
     const isLocalPath =
       /^louvorja:\/\/local\//i.test(dir) ||
       dir.startsWith("/") ||
       /^[A-Za-z]:[\\/]/.test(dir) ||
       dir.startsWith("\\\\");
-    if (!isLocalPath) return true;
-    const url = /^louvorja:\/\//i.test(dir) ? dir : _resolveFileUrl(dir);
-    try {
-      const response = await fetchWithTimeout(url, {
-        method: "GET",
-        headers: { Range: "bytes=0-0" },
-        timeout: NET_TIMEOUT.QUICK,
-        source: "file",
-      });
-      try {
-        await response.body?.cancel();
-      } catch {
-        /* corpo de erro/cancelamento não interessa */
-      }
-      return response.ok;
-    } catch {
-      return false;
+    if (!isLocalPath) return "ok";
+    return localFileStatus(/^louvorja:\/\//i.test(dir) ? dir : _resolveFileUrl(dir));
+  }
+
+  /**
+   * "Arquivo não encontrado" só quando ele não existe: é engano do operador e
+   * fica como evento. Sem permissão ou disco que não responde é defeito do
+   * ambiente — vai para o error tracking, com o motivo na tela.
+   */
+  function _alertUnopenableFile(status: Exclude<LocalFileStatus, "ok">, dir: string): void {
+    if (status === "not_found") {
+      reportMissingResource("open_file", "file");
+      $alert.error({ text: dir, title: "modules.media.alerts.file_not_found" });
+      return;
     }
+    reportExecutionError(new Error(`Liturgy file ${status}`), "open_file_access", {
+      file_status: status,
+      ...mediaSourceDetails(dir),
+    });
+    $alert.error({ text: dir, title: `modules.media.alerts.file_${status}` });
   }
 
   /** Cache de objectURLs para HEIC→JPEG (evita reconverter a cada projeção). */
@@ -622,12 +624,24 @@ export function useLiturgyExecution() {
         libRef: { table: DB_TABLE.LITURGY_FILES, id: item.ref_id },
       };
     } else {
-      const exists = await _localFileExists(dir);
+      // Uma liturgia importada pode guardar o caminho do computador de origem.
+      // O navegador precisa que o operador escolha os bytes pelo seletor: não
+      // pode abrir esse caminho nem tratá-lo como um endereço do acervo.
+      if (
+        !Platform.isDesktop &&
+        (/^[A-Za-z]:[\\/]/.test(dir) ||
+          dir.startsWith("\\\\") ||
+          /^(?:file:|louvorja:\/\/local\/)/i.test(dir))
+      ) {
+        reportMissingResource("open_file", "local_file_selection");
+        $alert.error({ text: chaveLiturgia("alerts.file_choose_again_web") });
+        return false;
+      }
+      const status = await _localFileStatus(dir);
       // Outro item pode ter sido pedido enquanto o disco era consultado.
       if (intent !== fileOpenIntent) return false;
-      if (!exists) {
-        reportMissingResource("open_file", "file");
-        $alert.error({ text: dir, title: "modules.media.alerts.file_not_found" });
+      if (status !== "ok") {
+        _alertUnopenableFile(status, dir);
         return false;
       }
     }
@@ -751,8 +765,9 @@ export function useLiturgyExecution() {
       if (!(await openWithSystemPlayer(dir, "unknown")) && isCurrent()) openUrl(dir);
       return false;
     } else {
-      reportMissingResource("open_file", "renderable_file");
-      $alert.error({ text: url, title: "modules.media.alerts.file_not_found" });
+      // O arquivo existe; é o tipo dele que o app não sabe abrir.
+      Telemetry.track("liturgy_file_unsupported", { operation: "open_file", extension: ext, kind });
+      $alert.error({ text: dir, title: "modules.media.alerts.file_unsupported" });
       return false;
     }
   }

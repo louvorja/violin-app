@@ -80,4 +80,18 @@ describe("AnnouncementsPresentationState", () => {
     expect(readAnnouncementPacket(packetWithFit(123))).toBeNull();
     expect(readAnnouncementPacket(packetWithFit(["cover"]))).toBeNull();
   });
+
+  it("carries media as Blob, still accepts legacy ArrayBuffer and rejects anything else", () => {
+    const withMedia = (videoData: unknown) => ({
+      ...intent("media", 3),
+      announcement_schema: 1,
+      announcement_revision: 1,
+      active: true,
+      slides: [{ id: "v", nome: "V", ordem: 1, videoData, videoMime: "video/mp4" }],
+    });
+    const video = new Blob(["x"], { type: "video/mp4" });
+    expect(readAnnouncementPacket(withMedia(video))?.slides[0].videoData).toBe(video);
+    expect(readAnnouncementPacket(withMedia(new ArrayBuffer(4)))).not.toBeNull();
+    expect(readAnnouncementPacket(withMedia("data:video/mp4;base64,AA"))).toBeNull();
+  });
 });

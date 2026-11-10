@@ -20,6 +20,14 @@ const TAMANHO: Record<string, string> = {
 
 const REPETICAO: Record<string, string> = { tile: "repeat" };
 
+/**
+ * As opções do seletor "Ajuste da imagem", na ordem do menu. As Opções e os ribbons
+ * do Papel de parede e da Biblioteca mostram a mesma lista, com os mesmos rótulos.
+ */
+export function opcoesDeAjuste(t: (key: string) => string): { value: string; label: string }[] {
+  return Object.keys(TAMANHO).map((value) => ({ value, label: t(`options.slides.pos_${value}`) }));
+}
+
 /** As duas opções cujo tamanho é o natural da imagem, e por isso dependem da escala. */
 const DEPENDE_DA_ESCALA = new Set(["center", "tile"]);
 

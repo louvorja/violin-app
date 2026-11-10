@@ -193,33 +193,35 @@ const availableActions = computed((): ActionOption[] => {
     ];
   }
 
+  // `action` é a versão da liturgia que o `playMusic` entende, não a ação do player:
+  // aqui "audio" é "Somente áudio", e a cantada é "sung".
   return [
     {
-      action: MUSIC_ACTION[MusicActionEnum.AUDIO].action,
+      action: "sung",
       icon: MUSIC_ACTION[MusicActionEnum.AUDIO].icon || ICONS.MUSIC.SING,
       color: MUSIC_ACTION[MusicActionEnum.AUDIO].color || "#c0392b",
       labelKey: "inputs.music_version_sung",
     },
     {
-      action: MUSIC_ACTION[MusicActionEnum.PLAYBACK].action,
+      action: "pb",
       icon: MUSIC_ACTION[MusicActionEnum.PLAYBACK].icon || ICONS.MUSIC.PLAYBACK,
       color: MUSIC_ACTION[MusicActionEnum.PLAYBACK].color || "#1b4f8a",
       labelKey: "inputs.music_version_pb",
     },
     {
-      action: MUSIC_ACTION[MusicActionEnum.LYRIC].action,
+      action: "lyric",
       icon: MUSIC_ACTION[MusicActionEnum.LYRIC].icon || ICONS.MUSIC.LYRIC,
       color: MUSIC_ACTION[MusicActionEnum.LYRIC].color || "#7f8c8d",
       labelKey: "inputs.music_version_lyric",
     },
     {
-      action: MUSIC_ACTION[MusicActionEnum.AUDIO_ONLY].action,
+      action: "audio",
       icon: MUSIC_ACTION[MusicActionEnum.AUDIO_ONLY].icon || ICONS.MUSIC.AUDIO_PLAYBACK,
       color: MUSIC_ACTION[MusicActionEnum.AUDIO_ONLY].color || "#27ae60",
       labelKey: "inputs.music_version_audio-only",
     },
     {
-      action: MUSIC_ACTION[MusicActionEnum.PLAYBACK_ONLY].action,
+      action: "audio_pb",
       icon: MUSIC_ACTION[MusicActionEnum.PLAYBACK_ONLY].icon || ICONS.MUSIC.NO_AUDIO,
       color: MUSIC_ACTION[MusicActionEnum.PLAYBACK_ONLY].color || "#8e44ad",
       labelKey: "inputs.music_version_playback-only",

@@ -230,6 +230,7 @@ function _onKeyDown(e) {
 
     // Ignora atalhos em campos de texto, exceto os marcados com allowInForm
     if (inForm && ctx !== "edit" && !_allowsInForm(options.allowInForm, e)) continue;
+    if (options.when && !options.when(e)) continue;
 
     // Contextos especiais verificados externamente pelo handler (media/liturgy)
     // Hotkeys.js não valida se o módulo está aberto — isso é responsabilidade do handler.
@@ -278,6 +279,8 @@ function destroy() {
  * @param {boolean} [options.preventDefault]  default: true
  * @param {boolean} [options.stopPropagation] default: false
  * @param {boolean|((e: KeyboardEvent) => boolean)} [options.allowInForm] default: false
+ * @param {(e: KeyboardEvent) => boolean} [options.when]  falso: o atalho é pulado, sem
+ *   cancelar a tecla, e ela segue para o próximo registrado com a mesma combinação
  * @param {string} [options.description]      Texto para o cheatsheet (chave i18n ou texto literal)
  * @param {string} [options.group]            Grupo para o cheatsheet
  */
