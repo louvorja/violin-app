@@ -73,6 +73,7 @@ import {
   writeSlot as writeOverlaySlot,
 } from "@/helpers/Overlay";
 import Shortcuts from "@/helpers/Shortcuts";
+import PlayerMediaSession from "@/helpers/PlayerMediaSession";
 import Telemetry from "@/helpers/Telemetry";
 import { withTelemetryActionSource } from "@/helpers/TelemetryAction";
 import { installRouteTelemetry } from "@/helpers/RouteTelemetry";
@@ -712,9 +713,16 @@ $storage.hydrate().then(async () => {
 
   _bootStage("remote_config_ready");
 
-  // D6 — Atalhos globais pertencem à janela principal. Registrar o mesmo
-  // conjunto em cada projeção só cria trabalho e pode disputar o registro IPC.
-  if (!isAuxiliaryRenderer) Shortcuts.init();
+  // Atalhos globais e controles nativos de mídia pertencem à janela principal,
+  // que controla a reprodução e aplica o fade também às teclas multimídia.
+  if (!isAuxiliaryRenderer) {
+    Shortcuts.init();
+    PlayerMediaSession.init();
+    app.onUnmount(() => {
+      Shortcuts.destroy();
+      PlayerMediaSession.destroy();
+    });
+  }
 
   // D5 — Conectar eventos do servidor HTTP às ações do app.
   if (Platform.isDesktop && !isAuxiliaryRenderer) {

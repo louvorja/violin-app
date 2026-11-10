@@ -101,6 +101,65 @@ function acompanhar(promise: Promise<boolean>) {
 }
 
 describe("pausar e retomar com fade", () => {
+  it("a tecla multimídia usa o fade e retoma mesmo se o sistema enviar pause duas vezes", async () => {
+    const el = await tocandoMusicaAtual();
+    el.play = vi.fn(async () => {
+      Object.defineProperty(el, "paused", { configurable: true, value: false });
+    });
+    el.pause = vi.fn(() => {
+      Object.defineProperty(el, "paused", { configurable: true, value: true });
+    });
+    const { default: appdata } = await import("@/helpers/AppData");
+    appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO, "blob:musica-atual");
+    appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);
+    appdata.set(KEYS.MODULES.MEDIA.CONFIG.VOLUME, 100);
+
+    const handlers = new Map<MediaSessionAction, MediaSessionActionHandler>();
+    const session = {
+      playbackState: "none" as MediaSessionPlaybackState,
+      setActionHandler(action: MediaSessionAction, handler: MediaSessionActionHandler | null) {
+        if (handler) handlers.set(action, handler);
+        else handlers.delete(action);
+      },
+    };
+    const original = Object.getOwnPropertyDescriptor(navigator, "mediaSession");
+    Object.defineProperty(navigator, "mediaSession", { configurable: true, value: session });
+    const { default: playerSession } = await import("@/helpers/PlayerMediaSession");
+    try {
+      playerSession.init();
+      handlers.get("pause")!({ action: "pause" });
+      expect(session.playbackState).toBe("paused");
+      expect(el.pause).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(60);
+      expect(el.volume).toBeGreaterThan(0);
+      expect(el.volume).toBeLessThan(1);
+
+      // O elemento ainda toca: o Play/Pause físico pode chegar como outro pause.
+      handlers.get("pause")!({ action: "pause" });
+      expect(session.playbackState).toBe("playing");
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(el.play).toHaveBeenCalledTimes(1);
+      expect(el.pause).not.toHaveBeenCalled();
+      expect(el.volume).toBe(1);
+
+      handlers.get("pause")!({ action: "pause" });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(el.pause).toHaveBeenCalledTimes(1);
+      expect(el.volume).toBe(0);
+      expect(session.playbackState).toBe("paused");
+
+      handlers.get("play")!({ action: "play" });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(el.play).toHaveBeenCalledTimes(2);
+      expect(el.volume).toBe(1);
+      expect(session.playbackState).toBe("playing");
+    } finally {
+      playerSession.destroy();
+      if (original) Object.defineProperty(navigator, "mediaSession", original);
+      else Reflect.deleteProperty(navigator, "mediaSession");
+    }
+  });
+
   it("o estado muda no pedido: o segundo toque durante o fade retoma, não pausa de novo", async () => {
     const el = await tocandoMusicaAtual();
     el.play = vi.fn(() => Promise.resolve()) as unknown as HTMLMediaElement["play"];

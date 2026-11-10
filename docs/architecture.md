@@ -747,6 +747,13 @@ No Windows, os dois `Program Files` e as pastas expostas por
 
 Atalhos in-window registrados em `src/bootstrap/main-shell.js` via `Hotkeys.register()`.
 
+O Play/Pause multimídia nativo passa por `src/helpers/PlayerMediaSession.ts`
+(`navigator.mediaSession`) e chama o mesmo `useMedia` do Space e dos botões, respeitando
+o fade. Só a janela principal instala esses controles, enquanto há mídia carregada.
+Durante o fade, cada toque inverte o pedido atual: o sistema pode enviar `pause`
+novamente porque o elemento ainda toca durante o fade-out. Os atalhos globais opcionais
+do Electron também enviam sempre à principal, mesmo com projeção ou retorno em foco.
+
 ### Command no Mac
 
 As combinações com modificador moram em `src/constants/HotkeyCombos.ts` (`HOTKEY.*`),
