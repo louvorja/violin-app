@@ -6,21 +6,23 @@ on:
 concurrency:
   group: deploy-dist
   cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: checkout code
         uses: actions/checkout@v4
         with:
-          # O token só aparece no passo do push: `npm install` roda scripts de terceiros.
           persist-credentials: false
       - name: set up node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: "npm"
       - name: fetch previous web deployment
         id: previous_deploy
         run: |
@@ -28,8 +30,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/louvorja-previous-dist"
           git archive refs/remotes/origin/dist | tar -x -C "$RUNNER_TEMP/louvorja-previous-dist"
           echo "created_at=$(git show -s --format=%cI refs/remotes/origin/dist)" >> "$GITHUB_OUTPUT"
+      - name: validate npm install policy
+        run: node scripts/validate-install-policy.mjs
       - name: install dependencies
-        run: npm install
+        run: npm ci
+        env:
+          HUSKY: "0"
       - name: read app version
         id: app_version
         run: |
@@ -73,11 +79,34 @@ jobs:
       - name: disable jekyll processing
         run: |
           touch dist/.nojekyll
+      - name: upload web bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    # Isolado do job de build: o runner que tem `contents: write` na memória do
+    # Runner.Worker nunca executa `npm ci` nem código de terceiros.
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: download web bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: dist
       - name: deploy to dist
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd dist
+          touch .nojekyll
           git init
           git checkout -b dist  # Cria a branch dist se não existir
           git config user.name "github-actions[bot]"

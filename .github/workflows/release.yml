@@ -9,6 +9,9 @@ on:
       - "v*.*.*-*"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
@@ -72,14 +75,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node_version || '24' }}
           cache: "npm"
 
+      - name: Conferir política de instalação npm
+        run: node scripts/validate-install-policy.mjs
+
       - name: Instalar dependências
         run: npm ci
+        env:
+          HUSKY: "0"
 
       - name: Conferir Xcode para ícone em camadas
         if: matrix.platform == 'mac'
@@ -240,6 +250,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Baixar artifacts dos 3 OSes (macOS Intel + ARM)
         uses: actions/download-artifact@v4
