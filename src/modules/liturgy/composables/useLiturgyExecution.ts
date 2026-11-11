@@ -8,6 +8,10 @@ import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { openAnnouncementsWindow, openSiteWindow } from "@/helpers/ProjectionWindows";
+import {
+  activateBackgroundProjection,
+  type BackgroundProjectionRecord,
+} from "@/helpers/BackgroundProjectionPlayback";
 import { beginAnnouncementIntent } from "@/presentation/AnnouncementsPresentationState";
 import { loadAnnouncements } from "@/modules/announcements/storage";
 import $appdata from "@/helpers/AppData";
@@ -125,6 +129,9 @@ export function useLiturgyExecution() {
           break;
         case LiturgyItemTypeEnum.MEDIA_LIBRARY:
           projected = await executeMediaLibraryItem(item);
+          break;
+        case LiturgyItemTypeEnum.BG_PROJECTION:
+          projected = await executeBackgroundProjectionItem(item);
           break;
         case LiturgyItemTypeEnum.BG_SOUND:
           await executeBgSoundItem(item);
@@ -480,6 +487,34 @@ export function useLiturgyExecution() {
     // Caminho absoluto no desktop → protocolo local.
     if (Platform.isDesktop) return $path.local(p);
     return p;
+  }
+
+  /**
+   * Projeção de Fundo: troca a mídia na janela do módulo, abrindo-a se ainda
+   * não estiver ativa. Ao contrário de som de fundo, é uma projeção visual —
+   * por isso confirma sucesso para permitir o overlay vinculado.
+   */
+  async function executeBackgroundProjectionItem(item: LiturgyItem): Promise<boolean> {
+    if (!item.ref_id) {
+      reportMissingResource("execute_background_projection", "background_projection");
+      $alert.error({ text: t("alerts.media_not_found") });
+      return false;
+    }
+    try {
+      const rec = await $idb.get<BackgroundProjectionRecord>(
+        DB_TABLE.BACKGROUND_PROJECTION_LIBRARY,
+        item.ref_id
+      );
+      if (!rec) {
+        reportMissingResource("execute_background_projection", "background_projection");
+        $alert.error({ text: t("alerts.media_not_found") });
+        return false;
+      }
+      return await activateBackgroundProjection(rec);
+    } catch (error) {
+      reportExecutionError(error, "execute_background_projection", { has_ref_id: true });
+      return false;
+    }
   }
 
   /** Som de fundo: reproduz no PLAYER do módulo Som de Fundo (fade/volume). */

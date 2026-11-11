@@ -47,6 +47,7 @@ import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { syncFromIdb as syncDevicesFromIdb } from "@/composables/useDevices";
 import Path from "@/helpers/Path";
 import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
+import { activateBackgroundProjection } from "@/helpers/BackgroundProjectionPlayback";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
 import { musicCommandSessionRejectionReason } from "@/presentation/MusicPresentationPacket";
@@ -1813,6 +1814,19 @@ $storage.hydrate().then(async () => {
                       rec.type || litItem.subtipo,
                       rec.mime || ""
                     );
+                    break;
+                  }
+                  case "projecao-de-fundo": {
+                    const projectionRefId = litItem.ref_id || "";
+                    if (projectionRefId) {
+                      const projectionRec = await $idb.get(
+                        DB_TABLE.BACKGROUND_PROJECTION_LIBRARY,
+                        projectionRefId
+                      );
+                      if (projectionRec) {
+                        projected = await activateBackgroundProjection(projectionRec);
+                      }
+                    }
                     break;
                   }
                   case "som-de-fundo": {

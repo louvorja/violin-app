@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
   readAllOverlaySlots: vi.fn(),
   writeOverlaySlot: vi.fn(),
   userdataSet: vi.fn(),
+  idbGet: vi.fn(),
   idbGetAll: vi.fn(),
+  activateBackgroundProjection: vi.fn(),
   resolveLiturgyFile: vi.fn(),
   releaseLiturgyFileUrl: vi.fn(),
   retainLiturgyFileUrl: vi.fn(),
@@ -105,9 +107,12 @@ vi.mock("@/helpers/ProjectionWindows", () => ({
   openAnnouncementsWindow: mocks.openAnnouncementsWindow,
   openSiteWindow: mocks.openSiteWindow,
 }));
+vi.mock("@/helpers/BackgroundProjectionPlayback", () => ({
+  activateBackgroundProjection: mocks.activateBackgroundProjection,
+}));
 vi.mock("@/helpers/AppData", () => ({ default: { get: vi.fn(), set: vi.fn() } }));
 vi.mock("@/helpers/IndexedDB", () => ({
-  default: { getAll: mocks.idbGetAll, rewriteRecords: vi.fn(async () => 0) },
+  default: { get: mocks.idbGet, getAll: mocks.idbGetAll, rewriteRecords: vi.fn(async () => 0) },
 }));
 vi.mock("@/helpers/Overlay", () => ({
   readAllSlots: mocks.readAllOverlaySlots,
@@ -193,7 +198,9 @@ beforeEach(() => {
   mocks.openYouTube.mockResolvedValue(true);
   mocks.readAllOverlaySlots.mockResolvedValue([{ id: "slot-1", enabled: false }]);
   mocks.writeOverlaySlot.mockResolvedValue(undefined);
+  mocks.idbGet.mockResolvedValue(null);
   mocks.idbGetAll.mockResolvedValue([]);
+  mocks.activateBackgroundProjection.mockResolvedValue(true);
   mocks.getCustomSong.mockResolvedValue(null);
   mocks.resolveAudio.mockResolvedValue(null);
   mocks.resolveLiturgyFile.mockResolvedValue(null);
@@ -699,6 +706,31 @@ describe("liturgia — ciclo de vida do overlay vinculado", () => {
     );
     /* A chave geral foi ligada pelo item: volta a desligar. */
     expect(mocks.userdataSet).toHaveBeenCalledWith(KEYS.MODULES.OVERLAY.ENABLED, false);
+  });
+
+  it("projeção de fundo ativa a mídia e liga o overlay vinculado", async () => {
+    mocks.idbGet.mockResolvedValue({
+      id: "bgp-1",
+      name: "Fundo do culto",
+      path: "/Users/ana/fundo.png",
+      type: "image",
+    });
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(
+      linked({
+        id: "bgp-item",
+        tipo: LiturgyItemTypeEnum.BG_PROJECTION,
+        item: "Fundo do culto",
+        ref_id: "bgp-1",
+      } as LiturgyItem)
+    );
+
+    expect(mocks.idbGet).toHaveBeenCalledWith(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY, "bgp-1");
+    expect(mocks.activateBackgroundProjection).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "bgp-1", path: "/Users/ana/fundo.png" })
+    );
+    expect(slots[0].enabled).toBe(true);
   });
 
   it("fechar a mídia desliga o overlay vinculado", async () => {

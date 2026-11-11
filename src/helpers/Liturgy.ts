@@ -81,6 +81,7 @@ function iconForItem(item: LiturgyItem): string {
     [LiturgyItemTypeEnum.SITE]: _isYoutube(item.url || item.subitem) ? ICONS.MEDIA.YOUTUBE : ICONS.UI.WEB,
     [LiturgyItemTypeEnum.MUSICA]: ICONS.MUSIC.MUSIC,
     [LiturgyItemTypeEnum.VIDEO_ONLINE]: ICONS.MEDIA.YOUTUBE,
+    [LiturgyItemTypeEnum.BG_PROJECTION]: ICONS.MODULES.BACKGROUND_PROJECTION,
     [LiturgyItemTypeEnum.MEDIA_LIBRARY]:
       item.subtipo === "image"
         ? ICONS.MEDIA.IMAGE
