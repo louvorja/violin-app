@@ -3,6 +3,7 @@ import $docs from "@/helpers/DocStore";
 import $userdata from "@/helpers/UserData";
 import $dev from "@/helpers/Dev";
 import DateTime from "@/helpers/DateTime";
+import { findCatalogMusic } from "@/helpers/CatalogMusic";
 import { KEYS } from "@/constants/UserDataKeys";
 import { DB_TABLE } from "@/constants/DbTables";
 import type { Playlist, PlaylistSong } from "@/types/Music";
@@ -41,12 +42,17 @@ function _generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+function _seconds(duration: unknown): number {
+  return typeof duration === "string" ? DateTime.toNumber(duration) : Number(duration) || 0;
+}
+
 function _getDurationTotal(songs: PlaylistSong[]): number {
-  return songs.reduce((sum, s) => {
-    const d = s.duration;
-    const sec = typeof d === "string" ? DateTime.toNumber(d) : Number(d) || 0;
-    return sum + sec;
-  }, 0);
+  return songs.reduce((sum, s) => sum + _seconds(s.duration), 0);
+}
+
+/** A playlist toca a cantada; 0 quando o catálogo baixado não traz a duração. */
+async function _catalogDuration(id_music: number): Promise<number> {
+  return _seconds((await findCatalogMusic(id_music))?.duration);
 }
 
 const selectedPlaylist = computed<Playlist | null>(() => {
@@ -70,6 +76,8 @@ async function createPlaylist(name: string): Promise<Playlist> {
 }
 
 async function addSong(playlistId: string, song: PlaylistSong): Promise<void> {
+  // O menu ⋮ das listas não conhece a duração da música.
+  if (!_seconds(song.duration)) song = { ...song, duration: await _catalogDuration(song.id_music) };
   _playlists.value = _playlists.value.map((p) => {
     if (p.id !== playlistId) return p;
     if (p.songs.some((s) => s.id_music === song.id_music)) return p;
@@ -118,6 +126,31 @@ function _parseImportedSong(data: unknown): PlaylistSong | null {
 
 let _hydrating: Promise<void> | null = null;
 
+/** Músicas salvas com 0:00 (pelo menu ⋮, antes de ele buscar a duração) ganham a do catálogo. */
+async function _fillMissingDurations(): Promise<void> {
+  const missing = new Set(
+    _playlists.value.flatMap((p) =>
+      p.songs.filter((s) => !_seconds(s.duration)).map((s) => s.id_music)
+    )
+  );
+  const found = new Map<number, number>();
+  for (const id_music of missing) {
+    const duration = await _catalogDuration(id_music);
+    if (duration) found.set(id_music, duration);
+  }
+  if (!found.size) return;
+  const fill = (s: PlaylistSong): PlaylistSong =>
+    !_seconds(s.duration) && found.has(s.id_music) ? { ...s, duration: found.get(s.id_music)! } : s;
+  const changed: Playlist[] = [];
+  _playlists.value = _playlists.value.map((p) => {
+    if (!p.songs.some((s) => fill(s) !== s)) return p;
+    const updated = { ...p, songs: p.songs.map(fill) };
+    changed.push(updated);
+    return updated;
+  });
+  for (const playlist of changed) await _persistOne(playlist);
+}
+
 async function _hydrate(): Promise<void> {
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   try {
@@ -136,6 +169,9 @@ async function _hydrate(): Promise<void> {
       outcome: "completed",
     });
     $dev.write("playlists:hydrated", { count: _playlists.value.length });
+    void _fillMissingDurations().catch((e) =>
+      $dev.write("playlists:fill_durations_error", { error: String(e) })
+    );
   } catch (e) {
     $dev.write("playlists:hydrate_error", { error: String(e) });
     const durationMs = Math.max(

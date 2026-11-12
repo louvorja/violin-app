@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
   readAllOverlaySlots: vi.fn(),
   writeOverlaySlot: vi.fn(),
   userdataSet: vi.fn(),
+  idbGet: vi.fn(),
   idbGetAll: vi.fn(),
+  activateBackgroundProjection: vi.fn(),
   resolveLiturgyFile: vi.fn(),
   releaseLiturgyFileUrl: vi.fn(),
   retainLiturgyFileUrl: vi.fn(),
@@ -105,9 +107,12 @@ vi.mock("@/helpers/ProjectionWindows", () => ({
   openAnnouncementsWindow: mocks.openAnnouncementsWindow,
   openSiteWindow: mocks.openSiteWindow,
 }));
+vi.mock("@/helpers/BackgroundProjectionPlayback", () => ({
+  activateBackgroundProjection: mocks.activateBackgroundProjection,
+}));
 vi.mock("@/helpers/AppData", () => ({ default: { get: vi.fn(), set: vi.fn() } }));
 vi.mock("@/helpers/IndexedDB", () => ({
-  default: { getAll: mocks.idbGetAll, rewriteRecords: vi.fn(async () => 0) },
+  default: { get: mocks.idbGet, getAll: mocks.idbGetAll, rewriteRecords: vi.fn(async () => 0) },
 }));
 vi.mock("@/helpers/Overlay", () => ({
   readAllSlots: mocks.readAllOverlaySlots,
@@ -141,6 +146,7 @@ import { DB_TABLE } from "@/constants/DbTables";
 import $alert from "@/helpers/Alert";
 import { fetchWithTimeout } from "@/helpers/Http";
 import Telemetry from "@/helpers/Telemetry";
+import Platform from "@/helpers/Platform";
 
 function arquivo(dir: string, item = "Arquivo"): LiturgyItem {
   return { id: "1", tipo: LiturgyItemTypeEnum.ARQUIVO, item, dir } as LiturgyItem;
@@ -177,6 +183,7 @@ function music(mode = "sung"): LiturgyItem {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  Platform.isDesktop = true;
   resetarSessaoOverlayVinculado();
   mocks.systemPlayer = false;
   mocks.stage = 0;
@@ -191,7 +198,9 @@ beforeEach(() => {
   mocks.openYouTube.mockResolvedValue(true);
   mocks.readAllOverlaySlots.mockResolvedValue([{ id: "slot-1", enabled: false }]);
   mocks.writeOverlaySlot.mockResolvedValue(undefined);
+  mocks.idbGet.mockResolvedValue(null);
   mocks.idbGetAll.mockResolvedValue([]);
+  mocks.activateBackgroundProjection.mockResolvedValue(true);
   mocks.getCustomSong.mockResolvedValue(null);
   mocks.resolveAudio.mockResolvedValue(null);
   mocks.resolveLiturgyFile.mockResolvedValue(null);
@@ -208,6 +217,21 @@ beforeEach(() => {
 });
 
 describe("liturgia — arquivo escolhido na web", () => {
+  it.each([
+    "G:\\Meu Drive\\Culto\\Informativo.mp4",
+    "\\\\servidor\\culto\\aviso.png",
+    "file:///C:/Culto/aviso.pdf",
+    "louvorja://local/Users/operador/aviso.png",
+  ])("orienta a escolher novamente o arquivo local importado na web: %s", async (dir) => {
+    Platform.isDesktop = false;
+    const ui = useLiturgyExecution();
+    await ui.executeItem(arquivo(dir));
+    expect($alert.error).toHaveBeenCalledWith({ text: "alerts.file_choose_again_web" });
+    expect(mocks.projectFile).not.toHaveBeenCalled();
+    expect(mocks.openAudio).not.toHaveBeenCalled();
+    expect(Telemetry.captureException).not.toHaveBeenCalled();
+  });
+
   it("projeta bytes locais pela referência após reabrir, sem tratar o nome como caminho", async () => {
     mocks.resolveLiturgyFile.mockResolvedValue({
       url: "blob:local",
@@ -682,6 +706,31 @@ describe("liturgia — ciclo de vida do overlay vinculado", () => {
     );
     /* A chave geral foi ligada pelo item: volta a desligar. */
     expect(mocks.userdataSet).toHaveBeenCalledWith(KEYS.MODULES.OVERLAY.ENABLED, false);
+  });
+
+  it("projeção de fundo ativa a mídia e liga o overlay vinculado", async () => {
+    mocks.idbGet.mockResolvedValue({
+      id: "bgp-1",
+      name: "Fundo do culto",
+      path: "/Users/ana/fundo.png",
+      type: "image",
+    });
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(
+      linked({
+        id: "bgp-item",
+        tipo: LiturgyItemTypeEnum.BG_PROJECTION,
+        item: "Fundo do culto",
+        ref_id: "bgp-1",
+      } as LiturgyItem)
+    );
+
+    expect(mocks.idbGet).toHaveBeenCalledWith(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY, "bgp-1");
+    expect(mocks.activateBackgroundProjection).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "bgp-1", path: "/Users/ana/fundo.png" })
+    );
+    expect(slots[0].enabled).toBe(true);
   });
 
   it("fechar a mídia desliga o overlay vinculado", async () => {

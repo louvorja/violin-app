@@ -62,6 +62,7 @@
     "site": "Site",
     "video-online": "Vídeo Online",
     "biblioteca-midia": "Biblioteca de Mídia",
+    "projecao-de-fundo": "Projeção de Fundo",
     "som-de-fundo": "Som de Fundo",
     "anuncios": "Anúncios",
     "overlay": "Sobreposição"
@@ -104,6 +105,8 @@
     "music_version_playback-only": "Somente áudio playback",
     "library_select": "Item da Biblioteca de Mídia",
     "library_search_btn": "Pesquisar na Biblioteca…",
+    "projection_select": "Projeção de Fundo",
+    "projection_search_btn": "Pesquisar projeções…",
     "sound_select": "Som de fundo",
     "sound_search_btn": "Pesquisar sons…"
   },
@@ -166,7 +169,18 @@
     "empty": "Nenhum vídeo disponível.",
     "empty_search": "Nenhum vídeo encontrado para esta busca.",
     "source_custom": "Meus vídeos",
-    "source_online": "On-line"
+    "source_online": "On-line",
+    "uncategorized": "Sem categoria",
+    "view": "Visualização",
+    "thumbnails": "Miniaturas",
+    "list": "Lista",
+    "channels": "Canais",
+    "all_channels": "Todos os canais",
+    "categories": "Categorias",
+    "all_categories": "Todas as categorias",
+    "without_channel": "Sem canal",
+    "program_section": "Vídeos do programa",
+    "custom_section": "Meus vídeos"
   },
   "schedules": {
     "title": "Itens Agendados",
@@ -277,6 +291,7 @@
     "import_unsupported_version": "Este arquivo foi feito numa versão mais nova do LouvorJA. Atualize o app para abrir."
   },
   "alerts": {
+    "file_choose_again_web": "Este arquivo está vinculado a uma pasta do computador. Edite o item da liturgia e use Escolher arquivo para abri-lo neste navegador.",
     "media_not_found": "Item não encontrado na biblioteca. Ele pode ter sido removido.",
     "file_unsupported": "Escolha uma imagem, vídeo, áudio, PDF ou apresentação .slja.",
     "file_import_failed": "Não foi possível guardar o arquivo neste aparelho. Verifique o espaço disponível e tente novamente."
@@ -284,9 +299,16 @@
   "library_search": {
     "title_media": "Biblioteca de Mídia",
     "title_sound": "Sons de Fundo",
+    "title_projection": "Projeções de Fundo",
     "find_label": "Localizar:",
     "col_name": "Nome",
     "col_detail": "Tipo",
+    "view_label": "Visualização",
+    "view_thumbnails": "Miniaturas",
+    "view_list": "Lista",
+    "all_categories": "Todas",
+    "uncategorized": "Sem categoria",
+    "keyboard_hint": "Use as setas e Enter",
     "empty": "Nenhum item disponível.",
     "empty_search": "Nenhum item encontrado para esta busca."
   },

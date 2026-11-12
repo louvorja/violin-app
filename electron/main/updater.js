@@ -30,6 +30,7 @@ const fs = require("fs-extra");
 const path = require("path");
 const https = require("https");
 const http = require("http");
+const { pipeline } = require("node:stream/promises");
 const { installRequiresWindowsElevation } = require("./windowsInstallScope.js");
 const { safeSend } = require("./safeWebContents.js");
 const { WorkPriority, canStartWork } = require("./presentationAdmission.js");
@@ -43,6 +44,7 @@ let autoUpdater = null;
 let UpdaterCancellationToken = null;
 let _nativeDownloadToken = null;
 let _downloadUpdatePromise = null;
+let _downloadPackagePromise = null;
 const _installRequiresElevation = installRequiresWindowsElevation();
 
 /** @type {import("electron").BrowserWindow | null} */
@@ -431,8 +433,8 @@ function _assetExtension() {
  * primeiro .exe" entregaria o errado em metade dos casos. A escolha é pela
  * arquitetura: no ARM o nativo (nome com "arm64"); no x64 o que NÃO é ARM.
  *
- * Fora do Windows o primeiro candidato serve: o mac publica um único artefato
- * universal e o Linux já era assim antes do ARM no Windows.
+ * O Linux também publica x64 e ARM64. Nele não há fallback por emulação; o
+ * macOS publica um único artefato universal.
  *
  * Exportada para teste — é a regra que impede uma máquina ARM de receber o
  * instalador x64 e perder a instalação nativa.
@@ -442,6 +444,11 @@ function escolherAssetDaRelease(assets, ext, platform = process.platform, arch =
   const candidatos = (Array.isArray(assets) ? assets : []).filter(
     (a) => a && typeof a.name === "string" && a.name.toLowerCase().endsWith(sufixo)
   );
+  if (platform === "linux") {
+    if (!["arm64", "x64"].includes(arch)) return undefined;
+    const isArm = (name) => /(?:^|[-_.])(?:arm64|aarch64)(?:[-_.]|$)/i.test(name);
+    return candidatos.find((asset) => isArm(asset.name) === (arch === "arm64"));
+  }
   if (platform !== "win32") return candidatos[0];
   const prefereArm = arch === "arm64";
   return (
@@ -459,9 +466,18 @@ function escolherAssetDaRelease(assets, ext, platform = process.platform, arch =
  *
  * @param {import("electron").WebContents} [sender] webContents para eventos de progresso
  */
-async function downloadPackage(sender) {
-  // Aceita BrowserWindow ou WebContents — normaliza para o webContents
-  const wc = sender && sender.webContents ? sender.webContents : sender;
+function downloadPackage(sender) {
+  if (_downloadPackagePromise) return _downloadPackagePromise;
+  const pending = _runDownloadPackage(sender);
+  _downloadPackagePromise = pending;
+  pending.then(
+    () => { if (_downloadPackagePromise === pending) _downloadPackagePromise = null; },
+    () => { if (_downloadPackagePromise === pending) _downloadPackagePromise = null; }
+  );
+  return pending;
+}
+
+async function _runDownloadPackage(sender) {
   if (!_latestReleaseInfo || !_latestReleaseInfo.assets) {
     const chk = await checkGithubAndSetState();
     if (!chk.ok || !chk.updateAvailable) {
@@ -482,47 +498,65 @@ async function downloadPackage(sender) {
   _dlSample = { time: 0, received: 0, rate: 0 };
   _setState({ status: "downloading", progress: 0, newVersion: info.version, error: null, bytesPerSecond: 0, transferred: 0, total: asset.size || 0 });
 
-  _downloadAbortController = new AbortController();
+  const controller = new AbortController();
+  _downloadAbortController = controller;
   try {
-    await new Promise((resolve, reject) => {
-      const onAbort = () => reject(new Error("cancelled"));
-      _downloadAbortController.signal.addEventListener("abort", onAbort);
-
-      const download = (url) => {
-        https.get(url, { headers: { "User-Agent": "LouvorJA" } }, (res) => {
-          if (_downloadAbortController.signal.aborted) { res.resume(); return; }
-          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            res.resume();
-            return download(res.headers.location);
-          }
-          if (res.statusCode !== 200) {
-            res.resume();
-            return reject(new Error(`HTTP ${res.statusCode} ao baixar ${asset.name}`));
-          }
-          _pipeToFile(res, dest, tmp, info, wc, resolve, reject);
-        }).on("error", reject).setTimeout(120000, function () {
-          this.destroy(new Error("Download timeout"));
-        });
-      };
-      download(asset.browser_download_url);
-    });
-
+    const response = await _downloadResponse(asset.browser_download_url, controller.signal);
+    await _pipeToFile(response, tmp, info, sender, controller.signal, asset.size);
+    if (controller.signal.aborted) throw new Error("cancelled");
+    await fs.move(tmp, dest, { overwrite: true });
     _setState({ status: "downloaded", progress: 100, newVersion: info.version, packagePath: dest });
     return { ok: true, path: dest };
   } catch (e) {
     try { await fs.remove(tmp); } catch (_) { /* ignore */ }
-    if (e.message === "cancelled") {
+    if (controller.signal.aborted) {
       _setState({ status: "available", error: null });
+      throw new Error("cancelled");
     } else {
       _setErrorState(e);
     }
     throw e;
   } finally {
-    _downloadAbortController = null;
+    if (_downloadAbortController === controller) _downloadAbortController = null;
   }
 }
 
-function _pipeToFile(res, dest, tmp, info, webContents, resolve, reject) {
+function _downloadResponse(url, signal, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new Error("cancelled"));
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return reject(new Error("Endereço de atualização inválido"));
+    let request;
+    const onAbort = () => {
+      const error = new Error("cancelled");
+      request?.destroy(error);
+      reject(error);
+    };
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    request = https.get(parsed.toString(), { headers: { "User-Agent": "LouvorJA" } }, (res) => {
+      cleanup();
+      if (signal.aborted) { res.destroy(); return reject(new Error("cancelled")); }
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        if (redirects >= 10) return reject(new Error("Muitos redirecionamentos no download"));
+        let next;
+        try { next = new URL(res.headers.location, url).toString(); }
+        catch (error) { return reject(error); }
+        return _downloadResponse(next, signal, redirects + 1).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`HTTP ${res.statusCode} ao baixar a atualização`));
+      }
+      resolve(res);
+    });
+    request.on("error", (error) => { cleanup(); reject(error); });
+    request.setTimeout(120000, () => request.destroy(new Error("Download timeout")));
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function _pipeToFile(res, tmp, info, webContents, signal, expectedSize) {
   const total = parseInt(res.headers["content-length"] || "0", 10);
   let received = 0;
   const out = fs.createWriteStream(tmp);
@@ -554,11 +588,12 @@ function _pipeToFile(res, dest, tmp, info, webContents, resolve, reject) {
       });
     }
   });
-  res.pipe(out);
-  out.on("finish", () => {
-    fs.move(tmp, dest, { overwrite: true }).then(() => resolve(), reject);
-  });
-  out.on("error", reject);
+  // pipeline fecha ambos os streams antes de rejeitar, inclusive no abort.
+  // Assim a limpeza nunca concorre com um arquivo que ainda está sendo escrito.
+  await pipeline(res, out, { signal });
+  if ((total > 0 && received !== total) || (Number.isSafeInteger(expectedSize) && expectedSize > 0 && received !== expectedSize)) {
+    throw new Error("O download da atualização está incompleto");
+  }
 }
 
 /**
@@ -935,7 +970,6 @@ function cancelDownload() {
   // Cancela download manual (GitHub API)
   if (_downloadAbortController) {
     _downloadAbortController.abort();
-    _downloadAbortController = null;
   }
   // A API instalada do electron-updater recebe CancellationToken em
   // downloadUpdate(); ela não oferece cancelDownload() no updater.

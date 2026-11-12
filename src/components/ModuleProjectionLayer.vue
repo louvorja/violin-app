@@ -90,6 +90,16 @@
         </span>
       </div>
     </Transition>
+
+    <!-- Aviso de tempo (Cronômetro): moldura pulsando por cima de tudo. -->
+    <div
+      v-if="active && alert"
+      class="module-projection__alert"
+      :class="`module-projection__alert--${alert}`"
+      :data-testid="`module-projection-alert-${alert}`"
+      :style="color ? { '--frame-color': color } : undefined"
+      aria-hidden="true"
+    />
   </div>
 </template>
 
@@ -131,6 +141,7 @@ const drawMode = ref("number");
 const drawWheel = ref(null);
 const active = ref(false);
 const color = ref("");
+const alert = ref("");
 
 // O Sorteio tem layout dedicado que monta os chips dos já sorteados.
 const isDraw = computed(() => moduleId.value === ModuleEnum.DRAW);
@@ -249,6 +260,7 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload) => {
   }
   active.value = payload.active ?? true;
   color.value = payload.color || "";
+  alert.value = payload.alert === "warning" || payload.alert === "danger" ? payload.alert : "";
 });
 
 useBroadcastListener(BROADCAST_TYPE.MODULE_FORMAT_CHANGED, (payload) => {
@@ -406,6 +418,47 @@ onMounted(() => {
 }
 .fade-content-leave-to {
   opacity: 0;
+}
+
+/*
+ * Moldura de aviso do Cronômetro. Pulso lento de propósito: chama a atenção de
+ * quem está no púlpito sem virar um pisca-pisca que distrai a igreja.
+ */
+.module-projection__alert {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  animation: module-projection-alert 1.2s ease-in-out infinite alternate;
+}
+/* A moldura usa a cor do número (`color` do payload), que vem da Formatação. */
+.module-projection__alert--warning {
+  --frame-color-default: #f59e0b;
+  box-shadow:
+    inset 0 0 0 1.2vmin var(--frame-color, var(--frame-color-default)),
+    inset 0 0 6vmin
+      color-mix(in srgb, var(--frame-color, var(--frame-color-default)) 55%, transparent);
+}
+.module-projection__alert--danger {
+  --frame-color-default: #ef4444;
+  box-shadow:
+    inset 0 0 0 1.4vmin var(--frame-color, var(--frame-color-default)),
+    inset 0 0 8vmin
+      color-mix(in srgb, var(--frame-color, var(--frame-color-default)) 60%, transparent);
+  animation-duration: 0.8s;
+}
+@keyframes module-projection-alert {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .module-projection__alert {
+    animation: none;
+  }
 }
 
 /* Módulos "live" (clock/stopwatch) — sem transição entre tics. */

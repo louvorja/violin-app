@@ -34,6 +34,11 @@ describe("vínculo de sobreposição — disponibilidade no formulário", () => 
     expect(canLinkOverlay({ ...item(LiturgyItemTypeEnum.MUSICA), escolha: true })).toBe(true);
   });
 
+  it("oferece o vínculo para Projeção de Fundo somente quando há uma mídia escolhida", () => {
+    expect(canLinkOverlay(item(LiturgyItemTypeEnum.BG_PROJECTION))).toBe(false);
+    expect(canLinkOverlay(item(LiturgyItemTypeEnum.BG_PROJECTION, { ref_id: "bgp-1" }))).toBe(true);
+  });
+
   it("exige slides de anúncio disponíveis e selecionados", () => {
     const announcements = item(LiturgyItemTypeEnum.ANUNCIOS, { anuncios_ids: ["slide-1"] });
     expect(canLinkOverlay(announcements, { availableAnnouncementIds: [] })).toBe(false);

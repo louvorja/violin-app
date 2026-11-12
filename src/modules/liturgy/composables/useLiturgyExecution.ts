@@ -8,6 +8,10 @@ import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { openAnnouncementsWindow, openSiteWindow } from "@/helpers/ProjectionWindows";
+import {
+  activateBackgroundProjection,
+  type BackgroundProjectionRecord,
+} from "@/helpers/BackgroundProjectionPlayback";
 import { beginAnnouncementIntent } from "@/presentation/AnnouncementsPresentationState";
 import { loadAnnouncements } from "@/modules/announcements/storage";
 import $appdata from "@/helpers/AppData";
@@ -156,6 +160,9 @@ export function useLiturgyExecution() {
           break;
         case LiturgyItemTypeEnum.MEDIA_LIBRARY:
           projected = await executeMediaLibraryItem(item);
+          break;
+        case LiturgyItemTypeEnum.BG_PROJECTION:
+          projected = await executeBackgroundProjectionItem(item);
           break;
         case LiturgyItemTypeEnum.BG_SOUND:
           await executeBgSoundItem(item);
@@ -515,6 +522,34 @@ export function useLiturgyExecution() {
     return p;
   }
 
+  /**
+   * Projeção de Fundo: troca a mídia na janela do módulo, abrindo-a se ainda
+   * não estiver ativa. Ao contrário de som de fundo, é uma projeção visual —
+   * por isso confirma sucesso para permitir o overlay vinculado.
+   */
+  async function executeBackgroundProjectionItem(item: LiturgyItem): Promise<boolean> {
+    if (!item.ref_id) {
+      reportMissingResource("execute_background_projection", "background_projection");
+      $alert.error({ text: t("alerts.media_not_found") });
+      return false;
+    }
+    try {
+      const rec = await $idb.get<BackgroundProjectionRecord>(
+        DB_TABLE.BACKGROUND_PROJECTION_LIBRARY,
+        item.ref_id
+      );
+      if (!rec) {
+        reportMissingResource("execute_background_projection", "background_projection");
+        $alert.error({ text: t("alerts.media_not_found") });
+        return false;
+      }
+      return await activateBackgroundProjection(rec);
+    } catch (error) {
+      reportExecutionError(error, "execute_background_projection", { has_ref_id: true });
+      return false;
+    }
+  }
+
   /** Som de fundo: reproduz no PLAYER do módulo Som de Fundo (fade/volume). */
   async function executeBgSoundItem(item: LiturgyItem): Promise<void> {
     if (!item.ref_id) {
@@ -657,6 +692,19 @@ export function useLiturgyExecution() {
         libRef: { table: DB_TABLE.LITURGY_FILES, id: item.ref_id },
       };
     } else {
+      // Uma liturgia importada pode guardar o caminho do computador de origem.
+      // O navegador precisa que o operador escolha os bytes pelo seletor: não
+      // pode abrir esse caminho nem tratá-lo como um endereço do acervo.
+      if (
+        !Platform.isDesktop &&
+        (/^[A-Za-z]:[\\/]/.test(dir) ||
+          dir.startsWith("\\\\") ||
+          /^(?:file:|louvorja:\/\/local\/)/i.test(dir))
+      ) {
+        reportMissingResource("open_file", "local_file_selection");
+        $alert.error({ text: chaveLiturgia("alerts.file_choose_again_web") });
+        return false;
+      }
       const status = await _localFileStatus(dir);
       // Outro item pode ter sido pedido enquanto o disco era consultado.
       if (intent !== fileOpenIntent) return false;

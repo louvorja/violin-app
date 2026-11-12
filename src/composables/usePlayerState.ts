@@ -6,6 +6,7 @@ import { useAudioPlayback } from "@/composables/useAudioPlayback";
 import type { AudioPlayback } from "@/composables/useAudioPlayback";
 import Modules from "@/helpers/Modules";
 import AppData from "@/helpers/AppData";
+import { KEYS } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 
@@ -81,6 +82,9 @@ export function usePlayerState(): {
   const audio     = useAudioPlayback();
 
   const media   = computed<Record<string, unknown>>(() => Modules.get("media") as Record<string, unknown>);
+  // Como no teclado, o controle segue o pedido de pausa/retomada durante o fade.
+  // O áudio ainda toca durante o fade-out; isso não deve impedir a retomada.
+  const isPaused = computed(() => AppData.get<boolean>(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true) !== false);
   const slides  = computed<Slide[]>(() => Media.slides() as Slide[]);
   const has_instrumental_music = computed<boolean>(
     () => !!(media.value?.data as Record<string, unknown>)?.url_instrumental_music
@@ -136,8 +140,8 @@ export function usePlayerState(): {
         click: () => prev(),
       },
       {
-        show: hasAudio, compact: false, disabled: audio.isFading.value,
-        highlight: true, icon: audio.isPaused.value ? ICONS.PLAYER.PLAYER : ICONS.PLAYER.PAUSE_PLAIN,
+        show: hasAudio, compact: false, disabled: false,
+        highlight: true, icon: isPaused.value ? ICONS.PLAYER.PLAYER : ICONS.PLAYER.PAUSE_PLAIN,
         click: () => playToggle(),
       },
       {
@@ -206,7 +210,7 @@ export function usePlayerState(): {
       menu_modes.value[0]
   );
 
-  function playToggle():    void { if (audio.isPaused.value) Media.play(); else Media.pause(); }
+  function playToggle():    void { if (isPaused.value) Media.play(); else Media.pause(); }
   function rewind():        void { Media.advanceTime(-10); }
   function forward():       void { Media.advanceTime(+10); }
   function first():         void { Media.firstSlide(); }

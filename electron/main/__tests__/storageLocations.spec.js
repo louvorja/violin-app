@@ -199,6 +199,46 @@ describe("troca independente de acervo e vídeos", () => {
     expect(storage.locations().changeError).toMatch(/diferente/);
     expect(fs.readFileSync(path.join(media, "musics/song.mp3"), "utf8")).toBe("source");
   });
+  it("preserva ambas as origens se a segunda mudança falha depois de copiar o acervo", async () => {
+    const media = await privateMedia(), videos = paths.videosDir();
+    const destination = path.join(root, "moved-media"), videoDestination = path.join(root, "moved-videos");
+    fs.outputFileSync(path.join(media, "musics/song.mp3"), "audio");
+    fs.outputFileSync(path.join(videos, "abcdefghijk.mp4"), "source");
+    fs.outputFileSync(path.join(videoDestination, "abcdefghijk.mp4"), "different");
+    await storage.configure(request({ mediaDir: destination, mediaAction: "move", videosDir: videoDestination, videosAction: "move" }));
+    access.release();
+    storage.applyPending();
+    expect(paths.filesDir()).toBe(media);
+    expect(paths.videosDir()).toBe(videos);
+    expect(storage.locations().changeError).toMatch(/diferente/);
+    expect(fs.readFileSync(path.join(media, "musics/song.mp3"), "utf8")).toBe("audio");
+    expect(fs.readFileSync(path.join(videos, "abcdefghijk.mp4"), "utf8")).toBe("source");
+  });
+  it("preserva a origem se gravar o novo layout falha após a cópia", async () => {
+    const media = await privateMedia(), destination = path.join(root, "moved-media");
+    fs.outputFileSync(path.join(media, "musics/song.mp3"), "audio");
+    await storage.configure(request({ mediaDir: destination, mediaAction: "move" }));
+    access.release();
+    vi.spyOn(paths, "saveLayout").mockImplementation(() => { throw new Error("layout write failed"); });
+    expect(() => storage.applyPending()).toThrow("layout write failed");
+    expect(paths.filesDir()).toBe(media);
+    expect(fs.readFileSync(path.join(media, "musics/song.mp3"), "utf8")).toBe("audio");
+    expect(fs.readFileSync(path.join(destination, "musics/song.mp3"), "utf8")).toBe("audio");
+  });
+  it("não remove a origem quando o destino mudou de conteúdo sem mudar o tamanho", async () => {
+    const media = await privateMedia(), destination = path.join(root, "moved-media");
+    fs.outputFileSync(path.join(media, "musics/song.mp3"), "audio");
+    await storage.configure(request({ mediaDir: destination, mediaAction: "move" }));
+    access.release();
+    const save = paths.saveLayout.bind(paths);
+    vi.spyOn(paths, "saveLayout").mockImplementation((value) => {
+      save(value);
+      fs.writeFileSync(path.join(destination, "musics/song.mp3"), "other");
+    });
+    storage.applyPending();
+    expect(paths.filesDir()).toBe(destination);
+    expect(fs.readFileSync(path.join(media, "musics/song.mp3"), "utf8")).toBe("audio");
+  });
   it("mover é recusado quando a pasta atual é compartilhada com outras contas", async () => {
     const shared = path.join(root, "shared");
     await storage.configure(request({ mediaDir: shared })); storage.applyPending();

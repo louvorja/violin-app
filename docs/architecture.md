@@ -622,6 +622,17 @@ adaptador `helpers/WebFileStore.ts`, que grava no Cache Storage (`louvorja-audio
 plataforma: o PWA mostra só a aba Coletâneas (Bíblia, pasta de dados e versão
 clássica seguem exclusivos do desktop).
 
+- **Disponibilidade por música.** Os indicadores das coletâneas contam IDs de
+  músicas com todos os áudios declarados disponíveis (cantado/playback), sem
+  incluir imagens nem músicas sem áudio. Capas e fundos são cache compartilhado:
+  remover uma coletânea apaga seus áudios e preserva as imagens.
+  A limpeza geral de mídia continua removendo ambos apenas em acervo privado.
+  Em pasta compartilhada, o escritor ativo pode excluir manualmente os downloads
+  selecionados após confirmação; a limpeza geral e automática permanece bloqueada.
+  Cada conta assina o acervo ao abrir (`electron/main/collectionAccounts.js`, pasta
+  `.louvorja-contas/`), e a confirmação nomeia as outras contas que abriram nos
+  últimos 90 dias. Só esta conta, com assinatura de 30 dias ou mais, é tratada
+  como pasta privada; antes disso, o aviso é genérico.
 - **URL é a chave.** O arquivo é guardado sob a mesma URL que o player pede
   (`Path.file`), então o service worker o serve sem nenhuma mudança nos consumidores.
 - **Service worker** (`vite.config.js`): as rotas de áudio e imagem não têm
@@ -735,6 +746,13 @@ No Windows, os dois `Program Files` e as pastas expostas por
 | **Global (OS-level)** | `electron/main/shortcuts.js` | System-wide                      |
 
 Atalhos in-window registrados em `src/bootstrap/main-shell.js` via `Hotkeys.register()`.
+
+O Play/Pause multimídia nativo passa por `src/helpers/PlayerMediaSession.ts`
+(`navigator.mediaSession`) e chama o mesmo `useMedia` do Space e dos botões, respeitando
+o fade. Só a janela principal instala esses controles, enquanto há mídia carregada.
+Durante o fade, cada toque inverte o pedido atual: o sistema pode enviar `pause`
+novamente porque o elemento ainda toca durante o fade-out. Os atalhos globais opcionais
+do Electron também enviam sempre à principal, mesmo com projeção ou retorno em foco.
 
 ### Command no Mac
 

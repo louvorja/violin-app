@@ -4,11 +4,12 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const paths = require("./paths.js");
 const access = require("./storageAccess.js");
+const collectionAccounts = require("./collectionAccounts.js");
 const roots = require("./storageRoots.js");
 const { canonical, overlaps } = roots;
 let changeError = null;
 let configuring = false;
-const { validateContents, probe, preflightCopy, copyCollection, applyPendingLayout } = require("./storageCollectionMigration.js");
+const { validateContents, probe, preflightCopy, copyCollection, applyPendingLayout, finishPendingMoves } = require("./storageCollectionMigration.js");
 const { defaultLocations } = require("./storageLayout.js");
 function normalized(p) { const s = path.resolve(p); return process.platform === "win32" ? s.toLowerCase() : s; }
 function validateRoots(mediaDir, videosDir) {
@@ -22,13 +23,27 @@ function defaults() {
     return { mediaDir: d.mediaDir, videosDir: d.videosDir };
   } catch { return null; }
 }
+/** Na primeira sessão o acervo nasce depois do boot: assina na hora em que a tela pergunta. */
+function mediaAccounts(dir) {
+  const result = collectionAccounts.usage(dir);
+  if (result.known) return result;
+  try {
+    collectionAccounts.sign(dir, { shared: true });
+  } catch {
+    return result;
+  }
+  return collectionAccounts.usage(dir);
+}
 function locations() {
   const c = paths.storageLayout();
+  const status = access.status();
   return { profileDir: paths.dataDir(), mediaDir: c.mediaDir, videosDir: c.videosDir,
+    // Quem perderia as músicas ao apagar: só faz diferença em pasta compartilhada.
+    mediaAccounts: status.media?.shared ? mediaAccounts(c.mediaDir) : null,
     setupCompleted: c.setupCompleted, restartRequired: !!c.pending,
     pending: c.pending ? { mediaDir: c.pending.mediaDir, videosDir: c.pending.videosDir,
       moving: c.pending.mediaAction === "move" || c.pending.videosAction === "move" } : null,
-    access: access.status(), changeError: c.pendingError || changeError,
+    access: status, changeError: c.pendingError || changeError,
     defaults: defaults(),
     // Mover apaga a pasta atual depois da cópia: só quando esta conta é a dona dela.
     canMove: { media: access.canMaintain("media"), videos: access.canMaintain("videos") } };
@@ -68,7 +83,10 @@ async function configure(input) {
 function applyPending() {
   const c = paths.storageLayout();
   const next = applyPendingLayout(c, { profileDir: paths.dataDir(), programDir: paths.programDir(), workDir: path.join(paths.dataDir(), "temp", "migrations") });
-  if (next !== c) paths.saveLayout(next);
+  if (next !== c) {
+    paths.saveLayout(next);
+    finishPendingMoves(c, next);
+  }
   changeError = next.pendingError || null;
 }
 function completeSetup() {

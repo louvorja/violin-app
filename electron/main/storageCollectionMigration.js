@@ -195,31 +195,76 @@ function pruneEmptyDirs(dir, { removeSelf }) {
 
 /**
  * Segunda metade de "mover": depois de `copyCollection` conferir cada arquivo no
- * destino pelo hash, apaga da origem o que chegou com o mesmo tamanho. Só arquivos
+ * destino pelo hash, apaga da origem o que continua com o mesmo conteúdo. Só arquivos
  * que o app gerencia (vídeos só pelo ID do YouTube); pastas que ficarem vazias
  * saem, e a raiz só se não sobrar nada além da marca. Origem compartilhada com
  * outras contas é preservada.
  */
 function removeMovedSource(source, target, kind) {
   source = canonical(source); target = canonical(target);
+  if (overlaps(source, target)) return { removed: 0, preserved: true };
   let marker;
   try { marker = access.readMarker(source, kind); }
   catch { return { removed: 0, preserved: true }; }
-  if (marker?.shared === true) return { removed: 0, preserved: true };
+  if (marker?.shared !== false) return { removed: 0, preserved: true };
   let removed = 0;
   for (const entry of files(source, kind)) {
     if (kind === "videos" && !VIDEO_ID_FILE.test(entry.relative)) continue;
     try {
-      const dest = fs.lstatSync(path.join(target, entry.relative));
-      if (!dest.isFile() || dest.size !== entry.size) continue;
+      const destPath = path.join(target, entry.relative);
+      if (normalized(canonical(destPath)) !== normalized(destPath)) continue;
+      const dest = fs.lstatSync(destPath);
+      if (!dest.isFile() || dest.size !== entry.size || hash(entry.source) !== hash(destPath)) continue;
       fs.unlinkSync(entry.source);
       removed++;
     } catch { /* não chegou: fica na origem */ }
   }
   if (kind === "media") for (const name of ["musics", "images", "covers"]) pruneEmptyDirs(path.join(source, name), { removeSelf: true });
   const rest = fs.existsSync(source) ? fs.readdirSync(source).filter((name) => ![".DS_Store", ".louvorja-collection.json"].includes(name)) : [];
-  if (!rest.length) fs.removeSync(source);
+  if (!rest.length) {
+    // Nunca remover recursivamente uma raiz: um arquivo criado depois da
+    // enumeração deve impedir a remoção, sem ser levado junto.
+    for (const name of [".DS_Store", ".louvorja-collection.json"]) {
+      try { fs.unlinkSync(path.join(source, name)); } catch { /* ausente */ }
+    }
+    try { fs.rmdirSync(source); } catch { /* algo apareceu: preservar */ }
+  }
   return { removed, preserved: rest.length > 0 };
+}
+
+/** Limpeza opcional, somente depois de publicar com sucesso o layout completo. */
+function finishPendingMoves(current, next, { acquire = access.acquire } = {}) {
+  if (!current.pending || next.pending) return;
+  for (const kind of ["media", "videos"]) {
+    const source = current[kind + "Dir"], target = next[kind + "Dir"];
+    if (current.pending[kind + "Action"] !== "move" || normalized(source) === normalized(target)) continue;
+    const releases = [];
+    let canPruneRoot = false;
+    try {
+      releases.push(acquire(source));
+      releases.push(acquire(target));
+      canPruneRoot = access.readMarker(source, kind)?.shared === false;
+      const result = removeMovedSource(source, target, kind);
+      console.info(`[storage] ${kind}: ${result.removed} arquivos movidos de ${source}.`);
+    } catch (error) {
+      // O layout já está salvo; uma falha aqui só deixa a cópia antiga.
+      console.warn(`[storage] ${kind}: a pasta antiga foi preservada:`, error.message);
+    } finally {
+      for (const release of releases.reverse()) {
+        try { release(); } catch { /* uma limpeza não invalida o layout salvo */ }
+      }
+    }
+    // A trava de escrita vivia na raiz; agora só uma pasta vazia pode sair.
+    if (canPruneRoot && fs.existsSync(source)) {
+      try {
+        const entries = fs.readdirSync(source);
+        if (entries.every((name) => [".DS_Store", ".louvorja-collection.json"].includes(name))) {
+          for (const name of entries) fs.unlinkSync(path.join(source, name));
+          fs.rmdirSync(source);
+        }
+      } catch { /* arquivos restantes ou outro escritor: preservar */ }
+    }
+  }
 }
 
 function applyPendingLayout(current, { profileDir, programDir, workDir, acquire, onProgress } = {}) {
@@ -238,15 +283,6 @@ function applyPendingLayout(current, { profileDir, programDir, workDir, acquire,
       if (action === "copy" || action === "move") copyCollection(current[kind + "Dir"], target, kind, pending.id, {
         workDir, acquire, onProgress, shared,
       });
-      if (action === "move") {
-        // A cópia já valeu: uma falha ao apagar deixa sobra na origem, não desfaz a troca.
-        try {
-          const result = removeMovedSource(current[kind + "Dir"], target, kind);
-          console.info(`[storage] ${kind}: ${result.removed} arquivos movidos de ${current[kind + "Dir"]}${result.preserved ? " (a pasta antiga ficou com outros arquivos)" : ""}.`);
-        } catch (error) {
-          console.warn(`[storage] ${kind}: a cópia terminou, mas a pasta antiga não pôde ser apagada:`, error.message);
-        }
-      }
       next[kind + "Shared"] = shared;
       if (shared) markShared(target, kind);
     }
@@ -259,4 +295,4 @@ function applyPendingLayout(current, { profileDir, programDir, workDir, acquire,
   }
 }
 
-module.exports = { validateContents, probe, files, preflightCopy, copyCollection, prepareStaging, applyPendingLayout, removeMovedSource };
+module.exports = { validateContents, probe, files, preflightCopy, copyCollection, prepareStaging, applyPendingLayout, finishPendingMoves, removeMovedSource };

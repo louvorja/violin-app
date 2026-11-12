@@ -62,6 +62,7 @@
     "site": "Sitio",
     "video-online": "Vídeo Online",
     "biblioteca-midia": "Biblioteca de Medios",
+    "projecao-de-fundo": "Proyección de Fondo",
     "som-de-fundo": "Sonido de Fondo",
     "anuncios": "Anuncios",
     "overlay": "Superposición"
@@ -104,6 +105,8 @@
     "music_version_playback-only": "Solo audio playback",
     "library_select": "Ítem de la Biblioteca de Medios",
     "library_search_btn": "Buscar en la biblioteca…",
+    "projection_select": "Proyección de Fondo",
+    "projection_search_btn": "Buscar proyecciones…",
     "sound_select": "Sonido de fondo",
     "sound_search_btn": "Buscar sonidos…"
   },
@@ -166,7 +169,18 @@
     "empty": "Ningún vídeo disponible.",
     "empty_search": "Ningún vídeo encontrado para esta búsqueda.",
     "source_custom": "Mis vídeos",
-    "source_online": "En línea"
+    "source_online": "En línea",
+    "uncategorized": "Sin categoría",
+    "view": "Visualización",
+    "thumbnails": "Miniaturas",
+    "list": "Lista",
+    "channels": "Canales",
+    "all_channels": "Todos los canales",
+    "categories": "Categorías",
+    "all_categories": "Todas las categorías",
+    "without_channel": "Sin canal",
+    "program_section": "Videos del programa",
+    "custom_section": "Mis videos"
   },
   "schedules": {
     "title": "Ítems Programados",
@@ -277,6 +291,7 @@
     "import_unsupported_version": "Este archivo fue hecho en una versión más nueva de LouvorJA. Actualice la app para abrirlo."
   },
   "alerts": {
+    "file_choose_again_web": "Este archivo está vinculado a una carpeta del equipo. Edita el ítem de la liturgia y usa Elegir archivo para abrirlo en este navegador.",
     "media_not_found": "Ítem no encontrado en la biblioteca. Puede haber sido eliminado.",
     "file_unsupported": "Elige una imagen, video, audio, PDF o presentación .slja.",
     "file_import_failed": "No se pudo guardar el archivo en este dispositivo. Verifica el espacio disponible e inténtalo de nuevo."
@@ -284,9 +299,16 @@
   "library_search": {
     "title_media": "Biblioteca de Medios",
     "title_sound": "Sonidos de Fondo",
+    "title_projection": "Proyecciones de Fondo",
     "find_label": "Buscar:",
     "col_name": "Nombre",
     "col_detail": "Tipo",
+    "view_label": "Visualización",
+    "view_thumbnails": "Miniaturas",
+    "view_list": "Lista",
+    "all_categories": "Todas",
+    "uncategorized": "Sin categoría",
+    "keyboard_hint": "Usa las flechas y Enter",
     "empty": "Ningún ítem disponible.",
     "empty_search": "Ningún ítem encontrado para esta búsqueda."
   },

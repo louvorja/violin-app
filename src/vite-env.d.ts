@@ -12,6 +12,12 @@ declare global {
       videos: { writable: boolean; shared: boolean; reason?: string };
     };
     changeError?: string;
+    /** Outras contas que usam o acervo compartilhado; null em pasta privada. */
+    mediaAccounts?: {
+      known: boolean;
+      settled: boolean;
+      others: { name: string; lastSeen: string }[];
+    } | null;
     /** As pastas que uma instalação nova usaria nesta máquina. */
     defaults?: { mediaDir: string; videosDir: string } | null;
     /** Se esta conta pode apagar a pasta atual depois de mover (não compartilhada). */
@@ -300,7 +306,7 @@ declare global {
         cb: (d: { file?: string; total: number; downloaded?: number; failed?: number }) => void
       ) => void;
       onFileDone: (cb: () => void) => void;
-      onFileError: (cb: () => void) => void;
+      onFileError: (cb: (d: { file?: string; error?: string } | null) => void) => void;
       onQueueDone: (
         cb: (d: {
           queued?: number;

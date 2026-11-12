@@ -705,27 +705,23 @@ function safeError(error: unknown): Error {
 export function breadcrumb(
   event: string,
   properties: Record<string, unknown> = {},
-  kind: "action" | "diagnostic" = "action"
+  kind: "action" | "diagnostic" = "action",
+  // Ação contínua (arrastar um controle) vira uma entrada só: o histórico de
+  // ações guarda 40, e uma rajada empurraria para fora os comandos anteriores.
+  { mergeWithinMs = kind === "diagnostic" ? 5000 : 0 }: { mergeWithinMs?: number } = {}
 ): void {
   if (!isEnabled()) return;
   const buffer = kind === "action" ? _actionBreadcrumbs : _breadcrumbs;
   const previous = buffer.at(-1);
-  if (
-    kind === "diagnostic" &&
-    previous?.event === event &&
-    Date.now() - Date.parse(previous.at) < 5000
-  ) {
+  const safe = serializableProperties(
+    kind === "action" ? { action_source: telemetryActionSource(), ...properties } : properties
+  );
+  if (previous?.event === event && Date.now() - Date.parse(previous.at) < mergeWithinMs) {
     previous.at = new Date().toISOString();
-    previous.properties = serializableProperties(properties);
+    previous.properties = safe;
     return;
   }
-  buffer.push({
-    at: new Date().toISOString(),
-    event,
-    properties: serializableProperties(
-      kind === "action" ? { action_source: telemetryActionSource(), ...properties } : properties
-    ),
-  });
+  buffer.push({ at: new Date().toISOString(), event, properties: safe });
   const limit = kind === "action" ? 40 : MAX_BREADCRUMBS;
   if (buffer.length > limit) buffer.splice(0, buffer.length - limit);
   _ph?.addExceptionStep(event, buffer.at(-1)?.properties);

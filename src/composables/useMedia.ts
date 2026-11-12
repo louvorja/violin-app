@@ -75,6 +75,8 @@ function _closeAlbumForPresentation(): void {
 }
 let _loadingId: string | number | null = null;
 let _playlistOnEnd: (() => boolean) | null = null;
+let _playlistOnClose: (() => void) | null = null;
+let _playlistOnPlayback: ((_idMusic: unknown) => void) | null = null;
 /**
  * O que está carregado no player agora é um ARQUIVO DE ÁUDIO avulso (Biblioteca
  * de Mídia), não uma música?
@@ -186,6 +188,9 @@ let _customPlayback: {
 let _activePlayback: AudioTelemetryContext | null = null;
 let _mediaActivitySent = false;
 const _videoStateRevisions = new VideoStateRevisionCounter();
+const _VOLUME_BREADCRUMB_MERGE_MS = 1000;
+let _volumeChange: { from: number; at: number } | null = null;
+let _volumeBeforeMute = 100;
 
 // typeof null === "object": sem tratar null aqui, open(null) estourava lendo params.mode.
 function _openParams(
@@ -241,6 +246,8 @@ function _warnNoTrack(playback: boolean): void {
 
 function _setPlaybackContext(context: AudioTelemetryContext | null): void {
   _activePlayback = context;
+  // Toda reprodução nova passa por aqui: música, música personalizada, arquivo e vídeo.
+  if (context) _playlistOnPlayback?.(context.id_music);
   const active = context !== null;
   if (active !== _mediaActivitySent) {
     _mediaActivitySent = active;
@@ -947,11 +954,18 @@ async function _loadAudioSrc(
   audioUrl: string,
   idCheck: string | number | null,
   retryFn: (id: string | number) => void,
-  onSource: (src: string, lazy: boolean, _sourceDetails?: Record<string, unknown>) => void = (
+  onSource: (
+    src: string,
+    lazy: boolean,
+    _sourceDetails?: Record<string, unknown>,
+    _ownsSource?: boolean
+  ) => void = (
     src,
-    lazy
+    lazy,
+    _sourceDetails,
+    ownsSource = false
   ) => {
-    _audio.setSrc(src, lazy);
+    _audio.setSrc(src, lazy, ownsSource);
     _self.pause(false);
   },
   deferAudioContext = false
@@ -1061,7 +1075,7 @@ async function _loadAudioSrc(
     if (cacheStatus !== "hit" && ehRemota(audioUrl)) reportNetworkResult(true, "media");
     const finish = (blob: Blob): void => {
       if (!isCurrentLoad()) return;
-      onSource(URL.createObjectURL(blob), false, requestContext?.original_source);
+      onSource(URL.createObjectURL(blob), false, requestContext?.original_source, true);
     };
     if (needsOpusDecode) {
       $appdata.set(KEYS.MODULES.MEDIA.LOADING, true);
@@ -1629,11 +1643,14 @@ const _self = {
       _existingAudio.src &&
       $userdata.get(KEYS.MODULES.MEDIA.FADE_AUDIO, false)
     ) {
+      // Pausa, parada ou outra música no meio do fade o cancelam sem chamar o
+      // callback: a abertura segue mesmo assim, ou ficaria esperando para sempre.
       await new Promise<void>((resolve) => {
-        _audio.fadeOut(() => {
+        const encerrar = (): void => {
           _audio.stop();
           resolve();
-        });
+        };
+        _audio.fadeOut(encerrar, encerrar);
       });
     } else {
       _audio.stop();
@@ -1956,12 +1973,15 @@ const _self = {
       audioUrl,
       idMusic,
       custom ? reopen : (id) => _self.open(id),
-      (src, lazy, sourceDetails) => {
+      (src, lazy, sourceDetails, ownsSource) => {
         _audio
-          .prepare(src, lazy, _audio.currentTime.value, {
-            ...switchContext,
-            original_source: sourceDetails,
-          })
+          .prepare(
+            src,
+            lazy,
+            _audio.currentTime.value,
+            { ...switchContext, original_source: sourceDetails },
+            ownsSource
+          )
           .then((faixa) => {
             // Fechar, abrir outra música ou mudar de modo invalida o preparo,
             // mesmo quando o ID da música continua igual.
@@ -1985,13 +2005,19 @@ const _self = {
             );
 
             return _audio
-              .takeOver(faixa, (d) => _slides.timeForPosition(slideIndex, fraction, d), playing)
+              .takeOver(
+                faixa,
+                (d) => _slides.timeForPosition(slideIndex, fraction, d),
+                playing,
+                isCurrentSwitch
+              )
               .then(() => {
+                if (!isCurrentSwitch()) return;
                 _setPlaybackContext(switchContext);
                 _slides.setPlaybackId(switchPlaybackId);
                 _slides.bindAudio(_audio);
-                $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, !playing);
-                if (!playing) _self.broadcastSlide();
+                $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, _audio.isPaused.value);
+                if (_audio.isPaused.value) _self.broadcastSlide();
                 Telemetry.track(
                   "music_mode_switch_completed",
                   _telemetryFor(switchContext, { id_music: idMusic, mode, previous_mode: current })
@@ -2434,6 +2460,8 @@ const _self = {
     keepProjectionWindows = false,
     preserveStageEpoch = false
   ): void {
+    // Só o fechamento efetivo encerra a playlist: o pedido sem `force` ainda espera o "Sim".
+    if (force) _playlistOnClose?.();
     if (force && !preserveStageEpoch) {
       ++_stageEpoch;
       _opening.value = null;
@@ -2530,6 +2558,7 @@ const _self = {
       params = { id_music: params };
     }
     _closeAlbumForPresentation();
+    _playlistOnPlayback?.(params.id_music);
     Telemetry.track("music_lyrics_opened", {
       id_music: params.id_music,
       id_album: params.id_album,
@@ -3215,22 +3244,26 @@ const _self = {
     const fade_audio = $userdata.get(KEYS.MODULES.MEDIA.FADE_AUDIO, false);
     const isVideo = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE);
 
+    // O estado muda no pedido, não quando o áudio responde: o próximo toque no
+    // botão ou no espaço lê "pausado" já durante o fade e retoma, em vez de
+    // pausar de novo e parecer que travou.
     if (bool) {
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
       if (fade_audio && !isVideo) {
         _audio.fadeOut(() => {
           _audio.pause(callback);
-          $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
           $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_FADING, false);
         });
       } else {
         _audio.pause(callback);
-        $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
       }
       _broadcastVideoState();
     } else {
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);
       const self = this;
       _audio.play(
         (e) => {
+          $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
           // O "tocar já" do YouTube tem um fallback próprio (volta ao embed e
           // inicia o download). Um 403 do CDN no meio da trilha não pode abrir
           // o modal de áudio: o operador acabaria fechando um erro que o app
@@ -3285,14 +3318,25 @@ const _self = {
   },
 
   setVolume(val: number): void {
-    const previous = _audio.volume.value;
+    const now = Date.now();
+    if (!_volumeChange || now - _volumeChange.at >= _VOLUME_BREADCRUMB_MERGE_MS) {
+      _volumeChange = { from: _audio.volume.value, at: now };
+    }
+    _volumeChange.at = now;
+    // Arrastar até o zero também silencia: desfazer volta ao volume de antes do arrasto, não a 1%.
+    if (val <= 0 && _volumeChange.from > 0) _volumeBeforeMute = _volumeChange.from;
     _audio.setVolume(val);
-    Telemetry.breadcrumb?.("media_volume_changed", {
-      playback_id: _activePlayback?.playback_id,
-      from_volume: previous,
-      requested_volume: val,
-      volume: _audio.volume.value,
-    });
+    Telemetry.breadcrumb?.(
+      "media_volume_changed",
+      {
+        playback_id: _activePlayback?.playback_id,
+        from_volume: _volumeChange.from,
+        requested_volume: val,
+        volume: _audio.volume.value,
+      },
+      "action",
+      { mergeWithinMs: _VOLUME_BREADCRUMB_MERGE_MS }
+    );
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VOLUME, val);
     if (_isYouTube()) {
       $broadcast.send(BROADCAST_TYPE.YOUTUBE_CONTROL, {
@@ -3304,8 +3348,13 @@ const _self = {
   },
 
   toogleVolume(): void {
-    const volume = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.VOLUME) as number;
-    this.setVolume(volume < 100 ? 100 : 0);
+    const volume = Number($appdata.get(KEYS.MODULES.MEDIA.CONFIG.VOLUME) ?? 0);
+    if (volume > 0) {
+      this.setVolume(0);
+      _volumeBeforeMute = volume;
+    } else {
+      this.setVolume(_volumeBeforeMute);
+    }
   },
 
   fullscreen(value = true): void {
@@ -3336,6 +3385,22 @@ const _self = {
 
   unregisterPlaylistEndHandler(): void {
     _playlistOnEnd = null;
+  },
+
+  registerPlaylistCloseHandler(handler: () => void): void {
+    _playlistOnClose = handler;
+  },
+
+  unregisterPlaylistCloseHandler(): void {
+    _playlistOnClose = null;
+  },
+
+  registerPlaylistPlaybackHandler(handler: (_idMusic: unknown) => void): void {
+    _playlistOnPlayback = handler;
+  },
+
+  unregisterPlaylistPlaybackHandler(): void {
+    _playlistOnPlayback = null;
   },
 };
 

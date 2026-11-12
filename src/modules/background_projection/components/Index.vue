@@ -269,6 +269,7 @@ import {
   closeBackgroundProjectionWindows,
   openBackgroundProjectionWindows,
 } from "@/helpers/ProjectionWindows";
+import { activateBackgroundProjection } from "@/helpers/BackgroundProjectionPlayback";
 import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
 import { ICONS } from "@/config/Icons";
@@ -874,23 +875,7 @@ function getSelectedFile(): BgFile | null {
 
 async function playFile(file: BgFile): Promise<void> {
   selectedId.value = file.id;
-  const url = resolvePath(file.path);
-  const payload = {
-    active: true,
-    epoch: nextBackgroundEpoch(),
-    url,
-    type: file.type,
-    title: file.name,
-  };
-
-  localStorage.setItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION, JSON.stringify(payload));
-
-  if (!isPlaying.value) {
-    isPlaying.value = true;
-    await openBackgroundProjectionWindows();
-  }
-
-  $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, payload);
+  await activateBackgroundProjection(file);
 }
 
 async function togglePlay(): Promise<void> {

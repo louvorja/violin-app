@@ -127,9 +127,9 @@ function isValidMusicSnapshot(packet) {
   const nextSlideCharacters = snapshot.nextSlide === null ? 0 : presentationSlideLength(snapshot.nextSlide);
   if (slideCharacters === null || nextSlideCharacters === null ||
       snapshot.title.length + slideCharacters + nextSlideCharacters > 512_000) return false;
-  return snapshot.slideIndex + 1 < snapshot.totalSlides
-    ? snapshot.nextSlide !== null
-    : snapshot.nextSlide === null;
+  // A próxima marcação pode não existir, mesmo com slides sem tempo no fim.
+  // Mantenha o mesmo contrato do parser do renderer.
+  return snapshot.slideIndex + 1 < snapshot.totalSlides || snapshot.nextSlide === null;
 }
 
 function stateKey(msg) {

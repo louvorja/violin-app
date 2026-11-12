@@ -162,7 +162,7 @@ describe("manutenção do acervo na tela de downloads", () => {
   });
 
   it.each([
-    [{ writable: true, shared: true }, pt.options.storage.shared_hint],
+    [{ writable: false, shared: true }, pt.options.storage.shared_hint],
     [{ writable: false, shared: false }, pt.options.storage.read_only_hint],
   ])("desabilita limpeza/quota e remoção no acervo %j", async (access, hint) => {
     state.access = access;
@@ -199,6 +199,74 @@ describe("manutenção do acervo na tela de downloads", () => {
     await button(pt.options.storage.clear_files).trigger("click");
     await flushPromises();
     expect(state.clearFiles).toHaveBeenCalledOnce();
+  });
+
+  async function confirmacaoDeApagar(mediaAccounts: unknown): Promise<string> {
+    state.access = { writable: true, shared: true };
+    state.locations.mockImplementation(async () => ({
+      access: { media: { ...state.access } },
+      mediaAccounts,
+    }));
+    await render();
+    await wrapper.get("#sync-album-1 input").setValue(false);
+    const remove = wrapper.findAll("button").find((item) => item.text().includes("Remover 1"));
+    await remove!.trigger("click");
+    await flushPromises();
+    return state.confirm.mock.calls[0][0] as string;
+  }
+
+  it("avisa quem mais perde as músicas quando outra conta usa o acervo", async () => {
+    const lastSeen = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    const texto = await confirmacaoDeApagar({
+      known: true,
+      settled: true,
+      others: [{ name: "Secretaria", lastSeen }],
+    });
+    expect(texto).toContain('A conta "Secretaria" deste computador também usa estas músicas');
+    expect(texto).toContain("aberta há 3 dias");
+  });
+
+  it("sem saber quem usa a pasta compartilhada, avisa de forma genérica", async () => {
+    const texto = await confirmacaoDeApagar({ known: true, settled: false, others: [] });
+    expect(texto).toContain(pt.options.collections_download.shared_unknown);
+  });
+
+  it("pasta compartilhada usada só por esta conta não leva aviso", async () => {
+    const texto = await confirmacaoDeApagar({ known: true, settled: true, others: [] });
+    expect(texto).not.toContain("deste computador");
+  });
+
+  it("permite apagar a seleção em pasta compartilhada gravável, mantendo limpeza geral bloqueada", async () => {
+    state.access = { writable: true, shared: true };
+    await render();
+    expect(wrapper.get("#sync-album-1 input").attributes("disabled")).toBeUndefined();
+    expect(
+      button(pt.options.collections_download.partial_discard).attributes("disabled")
+    ).toBeUndefined();
+    await wrapper.get("#sync-album-1 input").setValue(false);
+    const remove = wrapper.findAll("button").find((item) => item.text().includes("Remover 1"));
+    expect(remove?.attributes("disabled")).toBeUndefined();
+    await remove!.trigger("click");
+    await flushPromises();
+    expect(state.confirm).toHaveBeenCalledOnce();
+    expect(state.confirm).toHaveBeenCalledWith(expect.any(String), {
+      confirmText: "options.collections_download.partial_discard",
+      destructive: true,
+    });
+    expect(state.removeFiles).toHaveBeenCalled();
+    await storageTab();
+    expect(wrapper.get("#opt-quota").attributes("disabled")).toBeDefined();
+    expect(button(pt.options.storage.clear_files).attributes("disabled")).toBeDefined();
+  });
+
+  it("reconfere escrita antes de abrir a confirmação de apagar", async () => {
+    state.access = { writable: true, shared: true };
+    await render();
+    state.access = { writable: false, shared: true };
+    await button(pt.options.collections_download.partial_discard).trigger("click");
+    await flushPromises();
+    expect(state.confirm).not.toHaveBeenCalled();
+    expect(state.removeFiles).not.toHaveBeenCalled();
   });
 
   it("preserva remoção e limpeza do Cache Storage na web sem consultar permissões desktop", async () => {

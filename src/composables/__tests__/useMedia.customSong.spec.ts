@@ -236,6 +236,42 @@ describe.each(["custom", "catalog"] as const)("troca de modo pendente (%s)", (so
     expect(config()).toMatchObject({ mode: "no_audio", audio: "" });
   });
 
+  it.each(["fechar", "outra música", "sem áudio"])(
+    "um play pendente não reassume o player depois de %s",
+    async (nextAction) => {
+      const { audio, element } = await pendingModeSwitch(source);
+      let started!: () => void;
+      element.play = vi.fn(() => new Promise<void>((resolve) => { started = resolve; }));
+      element.dispatchEvent(new Event("canplay"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(element.play).toHaveBeenCalledOnce();
+
+      if (nextAction === "fechar") media.close(true);
+      else if (nextAction === "outra música")
+        await media.openCustomSong(
+          song({ id: "song-b", nome: "Outra música" }),
+          MusicActionEnum.NO_AUDIO
+        );
+      else media.switchMode(MusicActionEnum.NO_AUDIO);
+      const playback = media.getActivePlaybackId();
+      const title = slides.title.value;
+      const currentElement = audio.getElement();
+      const reopen = vi.spyOn(media, "openCustomSong");
+      const reopenCatalog = vi.spyOn(media, "open");
+
+      started();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(reopen).not.toHaveBeenCalled();
+      expect(reopenCatalog).not.toHaveBeenCalled();
+      expect(media.getActivePlaybackId()).toBe(playback);
+      expect(slides.title.value).toBe(title);
+      expect(config().audio).toBe("");
+      expect(audio.getElement()).toBe(currentElement);
+      expect(element.hasAttribute("src")).toBe(false);
+    }
+  );
+
   it("mantém a recuperação por reabertura quando o timeout ainda é da tentativa atual", async () => {
     await pendingModeSwitch(source);
     const reopen =

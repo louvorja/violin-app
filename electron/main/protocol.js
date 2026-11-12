@@ -235,6 +235,9 @@ function _corpoReparado(caminho, start, end, reparo) {
   let fh = null;
   let pos = start;
   let fechado = false;
+  // O teto vale para o pedido inteiro, não para cada pedaço: um salto para
+  // longe do ponto conferido congelava o vídeo até a varredura chegar lá.
+  let esperaRestante = audioRepair.CHUNK_WAIT_MAX_MS;
   const fechar = () => {
     if (fechado) return;
     fechado = true;
@@ -257,8 +260,12 @@ function _corpoReparado(caminho, start, end, reparo) {
           return;
         }
         const n = Math.min(_CHUNK_REPARADO, end - pos + 1);
-        const espera = reparo.waitFor(pos + n);
-        if (espera) await espera;
+        const espera = reparo.waitFor(pos + n, esperaRestante);
+        if (espera) {
+          const inicio = Date.now();
+          await espera;
+          esperaRestante -= Date.now() - inicio;
+        }
         if (fechado) return;
         const buf = Buffer.allocUnsafe(n);
         const { bytesRead } = await fh.read(buf, 0, n, pos);

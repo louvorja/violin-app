@@ -27,11 +27,14 @@ export function loadYtApi(): Promise<YTAPI> {
 
   _pending = new Promise<YTAPI>((resolve, reject) => {
     let settled = false;
+    let tag: HTMLScriptElement | null = null;
     const timer = window.setTimeout(() => {
       if (settled) return;
       settled = true;
-      // A tag fica no DOM de propósito: se o script chegar atrasado, a próxima
-      // chamada encontra `window.YT` pronto e resolve na hora.
+      // Uma tag que expirou não é uma tentativa ativa. Mantê-la faria a próxima
+      // chamada pular a requisição e expirar de novo, mesmo com a rede recuperada.
+      // Se a API já chegou, getYT() continua reaproveitando-a na próxima chamada.
+      tag?.remove();
       _pending = null;
       reject(new Error("Timeout ao carregar a API do YouTube"));
     }, LOAD_TIMEOUT_MS);
@@ -50,13 +53,13 @@ export function loadYtApi(): Promise<YTAPI> {
 
     if (document.querySelector('script[src*="iframe_api"]')) return;
 
-    const tag = document.createElement("script");
+    tag = document.createElement("script");
     tag.src = API_SRC;
     tag.addEventListener("error", () => {
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
-      tag.remove();
+      tag?.remove();
       _pending = null;
       reject(new Error("Falha ao carregar a API do YouTube"));
     });

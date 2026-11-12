@@ -145,7 +145,9 @@ export function readMusicPresentationPacket(value: unknown): MusicPresentationPa
   if (!s.active && (s.slideIndex !== 0 || s.totalSlides !== 0 ||
       current.slide !== null || next.slide !== null || s.title !== "")) return null;
   if (s.active && (s.totalSlides === 0 || s.slideIndex >= s.totalSlides ||
-      current.slide === null || (s.slideIndex + 1 < s.totalSlides) !== (next.slide !== null))) return null;
+      current.slide === null || (s.slideIndex + 1 === s.totalSlides && next.slide !== null))) return null;
+  // Numa música sincronizada, nextSlide é a próxima marcação, que pode não
+  // existir mesmo com slides sem horário restantes no fim da apresentação.
   return Object.freeze({
     schema: 1,
     selectionRevision: value.selectionRevision,

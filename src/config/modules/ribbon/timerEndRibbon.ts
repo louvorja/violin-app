@@ -13,9 +13,7 @@ import { KEYS } from "@constants/UserDataKeys";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { getModulePath } from "@/helpers/ModulePath";
-const TimerEndRibbonInfo = defineAsyncComponent(
-  () => import("@components/TimerEndRibbonInfo.vue")
-);
+const TimerEndRibbonInfo = defineAsyncComponent(() => import("@components/TimerEndRibbonInfo.vue"));
 
 export function getTimerEndActionKeys(moduleId: string) {
   if (moduleId === ModuleEnum.TIMER_WORSHIP) return KEYS.MODULES.TIMER_WORSHIP;
@@ -32,6 +30,14 @@ export function createTimerEndRibbonGroups(moduleId: string): RibbonGroup[] {
     {
       id: ctxId + "_end",
       title: `${modulePath}.ribbon.timer_end`,
+      /*
+       * Rótulo em cima da caixa e o resumo do que foi configurado logo abaixo,
+       * no mesmo grupo. Antes o resumo era um grupo à parte ("Informações"), e
+       * com o rótulo ao lado os dois juntos passavam da largura de uma tela
+       * de 1366 px — a ribbon ganhava barra de rolagem ao escolher uma ação.
+       */
+      stackedFields: true,
+      compactRows: 2,
       buttons: [
         {
           id: `${moduleId}_end_action`,
@@ -78,13 +84,12 @@ export function createTimerEndRibbonGroups(moduleId: string): RibbonGroup[] {
           color: "#1b4f8a",
           dependsOnOption: { path: optionPath, value: MediaEnum.MUSIC },
         },
+        {
+          id: `${moduleId}_end_info`,
+          label: "ribbon.groups.info",
+          customButton: TimerEndRibbonInfo,
+        },
       ],
-    },
-    {
-      id: ctxId + "_end_info",
-      title: "ribbon.groups.info",
-      customCategory: TimerEndRibbonInfo,
-      modules: [moduleId],
     },
   ];
 }

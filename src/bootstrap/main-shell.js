@@ -48,6 +48,7 @@ import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { syncFromIdb as syncDevicesFromIdb } from "@/composables/useDevices";
 import Path from "@/helpers/Path";
 import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
+import { activateBackgroundProjection } from "@/helpers/BackgroundProjectionPlayback";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
 import { musicCommandSessionRejectionReason } from "@/presentation/MusicPresentationPacket";
@@ -74,6 +75,7 @@ import {
   writeSlot as writeOverlaySlot,
 } from "@/helpers/Overlay";
 import Shortcuts from "@/helpers/Shortcuts";
+import PlayerMediaSession from "@/helpers/PlayerMediaSession";
 import Telemetry from "@/helpers/Telemetry";
 import { withTelemetryActionSource } from "@/helpers/TelemetryAction";
 import { installRouteTelemetry } from "@/helpers/RouteTelemetry";
@@ -713,9 +715,16 @@ $storage.hydrate().then(async () => {
 
   _bootStage("remote_config_ready");
 
-  // D6 — Atalhos globais pertencem à janela principal. Registrar o mesmo
-  // conjunto em cada projeção só cria trabalho e pode disputar o registro IPC.
-  if (!isAuxiliaryRenderer) Shortcuts.init();
+  // Atalhos globais e controles nativos de mídia pertencem à janela principal,
+  // que controla a reprodução e aplica o fade também às teclas multimídia.
+  if (!isAuxiliaryRenderer) {
+    Shortcuts.init();
+    PlayerMediaSession.init();
+    app.onUnmount(() => {
+      Shortcuts.destroy();
+      PlayerMediaSession.destroy();
+    });
+  }
 
   // D5 — Conectar eventos do servidor HTTP às ações do app.
   if (Platform.isDesktop && !isAuxiliaryRenderer) {
@@ -1808,6 +1817,19 @@ $storage.hydrate().then(async () => {
                     );
                     break;
                   }
+                  case "projecao-de-fundo": {
+                    const projectionRefId = litItem.ref_id || "";
+                    if (projectionRefId) {
+                      const projectionRec = await $idb.get(
+                        DB_TABLE.BACKGROUND_PROJECTION_LIBRARY,
+                        projectionRefId
+                      );
+                      if (projectionRec) {
+                        projected = await activateBackgroundProjection(projectionRec);
+                      }
+                    }
+                    break;
+                  }
                   case "som-de-fundo": {
                     const bgRefId = litItem.ref_id || "";
                     if (bgRefId) {
@@ -2869,8 +2891,8 @@ $storage.hydrate().then(async () => {
       (e) => {
         // Segurar a tecla não pode ir fechando abas até derrubar a janela.
         if (e?.repeat) return;
-        // Sem aba, a janela: o mesmo que o botão de fechar (com projeção no ar,
-        // ela só sai da frente).
+        // Sem aba e nada no ar, a janela: o mesmo que o botão de fechar (com
+        // projeção aberta, ela só sai da frente).
         if (!Modules.closeActiveTab()) void Platform.api?.window?.close?.();
       },
       {
@@ -3152,6 +3174,13 @@ $storage.hydrate().then(async () => {
       allowInForm: true,
       description: "hotkeys.pause",
       group: "media",
+    });
+    // As mesmas teclas com o foco na projeção ou no retorno. Sem áudio ("Sem
+    // áudio"), o espaço lá continua passando o slide, como sempre passou.
+    Broadcast.listen((msg) => {
+      if (msg?.type !== BROADCAST_TYPE.MEDIA_PLAY_PAUSE || !_mediaIsActive()) return;
+      if (AppData.get("modules.media.config.audio", "") !== "") _playPause();
+      else if (msg.payload?.key === "space") Media.nextSlide();
     });
 
     // --- Liturgia ---

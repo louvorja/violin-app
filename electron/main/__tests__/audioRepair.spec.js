@@ -10,7 +10,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 import fs from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import Path from "@/helpers/Path";
 
@@ -81,6 +81,7 @@ beforeAll(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
   audioRepair._resetForTests();
 });
 
@@ -148,6 +149,15 @@ describe("entrega pelo louvorja://local", () => {
     expect(part.bytes).toEqual(want.subarray(from, to + 1));
   });
 
+  it("a varredura registrada por outra grafia do caminho vale para o protocolo", async () => {
+    const video = newVideo();
+    // No Windows a URL vira `C:/...` e o caminho nativo é `C:\...`; aqui, `/./`.
+    const outraGrafia = `${dirname(video.path)}${sep}.${sep}${basename(video.path)}`;
+    const plan = await audioRepair.begin(outraGrafia);
+    audioRepair.report(plan.token, { upto: plan.count, bad: [3], done: true });
+    expect((await body(video.url)).bytes).toEqual(expected(video, [3]));
+  });
+
   it("arquivo sem quadro recusado segue pelo caminho de sempre", async () => {
     const video = newVideo();
     await scanAll(video, []);
@@ -203,6 +213,44 @@ describe("entrega pelo louvorja://local", () => {
     }
     await Promise.resolve();
     expect(released).toBe(true);
+  });
+
+  it("um pedido de vários pedaços espera no total o teto, não o teto por pedaço", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "setTimeout", "Date"] });
+    // ~10 pedaços de 64 KB: o salto para longe do ponto conferido.
+    const video = newVideo({ sizes: Array(10).fill(70_000), perChunk: [4, 3, 3] });
+    const plan = await audioRepair.begin(video.path);
+    // Conta as esperas que o pedido abriu: o relógio falso avança enquanto o
+    // disco lê, então medir o tempo dependeria da máquina.
+    let waits = 0;
+    const forFile = audioRepair.forFile;
+    vi.spyOn(audioRepair, "forFile").mockImplementation((...args) => {
+      const reparo = forFile(...args);
+      if (!reparo) return reparo;
+      return {
+        ...reparo,
+        waitFor(...waitArgs) {
+          const espera = reparo.waitFor(...waitArgs);
+          if (espera) waits++;
+          return espera;
+        },
+      };
+    });
+    let settled = false;
+    const pending = body(video.url).then((r) => {
+      settled = true;
+      return r;
+    });
+    // A varredura dá sinal de vida, mas não avança: só o teto libera a entrega.
+    for (let i = 0; i < 200 && !settled; i++) {
+      await audioRepair.read(plan.token, 0, 1);
+      vi.advanceTimersByTime(250);
+      // Leituras do disco são I/O de verdade: dê voltas ao laço para concluírem.
+      for (let k = 0; k < 30 && !settled; k++) await new Promise((r) => setImmediate(r));
+    }
+    expect(settled).toBe(true);
+    expect(waits).toBe(1);
+    expect((await pending).bytes).toEqual(video.file);
   });
 
   it("arquivo alterado no disco perde a troca antiga", async () => {
