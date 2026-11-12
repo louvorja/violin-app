@@ -687,6 +687,7 @@ const exportCounts = ref<ExportCounts>({
   media: 0,
   backgroundSound: 0,
   backgroundProjection: 0,
+  backgroundProjectionAll: 0,
 });
 let pendingExport: { name: string; color?: string; items: LiturgyItem[] } | null = null;
 

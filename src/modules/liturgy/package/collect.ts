@@ -16,14 +16,17 @@ export interface ExportOptions {
   media: boolean;
   /** Áudios do Som de Fundo que a liturgia usa. */
   backgroundSound: boolean;
-  /** A biblioteca inteira da Projeção de Fundo (a liturgia ainda não aponta para ela). */
+  /** Imagens e vídeos da Projeção de Fundo que a liturgia usa. */
   backgroundProjection: boolean;
+  /** A biblioteca inteira da Projeção de Fundo, além do que a liturgia usa. */
+  backgroundProjectionAll: boolean;
 }
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   media: true,
   backgroundSound: true,
-  backgroundProjection: false,
+  backgroundProjection: true,
+  backgroundProjectionAll: false,
 };
 
 export interface ExportCounts {
@@ -31,6 +34,7 @@ export interface ExportCounts {
   media: number;
   backgroundSound: number;
   backgroundProjection: number;
+  backgroundProjectionAll: number;
 }
 
 /** Registro de biblioteca como está no IndexedDB (os campos que interessam aqui). */
@@ -79,6 +83,32 @@ function displayName(item: LiturgyItem): string {
   return (item.item || item.subitem || item.dir || item.tipo || "").trim();
 }
 
+/** Item que aponta para uma biblioteca: de qual tabela, com que origem e qual opção o leva. */
+const LIBRARY_OF: Record<
+  string,
+  {
+    table: string;
+    source: FileSource;
+    option: "media" | "backgroundSound" | "backgroundProjection";
+  }
+> = {
+  [LiturgyItemTypeEnum.MEDIA_LIBRARY]: {
+    table: DB_TABLE.MEDIA_LIBRARY,
+    source: "media",
+    option: "media",
+  },
+  [LiturgyItemTypeEnum.BG_SOUND]: {
+    table: DB_TABLE.BACKGROUND_SOUND_LIBRARY,
+    source: "background-sound",
+    option: "backgroundSound",
+  },
+  [LiturgyItemTypeEnum.BG_PROJECTION]: {
+    table: DB_TABLE.BACKGROUND_PROJECTION_LIBRARY,
+    source: "background-projection",
+    option: "backgroundProjection",
+  },
+};
+
 function refsOf(items: LiturgyItem[], tipo: string): Set<string> {
   const ids = new Set<string>();
   for (const item of items) if (item.tipo === tipo && item.ref_id) ids.add(item.ref_id);
@@ -91,17 +121,18 @@ export async function countExport(
   getAll: CollectDeps["getAll"]
 ): Promise<ExportCounts> {
   const liturgy = new Set(items.filter(carriesFile).map((i) => i.ref_id || i.id)).size;
-  let backgroundProjection = 0;
+  let backgroundProjectionAll = 0;
   try {
-    backgroundProjection = (await getAll(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY)).length;
+    backgroundProjectionAll = (await getAll(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY)).length;
   } catch {
-    backgroundProjection = 0;
+    backgroundProjectionAll = 0;
   }
   return {
     liturgy,
     media: refsOf(items, LiturgyItemTypeEnum.MEDIA_LIBRARY).size,
     backgroundSound: refsOf(items, LiturgyItemTypeEnum.BG_SOUND).size,
-    backgroundProjection,
+    backgroundProjection: refsOf(items, LiturgyItemTypeEnum.BG_PROJECTION).size,
+    backgroundProjectionAll,
   };
 }
 
@@ -238,9 +269,14 @@ export async function collectFiles(
           missing.push(displayName(item));
         break;
       case LiturgyItemTypeEnum.MEDIA_LIBRARY:
-      case LiturgyItemTypeEnum.BG_SOUND: {
-        const isMedia = item.tipo === LiturgyItemTypeEnum.MEDIA_LIBRARY;
-        if (!(isMedia ? options.media : options.backgroundSound)) {
+      case LiturgyItemTypeEnum.BG_SOUND:
+      case LiturgyItemTypeEnum.BG_PROJECTION: {
+        const lib = LIBRARY_OF[item.tipo];
+        // Com a biblioteca inteira marcada, a usada vai junto mesmo desmarcada.
+        const chosen =
+          options[lib.option] ||
+          (lib.source === "background-projection" && options.backgroundProjectionAll);
+        if (!chosen) {
           localOnly.push(displayName(item));
           break;
         }
@@ -249,8 +285,7 @@ export async function collectFiles(
           missing.push(displayName(item));
           break;
         }
-        const table = isMedia ? DB_TABLE.MEDIA_LIBRARY : DB_TABLE.BACKGROUND_SOUND_LIBRARY;
-        const source: FileSource = isMedia ? "media" : "background-sound";
+        const { table, source } = lib;
         const ok = await once(`${source}:${refId}`, async () => {
           const record = await deps.get(table, refId);
           return record ? fromLibrary(source, record, deps) : null;
@@ -269,7 +304,7 @@ export async function collectFiles(
     }
   }
 
-  if (options.backgroundProjection) {
+  if (options.backgroundProjectionAll) {
     const all = await deps.getAll(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY).catch(() => []);
     for (const record of all) {
       if (!record?.id) continue;

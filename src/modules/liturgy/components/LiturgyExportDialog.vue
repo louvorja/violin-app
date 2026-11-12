@@ -29,6 +29,13 @@
         data-testid="liturgy-export-bg-projection"
         :label="`${t('library.export_opt_bg_projection')} (${counts.backgroundProjection})`"
       />
+      <LjCheckbox
+        :model-value="options.backgroundProjectionAll && counts.backgroundProjectionAll > 0"
+        :disabled="!counts.backgroundProjectionAll"
+        @update:model-value="options.backgroundProjectionAll = $event"
+        data-testid="liturgy-export-bg-projection-all"
+        :label="`${t('library.export_opt_bg_projection_all')} (${counts.backgroundProjectionAll})`"
+      />
     </div>
 
     <template #footer>
@@ -50,9 +57,9 @@
 <script setup lang="ts">
 /**
  * Escolha do que vai no pacote ao exportar a liturgia. Os arquivos dos itens do
- * tipo arquivo vão sempre; o que é das bibliotecas, conforme as caixas — a
- * Projeção de Fundo vai inteira e começa desmarcada (a liturgia ainda não
- * aponta para ela, e a biblioteca costuma ser grande).
+ * tipo arquivo vão sempre; o que é das bibliotecas, conforme as caixas. A
+ * biblioteca inteira da Projeção de Fundo é uma caixa à parte e começa
+ * desmarcada (costuma ser grande).
  */
 import { reactive, ref, watch } from "vue";
 import { useLiturgyI18n } from "../i18n";
@@ -90,6 +97,8 @@ function submit() {
     media: options.media && props.counts.media > 0,
     backgroundSound: options.backgroundSound && props.counts.backgroundSound > 0,
     backgroundProjection: options.backgroundProjection && props.counts.backgroundProjection > 0,
+    backgroundProjectionAll:
+      options.backgroundProjectionAll && props.counts.backgroundProjectionAll > 0,
   };
   internalShow.value = false;
   emit("confirm", chosen);

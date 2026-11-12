@@ -119,6 +119,24 @@ describe("installPackage", () => {
     expect(r.unsupported).toEqual(["texto.txt"]);
   });
 
+  it("item Projeção de Fundo aponta para o registro novo; a sobra entra uma vez", async () => {
+    const { deps, tableOf } = fakeDeps();
+    const r = await installPackage(
+      [item({ id: "f", tipo: "projecao-de-fundo", item: "Fundo", ref_id: "p-old" })],
+      [
+        file("background-projection", "p-old", "fundo.jpg"),
+        file("background-projection", "p-extra", "outro.jpg"),
+      ],
+      deps
+    );
+    const records = [...tableOf(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY).values()];
+    expect(records).toHaveLength(2);
+    const used = records.find((x) => x.name === "fundo.jpg" || x.fileName === "fundo.jpg");
+    expect(used).toBeTruthy();
+    expect(r.items[0].ref_id).toBe(used!.id);
+    expect(r.unsupported).toEqual([]);
+  });
+
   it("referência que não veio e não existe aqui é limpa e avisada; a que existe fica", async () => {
     const { deps } = fakeDeps({ [DB_TABLE.MEDIA_LIBRARY]: [{ id: "local" }] });
     const r = await installPackage(
