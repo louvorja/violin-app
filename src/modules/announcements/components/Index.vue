@@ -360,6 +360,7 @@ import {
 } from "reka-ui";
 import { module as manifest } from "../manifest";
 import { aplicarOrdemDoDrag } from "../dragOrder";
+import { loadAnnouncements } from "../storage";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import {
   LjButton,
@@ -400,10 +401,10 @@ interface Announcement {
   nome: string;
   ordem: number;
   texto?: string;
-  imageData?: ArrayBuffer;
+  imageData?: Blob;
   imageMime?: string;
   imageName?: string;
-  videoData?: ArrayBuffer;
+  videoData?: Blob;
   videoMime?: string;
   videoName?: string;
   style: AnnStyle;
@@ -436,7 +437,7 @@ const videoInput = ref<HTMLInputElement | null>(null);
 const TABLE = DB_TABLE.ANNOUNCEMENTS;
 
 async function load(): Promise<void> {
-  announcements.value = (await $idb.getAll<Announcement>(TABLE)).sort((a, b) => a.ordem - b.ordem);
+  announcements.value = await loadAnnouncements<Announcement>();
 }
 
 const sorted = computed(() => [...announcements.value].sort((a, b) => a.ordem - b.ordem));
@@ -518,10 +519,10 @@ async function saveItem(item: Announcement): Promise<void> {
     nome: item.nome,
     ordem: item.ordem,
     texto: item.texto || "",
-    imageData: item.imageData instanceof ArrayBuffer ? item.imageData : undefined,
+    imageData: item.imageData instanceof Blob ? item.imageData : undefined,
     imageMime: item.imageMime,
     imageName: item.imageName,
-    videoData: item.videoData instanceof ArrayBuffer ? item.videoData : undefined,
+    videoData: item.videoData instanceof Blob ? item.videoData : undefined,
     videoMime: item.videoMime,
     videoName: item.videoName,
     style: { ...item.style },
@@ -597,25 +598,32 @@ async function onMediaSelected(e: Event, kind: "image" | "video"): Promise<void>
       /* HEIC fallback */
     }
   }
-  let data: ArrayBuffer;
-  try {
-    data = await work.arrayBuffer();
-  } catch (error) {
-    input.value = "";
-    if (!reportLocalFileFailure(error, [f.name])) throw error;
-    return;
-  }
+  const target = editing.value;
+  const previous =
+    kind === "image"
+      ? { imageData: target.imageData, imageMime: target.imageMime, imageName: target.imageName }
+      : { videoData: target.videoData, videoMime: target.videoMime, videoName: target.videoName };
   if (kind === "image") {
-    editing.value.imageData = data;
-    editing.value.imageMime = work.type || "image/jpeg";
-    editing.value.imageName = name;
+    target.imageData = work;
+    target.imageMime = work.type || "image/jpeg";
+    target.imageName = name;
   } else {
-    editing.value.videoData = data;
-    editing.value.videoMime = work.type || "video/mp4";
-    editing.value.videoName = name;
+    target.videoData = work;
+    target.videoMime = work.type || "video/mp4";
+    target.videoName = name;
   }
-  await save();
-  input.value = "";
+  try {
+    await saveItem(target);
+    // O File aponta para o arquivo de origem; a cópia gravada não depende dele.
+    const stored = await $idb.get<Announcement>(TABLE, target.id);
+    if (kind === "image") target.imageData = stored?.imageData ?? work;
+    else target.videoData = stored?.videoData ?? work;
+  } catch (error) {
+    Object.assign(target, previous);
+    if (!reportLocalFileFailure(error, [f.name])) throw error;
+  } finally {
+    input.value = "";
+  }
 }
 
 function pickImage(): void {
@@ -667,9 +675,9 @@ function buildSlidesPayload(): Array<Record<string, unknown>> {
     nome: a.nome,
     ordem: a.ordem,
     texto: a.texto || "",
-    imageData: a.imageData instanceof ArrayBuffer ? a.imageData : undefined,
+    imageData: a.imageData instanceof Blob ? a.imageData : undefined,
     imageMime: a.imageMime,
-    videoData: a.videoData instanceof ArrayBuffer ? a.videoData : undefined,
+    videoData: a.videoData instanceof Blob ? a.videoData : undefined,
     videoMime: a.videoMime,
     style: a.style ? { ...a.style } : undefined,
   }));

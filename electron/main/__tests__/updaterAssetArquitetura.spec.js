@@ -59,6 +59,20 @@ describe("escolherAssetDaRelease", () => {
     expect(escolherAssetDaRelease([DMG], "dmg", "darwin", "x64")).toBe(DMG);
   });
 
+  it.each(["AppImage", "deb", "rpm"])("Linux escolhe %s da arquitetura nativa", (ext) => {
+    const x64 = { name: `LouvorJA.Violin-2.0.0.${ext}` };
+    const arm = { name: `LouvorJA.Violin-2.0.0-arm64.${ext}` };
+    expect(escolherAssetDaRelease([x64, arm], ext, "linux", "arm64")).toBe(arm);
+    expect(escolherAssetDaRelease([arm, x64], ext, "linux", "x64")).toBe(x64);
+  });
+
+  it("Linux não oferece binário de arquitetura incompatível quando o nativo falta", () => {
+    expect(escolherAssetDaRelease([{ name: "app-x86_64.AppImage" }], "AppImage", "linux", "arm64")).toBeUndefined();
+    expect(escolherAssetDaRelease([{ name: "app-aarch64.rpm" }], "rpm", "linux", "x64")).toBeUndefined();
+    const deb = { name: "app_2.0.0_amd64.deb" };
+    expect(escolherAssetDaRelease([deb], "deb", "linux", "x64")).toBe(deb);
+  });
+
   it("filtra pela extensão da instalação", () => {
     expect(escolherAssetDaRelease([DMG, EXE_X64], "dmg", "darwin", "arm64")).toBe(DMG);
     expect(escolherAssetDaRelease([DMG, EXE_X64], "exe", "win32", "x64")).toBe(EXE_X64);

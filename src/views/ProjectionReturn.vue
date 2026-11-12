@@ -80,6 +80,7 @@ import { slideMainText } from "@/helpers/SlideText";
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { useProjectionState } from "@/composables/useProjectionState";
+import { useProjectionSlideKeys } from "@/composables/useProjectionSlideKeys";
 import { useSlideStyle } from "@/composables/useSlideStyle";
 import { useFitText } from "@/composables/useFitText";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
@@ -88,8 +89,18 @@ import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import ReturnOverride from "@/components/ReturnOverride.vue";
 
 const { t } = useI18n();
-const { slide, isCover, progress, slideProgress, title, slideIndex, totalSlides, nextSlide } =
-  useProjectionState();
+const {
+  slide,
+  isCover,
+  progress,
+  slideProgress,
+  title,
+  slideIndex,
+  totalSlides,
+  nextSlide,
+  sessionId,
+} = useProjectionState();
+useProjectionSlideKeys({ slideIndex, totalSlides, sessionId });
 const slideStyle = useSlideStyle();
 const cfg = slideStyle.cfg;
 

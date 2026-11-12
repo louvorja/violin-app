@@ -92,6 +92,33 @@ describe("faixa cancelada no meio", () => {
     expect(res.bodyUsed).toBe(true);
   });
 
+  it("lê do disco só o que o player consome, não a faixa inteira", async () => {
+    const grande = join(root, "grande.mp4");
+    fs.writeFileSync(grande, Buffer.alloc(16 * 1024 * 1024, "v"));
+    let lido = 0;
+    const original = fs.createReadStream;
+    const espiar = (...args) => {
+      const stream = original.apply(fs, args);
+      stream.on("data", (chunk) => (lido += chunk.length));
+      return stream;
+    };
+    fs.createReadStream = espiar;
+    require("fs").createReadStream = espiar;
+    try {
+      const res = await handleRequest(
+        new Request(Path.local(grande), { headers: { Range: "bytes=0-" } })
+      );
+      const reader = res.body.getReader();
+      await reader.read();
+      await new Promise((r) => setTimeout(r, 200));
+      expect(lido).toBeLessThan(4 * 1024 * 1024);
+      await reader.cancel();
+    } finally {
+      fs.createReadStream = original;
+      require("fs").createReadStream = original;
+    }
+  });
+
   it("cancelar antes de ler nada também é limpo", async () => {
     const res = await handleRequest(
       new Request(Path.local(localFile), { headers: { Range: "bytes=0-" } })

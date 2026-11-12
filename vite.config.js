@@ -13,7 +13,7 @@ const require_ = createRequire(import.meta.url);
 const { version: packageVersion } = require_("./package.json");
 const { version: posthogSdkPackageVersion } = require_("posthog-js/package.json");
 
-const { escapeRegex, dbCachePattern } = require_("./config/swDbRoute.cjs");
+const { dbCachePattern, mediaCachePattern } = require_("./config/swDbRoute.cjs");
 const { installPwaRecovery } = require_("./config/pwaRecovery.cjs");
 
 // https://vitejs.dev/config/
@@ -171,7 +171,7 @@ export default async ({ mode }) => {
 
     // O catálogo aponta a mídia para a API ou direto para o armazenamento: as
     // duas origens são o mesmo acervo e caem nas mesmas rotas de cache.
-    const mediaOrigins = [filesUrl, ...DOMAINS.FILES].map(escapeRegex).join("|");
+    const mediaOrigins = filesUrl ? [filesUrl, ...DOMAINS.FILES] : [];
 
     // Runtime caching: DB JSONs (stale-while-revalidate) + mídia (cache-first 30 dias).
     // Quando VITE_URL_* está definido, usa padrão preciso de URL; caso contrário, cai
@@ -203,9 +203,15 @@ export default async ({ mode }) => {
       // <audio> pede `Range: bytes=0-`, e sem fatiar a resposta do cache o Chrome
       // Android não consegue tocar nem pular dentro do áudio offline.
       {
-        urlPattern: filesUrl
-          ? new RegExp(`^(?:${mediaOrigins}).*\\.(mp3|ogg|opus|m4a|aac|wav|flac)(\\?.*)?$`, "i")
-          : /\.(mp3|ogg|opus|m4a|aac|wav|flac)(\?.*)?$/i,
+        urlPattern: mediaCachePattern(mediaOrigins, [
+          "mp3",
+          "ogg",
+          "opus",
+          "m4a",
+          "aac",
+          "wav",
+          "flac",
+        ]),
         handler: "CacheFirst",
         options: {
           cacheName: "louvorja-audio",
@@ -216,9 +222,7 @@ export default async ({ mode }) => {
       },
       // Imagens externas — cache-first (sem expiração, pelo mesmo motivo do áudio)
       {
-        urlPattern: filesUrl
-          ? new RegExp(`^(?:${mediaOrigins}).*\\.(jpg|jpeg|png|webp|gif)(\\?.*)?$`, "i")
-          : /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i,
+        urlPattern: mediaCachePattern(mediaOrigins, ["jpg", "jpeg", "png", "webp", "gif"]),
         handler: "CacheFirst",
         options: {
           cacheName: "louvorja-images",
@@ -254,7 +258,7 @@ export default async ({ mode }) => {
     plugins.push(
       VitePWA({
         // Ativa o SW também para clientes legados. O documento só recarrega
-        // pela ação do operador em PwaUpdates; não importar o client virtual.
+        // após a guarda de atividade em usePwaUpdates; não importar o client virtual.
         registerType: "autoUpdate",
         injectRegister: false,
         devOptions: {
@@ -263,6 +267,8 @@ export default async ({ mode }) => {
         workbox: {
           skipWaiting: true,
           clientsClaim: true,
+          // O Workbox só escuta SKIP_WAITING sem `skipWaiting`; a página envia ao aplicar.
+          importScripts: ["sw-skip-waiting.js"],
           globPatterns: ["**/*.{html,js,css,svg,png,woff,woff2}", "app-build.json"],
           // O conversor de HEIC passa dos 2MiB que o workbox aceita precachear,
           // e o build falha por isso em vez de apenas avisar. Subir o limite

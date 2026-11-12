@@ -1696,6 +1696,29 @@ it("protege comandos recentes da rajada e enriquece exceções nativas com build
   Telemetry.setEnabled(false);
 });
 
+it("arrastar um controle vira uma ação só, sem juntar comandos repetidos de propósito", async () => {
+  const Telemetry = await loadTelemetry();
+  await Telemetry.init();
+  for (let volume = 80; volume >= 0; volume -= 5) {
+    Telemetry.breadcrumb("media_volume_changed", { from_volume: 80, volume }, "action", {
+      mergeWithinMs: 1000,
+    });
+  }
+  Telemetry.breadcrumb("next_slide");
+  Telemetry.breadcrumb("next_slide");
+  const config = posthog.init.mock.calls[0][1];
+  const { breadcrumbs } = config.before_send({
+    event: "$exception",
+    properties: { $exception_list: [{ type: "Error", value: "fixture" }] },
+  }).properties;
+  type Entrada = { event: string; properties: Record<string, unknown> };
+  const volume = breadcrumbs.filter((item: Entrada) => item.event === "media_volume_changed");
+  expect(volume).toHaveLength(1);
+  expect(volume[0].properties).toMatchObject({ from_volume: 80, volume: 0 });
+  expect(breadcrumbs.filter((item: Entrada) => item.event === "next_slide")).toHaveLength(2);
+  Telemetry.setEnabled(false);
+});
+
 it("incidente funcional inicia Replay, conta repetições e fecha quando o relógio volta a avançar", async () => {
   const Telemetry = await loadTelemetry();
   await Telemetry.init();

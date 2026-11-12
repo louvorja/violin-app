@@ -315,6 +315,7 @@ function initialize(options) {
       // só porque o erro de cancelamento virou uma pendência recuperável.
       options.onProgress?.({ phase: "publishing", files: 0, bytes: 0 });
       atomicJson(path.join(options.bootstrap, "storage-layout.json"), next);
+      require("./storageCollectionMigration.js").finishPendingMoves(current, next, { acquire: options.acquireCollection });
     }
     return next;
   }

@@ -40,7 +40,6 @@ for (const [device, options] of [
               { default: database },
               { default: media },
               { default: appdata },
-              { default: userdata },
               { KEYS },
               audio,
               storage,
@@ -49,7 +48,6 @@ for (const [device, options] of [
               import("/src/helpers/Database.ts"),
               import("/src/composables/useMedia.ts"),
               import("/src/helpers/AppData.ts"),
-              import("/src/helpers/UserData.ts"),
               import("/src/constants/UserDataKeys.ts"),
               import("/src/composables/useAudioPlayback.ts"),
               import("/src/helpers/WebFileStore.ts"),
@@ -72,7 +70,6 @@ for (const [device, options] of [
               lyric: [],
             });
             appdata.set(KEYS.SHELL.IS_ONLINE, true);
-            userdata.set(KEYS.MODULES.MEDIA.LAZY_LOAD, true);
             window.__offlineAudioTest = { media, audio: audio.useAudioPlayback() };
             return (await storage.webStorage.checkLocal([path]))[path];
           },

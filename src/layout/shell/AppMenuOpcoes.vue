@@ -1405,17 +1405,6 @@
       </div>
       <p class="opt-hint">{{ $t("options.player.fade_audio_hint") }}</p>
 
-      <div class="opt-row">
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="mediaLazyLoad"
-            @change="setMedia('lazy_load', $c($event))"
-          />
-          <span>{{ $t("options.player.lazy_load") }}</span>
-        </label>
-      </div>
-
       <div v-if="isDesktop" class="opt-row opt-row--col">
         <label class="opt-checkbox">
           <input
@@ -1700,7 +1689,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { AUTO_THEME_ID, isThemePreference, THEME_IDS } from "@/config/Themes";
 import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
-import { estiloDeFundo } from "@/helpers/BackgroundStyle";
+import { estiloDeFundo, opcoesDeAjuste } from "@/helpers/BackgroundStyle";
 import { FONT } from "@/config/Fonts";
 import { refreshReturnBg, refreshSlideBg } from "@/composables/useSlideStyle";
 
@@ -1852,13 +1841,7 @@ onMounted(() => {
     .catch(() => {});
 });
 
-const opcoesPosicaoFundo = computed(() => [
-  { value: "cover", label: t("options.slides.pos_cover") },
-  { value: "contain", label: t("options.slides.pos_contain") },
-  { value: "center", label: t("options.slides.pos_center") },
-  { value: "stretch", label: t("options.slides.pos_stretch") },
-  { value: "tile", label: t("options.slides.pos_tile") },
-]);
+const opcoesPosicaoFundo = computed(() => opcoesDeAjuste(t));
 
 const opcoesAlinhamento = computed(() => [
   { value: "top", label: t("options.slides.align_top") },
@@ -2108,9 +2091,6 @@ function restoreTextFormat(): void {
 
 const mediaFadeAudio: ComputedRef<boolean> = computed(
   () => $userdata.get<boolean>(KEYS.MODULES.MEDIA.FADE_AUDIO, false)!!
-);
-const mediaLazyLoad: ComputedRef<boolean> = computed(
-  () => $userdata.get<boolean>(KEYS.MODULES.MEDIA.LAZY_LOAD, true)!!
 );
 
 const videoProjFullscreen: ComputedRef<boolean> = computed(

@@ -30,9 +30,6 @@
         </template>
 
         <div class="media-options">
-          <LjTooltip :text="tm('inputs.lazy_load_tooltip')" side="bottom">
-            <LjSwitch v-model="lazy_load" :label="tm('inputs.lazy_load')" />
-          </LjTooltip>
           <LjTooltip :text="tm('inputs.fade_audio_tooltip')" side="bottom">
             <LjSwitch v-model="fade_audio" :label="tm('inputs.fade_audio')" />
           </LjTooltip>
@@ -152,10 +149,8 @@ import { ICONS } from "@/config/Icons";
 import Modules from "@/helpers/Modules";
 import UserData from "@/helpers/UserData";
 import AppData from "@/helpers/AppData";
-import { KEYS } from "@/constants/UserDataKeys";
-import { ModuleEnum } from "@/enums/ModuleEnum";
 import Media from "@/composables/useMedia";
-import { useFileProjection } from "@/composables/useFileProjection";
+import PlayerKeyboard from "@/helpers/PlayerKeyboard";
 import Path from "@/helpers/Path";
 import { useAudioPlayback } from "@/composables/useAudioPlayback";
 import Telemetry from "@/helpers/Telemetry";
@@ -261,11 +256,6 @@ const fullscreen = computed({
   set: (value) => Media.fullscreen(value),
 });
 
-const lazy_load = computed({
-  get: () => UserData.get("modules.media.lazy_load"),
-  set: (value) => UserData.set("modules.media.lazy_load", value),
-});
-
 const fade_audio = computed({
   get: () => UserData.get("modules.media.fade_audio"),
   set: (value) => UserData.set("modules.media.fade_audio", value),
@@ -297,8 +287,11 @@ function closeMedia() {
   Media.close();
 }
 
+// O operador tirou o player da frente (botão ou clique fora): as setas voltam a ser
+// da tela, e o player do rodapé as retoma com um clique.
 function minimizeMedia() {
   Media.minimize();
+  PlayerKeyboard.release();
 }
 
 function goToSlide(index) {
@@ -307,66 +300,6 @@ function goToSlide(index) {
 
 function resize(data) {
   preview_height.value = data.container_height;
-}
-
-// ---------------------------------------------------------------------------
-// Atalhos de teclado para navegação de slides — listener direto na janela.
-// Substitui (na prática) a registração via Hotkeys.js para esta janela: garante
-// que ←/→/↑/↓/PageUp/PageDown SEMPRE naveguem slides quando o media está aberto,
-// sem depender de prioridade de registro de outros módulos (Bíblia etc.) e sem
-// que o focus trap do v-dialog ou listeners internos do Vuetify "comam" o evento.
-// stopImmediatePropagation evita disparo duplo do handler global do Hotkeys.
-// ---------------------------------------------------------------------------
-function _isInTextField() {
-  const el = document.activeElement;
-  if (!el) return false;
-  const tag = el.tagName?.toLowerCase();
-  return tag === "input" || tag === "textarea" || el.isContentEditable;
-}
-
-function _onKeyNav(e) {
-  if (!module_.value?.show && !module_.value?.minimized) return;
-  // Não intercepta quando anúncios/projeção de arquivos está ativa.
-  if (useFileProjection().isProjecting.value) return;
-  // No Modo apresentação o passador do módulo é quem passa: tratar aqui também
-  // avançava dois slides a cada tecla.
-  if (AppData.get(KEYS.SHELL.ACTIVE_MODULE, "") === ModuleEnum.PRESENTATION_MODE) return;
-  // No Modo apresentação o passador do módulo é quem passa: tratar aqui também
-  // avançava dois slides a cada tecla.
-  if (AppData.get(KEYS.SHELL.ACTIVE_MODULE, "") === ModuleEnum.PRESENTATION_MODE) return;
-  if (e.ctrlKey || e.metaKey || e.altKey) return; // deixa Ctrl+arrow etc passar
-  if (_isInTextField()) return;
-  // "Deseja fechar este slide?" na tela: as setas e o Enter são da pergunta
-  // (Alert.vue), não passam o slide por baixo dela.
-  if (document.querySelector('[role="alertdialog"]')) return;
-
-  let handled = false;
-  switch (e.key) {
-    case "ArrowLeft":
-    case "ArrowUp":
-    case "PageUp":
-      Media.prevSlide();
-      handled = true;
-      break;
-    case "ArrowRight":
-    case "ArrowDown":
-    case "PageDown":
-      Media.nextSlide();
-      handled = true;
-      break;
-    case "Home":
-      Media.firstSlide();
-      handled = true;
-      break;
-    case "End":
-      Media.lastSlide();
-      handled = true;
-      break;
-  }
-  if (handled) {
-    e.preventDefault();
-    e.stopImmediatePropagation();
-  }
 }
 
 // Mantém o flag config.fullscreen sincronizado com o estado REAL do browser.
@@ -385,9 +318,6 @@ function _syncFullscreenFlag() {
 
 onMounted(() => {
   mediaMounted = true;
-  // capture:true → o listener fica antes de qualquer handler interno do v-dialog
-  // ou v-list. Com stopImmediatePropagation neutraliza o handler global Hotkeys.
-  window.addEventListener("keydown", _onKeyNav, { capture: true });
   document.addEventListener("fullscreenchange", _syncFullscreenFlag);
   // Não manter polling quando a mídia aberta é apenas áudio ou YouTube.
   updateVideoSyncTimer();
@@ -397,7 +327,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   mediaMounted = false;
-  window.removeEventListener("keydown", _onKeyNav, { capture: true });
   document.removeEventListener("fullscreenchange", _syncFullscreenFlag);
   stopVideoSyncTimer();
 });

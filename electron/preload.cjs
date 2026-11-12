@@ -298,6 +298,19 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   },
 
   // -------------------------------------------------------------------------
+  // Quadros de áudio que o Chromium recusa, trocados por silêncio na entrega
+  // -------------------------------------------------------------------------
+
+  audioRepair: {
+    /** Começa a conferência de um `louvorja://local/…` e diz se cabe a esta janela varrer. */
+    begin: (url) => ipcRenderer.invoke("audioRepair:begin", url),
+    /** Bytes dos quadros `[from, from + count)` da varredura `token`. */
+    read: (token, from, count) => ipcRenderer.invoke("audioRepair:read", token, from, count),
+    /** `{ upto, bad, done }` ou `{ abort: true }`. */
+    report: (token, result) => ipcRenderer.invoke("audioRepair:report", token, result),
+  },
+
+  // -------------------------------------------------------------------------
   // D4 — Gerenciamento de monitores e janelas de projeção
   // -------------------------------------------------------------------------
 

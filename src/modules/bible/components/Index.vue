@@ -328,6 +328,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { KEYS } from "@/constants/UserDataKeys";
 import Hotkeys from "@/helpers/Hotkeys";
+import PlayerKeyboard from "@/helpers/PlayerKeyboard";
 import Modules from "@/helpers/Modules";
 import AppData from "@/helpers/AppData";
 import UserData from "@/helpers/UserData";
@@ -585,6 +586,12 @@ const _hotkeyClean = () => {
 // minimizada/escondida — Modules.vue mantém todo módulo aberto no DOM, então
 // o componente nunca desmonta. Resultado: ArrowLeft/Right consumidas pelo
 // Bible mesmo com a janela do media em foco. Agora seguem o show do módulo.
+// A tecla de verdade, além disso, só anda no versículo com a Bíblia à vista e o
+// teclado fora do player: aberta numa aba de trás, ela trocava o versículo
+// projetado enquanto o operador rolava uma lista em outro módulo. O controle
+// remoto (evento sintético) segue com a prioridade de sempre.
+const _versesHaveKeys = (e: KeyboardEvent) =>
+  !e.isTrusted || (AppData.get("active_module") === moduleId && !PlayerKeyboard.hasKeys(e));
 let _hotkeysRegistered = false;
 function _registerBibleHotkeys(): void {
   if (_hotkeysRegistered) return;
@@ -592,11 +599,13 @@ function _registerBibleHotkeys(): void {
     context: "bible",
     description: "hotkeys.bible_prev_verse",
     group: "bible",
+    when: _versesHaveKeys,
   });
   Hotkeys.register("ArrowRight", _hotkeyNext, {
     context: "bible",
     description: "hotkeys.bible_next_verse",
     group: "bible",
+    when: _versesHaveKeys,
   });
   Hotkeys.register("Delete", _hotkeyClean, {
     context: "bible",

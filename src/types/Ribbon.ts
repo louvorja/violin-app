@@ -15,6 +15,13 @@ export interface RibbonGroup {
   buttons?: RibbonButton[];
   /** Linhas do grid de controles compactos (padrão: 3). */
   compactRows?: 1 | 2 | 3;
+  /**
+   * Rótulo dos campos (select, número) em cima do controle, em letra pequena —
+   * como o "TEMPO" do Cronômetro — em vez de ao lado com a largura fixa de
+   * alinhamento. Para grupos apertados, em que essa largura empurrava a caixa
+   * para longe e fazia a ribbon rolar.
+   */
+  stackedFields?: boolean;
   customCategory?: Component
   modules?: string[];
 }

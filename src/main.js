@@ -26,7 +26,7 @@ const bootstrap = (async () => {
     await migratePrivateReferencesOnce();
   }
   // Na nova abertura aplica código que já está pronto antes de ler/escrever dados.
-  // Se a instalação ainda está baixando, abre o app e oferece o aviso persistente.
+  // Se ainda estiver baixando, abre o app; usePwaUpdates aplica quando for seguro.
   if (import.meta.env.PROD && import.meta.env.VITE_TARGET !== "desktop" && !window.louvorjaApi) {
     if (await window.__ljPwaRecovery?.ready) return;
     const initialController = navigator.serviceWorker?.controller;

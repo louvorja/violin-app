@@ -287,6 +287,9 @@ export const BROADCAST_TYPE = Object.freeze({
   /** Solicita próxima música no álbum/liturgia. Emitido por ⌘→ / Ctrl+→. */
   MEDIA_NEXT_MUSIC: "media:next_music",
 
+  /** Espaço ou Pause com o foco na projeção ou no retorno. Recebido por: main-shell (play/pausa). */
+  MEDIA_PLAY_PAUSE: "media:play_pause",
+
   /** Abre diálogo de nova anotação na liturgia. Emitido por ⇧⌘N / Ctrl+Shift+N. */
   LITURGY_NEW_ANNOTATION: "liturgy:new_annotation",
 

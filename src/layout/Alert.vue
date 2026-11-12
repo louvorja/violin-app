@@ -93,6 +93,9 @@ const promptValue = computed({
 const variant = computed(() => alert.value?.color || "info");
 
 const iconForVariant = computed(() => {
+  // Pergunta de Sim/Não é pergunta: "?", não o "i" de aviso.
+  const question = (alert.value?.buttons ?? []).some((b) => b?.value === "yes");
+  if (variant.value === "info" && question) return ICONS.UI.HELP_SOLID;
   const map = {
     error: ICONS.UI.ALERT_CIRCLE,
     success: ICONS.UI.CHECK_CIRCLE,
@@ -238,7 +241,8 @@ function clickBtn(value) {
 
 .alert-header-icon {
   flex-shrink: 0;
-  color: var(--lj-navy);
+  /* Nos temas escuros a marca é cinza-escuro e sumia no fundo do diálogo. */
+  color: var(--lj-ui-accent-text);
 }
 
 .alert--error .alert-header-icon {

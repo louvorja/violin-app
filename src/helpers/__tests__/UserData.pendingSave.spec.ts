@@ -4,7 +4,9 @@ import { useUserDataStore } from "@/stores/userDataStore";
 const platform = vi.hoisted(() => ({ isDesktop: false }));
 vi.mock("@/helpers/Platform", () => ({ default: platform }));
 vi.mock("@/helpers/Dev", () => ({ default: { write: vi.fn() } }));
-vi.mock("@/helpers/Broadcast", () => ({ default: { send: vi.fn() } }));
+vi.mock("@/helpers/Broadcast", () => ({
+  default: { send: vi.fn(), listen: vi.fn(() => () => {}) },
+}));
 import UserData from "../UserData";
 import Storage from "../Storage";
 
@@ -58,4 +60,19 @@ describe("save pendente antes da recarga PWA", () => {
     UserData.flushPendingWebSave();
     expect(write).toHaveBeenCalledTimes(2);
   });
+
+  it.each(["pagehide", "hidden"])(
+    "salva edição pendente em %s sem aguardar o debounce",
+    (event) => {
+      UserData.initCrossWindow();
+      useUserDataStore().theme = "dark";
+      UserData.save();
+      if (event === "pagehide") window.dispatchEvent(new Event("pagehide"));
+      else {
+        vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+        document.dispatchEvent(new Event("visibilitychange"));
+      }
+      expect(JSON.parse(localStorage.getItem("user_data")!).theme).toBe("dark");
+    }
+  );
 });

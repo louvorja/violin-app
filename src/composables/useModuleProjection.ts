@@ -39,6 +39,8 @@ interface ProjectionPayload {
   mode?: "number" | "names";
   /** Roda 3D exibida apenas enquanto o sorteio está girando. */
   wheel?: ModuleWheelState;
+  /** Borda pulsando no telão: amarela perto do fim, vermelha depois dele. */
+  alert?: "warning" | "danger";
 }
 
 interface UseModuleProjectionOptions {

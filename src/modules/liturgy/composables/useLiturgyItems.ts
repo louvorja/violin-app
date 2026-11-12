@@ -46,6 +46,23 @@ interface VideoItem {
   source?: "custom" | "online";
   origin?: string;
   originIcon?: string;
+  channelId?: string;
+  channelName?: string;
+  playlistId?: string;
+  playlistName?: string;
+  categoryId?: string;
+  categoryName?: string;
+  categoryIcon?: string;
+  categoryIconType?: "icon" | "image";
+  categoryColor?: string;
+}
+
+interface VideoCategory {
+  id: string;
+  name: string;
+  icon?: string;
+  iconType?: "icon" | "image";
+  color?: string;
 }
 
 interface OnlineVideoDefaultItem {
@@ -60,7 +77,7 @@ interface OnlineApiVideo {
 }
 
 interface OnlineApiData {
-  channels?: { channel_id: string; default_image: string }[];
+  channels?: { channel_id: string; title?: string; default_image: string }[];
   playlists?: { playlist_id: string; channel_id: string; title: string }[];
   videos?: OnlineApiVideo[];
 }
@@ -607,6 +624,13 @@ export function useLiturgyItems(
         built.item = f.item || f.subitem || "";
         built.subitem = f.subitem || "";
         break;
+      case LiturgyItemTypeEnum.BG_PROJECTION:
+        built.ref_id = f.ref_id;
+        built.dir = f.dir || "";
+        built.subtipo = f.subtipo || "";
+        built.item = f.item || f.subitem || "";
+        built.subitem = f.subitem || "";
+        break;
       case LiturgyItemTypeEnum.BG_SOUND:
         built.ref_id = f.ref_id;
         built.dir = f.dir || "";
@@ -926,13 +950,6 @@ export function useLiturgyItems(
     { title: "Só o Começo - Vocal Livre", url: "https://www.youtube.com/watch?v=XktoQTwHSK4" },
   ];
 
-  function apiChannelImages(data: Partial<OnlineApiData>): Map<string, string> {
-    const chImg = new Map((data.channels ?? []).map((c) => [c.channel_id, c.default_image || ""]));
-    return new Map(
-      (data.playlists ?? []).map((p) => [p.playlist_id, chImg.get(p.channel_id) || ""])
-    );
-  }
-
   /** Cache em camadas (memória → tabelas online_* no IDB → rede) via Database. */
   async function loadOnlineApiVideos(): Promise<OnlineApiData | null> {
     return $database.get<OnlineApiData>(`${idioma()}_collections_online`, {
@@ -941,30 +958,54 @@ export function useLiturgyItems(
   }
 
   async function loadVideosList(): Promise<void> {
+    let customCategories = new Map<string, VideoCategory>();
+    try {
+      const categories = await $idb.getAll<VideoCategory>(DB_TABLE.CUSTOM_ONLINE_VIDEOS_CATEGORIES);
+      customCategories = new Map(categories.map((category) => [category.id, category]));
+    } catch {
+      customCategories = new Map();
+    }
+
     let all: VideoItem[] = [];
     try {
       const customs = await $idb.getAll<VideoItem>(DB_TABLE.CUSTOM_ONLINE_VIDEOS);
       customs.sort((a, b) => ((a.createdAt || "") > (b.createdAt || "") ? -1 : 1));
-      all = customs.map((v) => ({ ...v, source: "custom" as const }));
+      all = customs.map((v) => {
+        const category = v.categoryId ? customCategories.get(v.categoryId) : undefined;
+        return {
+          ...v,
+          source: "custom" as const,
+          categoryName: category?.name,
+          categoryIcon: category?.icon,
+          categoryIconType: category?.iconType,
+          categoryColor: category?.color,
+        };
+      });
     } catch {
       all = [];
     }
 
     const seen = new Set(all.map((v) => v.url));
     const api = await loadOnlineApiVideos();
-    const titles = new Map((api?.playlists ?? []).map((p) => [p.playlist_id, p.title]));
-    const images = apiChannelImages(api ?? {});
+    const channels = new Map((api?.channels ?? []).map((c) => [c.channel_id, c]));
+    const playlists = new Map((api?.playlists ?? []).map((p) => [p.playlist_id, p]));
     for (const av of api?.videos ?? []) {
       const url = `https://www.youtube.com/watch?v=${av.video_id}`;
       if (seen.has(url)) continue;
       seen.add(url);
+      const playlist = playlists.get(av.playlist_id);
+      const channel = playlist ? channels.get(playlist.channel_id) : undefined;
       all.push({
         id: av.video_id,
         name: av.title,
         url,
         source: "online",
-        origin: titles.get(av.playlist_id) || "",
-        originIcon: images.get(av.playlist_id) || "",
+        channelId: playlist?.channel_id,
+        channelName: channel?.title,
+        playlistId: av.playlist_id,
+        playlistName: playlist?.title,
+        origin: playlist?.title || "",
+        originIcon: channel?.default_image || "",
       });
     }
 

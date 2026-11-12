@@ -36,6 +36,7 @@
         />
         <div v-if="videoFailed" class="op-video-error">
           <span>{{ t("shell.operator_video_error") }}</span>
+          <small v-if="videoFailure">{{ t(VIDEO_FAILURE_HINT[videoFailure]) }}</small>
           <small>{{ videoTitle || "—" }}</small>
         </div>
       </div>
@@ -101,6 +102,8 @@ import { KEYS } from "@/constants/UserDataKeys";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import Telemetry from "@/helpers/Telemetry";
+import { mediaSourceDetails } from "@/helpers/MediaDiagnostics";
+import { reportVideoFailure, VIDEO_FAILURE_HINT } from "@/helpers/LocalFileStatus";
 import Path from "@/helpers/Path";
 import { applyVideoState } from "@/helpers/VideoSync";
 import { useYouTubeEmbed } from "@/composables/useYouTubeEmbed";
@@ -135,6 +138,7 @@ const videoActive = ref(false);
 const videoUrl = ref("");
 const videoTitle = ref("");
 const videoFailed = ref(false);
+const videoFailure = ref(null);
 const videoRef = ref(null);
 let videoActivation = 0;
 let videoObjectUrl = "";
@@ -300,18 +304,21 @@ function onVideoBuffering(event) {
 function onVideoError(event) {
   const el = event.currentTarget;
   videoFailed.value = true;
-  const code = el?.error?.code;
-  const reason = code === 3 ? "decode" : code === 4 ? "source_not_supported" : "unknown";
-  const error = new Error(`Operator video ${reason}`);
-  Telemetry.captureException(error, { operation: "operator_video", reason });
-  console.error("[Operator] vídeo local falhou:", error, {
-    code,
-    message: el?.error?.message,
-    src: videoUrl.value.substring(0, 100),
-  });
-  Telemetry.track("operator_video_failed", {
-    code: el?.error?.code,
-    message: el?.error?.message,
+  videoFailure.value = null;
+  const url = videoUrl.value;
+  void reportVideoFailure({
+    el,
+    url,
+    label: "Operator video",
+    event: "operator_video_failed",
+    operation: "operator_video",
+    details: {
+      playback_id: currentPlaybackId,
+      window_role: "operator",
+      ...mediaSourceDetails(url),
+    },
+  }).then((failure) => {
+    if (url === videoUrl.value) videoFailure.value = failure;
   });
 }
 

@@ -1,13 +1,42 @@
 {
   "title": "Cronômetro",
   "description": "Cronômetro progressivo e regressivo para controle de tempo no culto.",
-  "mode": { "up": "Progressivo", "down": "Regressivo" },
-  "actions": { "start": "Iniciar", "pause": "Pausar", "reset": "Zerar", "set": "Definir tempo" },
-  "alarm": { "done": "Tempo esgotado!" },
+  "mode": {
+    "up": "Progressivo",
+    "down": "Regressivo"
+  },
+  "actions": {
+    "start": "Iniciar",
+    "pause": "Pausar",
+    "reset": "Zerar",
+    "set": "Definir tempo"
+  },
+  "alarm": {
+    "done": "Tempo esgotado!"
+  },
   "ribbon": {
     "title_ctx": "Configurar Cronômetro",
     "mode": "Modo",
     "set_time": "Tempo",
-    "show_seconds": "Exibir segundos"
+    "show_seconds": "Exibir segundos",
+    "count_overtime": "Contar tempo excedido",
+    "warning": "Avisar faltando",
+    "flash_borders": "Piscar bordas",
+    "options": "Opções"
+  },
+  "warning": {
+    "off": "Não",
+    "m1": "1 min",
+    "m2": "2 min",
+    "m5": "5 min",
+    "m10": "10 min"
+  },
+  "screen": {
+    "on_air": "No telão",
+    "goal": "meta",
+    "ends_at": "termina às",
+    "overtime": "Tempo excedido",
+    "presets": "Tempos rápidos",
+    "minutes": "{n} min"
   }
 }

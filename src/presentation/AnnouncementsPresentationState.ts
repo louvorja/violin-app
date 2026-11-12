@@ -4,9 +4,9 @@ export interface AnnouncementSlide {
   nome: string;
   ordem: number;
   texto?: string;
-  imageData?: ArrayBuffer;
+  imageData?: Blob | ArrayBuffer;
   imageMime?: string;
-  videoData?: ArrayBuffer;
+  videoData?: Blob | ArrayBuffer;
   videoMime?: string;
   style?: {
     bgColor?: string;
@@ -42,6 +42,8 @@ const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const nonnegative = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const media = (value: unknown): boolean =>
+  value === undefined || value instanceof Blob || value instanceof ArrayBuffer;
 function validStyle(value: unknown): boolean {
   if (value === undefined) return true;
   if (!record(value)) return false;
@@ -81,8 +83,8 @@ export function readAnnouncementIntent(value: unknown): AnnouncementIntent | nul
         typeof raw.nome !== "string" || raw.nome.length > 1_000 ||
         !nonnegative(raw.ordem) ||
         (raw.texto !== undefined && (typeof raw.texto !== "string" || raw.texto.length > 100_000)) ||
-        (raw.imageData !== undefined && !(raw.imageData instanceof ArrayBuffer)) ||
-        (raw.videoData !== undefined && !(raw.videoData instanceof ArrayBuffer)) ||
+        !media(raw.imageData) ||
+        !media(raw.videoData) ||
         (raw.imageMime !== undefined && typeof raw.imageMime !== "string") ||
         (raw.videoMime !== undefined && typeof raw.videoMime !== "string") ||
         !validStyle(raw.style)) return null;

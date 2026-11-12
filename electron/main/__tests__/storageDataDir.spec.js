@@ -1,18 +1,20 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Module, { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const fs = require("fs-extra");
-let base, oldDir, filesDir, storage, maintenanceAllowed;
+let base, oldDir, filesDir, storage, maintenanceAllowed, writeAllowed, assertWritable;
 
 beforeEach(async () => {
   base = await fs.mkdtemp(path.join(os.tmpdir(), "lj-media-clean-"));
   oldDir = path.join(base, "private");
   filesDir = path.join(oldDir, "files");
   maintenanceAllowed = true;
+  writeAllowed = true;
+  assertWritable = vi.fn(() => { if (!writeAllowed) throw new Error("read-only"); });
   await fs.outputJson(path.join(oldDir, "library", "saved.json"), { collection: "library" });
   await fs.ensureDir(filesDir);
   const pathsModule = require.resolve("../paths.js");
@@ -23,8 +25,12 @@ beforeEach(async () => {
   const originalLoad = Module._load;
   Module._load = function (request, ...args) {
     if (request === "./storageAccess.js") return {
-      canMaintain: () => maintenanceAllowed,
-      assertMaintain: () => { if (!maintenanceAllowed) throw new Error("shared"); },
+      assertWritable,
+      canMaintain: () => writeAllowed && maintenanceAllowed,
+      assertMaintain: () => {
+        assertWritable();
+        if (!maintenanceAllowed) throw new Error("shared");
+      },
     };
     return request === "electron" ? { shell: {} } : originalLoad.call(this, request, ...args);
   };
@@ -64,8 +70,43 @@ describe("limpeza de acervo", () => {
     expect(await storage.enforceQuota(1)).toEqual({ removed: 0 });
     await expect(storage.clearFiles()).rejects.toThrow("shared");
     await expect(storage.clearUnused([])).rejects.toThrow("shared");
-    await expect(storage.removeFiles(["musics/pt/song.opus"])).rejects.toThrow("shared");
     expect(await fs.readFile(path.join(filesDir, "musics", "pt", "song.opus"), "utf8")).toBe("download");
+    await expectProtected();
+  });
+
+  it("o escritor de acervo compartilhado pode remover apenas os downloads escolhidos", async () => {
+    await seedProtected();
+    await fs.outputFile(path.join(filesDir, "musics", "pt", "song.mp3"), "legacy download");
+    maintenanceAllowed = false;
+    expect(await storage.removeFiles(["musics/pt/song.opus"])).toEqual({ removed: 2 });
+    expect(await fs.pathExists(path.join(filesDir, "musics", "pt", "song.opus"))).toBe(false);
+    expect(await fs.pathExists(path.join(filesDir, "musics", "pt", "song.mp3"))).toBe(false);
+    expect(await fs.readFile(path.join(filesDir, "images", "slide.jpg"), "utf8")).toBe("image");
+    await expectProtected();
+  });
+
+  it("uma pasta somente para leitura recusa exclusão manual e preserva os arquivos", async () => {
+    await seedProtected();
+    writeAllowed = false;
+    await expect(storage.removeFiles(["musics/pt/song.opus"])).rejects.toThrow("read-only");
+    expect(await fs.readFile(path.join(filesDir, "musics", "pt", "song.opus"), "utf8")).toBe("download");
+    expect(await fs.readFile(path.join(filesDir, "images", "slide.jpg"), "utf8")).toBe("image");
+    await expectProtected();
+  });
+
+  it("interrompe a exclusão se perder a escrita entre arquivos", async () => {
+    await seedProtected();
+    const selected = path.join(filesDir, "musics", "pt", "song.opus");
+    const legacy = path.join(filesDir, "musics", "pt", "song.mp3");
+    await fs.outputFile(legacy, "legacy download");
+    // Simula a perda da licença assim que o primeiro arquivo for removido.
+    assertWritable.mockImplementation(() => {
+      if (!fs.existsSync(selected)) throw new Error("read-only");
+    });
+    await expect(storage.removeFiles(["musics/pt/song.opus", "images/slide.jpg"])).rejects.toThrow("read-only");
+    expect(await fs.pathExists(selected)).toBe(false);
+    expect(await fs.readFile(legacy, "utf8")).toBe("legacy download");
+    expect(await fs.readFile(path.join(filesDir, "images", "slide.jpg"), "utf8")).toBe("image");
     await expectProtected();
   });
 

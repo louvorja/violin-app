@@ -6,6 +6,7 @@
  *   - fundo:    background_color, image, image_opacity, image_fit
  *   - layout:   border_spacing, vertical_align, horizontal_align
  *   - alarme:   alert_color
+ *   - aviso:    warning_color (Cronômetro e Temporizadores)
  *
  * Escuta MODULE_FORMAT_CHANGED e USERDATA_PATCH para refletir ao vivo.
  * Retorna estilos prontos para aplicar no template do módulo.
@@ -58,6 +59,7 @@ export function useModuleBodyStyle(moduleId: string) {
   const text_shadow_color = computed(() => read<string>("text_shadow_color", "#000000"));
   const text_shadow_blur = computed(() => read<number>("text_shadow_blur", 4));
   const alert_color = computed(() => read<string>("alert_color", "#E74C3C"));
+  const warning_color = computed(() => read<string>("warning_color", "#F59E0B"));
   const background_color = computed(() => read<string>("background_color", "#000000"));
   const border_spacing = computed(() => read<number>("border_spacing", 10));
   const vertical_align = computed(() => read<string>("vertical_align", "center"));
@@ -172,6 +174,9 @@ export function useModuleBodyStyle(moduleId: string) {
   /** Cor do alerta (estado de alarme). */
   const alertStyle = computed<CSSProperties>(() => ({ color: alert_color.value }));
 
+  /** Cor do aviso (perto do fim, antes do alarme) nos módulos de contagem. */
+  const warningStyle = computed<CSSProperties>(() => ({ color: warning_color.value }));
+
   /** Imagem de fundo (opcional). */
   const bgImage = useStoredImageUrl(image);
 
@@ -186,6 +191,7 @@ export function useModuleBodyStyle(moduleId: string) {
     textStyle,
     referenceStyle,
     alertStyle,
+    warningStyle,
     bgImage,
     imageStyle,
     container,

@@ -23,7 +23,10 @@ export function usePwaUpdates() {
   const tasks = useBackgroundTasks();
   const backgroundSound = useBackgroundSound();
   const store = useAppStore();
-  let recoveryPending = false;
+  // O download pode terminar depois do boot ou numa verificação periódica.
+  // A versão pronta deve ser aplicada assim que for seguro, sem depender de
+  // clique, retorno à aba ou falha de importação para autorizar a recarga.
+  let recoveryPending = true;
   let reloadCurrentBuild = false;
   let recovering = false;
   let disposed = false;

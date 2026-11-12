@@ -455,7 +455,7 @@
   white-space: normal;
 }
 
-/* Indicador de status de conexão FTP */
+/* Indicador de conexão com o servidor */
 .opt-connection-status {
   display: flex;
   align-items: center;
@@ -463,20 +463,9 @@
   width: 100%;
 }
 
-.opt-connection-box {
-  background: var(--lj-surface-bg);
-  border: 2px solid var(--lj-danger);
-  border-radius: var(--lj-radius-sm);
-  padding: var(--lj-space-2) var(--lj-space-3);
-  font-size: var(--lj-text-sm);
-  font-family: monospace;
-  color: var(--lj-text-muted);
-  word-break: break-all;
-  white-space: normal;
-}
-
-.opt-connection-status--ok .opt-connection-box {
-  border-color: var(--lj-success);
+.opt-connection-error {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .opt-connection-badge {
@@ -493,10 +482,6 @@
 
 .opt-connection-status--ok .opt-connection-badge {
   background: var(--lj-success);
-}
-
-.opt-connection-status--checking .opt-connection-box {
-  border-color: var(--lj-slide-text-gold);
 }
 
 .opt-connection-status--checking .opt-connection-badge {

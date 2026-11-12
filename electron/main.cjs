@@ -43,6 +43,7 @@ const { randomUUID } = require("crypto");
 const fs = require("fs-extra");
 const { configureSystemCertificates } = require("./main/systemCertificates.js");
 const { safeSend } = require("./main/safeWebContents.js");
+const { closeTabKeyScript } = require("./main/closeTabKey.js");
 
 // O processo principal usa `https` para updater, catálogo e mídia. No
 // Windows, acrescente as raízes que o SO confia antes de qualquer módulo poder
@@ -115,6 +116,7 @@ const { createCpuProfileCapture } = require("./main/cpuProfileCapture.js");
 const { createRuntimeIncidentJournal } = require("./main/runtimeIncidentJournal.js");
 const storageLocations = require("./main/storageLocations.js");
 const storageAccess = require("./main/storageAccess.js");
+const collectionAccounts = require("./main/collectionAccounts.js");
 const storageRecovery = require("./main/storageRecovery.js");
 const { createPresentationActivity } = require("./main/presentationActivity.js");
 const { buildCsp } = require("./main/csp.js");
@@ -215,6 +217,14 @@ try {
     paths.configureProfile();
   }
   storageAccess.initialize(paths.storageLayout());
+  // Antes de apagar músicas, a tela sabe se outra conta do computador também as usa.
+  try {
+    collectionAccounts.sign(paths.storageLayout().mediaDir, {
+      shared: storageAccess.status().media?.shared === true,
+    });
+  } catch (error) {
+    console.warn("[storage] Não foi possível registrar esta conta no acervo:", error.message);
+  }
 } catch (error) {
   console.error("[storage] Não foi possível preparar os dados:", error);
   dialog.showErrorBox("Não foi possível preparar os dados do LouvorJA", error.message);
@@ -903,20 +913,14 @@ function createWindow() {
     console.info("[lifecycle] Janela principal mantida em segundo plano:", projections);
   });
 
-  // ⌘W fecha a aba, como no Chrome. O menu nativo do macOS (Fechar janela)
-  // pegaria a tecla antes da página; aqui ela segue para o Hotkeys do renderer
-  // pelo mesmo evento sintético do /api/keyboard, e ele decide entre a aba e a
-  // janela. Segurar a tecla não repete: não pode ir fechando até a janela.
+  // ⌘W / Ctrl+W fecha a aba, nunca o programa de uma vez: ver closeTabKey.js.
   mainWindow.webContents.on("before-input-event", (event, input) => {
-    if (process.platform !== "darwin" || input.type !== "keyDown") return;
-    if (!input.meta || input.control || input.alt || input.shift) return;
-    if (input.key.toLowerCase() !== "w") return;
+    const script = closeTabKeyScript(input, process.platform);
+    if (script === null) return;
     event.preventDefault();
-    if (input.isAutoRepeat) return;
+    if (!script) return;
     mainWindow.webContents
-      .executeJavaScript(
-        'window.dispatchEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true, bubbles: true, cancelable: true }))'
-      )
+      .executeJavaScript(script)
       .catch(() => { /* janela recarregando ou destruída */ });
   });
 
@@ -1839,6 +1843,11 @@ ipcMain.on("presentation:media-active", (event, active) => {
 // Vídeos online baixados para projeção sem anúncios (onlineVideo:*)
 // ---------------------------------------------------------------------------
 onlineVideo.registerIpc(ipcMain);
+
+// ---------------------------------------------------------------------------
+// Quadros de áudio que o Chromium recusa, trocados por silêncio (audioRepair:*)
+// ---------------------------------------------------------------------------
+require("./main/audioRepair/index.js").registerIpc(ipcMain, protocolModule.localPathFromUrl);
 
 // ---------------------------------------------------------------------------
 // IPC handlers de displays e janelas (D4)

@@ -190,9 +190,9 @@ it("não abre o modal de áudio quando a falha é de uma trilha progressiva do Y
 
 it("retains real XHR Blob MIME, bytes and original basename when play rejects the opaque source", async () => {
   openAudio.mockRestore();
-  // Este é o caminho do blob baixado por inteiro, não o do streaming.
-  const { default: $userdata } = await import("@/helpers/UserData");
-  $userdata.set(KEYS.MODULES.MEDIA.LAZY_LOAD, false);
+  // Este é o caminho do blob baixado por inteiro, que sem conexão substitui o streaming.
+  const { default: $appdata } = await import("@/helpers/AppData");
+  $appdata.set(KEYS.SHELL.IS_ONLINE, false);
   const { default: Telemetry } = await import("@/helpers/Telemetry");
   const log = vi.spyOn(Telemetry, "log").mockImplementation(() => {});
   let request!: XMLHttpRequest;
@@ -249,6 +249,7 @@ it("retains real XHR Blob MIME, bytes and original basename when play rejects th
     const failed = log.mock.calls.find(([level]) => level === "error")?.[2];
     expect(JSON.stringify(failed)).not.toMatch(/signature|provider\.example|loaded-body|<html>/);
   } finally {
+    $appdata.set(KEYS.SHELL.IS_ONLINE, true);
     media.close(true);
     log.mockRestore();
     create.mockRestore();

@@ -103,7 +103,7 @@
  * do próprio conteúdo flutuante: os níveis aninhados são montados ali com as peças
  * do Reka UI que o `LjMenu` já usa, reaproveitando as classes `lj-menu__*`.
  */
-import { computed, inject, ref } from "vue";
+import { computed, inject, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useViewport } from "@/composables/useViewport";
 import { useRowReveal } from "@/composables/useRowReveal";
@@ -171,7 +171,6 @@ const props = withDefaults(
     alignWithCatalog?: boolean;
     color?: string;
     extraMenu?: ExtraMenuItem[];
-    showPlaylistMenu?: boolean;
     /** Largura máxima para recolher os atalhos no menu; pode variar com a tabela. */
     compactBreakpoint?: number;
     /** Monta ações rápidas apenas quando a linha é explorada, reduzindo o custo da tabela. */
@@ -299,7 +298,12 @@ const showMenu = computed(
     !!props.extraMenu?.length
 );
 
-const { playlists, addSong, isSongInPlaylist } = usePlaylists();
+const { playlists, addSong, isSongInPlaylist, hydrate } = usePlaylists();
+// A playlist é do acervo inteiro, não só do módulo Músicas: o Hinário e o Ctrl+M
+// também oferecem "Adicionar à playlist", mesmo sem o Músicas ter sido aberto.
+onMounted(() => {
+  if (!props.customSongId) void hydrate();
+});
 
 // Favoritos, liturgia e playlists guardam o id do acervo, que a música personalizada não tem.
 const catalogMenu = computed<MenuItem[]>(() => [
@@ -329,7 +333,7 @@ const catalogMenu = computed<MenuItem[]>(() => [
       },
     ],
   },
-  ...(props.showPlaylistMenu && playlists.value.length > 0
+  ...(playlists.value.length > 0
     ? [
         {
           title: t("components.music_menu.add_to_playlist"),
@@ -346,7 +350,7 @@ const catalogMenu = computed<MenuItem[]>(() => [
                 has_instrumental_music: !!props.has_instrumental_music,
               };
               addSong(p.id, song);
-              $snackbar.show(t("modules.musics.playlists.song_added"));
+              $snackbar.show(t("components.music_menu.added_to_playlist"));
             },
           })),
         },

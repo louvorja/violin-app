@@ -7,6 +7,7 @@ export enum LiturgyItemTypeEnum {
   MUSICA = "musica",
   SITE = "site",
   VIDEO_ONLINE = "video-online",
+  BG_PROJECTION = "projecao-de-fundo",
   BG_SOUND = "som-de-fundo",
   ANUNCIOS = "anuncios",
   OVERLAY = "overlay",

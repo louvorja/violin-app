@@ -95,6 +95,7 @@ export const KEYS = {
       DAY_NOTES: `${MODULES_LITURGY}.day_notes`,
       SCHEDULED_ITEMS: `${MODULES_LITURGY}.scheduled_items`,
       SCHEDULED_CATEGORIES: `${MODULES_LITURGY}.scheduled_categories`,
+      SCHEDULED_MIGRATED: `${MODULES_LITURGY}.scheduled_migrated`,
       LEGACY_ITEMS: `${MODULES_LITURGY}.items`,
       LEGACY_WEEKS: `${MODULES_LITURGY}.weeks`,
       LEGACY_ACTIVE_WEEK: `${MODULES_LITURGY}.active_week`,
@@ -157,7 +158,6 @@ export const KEYS = {
     MEDIA: {
       IS_PLAYING: `${MODULES_MEDIA}.is_playing`,
       FADE_AUDIO: `${MODULES_MEDIA}.fade_audio`,
-      LAZY_LOAD: `${MODULES_MEDIA}.lazy_load`,
       MINIMIZED: `${MODULES_MEDIA}.minimized`,
       LOADING: `${MODULES_MEDIA}.loading`,
       SHOW: `${MODULES_MEDIA}.show`,
@@ -263,6 +263,12 @@ export const KEYS = {
       MODE: `${MODULES_STOPWATCH}.mode`,
       TARGET_SECONDS: `${MODULES_STOPWATCH}.target_seconds`,
       SHOW_SECONDS: `${MODULES_STOPWATCH}.show_seconds`,
+      /** Regressivo continua depois do zero, mostrando "-mm:ss". */
+      COUNT_OVERTIME: `${MODULES_STOPWATCH}.count_overtime`,
+      /** Segundos antes do fim em que o aviso amarelo começa (0 desliga). */
+      WARNING_SECONDS: `${MODULES_STOPWATCH}.warning_seconds`,
+      /** Bordas pulsando na tela e no telão durante os avisos. */
+      FLASH_BORDERS: `${MODULES_STOPWATCH}.flash_borders`,
     },
     SLIDE_EDITOR: {
       PROJECTING: `${MODULES}.${ModuleEnum.SLIDE_EDITOR}.projecting`,
@@ -276,6 +282,10 @@ export const KEYS = {
       SHOW_TARGET_TIME: `${MODULES_TIMER}.show_target_time`,
       SHOW_ALERT: `${MODULES_TIMER}.show_alert`,
       ALERT_SECONDS: `${MODULES_TIMER}.alert_seconds`,
+      /** Regressivo continua depois do zero, mostrando "-hh:mm:ss". */
+      COUNT_OVERTIME: `${MODULES_TIMER}.count_overtime`,
+      /** Bordas pulsando na tela e no telão durante os avisos. */
+      FLASH_BORDERS: `${MODULES_TIMER}.flash_borders`,
       END_ACTION: `${MODULES_TIMER}.timer_end_action`,
       END_ACTION_AUDIO: `${MODULES_TIMER}.timer_end_data_audio`,
       END_ACTION_MUSIC: `${MODULES_TIMER}.timer_end_data_music`,
@@ -288,6 +298,10 @@ export const KEYS = {
       SHOW_TARGET_TIME: `${MODULES_TIMER_WORSHIP}.show_target_time`,
       SHOW_ALERT: `${MODULES_TIMER_WORSHIP}.show_alert`,
       ALERT_SECONDS: `${MODULES_TIMER_WORSHIP}.alert_seconds`,
+      /** Regressivo continua depois do zero, mostrando "-hh:mm:ss". */
+      COUNT_OVERTIME: `${MODULES_TIMER_WORSHIP}.count_overtime`,
+      /** Bordas pulsando na tela e no telão durante os avisos. */
+      FLASH_BORDERS: `${MODULES_TIMER_WORSHIP}.flash_borders`,
       SOUND_START: `${MODULES_TIMER_WORSHIP}.sound_start`,
       SOUND_FIVE_MIN: `${MODULES_TIMER_WORSHIP}.sound_five_min`,
       SOUND_ONE_MIN: `${MODULES_TIMER_WORSHIP}.sound_one_min`,

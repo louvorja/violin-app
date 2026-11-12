@@ -124,6 +124,7 @@ evitando que uma cópia antiga substitua o estado atual.
 |---|---|
 | `MEDIA_PREV_MUSIC` | ⌘← / Ctrl+← |
 | `MEDIA_NEXT_MUSIC` | ⌘→ / Ctrl+→ |
+| `MEDIA_PLAY_PAUSE` | Espaço / Pause com o foco na projeção ou no retorno (`{ key }`) |
 | `LITURGY_RIBBON_ACTION` | ⌘N / Ctrl+N (`add`) |
 | `LITURGY_NEW_ANNOTATION` | ⇧⌘N / Ctrl+Shift+N |
 | `DRAWING_TEXT` | HTTP externo (sorteio): número ou nome em `{ text }` |

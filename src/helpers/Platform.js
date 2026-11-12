@@ -191,6 +191,11 @@ export default {
     return api?.presentation ?? null;
   },
 
+  /** Conferência do áudio de vídeos locais (ver AudioPacketScan). */
+  get audioRepair() {
+    return api?.audioRepair ?? null;
+  },
+
   /**
    * Vídeos do YouTube baixados para projeção sem anúncios, ou deixados prontos de antemão.
    * null quando rodando no browser/PWA — lá só existe o player embutido.

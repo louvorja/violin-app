@@ -286,20 +286,24 @@ async function sizeOfPaths(remoteRelPaths = []) {
 }
 
 async function removeFiles(remoteRelPaths = []) {
-  storageAccess.assertMaintain("media");
+  // A seleção explícita do usuário pode ser removida em acervo compartilhado;
+  // somente o escritor ativo pode fazê-lo. Limpeza geral continua separada.
+  storageAccess.assertWritable("media");
   const filesDir = paths.filesDir();
   let removed = 0;
   for (const rel of remoteRelPaths) {
     if (typeof rel !== "string" || !rel) continue;
     const cleaned = rel.replace(/^\/+/, "");
-    try {
-      // As variantes antigas continuam removíveis, mas somente dentro das
-      // áreas oficiais e sem atravessar links ou arquivos particulares.
-      for (const candidate of variantsOf(cleaned)) {
-        if (await removeOwnedMedia(filesDir, candidate)) removed += 1;
+    // As variantes antigas continuam removíveis, mas somente dentro das
+    // áreas oficiais e sem atravessar links ou arquivos particulares.
+    for (const candidate of variantsOf(cleaned)) {
+      // Interrompe o lote se a pasta perder a permissão de escrita.
+      storageAccess.assertWritable("media");
+      try {
+        if (await removeManagedFile(filesDir, candidate)) removed += 1;
+      } catch (_) {
+        /* ignore */
       }
-    } catch (_) {
-      /* ignore */
     }
   }
   return { removed };

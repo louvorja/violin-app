@@ -19,6 +19,16 @@ describe("module presentation state", () => {
     });
   });
 
+  it("carries the stopwatch border alert and rejects unknown levels", () => {
+    const authority = new ModulePresentationAuthority(100, "shell");
+    expect(authority.publish({ module: "stopwatch", text: "00:48", alert: "warning" }))
+      .toMatchObject({ alert: "warning" });
+    expect(authority.publish({ module: "stopwatch", text: "+00:05", alert: "danger" }))
+      .toMatchObject({ alert: "danger" });
+    expect(authority.publish({ module: "stopwatch", text: "1", alert: "blink" })).toBeNull();
+    expect(authority.publish({ module: "stopwatch", text: "1" })).not.toHaveProperty("alert");
+  });
+
   it("orders each module independently and ignores delayed request replies", () => {
     const authority = new ModulePresentationAuthority(100, "shell");
     const gate = new ModulePresentationGate();

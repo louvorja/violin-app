@@ -1,5 +1,6 @@
-import { ref, computed, onMounted, onUnmounted, reactive, watch, type Ref, type ComputedRef } from "vue";
+import { ref, computed, onMounted, onUnmounted, type Ref, type ComputedRef } from "vue";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useModuleMirror } from "@/composables/useModuleMirror";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { readAllSlots, getImage, resolveImageUrl } from "@/helpers/Overlay";
@@ -13,7 +14,7 @@ interface OverlayStateReturn {
   enabled: Ref<boolean>;
   slots: Ref<OverlaySlot[]>;
   activeSlots: ComputedRef<OverlaySlot[]>;
-  moduleValues: Record<string, string>;
+  mirrorText: (_source: string | null | undefined) => string;
   slotImage: (_slot: OverlaySlot) => Promise<string>;
   slotStyle: (_slot: OverlaySlot) => Record<string, string>;
   imageStyle: (_slot: OverlaySlot) => Record<string, string>;
@@ -25,7 +26,6 @@ interface OverlayStateReturn {
 export function useOverlayState(): OverlayStateReturn {
   const enabled = ref($userdata.get<boolean>(KEYS.MODULES.OVERLAY.ENABLED, false) === true);
   const slots = ref<OverlaySlot[]>([]);
-  const moduleValues = reactive<Record<string, string>>({});
   const visibilityGate = new OverlayVisibilityGate();
   let refreshGeneration = 0;
   let disposed = false;
@@ -61,31 +61,13 @@ export function useOverlayState(): OverlayStateReturn {
     void refresh();
   });
 
-  useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload) => {
-    const p = payload as { module?: string; text?: string; reference?: string };
-    if (p.module) {
-      moduleValues[p.module] = p.text || p.reference || "";
-    }
-  });
-
   useBroadcastListener(BROADCAST_TYPE.REQUEST_OVERLAY_STATE, () => {
     refresh();
   });
 
-  function requestModuleStates() {
-    const seen = new Set<string>();
-    for (const slot of slots.value) {
-      if (slot.type === "module_mirror" && slot.source_module && !seen.has(slot.source_module)) {
-        seen.add(slot.source_module);
-        $broadcast.send(BROADCAST_TYPE.REQUEST_MODULE_STATE, { module: slot.source_module });
-      }
-    }
-  }
-
   onMounted(() => {
     void refresh();
     $broadcast.send(BROADCAST_TYPE.REQUEST_OVERLAY_STATE);
-    requestModuleStates();
   });
 
   onUnmounted(() => {
@@ -94,24 +76,14 @@ export function useOverlayState(): OverlayStateReturn {
     pruneImages([]);
   });
 
-  // Monitora novos source_module adicionados em tempo real
-  watch(
-    () => slots.value.map((s) => s.source_module),
-    (curr, prev) => {
-      const prevSet = new Set(prev.filter(Boolean));
-      for (const sm of curr) {
-        if (sm && !prevSet.has(sm)) {
-          $broadcast.send(BROADCAST_TYPE.REQUEST_MODULE_STATE, { module: sm });
-        }
-      }
-    },
-    { deep: true }
-  );
-
   const activeSlots = computed(() => {
     if (!enabled.value) return [];
     return slots.value.filter((s) => s.enabled).sort((a, b) => a.order - b.order);
   });
+
+  const { mirrorText } = useModuleMirror(() =>
+    activeSlots.value.filter((s) => s.type === "module_mirror").map((s) => s.source_module)
+  );
 
   async function slotImage(slot: OverlaySlot): Promise<string> {
     if (!slot.file_id) return slot.content || "";
@@ -157,7 +129,7 @@ export function useOverlayState(): OverlayStateReturn {
     enabled: enabled,
     slots,
     activeSlots,
-    moduleValues,
+    mirrorText,
     slotImage,
     slotStyle: overlaySlotStyle,
     imageStyle: (slot) => overlayImageStyle(slot),

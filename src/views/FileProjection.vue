@@ -34,8 +34,8 @@
             />
             <div v-if="videoFailed" class="video-unavailable">
               <span class="video-unavailable__title">{{ $t("projection.video_unavailable") }}</span>
-              <span class="video-unavailable__hint">
-                {{ $t("projection.video_unavailable_hint") }}
+              <span v-if="videoFailure" class="video-unavailable__hint">
+                {{ $t(VIDEO_FAILURE_HINT[videoFailure]) }}
               </span>
             </div>
           </template>
@@ -111,6 +111,11 @@ import {
   mediaLibraryDetails,
   mediaDiagnosticLog,
 } from "@/helpers/MediaDiagnostics";
+import {
+  reportVideoFailure,
+  VIDEO_FAILURE_HINT,
+  type VideoFailure,
+} from "@/helpers/LocalFileStatus";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
 import { applyVideoState } from "@/helpers/VideoSync";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
@@ -161,6 +166,7 @@ useScreenVideoReport(
   () => fileProjection.active && fileProjection.type === "video"
 );
 const videoFailed = ref(false);
+const videoFailure = ref<VideoFailure | null>(null);
 const videoStateGate = new VideoStateGate();
 const activationGate = new FileProjectionActivationGate();
 const videoFrameConfirmation = new VideoFrameConfirmation(
@@ -561,41 +567,35 @@ function onVideoBuffering(event: Event): void {
 function onVideoError(event: Event): void {
   const el = event.currentTarget as HTMLVideoElement | null;
   videoFailed.value = true;
+  videoFailure.value = null;
   videoFrameConfirmation.cancel();
   videoFirstFrame.cancel();
-  const code = el?.error?.code;
-  const reason = code === 3 ? "decode" : code === 4 ? "source_not_supported" : "unknown";
-  const error = new Error(`File projection video ${reason}`);
-  const diagnostics = {
-    ...mediaElementDetails(el),
-    ...videoSourceDiagnostics,
-    window_role: "auxiliary",
-    phase: "media_element",
-  };
-  mediaDiagnosticLog("error", "file projection video failed", {
-    ...diagnostics,
-    playback_id: fileProjection.playback_id,
-    reason,
+  const url = fileProjection.url;
+  const playbackId = fileProjection.playback_id;
+  // Aviso, não erro: a gravidade sai do motivo, decidido em reportVideoFailure.
+  console.warn("[FileProjection] vídeo local falhou:", {
+    playback_id: playbackId,
+    code: el?.error?.code,
+    message: mediaDiagnosticMessage(el?.error?.message),
+    source: mediaSourceDetails(url),
   });
-  Telemetry.captureException(error, {
-    ...diagnostics,
-    playback_id: fileProjection.playback_id,
+  void reportVideoFailure({
+    el,
+    url,
+    label: "File projection video",
+    event: "file_projection_video_failed",
     operation: "file_projection_video",
-    reason,
-  });
-  console.error("[FileProjection] vídeo local falhou:", error, {
-    code,
-    message: mediaDiagnosticMessage(el?.error?.message),
-    source: mediaSourceDetails(fileProjection.url),
-  });
-  Telemetry.track("file_projection_video_failed", {
-    ...diagnostics,
-    playback_id: fileProjection.playback_id,
-    reason,
-    code,
-    message: mediaDiagnosticMessage(el?.error?.message),
-    ready_state: el?.readyState,
-    network_state: el?.networkState,
+    details: {
+      ...mediaElementDetails(el),
+      ...videoSourceDiagnostics,
+      window_role: "auxiliary",
+      phase: "media_element",
+      playback_id: playbackId,
+    },
+  }).then((failure) => {
+    if (playbackId === fileProjection.playback_id && url === fileProjection.url) {
+      videoFailure.value = failure;
+    }
   });
 }
 

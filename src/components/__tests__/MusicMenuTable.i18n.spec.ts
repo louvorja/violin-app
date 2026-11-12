@@ -28,7 +28,7 @@ function resolve(arvore: Record<string, unknown>, chave: string): unknown {
 
 describe("MusicMenuTable — traduções", () => {
   it("acha a chave do aviso da playlist", () => {
-    expect(usadas).toContain("modules.musics.playlists.song_added");
+    expect(usadas).toContain("components.music_menu.added_to_playlist");
   });
 
   it.each(["pt", "es"])("toda chave resolve em %s", (idioma) => {

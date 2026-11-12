@@ -52,7 +52,7 @@
                   class="overlay-preview-text"
                   :style="previewTextStyle(slot)"
                 >
-                  {{ mirrorText(slot) }}
+                  {{ mirrorText(slot.source_module) }}
                 </div>
               </div>
             </div>
@@ -130,7 +130,6 @@
 import { LjButton, LjChip, LjIcon, LjSwitch } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue";
-import { useI18n } from "vue-i18n";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import OverlaySlotEditor from "./OverlaySlotEditor.vue";
@@ -140,8 +139,8 @@ import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
 import Strings from "@/helpers/Strings";
 import { KEYS } from "@/constants/UserDataKeys";
-import { getModuleTitle } from "@/config/modules";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { useModuleMirror } from "@/composables/useModuleMirror";
 import {
   getImage,
   resolveImageUrl,
@@ -158,7 +157,6 @@ import {
 } from "@/helpers/OverlayStyle";
 import { OVERLAY_STYLE_DEFAULTS, createOverlaySlot, type OverlaySlot } from "@/types/Overlay";
 
-const { t } = useI18n();
 const moduleContainer = ref<{ tm(key: string, named?: Record<string, unknown>): string } | null>(
   null
 );
@@ -173,9 +171,13 @@ const enabled = computed(
 const localSlots = reactive<OverlaySlot[]>([]);
 const editingSlot = ref<OverlaySlot | null>(null);
 const previewImageCache = reactive<Record<string, string>>({});
-const moduleValues = reactive<Record<string, string>>({});
+const { mirrorText } = useModuleMirror(() =>
+  localSlots.filter((slot) => slot.type === "module_mirror").map((slot) => slot.source_module)
+);
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let saveGeneration = 0;
+let reloadAfterSave = false;
 let loadGeneration = 0;
 
 function setEnabled(value: boolean): void {
@@ -187,6 +189,11 @@ async function load(): Promise<void> {
   const generation = ++loadGeneration;
   const slots = await readAllSlots();
   if (generation !== loadGeneration) return;
+  // Uma edição que ainda não foi gravada é mais nova que o disco: recarregar agora a apagaria.
+  if (saveTimer !== null) {
+    reloadAfterSave = true;
+    return;
+  }
   localSlots.length = 0;
   for (const s of slots) {
     localSlots.push({ ...s, style: { ...OVERLAY_STYLE_DEFAULTS, ...(s.style || {}) } });
@@ -194,6 +201,7 @@ async function load(): Promise<void> {
 }
 
 function persist(): void {
+  const generation = ++saveGeneration;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     for (const s of localSlots) {
@@ -201,7 +209,12 @@ function persist(): void {
       await writeSlot(plain);
     }
     $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {});
+    if (generation !== saveGeneration) return;
     saveTimer = null;
+    if (reloadAfterSave) {
+      reloadAfterSave = false;
+      void load();
+    }
   }, 200);
 }
 
@@ -332,12 +345,6 @@ function previewImageUrl(slot: OverlaySlot): string {
   return "";
 }
 
-function mirrorText(slot: OverlaySlot): string {
-  const source = slot.source_module || "";
-  if (moduleValues[source]) return moduleValues[source];
-  return source ? t(getModuleTitle(source)) : "—";
-}
-
 // Ações da Ribbon
 useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => {
   const pl = payload as { module?: string; action?: string } | null;
@@ -346,14 +353,6 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => 
     case "add":
       addSlot();
       break;
-  }
-});
-
-// Escuta valores de módulos fonte para preview ao vivo
-useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload: unknown) => {
-  const p = payload as { module?: string; text?: string; reference?: string } | null;
-  if (p?.module) {
-    moduleValues[p.module] = p.text || p.reference || "";
   }
 });
 

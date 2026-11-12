@@ -46,6 +46,10 @@ vi.mock("@/components/ui", () => ({
     props: ["icon", "size"],
     template: `<span class="lj-icon-stub" />`,
   },
+  LjSelect: {
+    props: ["modelValue", "items", "size", "ariaLabel"],
+    template: `<div class="lj-select-stub">{{ items.map((i) => i.label).join("|") }}</div>`,
+  },
 }));
 
 import RibbonFileProjectionSettings from "../RibbonFileProjectionSettings.vue";
@@ -115,7 +119,11 @@ describe("RibbonFileProjectionSettings", () => {
     await ligar(wrapper);
 
     expect(wrapper.find('input[type="color"]').exists()).toBe(true);
-    expect(wrapper.find("select").exists()).toBe(true);
+    /* O seletor do catálogo, com os rótulos das Opções — o nativo ficava branco no
+       tema escuro e mostrava "Cover", "Tile" em inglês. */
+    expect(wrapper.find(".lj-select-stub").text()).toBe(
+      "Preencher|Ajustar|Centro|Esticar|Lado a lado"
+    );
     expect(wrapper.find(".opt-bg-pick").exists()).toBe(true);
     /* Três colunas: interruptor+cor+ajuste | imagem | prévia. */
     expect(wrapper.findAll(".rfps-col")).toHaveLength(3);
@@ -155,7 +163,7 @@ describe("RibbonFileProjectionSettings", () => {
     const wrapper = await montar();
 
     expect(wrapper.find('input[type="color"]').exists()).toBe(true);
-    expect(wrapper.find("select").exists()).toBe(true);
+    expect(wrapper.find(".lj-select-stub").exists()).toBe(true);
   });
 
   it("trocar a cor agenda a gravação (debounce de300ms) e avisa as telas", async () => {
