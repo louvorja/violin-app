@@ -1,117 +1,85 @@
 name: deploy
 on:
   push:
-    branches:
-      - main
-concurrency:
-  group: deploy-dist
-  cancel-in-progress: false
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout code
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: set up node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: "npm"
-      - name: fetch previous web deployment
-        id: previous_deploy
-        run: |
-          git fetch origin +dist:refs/remotes/origin/dist
-          mkdir -p "$RUNNER_TEMP/louvorja-previous-dist"
-          git archive refs/remotes/origin/dist | tar -x -C "$RUNNER_TEMP/louvorja-previous-dist"
-          echo "created_at=$(git show -s --format=%cI refs/remotes/origin/dist)" >> "$GITHUB_OUTPUT"
-      - name: validate npm install policy
-        run: node scripts/validate-install-policy.mjs
-      - name: install dependencies
-        run: npm ci
-        env:
-          HUSKY: "0"
-      - name: read app version
-        id: app_version
-        run: |
-          version=$(node -p "require('./package.json').version")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: validate PostHog source maps
-        run: npm run validate:observability-release
-        env:
-          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
-          POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
-          REQUIRE_POSTHOG_SOURCEMAPS: "true"
-      - name: build project
-        run: npm run build
-        env:
-          NODE_ENV: production
-          VITE_BASE_URL: /
-          VITE_URL_DATABASE: ${{ vars.VITE_URL_DATABASE }}
-          VITE_URL_FILES: ${{ vars.VITE_URL_FILES }}
-          VITE_API_TOKEN: ${{ secrets.VITE_API_TOKEN }}
-          VITE_APP_VERSION: ${{ steps.app_version.outputs.version }}
-          VITE_POSTHOG_KEY: ${{ vars.VITE_POSTHOG_KEY }}
-          VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
-          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
-          POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
-          POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
-          REQUIRE_POSTHOG_SOURCEMAPS: "true"
-      # O SW já foi gerado: assets retidos ficam no servidor, fora do precache.
-      # Até cinco builds completos (atual + quatro), 14 dias e 128 MiB.
-      - name: retain assets for open tabs
-        env:
-          PREVIOUS_DEPLOY_AT: ${{ steps.previous_deploy.outputs.created_at }}
-        run: node scripts/retain-web-assets.mjs dist "$RUNNER_TEMP/louvorja-previous-dist" "$PREVIOUS_DEPLOY_AT"
-      - name: copy CNAME to dist (if exists)
-        run: |
-          if [ -f "$RUNNER_TEMP/louvorja-previous-dist/CNAME" ]; then
-            cp "$RUNNER_TEMP/louvorja-previous-dist/CNAME" dist/CNAME
-          fi
-      - name: copy index.html to 404.html
-        run: |
-          cp dist/index.html dist/404.html
-      - name: disable jekyll processing
-        run: |
-          touch dist/.nojekyll
-      - name: upload web bundle artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-dist
-          path: dist
-          include-hidden-files: true
-          retention-days: 1
-          if-no-files-found: error
+concurrency:
+  group: publish-dist
+  cancel-in-progress: true
 
-  publish:
-    # Isolado do job de build: o runner que tem `contents: write` na memória do
-    # Runner.Worker nunca executa `npm ci` nem código de terceiros.
-    needs: build
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - name: download web bundle artifact
-        uses: actions/download-artifact@v4
+      - name: Obter código
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          name: web-dist
-          path: dist
-      - name: deploy to dist
+          persist-credentials: false
+      - name: Configurar Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Instalar dependências sem ganchos
+        run: npm ci --ignore-scripts --no-audit
+      - name: Gerar site
+        run: npm --ignore-scripts run build
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_ENV: production
+          VITE_BASE_URL: /
+      - name: Preparar arquivos de publicação
         run: |
-          cd dist
-          touch .nojekyll
-          git init
-          git checkout -b dist  # Cria a branch dist se não existir
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "🚀 Deploy id ${GITHUB_RUN_ID}"
-          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git push -f origin dist  # Faz push forçado para a branch dist
+          if [ -f CNAME ]; then
+            cp CNAME dist/CNAME
+          fi
+          cp dist/index.html dist/404.html
+      - name: Enviar arquivos para o GitHub Pages
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: dist
+
+      - name: Publicar na branch dist
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init --initial-branch=dist
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all
+          git commit -m "Deploy ${GITHUB_SHA} (run ${GITHUB_RUN_ID})"
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+
+          authorization=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$authorization"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0="http.${GITHUB_SERVER_URL}/.extraheader"
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $authorization"
+
+          current=$(git ls-remote --heads origin refs/heads/dist)
+          expected=${current%%[[:space:]]*}
+          git push --force-with-lease="refs/heads/dist:$expected" origin HEAD:refs/heads/dist
+
+  pages:
+    name: Publicar no GitHub Pages
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar artefato
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
