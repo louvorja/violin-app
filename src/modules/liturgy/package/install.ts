@@ -123,6 +123,8 @@ export async function installPackage(
   let stored = 0;
 
   const byKey = new Map<string, PackageFile>();
+  /** Arquivos do pacote já tratados por algum item (não entram de novo como "sobra"). */
+  const handled = new Set<string>();
   for (const f of files) byKey.set(`${f.source}:${f.sourceId}`, f);
 
   async function rollback(): Promise<void> {
@@ -315,12 +317,18 @@ export async function installPackage(
         break;
       }
       case LiturgyItemTypeEnum.MEDIA_LIBRARY:
-      case LiturgyItemTypeEnum.BG_SOUND: {
+      case LiturgyItemTypeEnum.BG_SOUND:
+      case LiturgyItemTypeEnum.BG_PROJECTION: {
         const source: Exclude<FileSource, "liturgy"> =
-          item.tipo === LiturgyItemTypeEnum.MEDIA_LIBRARY ? "media" : "background-sound";
+          item.tipo === LiturgyItemTypeEnum.MEDIA_LIBRARY
+            ? "media"
+            : item.tipo === LiturgyItemTypeEnum.BG_SOUND
+              ? "background-sound"
+              : "background-projection";
         if (!item.ref_id) break;
         const file = byKey.get(`${source}:${item.ref_id}`);
         if (file) {
+          handled.add(`${source}:${item.ref_id}`);
           const saved = (await once(`${source}:${item.ref_id}`, () =>
             storeInLibrary(source, file)
           )) as { id: string; kind: MediaKind } | null;
@@ -341,9 +349,10 @@ export async function installPackage(
     out.push(item);
   }
 
-  // A biblioteca de Projeção de Fundo vai inteira (opção na exportação).
+  // Projeção de Fundo que nenhum item usa: veio com a biblioteca inteira (opção na exportação).
   for (const file of files) {
     if (file.source !== "background-projection") continue;
+    if (handled.has(`background-projection:${file.sourceId}`)) continue;
     const saved = await once(`background-projection:${file.sourceId}`, () =>
       storeInLibrary("background-projection", file)
     );

@@ -114,6 +114,7 @@ export function useLiturgyExport(report: Report) {
       with_media: options.media,
       with_background_sound: options.backgroundSound,
       with_background_projection: options.backgroundProjection,
+      with_background_projection_all: options.backgroundProjectionAll,
     });
 
     const warnings: string[] = [];

@@ -3385,7 +3385,7 @@ files/
   liturgy/<ref-ou-item>/<nome>               arquivos dos itens do tipo arquivo (sempre)
   media/<id>/<nome>                          Biblioteca de Mídia usada (opção, marcada)
   background-sound/<id>/<nome>               Som de Fundo usado (opção, marcada)
-  background-projection/<id>/<nome>          Projeção de Fundo inteira (opção, desmarcada)
+  background-projection/<id>/<nome>          Projeção de Fundo usada (opção, marcada); a biblioteca inteira é outra opção, desmarcada
 ```
 
 Cada entrada de `files[]` diz a origem (`source`) e o registro de origem

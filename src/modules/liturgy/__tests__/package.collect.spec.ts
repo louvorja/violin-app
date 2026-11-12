@@ -73,6 +73,7 @@ const liturgy = [
   item({ id: "i8", tipo: "biblioteca-midia", item: "Apagada", ref_id: "sumiu" }),
   item({ id: "i9", tipo: "anuncios", item: "Avisos" }),
   item({ id: "i10", tipo: "musica", item: "Minha canção", ref_id: "c1", musica: -2 }),
+  item({ id: "i11", tipo: "projecao-de-fundo", item: "Fundo", ref_id: "p1" }),
 ];
 
 describe("carriesFile", () => {
@@ -91,13 +92,14 @@ describe("nameWithExtension", () => {
 });
 
 describe("contagem da janela de exportação", () => {
-  it("conta cada origem uma vez e a biblioteca inteira de Projeção de Fundo", async () => {
+  it("conta cada origem uma vez, a Projeção de Fundo usada e a biblioteca inteira", async () => {
     const { d } = deps(tables);
     expect(await countExport(liturgy, d.getAll)).toEqual({
       liturgy: 2,
       media: 3,
       backgroundSound: 1,
-      backgroundProjection: 2,
+      backgroundProjection: 1,
+      backgroundProjectionAll: 2,
     });
   });
 });
@@ -115,6 +117,7 @@ describe("collectFiles", () => {
       "media:m1:Abertura.png",
       "media:m2:Vídeo.mp4",
       "background-sound:s1:chuva.mp3",
+      "background-projection:p1:fundo.jpg",
     ]);
     // O caminho do item que já é endereço da internet não é lido.
     expect(reads).not.toContain("https://a.b/c.pdf");
@@ -126,12 +129,17 @@ describe("collectFiles", () => {
     const { d } = deps(tables);
     const r = await collectFiles(
       liturgy,
-      { media: false, backgroundSound: false, backgroundProjection: false },
+      {
+        media: false,
+        backgroundSound: false,
+        backgroundProjection: false,
+        backgroundProjectionAll: false,
+      },
       d
     );
     expect(r.files.map((f) => f.source)).toEqual(["liturgy"]);
     expect(r.localOnly).toEqual(
-      expect.arrayContaining(["Foto", "Foto de novo", "Vídeo", "Chuva", "Apagada"])
+      expect.arrayContaining(["Foto", "Foto de novo", "Vídeo", "Chuva", "Apagada", "Fundo"])
     );
     // Arquivo do disco que não deu para ler vai para os ausentes.
     expect(r.missing).toEqual(["Vídeo do disco"]);
@@ -139,7 +147,22 @@ describe("collectFiles", () => {
 
   it("Projeção de Fundo inteira, quando marcada; registro sem bytes fica de fora", async () => {
     const { d } = deps(tables);
-    const r = await collectFiles([], { ...DEFAULT_EXPORT_OPTIONS, backgroundProjection: true }, d);
+    const r = await collectFiles(
+      [],
+      { ...DEFAULT_EXPORT_OPTIONS, backgroundProjectionAll: true },
+      d
+    );
     expect(r.files.map((f) => `${f.source}:${f.sourceId}`)).toEqual(["background-projection:p1"]);
+  });
+
+  it("biblioteca inteira marcada leva a usada junto, uma vez só", async () => {
+    const { d } = deps(tables);
+    const r = await collectFiles(
+      [item({ id: "f", tipo: "projecao-de-fundo", item: "Fundo", ref_id: "p1" })],
+      { ...DEFAULT_EXPORT_OPTIONS, backgroundProjection: false, backgroundProjectionAll: true },
+      d
+    );
+    expect(r.files.map((f) => `${f.source}:${f.sourceId}`)).toEqual(["background-projection:p1"]);
+    expect(r.localOnly).toEqual([]);
   });
 });

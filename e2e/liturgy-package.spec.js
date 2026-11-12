@@ -340,3 +340,63 @@ test(".ja com várias liturgias: cada uma vai para o seu dia da semana", async (
   await expect(list).toContainText("Oração de segunda");
   await expect(list).not.toContainText("Abertura de domingo");
 });
+
+test("Projeção de Fundo usada vai no pacote; a biblioteca inteira só quando marcada", async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const a = await browser.newContext();
+  const pageA = await a.newPage();
+  await openLiturgy(pageA);
+  await pageA.evaluate(
+    async (bytes) => {
+      const { default: idb } = await import("/src/helpers/IndexedDB.ts");
+      const { default: liturgy } = await import("/src/helpers/Liturgy.ts");
+      for (const [id, name] of [
+        ["fundo_usado", "fundo do culto.png"],
+        ["fundo_sobra", "outro fundo.png"],
+      ])
+        await idb.put("background_projection.library", {
+          id,
+          name,
+          path: "blob:sessao-antiga",
+          type: "image",
+          data: new Uint8Array(bytes).buffer,
+          mime: "image/png",
+        });
+      liturgy.add(
+        { tipo: "projecao-de-fundo", item: "Fundo", ref_id: "fundo_usado", subtipo: "image" },
+        liturgy.getActiveDay()
+      );
+    },
+    [...image]
+  );
+
+  const download = pageA.waitForEvent("download");
+  await pageA.getByRole("button", { name: /Exportar Liturgia$/ }).click();
+  const dialog = pageA.getByTestId("liturgy-export-dialog");
+  await expect(dialog).toContainText("Projeção de Fundo usada (1)");
+  await expect(dialog).toContainText("Projeção de Fundo (biblioteca inteira) (2)");
+  await pageA.getByTestId("liturgy-export-confirm").click();
+  const path = test.info().outputPath("fundo.llja");
+  await (await download).saveAs(path);
+  await a.close();
+
+  const b = await browser.newContext();
+  const pageB = await b.newPage();
+  await openLiturgy(pageB);
+  await importFile(pageB, path);
+  const ask = pageB.getByRole("alertdialog").or(pageB.getByRole("dialog")).last();
+  await ask.getByRole("button", { name: "Sim", exact: true }).click();
+  await expect(pageB.locator(".liturgy-page")).toContainText("Fundo");
+
+  // Só o fundo usado veio (a biblioteca inteira começa desmarcada), e o item aponta para ele.
+  const records = await rows(pageB, "background_projection.library");
+  expect(records.map((r) => r.name)).toEqual(["fundo do culto.png"]);
+  const ref = await pageB.evaluate(async () => {
+    const { default: liturgy } = await import("/src/helpers/Liturgy.ts");
+    return liturgy.list(liturgy.getActiveDay()).find((i) => i.tipo === "projecao-de-fundo")?.ref_id;
+  });
+  expect(ref).toBe(records[0].id);
+  await b.close();
+});
