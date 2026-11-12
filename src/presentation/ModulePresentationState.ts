@@ -8,6 +8,11 @@ export interface ModuleValue {
   extra?: string;
   mode?: "number" | "names";
   wheel?: ModuleWheelState;
+  /**
+   * Aviso de tempo do Cronômetro: a projeção pulsa uma borda amarela
+   * ("warning") ou vermelha ("danger"). Ausente = sem borda.
+   */
+  alert?: "warning" | "danger";
 }
 
 export interface ModuleWheelState {
@@ -116,6 +121,10 @@ export function readModuleValue(value: unknown): ModuleValue | null {
         ...(wheel.max !== undefined ? { max: wheel.max } : {}),
       };
     }
+  }
+  if (value.alert !== undefined) {
+    if (value.alert !== "warning" && value.alert !== "danger") return null;
+    result.alert = value.alert;
   }
   return result;
 }

@@ -141,6 +141,7 @@
       "border": "Borde",
       "vertical": "Alineación vertical",
       "horizontal": "Alineación horizontal",
+      "warning_color": "Color de aviso",
       "alert_color": "Color de alerta",
       "hour_cycle": "Formato del reloj",
       "time_format": "Formato de la hora",

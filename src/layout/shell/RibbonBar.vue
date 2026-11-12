@@ -117,7 +117,14 @@
           <div
             v-if="compactButtons(group).length"
             class="ribbon-group-track"
-            :class="getCompactTrackClass()"
+            :class="[
+              getCompactTrackClass(),
+              {
+                'ribbon-group-track--stacked-fields': group.stackedFields,
+                'ribbon-group-track--stacked-span':
+                  group.stackedFields && (group.compactRows ?? 3) === 3,
+              },
+            ]"
             :style="
               group.compactRows
                 ? { gridTemplateRows: `repeat(${group.compactRows}, max-content)` }
@@ -1129,6 +1136,26 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
 
 .ribbon-group-item--field .ribbon-field-label {
   min-width: var(--lj-ribbon-field-label-width);
+}
+
+/* Grupo com `stackedFields`: rótulo em cima, no mesmo tom do "TEMPO" do
+   TimeDurationInput, e sem a largura de alinhamento. */
+.ribbon-group-track--stacked-fields .ribbon-group-item--compact .ribbon-field-wrap {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+/* Com três linhas, o campo empilhado ocupa duas: sozinho numa linha ele a
+   esticava e as caixinhas da coluna ao lado ficavam desencontradas. */
+.ribbon-group-track--stacked-span .ribbon-group-item--field {
+  grid-row: span 2;
+  align-self: start;
+}
+.ribbon-group-track--stacked-fields .ribbon-group-item--field .ribbon-field-label {
+  min-width: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .ribbon-field-select {
