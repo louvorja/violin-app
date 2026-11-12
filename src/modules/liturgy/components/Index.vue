@@ -14,14 +14,17 @@
 
     <Transition name="liturgy-busy">
       <div
-        v-if="importing"
+        v-if="importing || exporting"
         class="liturgy-busy-overlay"
         role="status"
         aria-live="polite"
-        data-testid="liturgy-import-loader"
+        :data-testid="importing ? 'liturgy-import-loader' : 'liturgy-export-loader'"
       >
-        <LjSpinner :size="36" :label="t('library.importing')" />
-        <span>{{ t("library.importing") }}</span>
+        <LjSpinner
+          :size="36"
+          :label="importing ? t('library.importing') : t('library.exporting')"
+        />
+        <span>{{ importing ? t("library.importing") : t("library.exporting") }}</span>
       </div>
     </Transition>
 
@@ -149,6 +152,7 @@
     </LjDialog>
 
     <LiturgySaveDialog v-model="saveDialog" :items="safeItems" @saved="onLiturgySaved" />
+    <LiturgyExportDialog v-model="exportDialog" :counts="exportCounts" @confirm="confirmExport" />
     <LiturgyLoadDialog v-model="loadDialog" :items="safeItems" @loaded="onLiturgyLoaded" />
     <LiturgyManageDialog v-model="manageDialog" @managed="onLiturgyManaged" />
 
@@ -177,7 +181,8 @@ import LiturgyTimeline from "./LiturgyTimeline.vue";
 import LiturgyNotesPanel from "./LiturgyNotesPanel.vue";
 import LiturgyItemForm from "./LiturgyItemForm.vue";
 import LiturgySchedules from "./LiturgySchedules.vue";
-import $alert from "@/helpers/Alert";
+import $alert, { escapeHtml } from "@/helpers/Alert";
+import type { LiturgyLibraryItem } from "@/types/LiturgyLibrary";
 import $snackbar from "@/helpers/Snackbar";
 import $liturgy from "@/helpers/Liturgy";
 import $appdata from "@/helpers/AppData";
@@ -189,10 +194,14 @@ import { musicTitle } from "@root/config/musicCatalog.mjs";
 import { ACTION_LITURGY_VERSION } from "@/config/MusicAction";
 import type { MusicActionEnum } from "@/enums/MusicActionEnum";
 import LiturgySaveDialog from "./LiturgySaveDialog.vue";
+import LiturgyExportDialog from "./LiturgyExportDialog.vue";
 import LiturgyLoadDialog from "./LiturgyLoadDialog.vue";
 import LiturgyManageDialog from "./LiturgyManageDialog.vue";
 import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
-import { useLiturgyImport } from "../composables/useLiturgyImport";
+import { useLiturgyImport, type WeekEntry } from "../composables/useLiturgyImport";
+import { countExportFiles, useLiturgyExport } from "../composables/useLiturgyExport";
+import { DEFAULT_EXPORT_OPTIONS, type ExportCounts, type ExportOptions } from "../package/collect";
+import { pendingLiturgyFiles, takeLiturgyImport } from "../openRequests";
 import { useLiturgyAutoLoad } from "../composables/useLiturgyAutoLoad";
 import Telemetry from "@/helpers/Telemetry";
 
@@ -414,7 +423,85 @@ function reportLiturgyError(
   Telemetry.track("liturgy_operation_failed", { operation, ...properties });
 }
 
-const { busy: importing, doImport } = useLiturgyImport(liturgyLibrary, reportLiturgyError);
+const {
+  busy: importing,
+  doImport,
+  importFile,
+} = useLiturgyImport(liturgyLibrary, reportLiturgyError, {
+  onImported: offerOpenImported,
+  onImportedWeek: offerPlaceWeek,
+});
+
+/**
+ * O `.ja` (e o `.json` da semana do Classic) traz uma liturgia por dia: oferece
+ * pôr cada uma no seu dia, de uma vez, em vez de deixar tudo só na biblioteca.
+ */
+function offerPlaceWeek(entries: WeekEntry[]) {
+  const days = entries.map((e) => dayLabels.value[e.day]).join(", ");
+  const replacing = entries.some((e) => $liturgy.list(e.day).length > 0);
+  const text = t(replacing ? "library.import_week_replace" : "library.import_week", {
+    count: entries.length,
+    days,
+  });
+  $alert.yesno(
+    { title: escapeHtml(t("library.import_title")), text: escapeHtml(text), translate: false },
+    (btn?: string) => {
+      if (btn !== "yes") return;
+      for (const { item, day } of entries) {
+        $liturgy.set(item.items, day);
+        $liturgy.setDayLiturgyId(day, item.id);
+      }
+      const today = entries.find((e) => e.day === activeDay.value);
+      if (today) $liturgy.setCurrentLiturgyId(today.item.id);
+      void onLiturgyLoaded();
+    }
+  );
+}
+
+/**
+ * Depois de importar, oferece abrir a liturgia no dia que está na tela — sem
+ * isso ela ia só para a biblioteca, e parecia que o import não tinha feito nada.
+ */
+function offerOpenImported(item: LiturgyLibraryItem) {
+  const day = activeDay.value;
+  const replacing = $liturgy.list(day).length > 0;
+  const text = t(replacing ? "library.import_open_replace" : "library.import_open", {
+    name: item.name,
+    day: dayLabels.value[day],
+  });
+  $alert.yesno(
+    { title: escapeHtml(t("library.import_title")), text: escapeHtml(text), translate: false },
+    (btn?: string) => {
+      if (btn !== "yes" || activeDay.value !== day) return;
+      $liturgy.set(item.items, day);
+      $liturgy.setCurrentLiturgyId(item.id);
+      void onLiturgyLoaded();
+    }
+  );
+}
+
+// Duplo clique num .llja (ou arrastar para a janela): a shell enfileira, a tela importa.
+// Um de cada vez: tirar da fila também muda a fila, e o watch dispararia de novo
+// no meio de um import — o segundo seria recusado pela trava e o arquivo, perdido.
+let drainingImports = false;
+watch(
+  pendingLiturgyFiles,
+  async () => {
+    if (drainingImports) return;
+    drainingImports = true;
+    try {
+      let file = takeLiturgyImport();
+      while (file) {
+        await importFile(file);
+        file = takeLiturgyImport();
+      }
+    } finally {
+      drainingImports = false;
+    }
+  },
+  { immediate: true }
+);
+const { busy: exporting, exportLiturgy } = useLiturgyExport(reportLiturgyError);
 
 watch(
   [items, () => $liturgy.getCurrentLiturgyId()],
@@ -552,7 +639,7 @@ function handleRibbonAction(action: string) {
       loadDialog.value = true;
       break;
     case "export":
-      doExport();
+      void doExport();
       break;
     case "import":
       doImport();
@@ -594,33 +681,56 @@ function clearDayDialog() {
   });
 }
 
-function doExport() {
-  const id = $liturgy.getCurrentLiturgyId();
-  if (!id) {
-    $snackbar.warning(t("library.no_liturgy_selected"));
-    Telemetry.track("liturgy_operation_blocked", { operation: "export", reason: "not_selected" });
+const exportDialog = ref(false);
+const exportCounts = ref<ExportCounts>({
+  liturgy: 0,
+  media: 0,
+  backgroundSound: 0,
+  backgroundProjection: 0,
+  backgroundProjectionAll: 0,
+});
+let pendingExport: { name: string; color?: string; items: LiturgyItem[] } | null = null;
+
+/**
+ * Exporta o que está NA TELA — não a versão salva na biblioteca, que pode estar
+ * atrás das últimas mudanças. O nome e a cor vêm da liturgia salva deste dia,
+ * quando houver; sem ela, o nome é o do dia ("Sábado"). Antes, a janela pergunta
+ * o que das bibliotecas vai junto.
+ */
+async function doExport() {
+  if (exporting.value) return;
+  const items = safeItems.value;
+  if (!items.length) {
+    await exportLiturgy({ name: "", items }, DEFAULT_EXPORT_OPTIONS);
     return;
   }
-  liturgyLibrary
-    .get(id)
-    .then((item) => {
-      if (!item) {
-        Telemetry.track("liturgy_resource_missing", {
-          resource: "library_item",
-          operation: "export",
-        });
-        return;
+  const id = $liturgy.getCurrentLiturgyId();
+  let name = dayLabels.value[activeDay.value];
+  let color: string | undefined;
+  if (id) {
+    try {
+      const saved = await liturgyLibrary.get(id);
+      if (saved) {
+        name = saved.name;
+        color = saved.color;
       }
-      liturgyLibrary.exportToJson(item.items, item.name);
-      Telemetry.track("liturgy_export_completed", {
-        format: "json",
-        item_count: item.items.length,
-      });
-    })
-    .catch((error: unknown) => {
-      reportLiturgyError(error, "export", { format: "json" });
-      console.error("[Liturgia] export falhou:", error);
-    });
+    } catch (error) {
+      reportLiturgyError(error, "export_lookup", { has_liturgy_id: true });
+    }
+  }
+  pendingExport = { name, color, items };
+  try {
+    exportCounts.value = await countExportFiles(items);
+  } catch (error) {
+    reportLiturgyError(error, "export_count");
+  }
+  exportDialog.value = true;
+}
+
+async function confirmExport(options: ExportOptions) {
+  const input = pendingExport;
+  pendingExport = null;
+  if (input) await exportLiturgy(input, options);
 }
 
 /*

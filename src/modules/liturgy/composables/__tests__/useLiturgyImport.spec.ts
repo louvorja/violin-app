@@ -1,18 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useLiturgyImport } from "../useLiturgyImport";
+import { useLiturgyImport, weekEntries } from "../useLiturgyImport";
 import { useLiturgyLibrary } from "../useLiturgyLibrary";
+import { buildPackage } from "../../package/format";
+import type { InstallDeps } from "../../package/install";
 
 const success = vi.fn();
 const error = vi.fn();
+const warning = vi.fn();
 vi.mock("@/helpers/Snackbar", () => ({
-  default: { success: (msg: string) => success(msg), error: (msg: string) => error(msg) },
+  default: {
+    success: (msg: string) => success(msg),
+    error: (msg: string) => error(msg),
+    warning: (msg: string) => warning(msg),
+  },
 }));
 
-type YesNo = { options: { title: string; text: string }; answer: (_btn?: string) => Promise<void> };
-let questions: YesNo[] = [];
+type Question = {
+  options: { title: string; text: string; buttons?: { value: string }[] };
+  answer: (_btn?: string) => void;
+};
+let questions: Question[] = [];
 vi.mock("@/helpers/Alert", () => ({
+  escapeHtml: (text: string) => text,
   default: {
-    yesno: (options: YesNo["options"], answer: YesNo["answer"]) =>
+    show: (options: Question["options"], answer: Question["answer"]) =>
+      questions.push({ options, answer }),
+    info: (options: Question["options"], answer: Question["answer"]) =>
       questions.push({ options, answer }),
   },
 }));
@@ -25,7 +38,7 @@ vi.mock("@/helpers/Telemetry", () => ({
 
 vi.mock("../../i18n", () => ({
   useLiturgyI18n: () => ({
-    t: (key: string) =>
+    t: (key: string, values?: Record<string, unknown>) =>
       (
         ({
           "library.weekday_sunday": "Domingo",
@@ -36,7 +49,7 @@ vi.mock("../../i18n", () => ({
           "library.weekday_friday": "Sexta",
           "library.weekday_saturday": "Sábado",
         }) as Record<string, string>
-      )[key] ?? key,
+      )[key] ?? (values ? `${key} ${JSON.stringify(values)}` : key),
   }),
 }));
 
@@ -102,6 +115,7 @@ function file(name: string, content: string, encoding: "latin1" | "utf8-bom" = "
     type: name.endsWith(".json") ? "application/json" : "",
     text: async () => content,
     arrayBuffer: async () => bytes.buffer,
+    slice: (start: number, end: number) => new Blob([bytes.slice(start, end)]),
   } as unknown as File;
 }
 
@@ -132,6 +146,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   success.mockReset();
   error.mockReset();
+  warning.mockReset();
   track.mockReset();
   report.mockReset();
   questions = [];
@@ -203,7 +218,7 @@ describe("useLiturgyImport — o loader durante o import", () => {
     expect(busy.value).toBe(false);
     expect(error).toHaveBeenCalledWith("library.import_invalid");
     expect(success).not.toHaveBeenCalled();
-    expect(report).toHaveBeenCalledWith(expect.any(Error), "import_json", expect.any(Object));
+    expect(report).toHaveBeenCalledWith(expect.any(Error), "import_json_save", expect.any(Object));
   });
 
   it("não deixa começar outro import enquanto um está em andamento", async () => {
@@ -230,52 +245,58 @@ describe("useLiturgyImport — liturgia que já existe na biblioteca", () => {
     getByName.mockResolvedValue({ id: "abc", name: "Culto de domingo" });
   });
 
-  it("sem loader enquanto o operador lê a pergunta, e sem aviso ainda", async () => {
-    const { busy, importFile } = setup();
+  /** Começa o import e espera a pergunta aparecer. */
+  async function untilAsked() {
+    const api = setup();
+    const done = api.importFile(file("culto.json", JSON_LITURGY));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(questions).toHaveLength(1);
+    return { ...api, done };
+  }
 
-    const done = importFile(file("culto.json", JSON_LITURGY));
+  it("pergunta com três saídas, sem loader enquanto o operador lê, e sem aviso ainda", async () => {
+    const { busy, done } = await untilAsked();
+
+    expect(questions[0].options.buttons?.map((b) => b.value)).toEqual([
+      "cancel",
+      "copy",
+      "replace",
+    ]);
+    expect(questions[0].options.text).toContain("Culto de domingo");
+    expect(busy.value).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    expect(success).not.toHaveBeenCalled();
+    questions[0].answer("cancel");
+    await done;
+  });
+
+  it("cancelar descarta o arquivo sem gravar nem avisar", async () => {
+    const { busy, done } = await untilAsked();
+    questions[0].answer("cancel");
     await vi.advanceTimersByTimeAsync(500);
     await done;
 
-    expect(questions).toHaveLength(1);
     expect(busy.value).toBe(false);
     expect(save).not.toHaveBeenCalled();
     expect(success).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
   });
 
-  it("responder não descarta o arquivo sem gravar nem avisar", async () => {
-    const { busy, importFile } = setup();
-    const done = importFile(file("culto.json", JSON_LITURGY));
-    await vi.advanceTimersByTimeAsync(500);
-    await done;
-
-    await questions[0].answer("no");
-    await vi.advanceTimersByTimeAsync(500);
-
-    expect(busy.value).toBe(false);
-    expect(save).not.toHaveBeenCalled();
-    expect(success).not.toHaveBeenCalled();
-  });
-
-  it("responder sim liga o loader de novo enquanto sobrescreve, e o aviso vem depois", async () => {
-    const { busy, importFile } = setup();
+  it("substituir liga o loader de novo enquanto sobrescreve, e o aviso vem depois", async () => {
+    const { busy, done } = await untilAsked();
     const busyWhenToasted: boolean[] = [];
     success.mockImplementation(() => busyWhenToasted.push(busy.value));
-    const done = importFile(file("culto.json", JSON_LITURGY));
-    await vi.advanceTimersByTimeAsync(500);
-    await done;
 
     const writing = deferred();
     save.mockReturnValue(writing.promise);
-    const answered = questions[0].answer("yes");
+    questions[0].answer("replace");
     await vi.advanceTimersByTimeAsync(0);
     expect(busy.value).toBe(true);
     expect(success).not.toHaveBeenCalled();
 
     writing.finish();
     await vi.advanceTimersByTimeAsync(500);
-    await answered;
+    await done;
 
     expect(busy.value).toBe(false);
     expect(save).toHaveBeenCalledWith({
@@ -290,20 +311,86 @@ describe("useLiturgyImport — liturgia que já existe na biblioteca", () => {
     );
   });
 
-  it("falha ao sobrescrever: solta o loader e avisa o erro", async () => {
-    const { busy, importFile } = setup();
-    const done = importFile(file("culto.json", JSON_LITURGY));
+  it("importar como cópia grava com outro nome, sem mexer na que existe", async () => {
+    list.mockResolvedValue([{ name: "Culto de domingo" }, { name: "Culto de domingo (2)" }]);
+    const { done } = await untilAsked();
+    questions[0].answer("copy");
     await vi.advanceTimersByTimeAsync(500);
     await done;
 
+    expect(save).toHaveBeenCalledWith({ name: "Culto de domingo (3)", items: expect.any(Array) });
+    expect(track).toHaveBeenCalledWith(
+      "liturgy_import_completed",
+      expect.objectContaining({ overwritten: false, as_copy: true })
+    );
+  });
+
+  it("falha ao sobrescrever: solta o loader e avisa o erro", async () => {
+    const { busy, done } = await untilAsked();
     save.mockRejectedValue(new Error("sem permissão"));
-    const answered = questions[0].answer("yes");
+    questions[0].answer("replace");
     await vi.advanceTimersByTimeAsync(500);
-    await answered;
+    await done;
 
     expect(busy.value).toBe(false);
     expect(error).toHaveBeenCalledWith("library.import_invalid");
     expect(report).toHaveBeenCalledWith(expect.any(Error), "import_json_save", expect.any(Object));
+  });
+});
+
+describe("useLiturgyImport — depois de importar", () => {
+  it("entrega a liturgia gravada para a tela oferecer abrir, e traz a cor do arquivo", async () => {
+    const onImported = vi.fn();
+    save.mockImplementation(async (data: object) => ({ id: "novo", ...data }));
+    const library = {
+      parseImport: useLiturgyLibrary().parseImport,
+      getByName: (name: string) => getByName(name),
+      save: (data: unknown) => save(data),
+      list: () => list(),
+    } as unknown as Parameters<typeof useLiturgyImport>[0];
+    const { importFile } = useLiturgyImport(library, report, { onImported });
+    const json = JSON.stringify({ ...JSON.parse(JSON_LITURGY), color: "#AA0000" });
+    const done = importFile(file("culto.json", json));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ color: "#AA0000" }));
+    expect(onImported).toHaveBeenCalledWith(expect.objectContaining({ id: "novo" }));
+  });
+});
+
+describe("useLiturgyImport — .json da semana do Classic", () => {
+  it("cada liturgia de `liturgies` entra com o nome que trouxe, numerado se repetir", async () => {
+    list.mockResolvedValue([{ name: "Sábado" }]);
+    const semana = JSON.stringify({
+      schema: 1,
+      exportedAt: "2026-11-05T23:07:04",
+      liturgies: [
+        {
+          name: "Sábado",
+          color: "#AA0000",
+          binding: { type: "day_of_week", value: 6 },
+          items: [{ id: "item_1", tipo: "anotacao", item: "Abertura" }],
+        },
+        { name: "Domingo", items: [{ id: "item_2", tipo: "bloco", item: "Culto" }] },
+        { name: "Segunda-feira", items: [] },
+      ],
+    });
+    const { importFile } = setup();
+    const done = importFile(file("semana.json", semana));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(save.mock.calls.map(([d]) => d)).toEqual([
+      {
+        name: "Sábado 1",
+        color: "#AA0000",
+        items: [expect.objectContaining({ item: "Abertura" })],
+      },
+      { name: "Domingo", items: [expect.objectContaining({ tipo: "bloco" })] },
+    ]);
+    expect(questions).toHaveLength(0);
+    expect(success).toHaveBeenCalledOnce();
   });
 });
 
@@ -397,14 +484,14 @@ describe("useLiturgyImport — o seletor de arquivo", () => {
     vi.restoreAllMocks();
   });
 
-  it("abre o seletor de .json e .ja, e importa o arquivo escolhido", async () => {
+  it("abre o seletor de .llja, .json e .ja, e importa o arquivo escolhido", async () => {
     const { doImport, busy } = setup();
     doImport();
 
     expect(created).toHaveLength(1);
     const [input] = created;
     expect(input.type).toBe("file");
-    expect(input.accept).toBe(".json,.ja");
+    expect(input.accept).toBe(".llja,.zip,.json,.ja");
     expect(input.click).toHaveBeenCalledOnce();
 
     Object.defineProperty(input, "files", { value: [file("culto.json", JSON_LITURGY)] });
@@ -511,5 +598,195 @@ describe("useLiturgyImport — nome do .ja pela posição", () => {
     await done;
 
     expect(nomesSalvos()).toEqual(["Domingo"]);
+  });
+});
+
+describe("useLiturgyImport — pacote .llja", () => {
+  // O JSZip usa os timers de verdade.
+  beforeEach(() => vi.useRealTimers());
+
+  it("grava os arquivos nas bibliotecas, avisa o que faltou e só depois oferece abrir", async () => {
+    const tables = new Map<string, Map<string, Record<string, unknown>>>();
+    const table = (t: string) => {
+      if (!tables.has(t)) tables.set(t, new Map());
+      return tables.get(t)!;
+    };
+    const installDeps: Partial<InstallDeps> = {
+      get: async (t, id) => table(t).get(id),
+      getAll: async (t) => [...table(t).values()],
+      put: async (t, r) => void table(t).set(String(r.id), r),
+      del: async (t, id) => void table(t).delete(id),
+    };
+    const startVideoDownload = vi.fn();
+    const onImported = vi.fn();
+    save.mockImplementation(async (data: object) => ({ id: "novo", ...data }));
+    const library = {
+      parseImport: useLiturgyLibrary().parseImport,
+      getByName: (name: string) => getByName(name),
+      save: (data: unknown) => save(data),
+      list: () => list(),
+    } as unknown as Parameters<typeof useLiturgyImport>[0];
+    const { importFile } = useLiturgyImport(library, report, {
+      installDeps,
+      startVideoDownload,
+      onImported,
+    });
+
+    const blob = await buildPackage({
+      liturgy: {
+        name: "Culto",
+        color: "#AA0000",
+        items: [
+          { id: "a", tipo: "biblioteca-midia", item: "Foto", ref_id: "m1" },
+          { id: "b", tipo: "som-de-fundo", item: "Chuva", ref_id: "sumiu" },
+          { id: "c", tipo: "video-online", item: "Clipe", url: "https://youtu.be/DDDDDDDDDDD" },
+        ] as never,
+      },
+      files: [
+        {
+          source: "media",
+          sourceId: "m1",
+          name: "foto.png",
+          mime: "image/png",
+          data: new Blob(["PNG"]),
+        },
+      ],
+    });
+    await importFile(new File([blob], "Culto.llja"));
+
+    const media = [...table("media_library").values()];
+    expect(media).toHaveLength(1);
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Culto",
+        color: "#AA0000",
+        items: [
+          expect.objectContaining({ ref_id: media[0].id }),
+          expect.not.objectContaining({ ref_id: "sumiu" }),
+          expect.objectContaining({ tipo: "video-online" }),
+        ],
+      })
+    );
+    expect(startVideoDownload).toHaveBeenCalledWith("DDDDDDDDDDD", "Clipe");
+    // Aviso do que faltou primeiro; a pergunta de abrir vem depois que ele fecha.
+    expect(questions).toHaveLength(1);
+    expect(questions[0].options.text).toContain("Chuva");
+    expect(onImported).not.toHaveBeenCalled();
+    questions[0].answer("close");
+    expect(onImported).toHaveBeenCalledWith(expect.objectContaining({ id: "novo" }));
+  });
+
+  it("se a liturgia não grava, desfaz o que entrou nas bibliotecas", async () => {
+    const media = new Map<string, unknown>();
+    const installDeps: Partial<InstallDeps> = {
+      get: async () => undefined,
+      getAll: async () => [],
+      put: async (t, r) => void (t === "media_library" && media.set(String(r.id), r)),
+      del: async (t, id) => void media.delete(id),
+    };
+    save.mockRejectedValue(new Error("disco cheio"));
+    const library = {
+      parseImport: useLiturgyLibrary().parseImport,
+      getByName: (name: string) => getByName(name),
+      save: (data: unknown) => save(data),
+      list: () => list(),
+    } as unknown as Parameters<typeof useLiturgyImport>[0];
+    const { importFile } = useLiturgyImport(library, report, { installDeps });
+    const blob = await buildPackage({
+      liturgy: {
+        name: "Culto",
+        items: [{ id: "a", tipo: "biblioteca-midia", item: "Foto", ref_id: "m1" }] as never,
+      },
+      files: [
+        { source: "media", sourceId: "m1", name: "foto.png", mime: "", data: new Blob(["P"]) },
+      ],
+    });
+    await importFile(new File([blob], "Culto.llja"));
+    expect(media.size).toBe(0);
+    expect(error).toHaveBeenCalledWith("library.import_invalid");
+  });
+});
+
+describe("useLiturgyImport — várias liturgias vão para a semana", () => {
+  function setupWeek() {
+    const onImported = vi.fn();
+    const onImportedWeek = vi.fn();
+    let n = 0;
+    save.mockImplementation(async (data: object) => ({ id: `lit-${++n}`, ...data }));
+    const library = {
+      parseImport: useLiturgyLibrary().parseImport,
+      getByName: (name: string) => getByName(name),
+      save: (data: unknown) => save(data),
+      list: () => list(),
+    } as unknown as Parameters<typeof useLiturgyImport>[0];
+    const api = useLiturgyImport(library, report, { onImported, onImportedWeek });
+    return { ...api, onImported, onImportedWeek };
+  }
+
+  it(".ja com duas liturgias: oferece pôr a 1ª no domingo e a 2ª na segunda", async () => {
+    const { importFile, onImported, onImportedWeek } = setupWeek();
+    const done = importFile(file("liturgia.ja", JA_TWO_LITURGIES));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(onImported).not.toHaveBeenCalled();
+    expect(onImportedWeek).toHaveBeenCalledOnce();
+    const entries = onImportedWeek.mock.calls[0][0] as { item: { id: string }; day: number }[];
+    expect(entries.map((e) => [e.item.id, e.day])).toEqual([
+      ["lit-1", 0],
+      ["lit-2", 1],
+    ]);
+  });
+
+  it(".ja com uma liturgia só: oferece abrir, como o .json", async () => {
+    const { importFile, onImported, onImportedWeek } = setupWeek();
+    const done = importFile(file("liturgia.ja", JA_V26_7, "utf8-bom"));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(onImportedWeek).not.toHaveBeenCalled();
+    expect(onImported).toHaveBeenCalledWith(expect.objectContaining({ id: "lit-1" }));
+  });
+
+  it(".json da semana usa o dia do vínculo; sem vínculo, a posição", async () => {
+    const semana = JSON.stringify({
+      schema: 1,
+      liturgies: [
+        {
+          name: "Culto de sábado",
+          binding: { type: "day_of_week", value: 6 },
+          items: [{ id: "a", tipo: "anotacao", item: "Abertura" }],
+        },
+        { name: "Sem vínculo", items: [{ id: "b", tipo: "anotacao", item: "B" }] },
+      ],
+    });
+    const { importFile, onImportedWeek } = setupWeek();
+    const done = importFile(file("semana.json", semana));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    const entries = onImportedWeek.mock.calls[0][0] as { item: { name: string }; day: number }[];
+    expect(entries.map((e) => [e.item.name, e.day])).toEqual([
+      ["Culto de sábado", 6],
+      ["Sem vínculo", 1],
+    ]);
+  });
+});
+
+describe("weekEntries", () => {
+  const lit = (id: string) => ({ id, name: id, items: [] }) as never;
+  it("só a primeira de cada dia entra, e dia fora da semana fica de fora", () => {
+    expect(
+      weekEntries([
+        { item: lit("a"), day: 0 },
+        { item: lit("b"), day: 1 },
+        { item: lit("c"), day: 0 },
+        { item: lit("d"), day: 7 },
+        { day: 2 },
+      ]).map((e) => [e.item.id, e.day])
+    ).toEqual([
+      ["a", 0],
+      ["b", 1],
+    ]);
   });
 });
