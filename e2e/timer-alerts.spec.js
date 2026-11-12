@@ -105,6 +105,116 @@ for (const mod of MODULES) {
     await expect(page.getByTestId(mod.display)).not.toContainText("-");
     await expect(page.getByTestId(mod.stage)).toHaveAttribute("data-alert", "danger");
   });
+
+  test(`${mod.id}: não colore o aviso antes de iniciar`, async ({ page }) => {
+    await openModule(page, mod);
+    const time = page.locator('input[type="time"]').first();
+    await time.fill("10:59");
+    await time.dispatchEvent("change");
+
+    const display = page.getByTestId(mod.display);
+    await expect(display).toContainText(/00:0[01]:\d\d/);
+    await expect(page.getByTestId(mod.stage)).toHaveAttribute("data-alert", "none");
+    expect(await display.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(255, 255, 255)");
+  });
+
+  test(`${mod.id}: desligar tempo excedido no excedido pausa`, async ({ page }) => {
+    await openModule(page, mod);
+    const display = page.getByTestId(mod.display);
+    await page.getByTestId(`ribbon-btn-${mod.id}_toggle`).click();
+    await page.clock.runFor(130_000);
+    await expect(display).toContainText(/-00:00:/);
+
+    await page.getByText("Contar tempo excedido").click();
+    await expect(display).toContainText("00:00:00");
+    await expect(display).not.toContainText("-");
+    await expect(page.getByTestId(`ribbon-btn-${mod.id}_toggle`)).toContainText("Iniciar");
+  });
+
+  test(`${mod.id}: start com horário passado e sem excedido não mostra negativo`, async ({
+    page,
+  }) => {
+    await openModule(page, mod);
+    const time = page.locator('input[type="time"]').first();
+    await time.fill("10:57");
+    await time.dispatchEvent("change");
+    await page.getByText("Contar tempo excedido").click();
+
+    const display = page.getByTestId(mod.display);
+    const toggle = page.getByTestId(`ribbon-btn-${mod.id}_toggle`);
+    await toggle.click();
+    await expect(display).not.toContainText("-");
+    await page.clock.runFor(2_000);
+    await expect(display).toContainText("00:00:00");
+    await expect(toggle).toContainText("Iniciar");
+  });
+
+  test(`${mod.id}: fechar no X encerra só a projeção do módulo`, async ({ page, context }) => {
+    await openModule(page, mod);
+    const projection = await context.newPage();
+    await projection.goto(`/projection/module?module=${mod.id}`);
+    await page.bringToFront();
+    await page.getByTestId(`ribbon-btn-${mod.id}_toggle`).click();
+    await page.clock.runFor(5_000);
+    await expect(projection.locator(".module-projection__text")).toContainText(/\d/);
+
+    await page.locator(".subtab-close").first().click();
+    await expect(projection.locator(".module-projection__text")).toHaveCount(0);
+    await expect(projection.locator(".module-projection__alert")).toHaveCount(0);
+
+    await page.locator(`#ribbon-tab-${mod.tab}`).click();
+    await page.locator(`[data-testid="ribbon-btn-${mod.id}"]`).click();
+    await expect(projection.locator(".module-projection__text")).toContainText(/\d/);
+  });
+
+  test(`${mod.id}: cor do aviso e do alerta atualiza com o timer pausado`, async ({
+    page,
+    context,
+  }) => {
+    await openModule(page, mod);
+    const display = page.getByTestId(mod.display);
+    const projection = await context.newPage();
+    await projection.goto(`/projection/module?module=${mod.id}`);
+    await page.bringToFront();
+
+    await page.getByTestId(`ribbon-btn-${mod.id}_toggle`).click();
+    await page.clock.runFor(70_000);
+    await expect(page.getByTestId(mod.stage)).toHaveAttribute("data-alert", "warning");
+    await page.getByTestId(`ribbon-btn-${mod.id}_toggle`).click();
+
+    await page.evaluate(async (id) => {
+      const { default: userdata } = await import("/src/helpers/UserData.ts");
+      userdata.set(`modules.${id}.warning_color`, "#22C55E");
+      userdata.set(`modules.${id}.alert_color`, "#8E44AD");
+    }, mod.id);
+
+    const color = (locator) => locator.evaluate((el) => getComputedStyle(el).color);
+    const frame = (locator) =>
+      locator.evaluate((el) => getComputedStyle(el).getPropertyValue("--frame-color").trim());
+
+    await expect.poll(() => color(display)).toBe("rgb(34, 197, 94)");
+    await expect.poll(() => frame(page.getByTestId("module-alert-frame-warning"))).toBe("#22C55E");
+    await expect
+      .poll(() => color(projection.locator(".module-projection__text")))
+      .toBe("rgb(34, 197, 94)");
+    await expect
+      .poll(() => frame(projection.getByTestId("module-projection-alert-warning")))
+      .toBe("#22C55E");
+
+    await page.getByTestId(`ribbon-btn-${mod.id}_toggle`).click();
+    await page.clock.runFor(70_000);
+    await expect(page.getByTestId(mod.stage)).toHaveAttribute("data-alert", "danger");
+    await page.getByTestId(`ribbon-btn-${mod.id}_toggle`).click();
+
+    await expect.poll(() => color(display)).toBe("rgb(142, 68, 173)");
+    await expect.poll(() => frame(page.getByTestId("module-alert-frame-danger"))).toBe("#8E44AD");
+    await expect
+      .poll(() => color(projection.locator(".module-projection__text")))
+      .toBe("rgb(142, 68, 173)");
+    await expect
+      .poll(() => frame(projection.getByTestId("module-projection-alert-danger")))
+      .toBe("#8E44AD");
+  });
 }
 
 test("timer: sem mexer no modo, conta regressivo como a tela mostra", async ({ page }) => {
@@ -164,6 +274,27 @@ test("timer: horário de madrugada vira o de amanhã; horário que acabou de pas
   await page.getByTestId("ribbon-btn-timer_toggle").click();
   await page.clock.runFor(2_000);
   await expect(display).toContainText(/-00:3\d:\d\d/);
+});
+
+test("timer: horário da manhã definido à tarde é o de amanhã", async ({ page }) => {
+  await page.clock.install({ time: new Date(2026, 10, 5, 14, 0, 0) });
+  await page.route("http://e2e.mock/**", (route) => route.fulfill({ json: [] }));
+  await page.route("**/json_db/**", (route) => route.fulfill({ json: [] }));
+  await page.goto("/");
+  await page
+    .locator('[data-testid="modules-ready"]')
+    .waitFor({ state: "attached", timeout: 30_000 });
+  await page.locator("#ribbon-tab-utilities").click();
+  await page.locator('[data-testid="ribbon-btn-timer"]').click();
+  const display = page.getByTestId("timer-display");
+  await expect(display).toBeVisible();
+  await page.clock.setSystemTime(new Date(2026, 10, 5, 14, 0, 0));
+
+  const time = page.locator('input[type="time"]').first();
+  await time.fill("05:00");
+  await time.dispatchEvent("change");
+  // 14:00 -> 05:00 é 15h à frente; antes a regra de 12h mostrava -09:00:00.
+  await expect(display).toContainText(/1[45]:\d\d:\d\d/);
 });
 
 for (const mod of MODULES) {

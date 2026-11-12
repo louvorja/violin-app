@@ -73,6 +73,54 @@ test("contagem continua certa quando o relógio pula (janela minimizada)", async
   await expect(page.getByTestId("stopwatch-display")).toHaveText("01:30");
 });
 
+test("pausar e +1 min estende sem perder o tempo contado", async ({ page }) => {
+  await openStopwatch(page);
+  const display = page.getByTestId("stopwatch-display");
+  await page.getByRole("tab", { name: "Regressivo" }).click();
+  await page.getByTestId("stopwatch-preset-5").click();
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+
+  await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
+  await page.clock.runFor(60_000);
+  await expect(display).toHaveText("04:00");
+
+  await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
+  await page.getByTestId("stopwatch-add-minute").click();
+  await expect(display).toHaveText("05:00");
+});
+
+test("preset durante a contagem recomeça do zero", async ({ page }) => {
+  await openStopwatch(page);
+  const display = page.getByTestId("stopwatch-display");
+  await page.getByRole("tab", { name: "Regressivo" }).click();
+  await page.getByTestId("stopwatch-preset-5").click();
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+
+  await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
+  await page.clock.runFor(60_000);
+  await expect(display).toHaveText("04:00");
+
+  await page.getByTestId("stopwatch-preset-30").click();
+  await expect(display).toHaveText("30:00");
+  await expect(page.getByTestId("ribbon-btn-stopwatch_toggle")).toContainText("Iniciar");
+});
+
+test("desligar tempo excedido no excedido para e mostra 00:00", async ({ page }) => {
+  await openStopwatch(page);
+  const display = page.getByTestId("stopwatch-display");
+  await page.getByRole("tab", { name: "Regressivo" }).click();
+  await page.getByTestId("stopwatch-preset-5").click();
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+
+  await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
+  await page.clock.runFor(5 * 60_000 + 5_000);
+  await expect(display).toHaveText("-00:05");
+
+  await page.getByText("Contar tempo excedido").click();
+  await expect(display).toHaveText("00:00");
+  await expect(page.getByTestId("ribbon-btn-stopwatch_toggle")).toContainText("Iniciar");
+});
+
 test("fechar a aba no X para a contagem e tira a borda do telão", async ({ page, context }) => {
   await openStopwatch(page);
   await page.getByRole("tab", { name: "Regressivo" }).click();
@@ -86,11 +134,13 @@ test("fechar a aba no X para a contagem e tira a borda do telão", async ({ page
 
   await page.locator(".subtab-close").first().click();
   await expect(projection.locator(".module-projection__alert")).toHaveCount(0);
+  await expect(projection.locator(".module-projection__text")).toHaveCount(0);
 
   await page.locator("#ribbon-tab-utilities").click();
   await page.locator('[data-testid="ribbon-btn-stopwatch"]').click();
   await expect(page.getByTestId("stopwatch-display")).toHaveText("05:00");
   await expect(page.getByTestId("ribbon-btn-stopwatch_toggle")).toContainText("Iniciar");
+  await expect(projection.locator(".module-projection__text")).toHaveText("05:00");
 });
 
 test("cores do aviso e do alerta da Formatação valem no número e na moldura, na tela e no telão", async ({

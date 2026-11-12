@@ -4,6 +4,7 @@
     :manifest="manifest"
     :style="{ minWidth: '300px' }"
     @close="close()"
+    @show="onModuleShow"
   >
     <div class="lj-u-flex lj-u-h-full">
       <ModuleFormatDrawer v-model="show_format" :module-id="'stopwatch'" :manifest="manifest" />
@@ -12,7 +13,7 @@
         <div
           ref="container"
           class="sw-body"
-          :style="rootStyle"
+          :style="[rootStyle, { '--sw-hud-color': textStyle.color || '#fff' }]"
           data-testid="stopwatch-stage"
           :data-alert="alert || 'none'"
         >
@@ -137,7 +138,6 @@ import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useScreenProjection } from "@/composables/useScreenProjection";
 import $userdata from "@/helpers/UserData";
-import $appdata from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
 import {
   elapsedMs,
@@ -258,18 +258,20 @@ const alertColor = computed(() =>
       : undefined
 );
 
-watch(
-  [display, alert, flashBorders, alertColor],
-  () => {
-    projection.emit({
-      text: display.value,
-      active: true,
-      color: alertColor.value,
-      alert: flashBorders.value && alert.value ? alert.value : undefined,
-    });
-  },
-  { immediate: true }
-);
+const projectionActive = ref(true);
+
+function emitProjection() {
+  projection.emit({
+    text: projectionActive.value ? display.value : "",
+    active: projectionActive.value,
+    color: projectionActive.value ? alertColor.value : undefined,
+    alert: projectionActive.value && flashBorders.value && alert.value ? alert.value : undefined,
+  });
+}
+
+watch([display, alert, flashBorders, alertColor, projectionActive], emitProjection, {
+  immediate: true,
+});
 
 function tick() {
   now.value = Date.now();
@@ -281,6 +283,15 @@ function tick() {
   // Sem tempo excedido a contagem termina aqui, como sempre foi.
   if (!overtime.value) pause();
 }
+
+/*
+ * Desligar o excedido com a contagem já passada do zero precisa parar o
+ * relógio: `tick` não pausa mais depois de `reachedEnd`, e o botão ficaria em
+ * "Pausar" com o display congelado em 00:00.
+ */
+watch(overtime, (on) => {
+  if (!on && reachedEnd.value && running.value) pause();
+});
 
 function toggle() {
   if (running.value) pause();
@@ -338,27 +349,51 @@ const dockLabels = computed(() => ({
   warnings: ["off", "m1", "m2", "m5", "m10"].map((k) => tm(`warning.${k}`)),
 }));
 
+/** Marca a próxima mudança de meta como extensão, não como recomeço. */
+let extendTo = null;
+
+function clampTarget(total) {
+  return Math.max(0, Math.min(Number(total) || 0, 99 * 3600));
+}
+
 function setTarget(total) {
-  $userdata.set(KEYS.MODULES.STOPWATCH.TARGET_SECONDS, Math.max(0, Math.min(total, 99 * 3600)));
+  const next = clampTarget(total);
+  extendTo = null;
+  if (next === targetSeconds.value) {
+    reset();
+    return;
+  }
+  $userdata.set(KEYS.MODULES.STOPWATCH.TARGET_SECONDS, next);
+}
+
+function extendTarget(seconds) {
+  const next = clampTarget(targetSeconds.value + seconds);
+  if (next === targetSeconds.value) return;
+  extendTo = next;
+  $userdata.set(KEYS.MODULES.STOPWATCH.TARGET_SECONDS, next);
 }
 
 /*
  * +1 min durante a contagem dá mais tempo a quem está falando sem recomeçar:
- * a meta cresce e a contagem continua de onde está. Parado, só ajusta a meta.
+ * a meta cresce e a contagem continua de onde está, pausada ou correndo.
  */
 function addMinute() {
-  setTarget(targetSeconds.value + 60);
+  extendTarget(60);
 }
 
 // Trocar o modo ou a meta (ribbon, presets, controle remoto) zera — exceto o
-// +1 min com o cronômetro rodando, que só estende.
+// +1 min, que só estende.
 watch(mode, () => reset());
-watch(targetSeconds, (next, prev) => {
-  if (running.value && next > prev) {
+watch(targetSeconds, (next) => {
+  const isExtension = extendTo !== null && next === extendTo;
+  extendTo = null;
+
+  if (isExtension) {
     // `seconds` já reflete a meta nova: se voltou a sobrar tempo, sai do vermelho.
     if (seconds.value > 0) reachedEnd.value = false;
     return;
   }
+
   reset();
 });
 
@@ -375,20 +410,24 @@ function setTimeFromPayload(payload) {
 }
 
 function close() {
+  if (!projectionActive.value && !running.value) return;
+  projectionActive.value = false;
   reset();
+  emitProjection();
 }
 
 /*
- * O X da aba fecha o módulo por Modules.close(), sem passar pelo @close do
- * ModuleContainer — e o componente segue vivo no KeepAlive. Sem isto, a
- * contagem continuava escondida e a borda ficava pulsando no telão.
+ * O X da aba fecha por Modules.close(); o ModuleContainer traduz a mudança de
+ * visibilidade no evento `show`, sem o módulo precisar ler AppData.
  */
-watch(
-  () => $appdata.get(`modules.stopwatch.show`),
-  (shown) => {
-    if (shown === false) close();
+function onModuleShow(visible) {
+  if (!visible) {
+    close();
+    return;
   }
-);
+  projectionActive.value = true;
+  emitProjection();
+}
 
 let screenPoll = null;
 onMounted(() => {
@@ -400,6 +439,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  projection.emit({ active: false, text: "" });
   clearInterval(timer);
   clearInterval(screenPoll);
   $userdata.set(KEYS.MODULES.STOPWATCH.RUNNING, false);
@@ -448,8 +488,8 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: var(--lj-space-4);
   font-size: var(--lj-text-sm);
-  color: rgba(255, 255, 255, 0.62);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  color: color-mix(in srgb, var(--sw-hud-color, #fff) 62%, transparent);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   pointer-events: none;
 }
 .sw-hud-info {
@@ -457,7 +497,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .sw-hud-info b {
-  color: #fff;
+  color: var(--sw-hud-color, #fff);
   font-weight: var(--lj-weight-semibold, 600);
 }
 
@@ -467,9 +507,9 @@ onBeforeUnmount(() => {
   gap: var(--lj-space-2);
   padding: 2px var(--lj-space-4);
   border-radius: 999px;
-  border: 1px solid rgba(239, 68, 68, 0.6);
-  background: rgba(239, 68, 68, 0.16);
-  color: #fecaca;
+  border: 1px solid #ef4444;
+  background: #ef4444;
+  color: #fff;
   font-size: var(--lj-text-xs);
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -480,7 +520,7 @@ onBeforeUnmount(() => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #ef4444;
+  background: #fff;
   animation: sw-pulse 1s ease-in-out infinite alternate;
 }
 
@@ -505,11 +545,11 @@ onBeforeUnmount(() => {
 
 .sw-sub {
   font-size: var(--lj-text-base);
-  color: rgba(255, 255, 255, 0.6);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  color: color-mix(in srgb, var(--sw-hud-color, #fff) 62%, transparent);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 .sw-sub b {
-  color: #fbbf24;
+  color: var(--sw-hud-color, #fff);
   font-weight: 600;
 }
 

@@ -4,6 +4,7 @@
     :manifest="manifest"
     :style="{ minWidth: '320px' }"
     @close="close()"
+    @show="onModuleShow"
   >
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'timer_worship'" :manifest="manifest" />
@@ -61,7 +62,6 @@ import ModuleAlertFrame from "@/components/ModuleAlertFrame.vue";
 import ModuleTimerDock from "@/components/ModuleTimerDock.vue";
 import TimerEndActionDialogs from "@/components/TimerEndActionDialogs.vue";
 import $userdata from "@/helpers/UserData";
-import $appdata from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
@@ -72,6 +72,7 @@ import { SABBATH_SCHOOL_SOUNDS } from "@/config/SabbathSchool";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { formatTimerSeconds, timerProjectionText } from "@/helpers/TimerText";
+import { secondsUntilTarget } from "@/helpers/TimerTarget";
 import { worshipShowsTarget, worshipTargetTime } from "../projectionText";
 
 type TimerMode = "up" | "down";
@@ -112,6 +113,7 @@ const alertSeconds = computed<number>(() =>
 const alertActive = computed<boolean>(
   () =>
     mode.value === "down" &&
+    startedAt.value !== null &&
     showAlert.value &&
     seconds.value <= alertSeconds.value &&
     (seconds.value > 0 || alarmed.value)
@@ -128,7 +130,9 @@ let oneMinFired = false;
  */
 const displayColor = computed<string | undefined>(() => {
   // Passou do horário: vermelho mesmo com o aviso em "Não".
-  if (mode.value === "down" && seconds.value <= 0 && alarmed.value) return alertStyle.value.color;
+  if (mode.value === "down" && seconds.value <= 0 && alarmed.value && startedAt.value !== null) {
+    return alertStyle.value.color;
+  }
   return alertActive.value ? warningStyle.value.color : undefined;
 });
 const displayColorStyle = computed(() =>
@@ -266,41 +270,28 @@ function setTimeFromPayload(payload: unknown): void {
   reset();
 }
 
+const projectionActive = ref(true);
+
+function emitProjection(): void {
+  projection.emit({
+    text: projectionActive.value ? projecao.value : "",
+    active: projectionActive.value,
+    color: projectionActive.value ? displayColor.value : undefined,
+    alert:
+      projectionActive.value && flashBorders.value && alertLevel.value
+        ? alertLevel.value
+        : undefined,
+  });
+}
+
 watch(
-  [projecao, alertActive, alertLevel, flashBorders],
-  () => {
-    projection.emit({
-      text: projecao.value,
-      active: true,
-      color: displayColor.value,
-      alert: flashBorders.value && alertLevel.value ? alertLevel.value : undefined,
-    });
-  },
+  [projecao, alertActive, alertLevel, flashBorders, displayColor, projectionActive],
+  emitProjection,
   { immediate: true }
 );
 
-function getTargetDate(): Date {
-  const [hours, minutes] = targetTime.value.split(":").map(Number);
-  const target = new Date();
-  target.setHours(hours || 0, minutes || 0, 0, 0);
-  return target;
-}
-
-/*
- * Segundos até o horário. Já passou há até 12 h: é o horário de hoje que
- * passou (negativo). Passou há mais que isso: é o de amanhã (ex.: 01:00
- * definido às 23:00). Antes, qualquer horário já passado virava o de amanhã,
- * e Reiniciar depois do sermão mostrava 23:59:xx no telão.
- */
-function secondsUntilTarget(): number {
-  const now = Date.now();
-  const target = getTargetDate();
-  if (now - target.getTime() > 12 * 3600 * 1000) target.setDate(target.getDate() + 1);
-  return Math.ceil((target.getTime() - now) / 1000);
-}
-
 function getDurationUntilTarget(): number {
-  return Math.max(0, secondsUntilTarget());
+  return Math.max(0, secondsUntilTarget(targetTime.value));
 }
 
 function updateFromTargetTime(): void {
@@ -362,6 +353,17 @@ function updateRunningTime(): void {
   }
 }
 
+/*
+ * Desligar o excedido no meio dele precisa parar a contagem: `alarmed` já é
+ * true, então o tick não pausa sozinho e o botão ficaria em "Pausar" com o
+ * display congelado em 00:00:00.
+ */
+watch(overtime, (on) => {
+  if (on || mode.value !== "down" || !alarmed.value || seconds.value > 0) return;
+  seconds.value = 0;
+  if (running.value) pause();
+});
+
 function toggle(): void {
   if (running.value) {
     pause();
@@ -379,8 +381,14 @@ function start(): void {
   alarmed.value = resumingOvertime;
   fiveMinFired = resumingOvertime;
   oneMinFired = resumingOvertime;
+  const until = secondsUntilTarget(targetTime.value);
   // Regressivo aceita horário já passado: começa direto no excedido (ou no zero).
-  durationSeconds.value = mode.value === "down" ? secondsUntilTarget() : getDurationUntilTarget();
+  durationSeconds.value =
+    mode.value === "down"
+      ? overtime.value
+        ? until
+        : Math.max(0, until)
+      : getDurationUntilTarget();
   startedAt.value = Date.now();
   seconds.value = mode.value === "down" ? durationSeconds.value : 0;
   running.value = true;
@@ -410,29 +418,34 @@ function reset(): void {
   updateFromTargetTime();
 }
 
-// Fechar zera: com a contagem só pausada, a borda de aviso ficava no telão.
-// O horário continua salvo, então reabrir e iniciar retoma do ponto certo.
+// Fechar zera a contagem e tira o módulo do telão. O horário continua salvo,
+// então reabrir e iniciar retoma do ponto certo.
 function close(): void {
+  if (!projectionActive.value && !running.value) return;
+  projectionActive.value = false;
   reset();
+  emitProjection();
 }
 
 /*
- * O X da aba fecha o módulo por Modules.close(), sem passar pelo @close do
- * ModuleContainer — e o componente segue vivo no KeepAlive. Sem isto, a
- * contagem continuava escondida e a borda ficava pulsando no telão.
+ * O X da aba fecha por Modules.close(); o ModuleContainer traduz a mudança de
+ * visibilidade no evento `show`, sem o módulo precisar ler AppData.
  */
-watch(
-  () => $appdata.get(`modules.timer_worship.show`),
-  (shown) => {
-    if (shown === false) close();
+function onModuleShow(visible: boolean): void {
+  if (!visible) {
+    close();
+    return;
   }
-);
+  projectionActive.value = true;
+  emitProjection();
+}
 
 // Fechar o app com a contagem rodando deixava a chave em "true", e o botão da
 // ribbon abria em "Pausar" sem nada contando.
 $userdata.set(KEYS.MODULES.TIMER_WORSHIP.RUNNING, false);
 
 onBeforeUnmount(() => {
+  projection.emit({ active: false, text: "" });
   if (timer !== null) clearInterval(timer);
 });
 </script>
