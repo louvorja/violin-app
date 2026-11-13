@@ -1253,6 +1253,8 @@
       "dynamic_text": "Texto Dinámico",
       "editor_track_sung": "Pista: Cantado",
       "editor_track_playback": "Pista: Playback",
+      "editor_audio_convert_to_pb": "Convertir a Playback",
+      "editor_audio_convert_to_sung": "Convertir a Cantado",
       "editor_audio_attach": "Audio",
       "editor_audio_remove": "Quitar Audio",
       "editor_aux_color": "Color del Texto",
@@ -1403,6 +1405,23 @@
       "uncategorized": "Sin categoría",
       "no_categories": "Ninguna categoría. Cree una primero.",
       "confirm_delete_category": "¿Eliminar esta categoría?"
+    },
+    "slja": {
+      "track_title": "Clasificar pista del archivo .slja",
+      "track_description": "Este paquete contiene audio, pero no indica si es Cantado o Playback. Selecciona la pista correspondiente:",
+      "track_description_multi": "Los siguientes archivos contienen audio sin indicar la pista. Elige Cantado o Playback para cada uno:",
+      "track_sung": "Cantado",
+      "track_playback": "Playback",
+      "all_sung": "Todos Cantado",
+      "all_playback": "Todos Playback",
+      "import_confirm": "Importar",
+      "cancel": "Cancelar",
+      "export_title": "Exportar canción (.slja)",
+      "export_description": "Esta canción tiene Cantado y Playback. ¿Cómo deseas exportar?",
+      "export_unified_title": "Archivo único (.slja)",
+      "export_unified_hint": "Empaqueta Cantado, Playback y ambos tiempos en un solo archivo para reimportar en esta app.",
+      "export_classic_title": "Compatible con LouvorJA Clásico (2 archivos)",
+      "export_classic_hint": "Genera Canción.slja y Canción -PB.slja por separado, compatibles con el programa clásico."
     },
     "cat": {
       "action": "Acciones",

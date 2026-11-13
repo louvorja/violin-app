@@ -136,6 +136,9 @@ interface SlideStyleAPI {
   coverStyle: (slide?: SlideOption) => CSSProperties;
   lyricStyle: (slide?: SlideOption) => CSSProperties;
   auxStyle: (slide?: SlideOption) => CSSProperties;
+  coverSizePct: (slide?: SlideOption) => number;
+  lyricSizePct: (slide?: SlideOption) => number;
+  auxSizePct: (slide?: SlideOption) => number;
   nextStyle: (slide?: SlideOption) => CSSProperties;
   bgStyle: (slide?: SlideOption) => CSSProperties;
   bgBlurStyle: () => CSSProperties | null;
@@ -178,6 +181,7 @@ interface SlideCfg {
   text_border_width: number;
   text_border_radius: number;
   affect_external_slides: boolean;
+  custom_text_format_active: boolean;
   custom_background_active: boolean;
   shadow_enabled: boolean;
   shadow_color: string;
@@ -219,7 +223,7 @@ const _readSlideOpts = (): SlideCfg => {
 
   const legacy =
     ($userdata.get(KEYS.OPTIONS.SLIDE.SLIDES, {}) as Partial<typeof SLIDE_STYLE_DEFAULT>) ?? {};
-  const merged: SlideCfg = { ...SLIDE_STYLE_DEFAULT, ...legacy };
+  const merged: SlideCfg = { ...SLIDE_STYLE_DEFAULT, ...legacy, custom_text_format_active: false };
 
   // text_align e show_title_first_slide são chaves planas globais (sempre aplicam)
   const textAlign = $userdata.get<string>(KEYS.OPTIONS.SLIDE.TEXT_ALIGN, null);
@@ -247,6 +251,7 @@ const _readSlideOpts = (): SlideCfg => {
   // Formatação de texto personalizada
   const customTextFormat =
     $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_TEXT_FORMAT, false) === true;
+  merged.custom_text_format_active = customTextFormat;
   merged.text_border_enabled = false;
   merged.shadow_enabled = false;
   if (customTextFormat) {
@@ -437,6 +442,7 @@ export function useSlideStyle(): SlideStyleAPI {
     void _slideBgReady.value; // dependência reativa — re-avalia quando o IndexedDB resolve
     void _returnBgReady.value;
     // Re-avalia quando o checkbox de fundo personalizado ou retorno é toggleado
+    void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_TEXT_FORMAT, false);
     void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_BACKGROUND, false);
     void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_BACKGROUND, false);
     void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_TEXT_FORMAT, false);
@@ -453,14 +459,36 @@ export function useSlideStyle(): SlideStyleAPI {
     return resolveFont(fromSlide, cfg.value.font, cfg.value.font);
   }
 
-  /** Quando affect_external_slides=true, ignora overrides do slide e usa só o cfg. */
+  /** Só sobrescreve cor/tamanho do slide quando a formatação personalizada
+   *  de texto está ativa E marcada para afetar slides externos. */
+  const _overrideExternalText = (): boolean =>
+    cfg.value.custom_text_format_active && cfg.value.affect_external_slides;
+
   function _pickSize(fromSlide: number | undefined, fromCfg: number): number {
-    if (cfg.value.affect_external_slides) return fromCfg;
+    if (_overrideExternalText()) return fromCfg;
     return Number(fromSlide) || fromCfg;
   }
   function _pickColor(fromSlide: string | undefined, fromCfg: string): string {
-    if (cfg.value.affect_external_slides) return fromCfg;
+    if (_overrideExternalText()) return fromCfg;
     return fromSlide || fromCfg;
+  }
+  function _externalTextTransform(slide?: SlideOption): CSSProperties {
+    const s = slide as { id_music?: number; custom_song_id?: string; tipo?: string } | null;
+    const isCustomSlide = s?.id_music == null && (s?.custom_song_id != null || s?.tipo != null);
+    return isCustomSlide && !_overrideExternalText() ? { textTransform: "none" } : {};
+  }
+
+  function coverSizePct(slide?: SlideOption): number {
+    return _pickSize((slide as { font_size_pct?: number })?.font_size_pct, cfg.value.font_size_cover);
+  }
+  function lyricSizePct(slide?: SlideOption): number {
+    return _pickSize((slide as { font_size_pct?: number })?.font_size_pct, cfg.value.font_size_lyric);
+  }
+  function auxSizePct(slide?: SlideOption): number {
+    return _pickSize(
+      (slide as { font_size_aux_pct?: number })?.font_size_aux_pct,
+      cfg.value.font_size_aux
+    );
   }
 
   function _buildTextShadow(): string | undefined {
@@ -470,10 +498,7 @@ export function useSlideStyle(): SlideStyleAPI {
   }
 
   function coverStyle(slide?: SlideOption): CSSProperties {
-    const sizePct = _pickSize(
-      (slide as { font_size_pct?: number })?.font_size_pct,
-      cfg.value.font_size_cover
-    );
+    const sizePct = coverSizePct(slide);
     const color = _pickColor((slide as { color?: string })?.color, cfg.value.color_cover);
     return {
       fontFamily: _baseFont(slide ?? null),
@@ -485,14 +510,12 @@ export function useSlideStyle(): SlideStyleAPI {
       textShadow: _buildTextShadow() ?? "none",
       lineHeight: 1.3,
       maxWidth: "92vw",
+      ..._externalTextTransform(slide),
     };
   }
 
   function lyricStyle(slide?: SlideOption): CSSProperties {
-    const sizePct = _pickSize(
-      (slide as { font_size_pct?: number })?.font_size_pct,
-      cfg.value.font_size_lyric
-    );
+    const sizePct = lyricSizePct(slide);
     const color = _pickColor((slide as { color?: string })?.color, cfg.value.color_lyric);
     return {
       fontFamily: _baseFont(slide ?? null),
@@ -504,14 +527,12 @@ export function useSlideStyle(): SlideStyleAPI {
       textShadow: _buildTextShadow() ?? "none",
       lineHeight: 1.3,
       maxWidth: "92vw",
+      ..._externalTextTransform(slide),
     };
   }
 
   function auxStyle(slide?: SlideOption): CSSProperties {
-    const sizePct = _pickSize(
-      (slide as { font_size_aux_pct?: number })?.font_size_aux_pct,
-      cfg.value.font_size_aux
-    );
+    const sizePct = auxSizePct(slide);
     const color = _pickColor((slide as { color_aux?: string })?.color_aux, cfg.value.color_aux);
     return {
       fontFamily: _baseFont(slide ?? null),
@@ -522,6 +543,7 @@ export function useSlideStyle(): SlideStyleAPI {
       textShadow: _buildTextShadow() ?? "none",
       lineHeight: 1.3,
       maxWidth: "92vw",
+      ..._externalTextTransform(slide),
     };
   }
 
@@ -678,6 +700,9 @@ export function useSlideStyle(): SlideStyleAPI {
     coverStyle,
     lyricStyle,
     auxStyle,
+    coverSizePct,
+    lyricSizePct,
+    auxSizePct,
     nextStyle,
     bgStyle,
     bgBlurStyle,

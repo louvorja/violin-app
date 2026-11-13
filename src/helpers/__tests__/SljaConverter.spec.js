@@ -390,3 +390,82 @@ describe("SljaConverter — fillMissingImages", () => {
     expect(capaFilled[1].imagem).toBe("");
   });
 });
+
+describe("SljaConverter — precisão sub-segundo (#61)", () => {
+  it("formata e interpreta tempos com precisão de milissegundos sem quebrar segundos inteiros", () => {
+    expect(SljaConverter.secondsToHms(12)).toBe("00:00:12");
+    expect(SljaConverter.secondsToHms(11.518)).toBe("00:00:11.518");
+    expect(SljaConverter.secondsToHms(11.9999)).toBe("00:00:12");
+    expect(SljaConverter.secondsToHms(11.518, { fractional: false })).toBe("00:00:11");
+    expect(SljaConverter.hmsToSeconds("00:00:11.518")).toBe(11.518);
+    expect(SljaConverter.hmsToSeconds("00:03:53,353")).toBe(233.353);
+  });
+
+  it("preserva milissegundos de arquivo clássico sem tempo_hms no round-trip", async () => {
+    // 41163496 bytes / 176400 bytes/s = 233.3531519... -> 233.353s
+    const ini = [
+      "[Geral]",
+      "slides=2",
+      "",
+      "[Slide:1]",
+      "tipo=CAPA",
+      "letra=Hino Clássico",
+      "tempo=0",
+      "",
+      "[Slide:2]",
+      "tipo=LETRA",
+      "letra=estrofe",
+      "tempo=41163496",
+    ].join("\r\n");
+
+    const loaded = await SljaConverter.loadSlja(new Blob([SljaConverter.encodeCp1252(ini)]));
+    expect(loaded.slides[1].tempo_seconds).toBe(233.353);
+
+    const reexported = await SljaConverter.writeSlja({
+      slides: loaded.slides,
+      nome: "Hino Clássico",
+    });
+    const reloaded = await SljaConverter.loadSlja(reexported);
+    expect(reloaded.slides[1].tempo_seconds).toBe(233.353);
+  });
+
+  it("recupera milissegundos de tempo em bytes quando tempo_hms legado veio truncado", () => {
+    const ini = [
+      "[Geral]",
+      "slides=1",
+      "",
+      "[Slide:1]",
+      "tipo=LETRA",
+      "letra=estrofe",
+      "tempo_hms=00:03:53",
+      "tempo=41163496",
+    ].join("\r\n");
+
+    const parsed = SljaConverter.parseSlja(ini);
+    expect(parsed.slides[0].tempo_seconds).toBe(233.353);
+  });
+
+  it("grava e lê pacote unificado com faixa, áudio playback e tempos separados (#62)", async () => {
+    const sungAudio = new Blob([new Uint8Array([0xff, 0xfb, 0x90, 0x00, 1])]);
+    const pbAudio = new Blob([new Uint8Array([0xff, 0xfb, 0x90, 0x00, 2])]);
+    const blob = await SljaConverter.writeSlja({
+      nome: "Unificada",
+      meta: { faixa: "ambos" },
+      audio: sungAudio,
+      audioName: "cantado.mp3",
+      playbackAudio: pbAudio,
+      playbackAudioName: "playback.mp3",
+      slides: [
+        { tipo: "CAPA", letra: "Unificada", tempo_seconds: 0 },
+        { tipo: "LETRA", letra: "Verso", tempo_seconds: 10.25, tempo_seconds_pb: 12.5 },
+      ],
+    });
+
+    const loaded = await SljaConverter.loadSlja(blob);
+    expect(loaded.meta.faixa).toBe("ambos");
+    expect(loaded.audioName).toBe("cantado.mp3");
+    expect(loaded.playbackAudioName).toBe("playback.mp3");
+    expect(loaded.slides[1].tempo_seconds).toBe(10.25);
+    expect(loaded.slides[1].tempo_seconds_pb).toBe(12.5);
+  });
+});

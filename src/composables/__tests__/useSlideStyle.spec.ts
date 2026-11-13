@@ -173,4 +173,40 @@ describe("useSlideStyle — leitura das opções", () => {
     $userdata.set(K.RETURN_TEXT_CASE, "normal");
     expect(useSlideStyle().textTransform.value).toBe("none");
   });
+
+  it("preserva cor, tamanho e caixa de slide personalizado quando a formatação global de texto está desligada (#59)", () => {
+    $userdata.set(K.CUSTOM_TEXT_FORMAT, false);
+    $userdata.set(K.AFFECT_EXTERNAL_SLIDES, true);
+
+    const style = useSlideStyle();
+    const slide = {
+      custom_song_id: "song-1",
+      color: "#33cc99",
+      color_aux: "#ff8800",
+      font_size_pct: 22,
+      font_size_aux_pct: 12,
+    };
+
+    expect(style.coverSizePct(slide)).toBe(22);
+    expect(style.lyricSizePct(slide)).toBe(22);
+    expect(style.auxSizePct(slide)).toBe(12);
+    expect(style.lyricStyle(slide)).toMatchObject({ color: "#33cc99", textTransform: "none" });
+    expect(style.auxStyle(slide)).toMatchObject({ color: "#ff8800", textTransform: "none" });
+  });
+
+  it("sobrescreve cor/tamanho externos só quando CUSTOM_TEXT_FORMAT e AFFECT_EXTERNAL_SLIDES estão ativos (#59)", () => {
+    $userdata.set(K.CUSTOM_TEXT_FORMAT, true);
+    $userdata.set(K.TEXT_COLOR, "#112233");
+    $userdata.set(K.BODY_SIZE, 16);
+    $userdata.set(K.AFFECT_EXTERNAL_SLIDES, true);
+
+    const slide = { custom_song_id: "song-1", color: "#33cc99", font_size_pct: 22 };
+    const style = useSlideStyle();
+    expect(style.lyricSizePct(slide)).toBe(16);
+    expect(style.lyricStyle(slide).color).toBe("#112233");
+
+    $userdata.set(K.AFFECT_EXTERNAL_SLIDES, false);
+    expect(style.lyricSizePct(slide)).toBe(22);
+    expect(style.lyricStyle(slide).color).toBe("#33cc99");
+  });
 });

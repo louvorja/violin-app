@@ -29,7 +29,7 @@
           />
           <strong data-testid="se-track">{{ trackLabel }}</strong>
           <span v-if="trackName" class="se-audio-time">
-            {{ formatTime(audioCurrentTime) }} / {{ formatTime(audioDuration) }}
+            {{ formatClock(audioCurrentTime) }} / {{ formatClock(audioDuration) }}
           </span>
           <span v-else class="se-audio-time">{{ tm("data.no_audio") }}</span>
         </span>
@@ -62,7 +62,15 @@
           <span class="se-slide-list-count">{{ slides.length }}</span>
         </div>
         <div class="se-slide-list-body">
-          <draggable :list="slides" item-key="id" handle=".se-thumb" @end="onReorder">
+          <draggable
+            :list="slides"
+            item-key="id"
+            handle=".se-thumb"
+            :delay="300"
+            :delay-on-touch-only="true"
+            :touch-start-threshold="10"
+            @end="onReorder"
+          >
             <template #item="{ element, index }">
               <div
                 class="se-thumb"
@@ -134,8 +142,8 @@
             />
           </button>
           <div class="se-player-time">
-            <span class="se-player-time-current">{{ formatTime(audioCurrentTime) }}</span>
-            <span class="se-player-time-total">{{ formatTime(audioDuration) }}</span>
+            <span class="se-player-time-current">{{ formatClock(audioCurrentTime) }}</span>
+            <span class="se-player-time-total">{{ formatClock(audioDuration) }}</span>
           </div>
           <div class="se-timeline" @click="onTimelineClick">
             <div class="se-timeline-fill" :style="{ width: `${timelineProgress}%` }" />
@@ -308,6 +316,14 @@
               />
               <span>{{ tm("labels.transparent_bg") }}</span>
             </label>
+            <p
+              v-if="globalFormatOverridesExternal"
+              class="se-hint"
+              data-testid="se-global-override-hint"
+            >
+              Formatação global de texto nas Opções está ativa e sobrescreve cor/tamanho ao
+              projetar.
+            </p>
           </div>
         </details>
 
@@ -347,6 +363,26 @@
                 <option v-for="p in 9" :key="p" :value="p">{{ tm(`positions.${p}`) }}</option>
               </select>
             </div>
+          </div>
+        </details>
+
+        <!-- ===== Faixa de Áudio ===== -->
+        <details class="se-panel">
+          <summary class="se-panel-head">
+            <LjIcon size="14" :icon="ICONS.MUSIC.NOTE" />
+            <span>{{ tm("labels.audio_file") }} ({{ trackLabel }})</span>
+            <LjIcon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
+          </summary>
+          <div class="se-panel-body">
+            <button
+              type="button"
+              class="se-act-btn"
+              data-testid="se-convert-track"
+              @click="actConvertTrack"
+            >
+              <LjIcon size="14" :icon="playbackTrack ? ICONS.MUSIC.SING : ICONS.MUSIC.PLAYBACK" />
+              {{ tm(playbackTrack ? "labels.convert_to_sung" : "labels.convert_to_playback") }}
+            </button>
           </div>
         </details>
 
@@ -431,6 +467,7 @@
     <input ref="fileTxt" type="file" accept=".txt" hidden @change="onImportTxt" />
     <input ref="fileAudio" type="file" accept="audio/*" hidden @change="onPickAudio" />
     <input ref="fileImage" type="file" accept="image/*,.heic,.heif" hidden @change="onPickImage" />
+    <SljaPackagePrompts ref="sljaPrompts" />
   </ModuleContainer>
 </template>
 
@@ -441,15 +478,18 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import draggable from "vuedraggable";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import SljaPackagePrompts from "@/components/SljaPackagePrompts.vue";
 import $broadcast from "@/helpers/Broadcast";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import SljaConverter from "@/helpers/SljaConverter";
 import { plainSlideText } from "@/helpers/SlideText";
 import AudioLibrary from "@/helpers/AudioLibrary";
 import { ensureRenderableImage } from "@/helpers/ImageConvert";
-import CustomSongs from "@/helpers/CustomSongs";
+import CustomSongs, { hasPlayback, hasSung } from "@/helpers/CustomSongs";
 import { downloadSongPackages, readSongFile } from "@/helpers/CustomSongPackage";
+import { convertActiveTrack } from "../helpers/trackConversion";
 import $alert from "@/helpers/Alert";
+import $snackbar from "@/helpers/Snackbar";
 import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -476,6 +516,7 @@ const fileSlja = ref(null);
 const fileTxt = ref(null);
 const fileAudio = ref(null);
 const fileImage = ref(null);
+const sljaPrompts = ref(null);
 
 const aspectRatio = ref("16-9");
 const song = ref(CustomSongs.newSong());
@@ -503,12 +544,34 @@ const playbackTrack = ref(false);
 function setTrack(playback) {
   if (playbackTrack.value === playback) return;
   audioEl.value?.pause();
+  audioPlaying.value = false;
   playbackTrack.value = playback;
   $userdata.set(KEYS.MODULES.SLIDE_EDITOR.PLAYBACK_TRACK, playback);
 }
 
 function toggleTrack() {
   setTrack(!playbackTrack.value);
+}
+
+function actConvertTrack() {
+  const wasBoth = hasSung(song.value) && hasPlayback(song.value);
+  const converted = convertActiveTrack(song.value, playbackTrack.value);
+  song.value = {
+    ...song.value,
+    audio_token: converted.audio_token,
+    audio_name: converted.audio_name,
+    playback_token: converted.playback_token,
+    playback_name: converted.playback_name,
+    slides: converted.slides,
+  };
+  setTrack(converted.nextIsPlayback);
+  markDirty();
+  const noticeKey = wasBoth
+    ? "labels.tracks_swapped"
+    : converted.nextIsPlayback
+      ? "labels.track_converted_to_playback"
+      : "labels.track_converted_to_sung";
+  $snackbar.show(tm(noticeKey));
 }
 
 /** Música só com playback abre na faixa dele; as demais, na cantada. */
@@ -640,21 +703,29 @@ const previewSlideForStyle = computed(() => {
   };
 });
 
-// Mesma proporção de Slide.vue: cfg.font_size_* é a porcentagem da altura
-// do container, sem piso/teto em pixels. A prévia acompanha o telão mesmo
-// quando este usa uma resolução muito maior.
+const globalFormatOverridesExternal = computed(
+  () =>
+    slideStyle.cfg.value.custom_text_format_active && slideStyle.cfg.value.affect_external_slides
+);
+
+// No editor a prévia sempre espelha cor, tamanho e caixa editados no slide atual,
+// mesmo quando a formatação global das Opções está ativa para projeção externa.
 const mainTextStyle = computed(() => {
   const s = activeSlide.value;
   const isCover = s.tipo === "CAPA";
   const base = isCover
     ? slideStyle.coverStyle(previewSlideForStyle.value)
     : slideStyle.lyricStyle(previewSlideForStyle.value);
-  const sizeVar = isCover
-    ? slideStyle.cfg.value.font_size_cover
-    : slideStyle.cfg.value.font_size_lyric;
+  const sizeVar =
+    Number(s.tamanho_letra) ||
+    (isCover ? slideStyle.cfg.value.font_size_cover : slideStyle.cfg.value.font_size_lyric);
+  const colorVar =
+    s.cor_letra || (isCover ? slideStyle.cfg.value.color_cover : slideStyle.cfg.value.color_lyric);
   return {
     ...base,
+    color: colorVar,
     fontSize: `${sizeVar}cqh`,
+    textTransform: "none",
     textAlign: s.text_align || "center",
     background: s.fundo_letra ? "rgba(0,0,0,0.55)" : "transparent",
     padding: "0.4cqh 1cqh",
@@ -665,10 +736,13 @@ const mainTextStyle = computed(() => {
 const auxTextStyle = computed(() => {
   const s = activeSlide.value;
   const base = slideStyle.auxStyle(previewSlideForStyle.value);
-  const sizeVar = slideStyle.cfg.value.font_size_aux;
+  const sizeVar = Number(s.tamanho_letra_aux) || slideStyle.cfg.value.font_size_aux;
+  const colorVar = s.cor_letra_aux || slideStyle.cfg.value.color_aux;
   return {
     ...base,
+    color: colorVar,
     fontSize: `${sizeVar}cqh`,
+    textTransform: "none",
     textAlign: s.text_align || "center",
     background: s.fundo_letra ? "rgba(0,0,0,0.55)" : "transparent",
     padding: "0.4cqh 1cqh",
@@ -687,6 +761,10 @@ function truncate(text) {
 
 function formatTime(s) {
   return SljaConverter.secondsToHms(s || 0);
+}
+
+function formatClock(s) {
+  return SljaConverter.secondsToHms(s || 0, { fractional: false });
 }
 
 function goSlide(idx) {
@@ -897,6 +975,7 @@ const RIBBON_HANDLERS = {
   last: () => goSlide(slides.value.length - 1),
   audio_track: toggleTrack,
   audio_attach: actAttachAudio,
+  audio_convert: actConvertTrack,
   audio_remove: actAudioRemove,
   play_pause: togglePlay,
   record_advance: recordAdvance,
@@ -970,8 +1049,14 @@ async function onLoadSlja(e) {
   e.target.value = "";
   if (!file) return;
   try {
-    // Um arquivo `Música -PB.slja` é o playback da música: abre nessa faixa.
-    const opened = await readSongFile(file, tm("data.untitled"));
+    // Um arquivo `Música -PB.slja` (ou tag `faixa=playback`) abre direto no playback;
+    // arquivos legados sem indicação perguntam ao operador antes de carregar.
+    const opened = await readSongFile(file, tm("data.untitled"), {
+      classifyLegacyTrack: sljaPrompts.value
+        ? (item) => sljaPrompts.value.classifyLegacyTrack(item)
+        : undefined,
+    });
+    if (opened.cancelled || !opened.song) return;
     song.value = opened.song;
     current.value = 0;
     dirty.value = false;
@@ -1066,10 +1151,16 @@ async function actSaveAs() {
   }
 }
 
-// Exporta a apresentação atual como .slja; com playback sai também o `-PB.slja`.
+// Exporta a apresentação atual como .slja (único com as duas faixas ou par clássico).
 async function actExport() {
   try {
-    await downloadSongPackages(song.value, songTitle.value);
+    let mode = "classic";
+    if (hasSung(song.value) && hasPlayback(song.value) && sljaPrompts.value) {
+      const picked = await sljaPrompts.value.chooseExportMode();
+      if (!picked) return;
+      mode = picked;
+    }
+    await downloadSongPackages(song.value, songTitle.value, { mode });
   } catch (err) {
     $alert.message(tm("data.invalid_file") + "\n\n" + (err?.message || err));
   }
@@ -1389,6 +1480,12 @@ function togglePlay() {
   audioEl.value.play();
 }
 
+function roundSeconds(s) {
+  const n = Number(s);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n * 1000) / 1000;
+}
+
 function recordAdvance() {
   if (!requireAudio() || !slides.value.length) return;
   // Paridade Delphi (acaoSlide 'prox_grava' em fmEditorSlides.pas:629):
@@ -1396,7 +1493,7 @@ function recordAdvance() {
   // "este tempo é o início do próximo slide". Gravar no slide atual e depois
   // avançar fazia o syncSlideFromAudio puxar o operador de volta.
   if (current.value >= slides.value.length - 1) return;
-  const seconds = Math.round(audioEl.value.currentTime);
+  const seconds = roundSeconds(audioEl.value.currentTime);
   current.value += 1;
   setSlideTime(activeSlide.value, seconds);
   markDirty();
@@ -1404,7 +1501,7 @@ function recordAdvance() {
 
 function recordStart() {
   if (!requireAudio() || !slides.value.length) return;
-  setSlideTime(activeSlide.value, Math.round(audioEl.value.currentTime));
+  setSlideTime(activeSlide.value, roundSeconds(audioEl.value.currentTime));
   markDirty();
 }
 
@@ -1420,8 +1517,8 @@ function recordRetroactive() {
     audioCurrentTime.value = 0;
     return;
   }
-  const cur = slideTime(activeSlide.value) || Math.round(audioEl.value.currentTime);
-  const newTime = Math.max(0, cur - RETROACTIVE_OFFSET_S);
+  const cur = slideTime(activeSlide.value) || roundSeconds(audioEl.value.currentTime);
+  const newTime = roundSeconds(Math.max(0, cur - RETROACTIVE_OFFSET_S));
   audioEl.value.currentTime = newTime;
   audioCurrentTime.value = newTime;
   setSlideTime(activeSlide.value, newTime);
@@ -1609,6 +1706,7 @@ function replicateText(scope) {
   aspect-ratio: 16 / 9;
   border-radius: var(--lj-radius-md);
   cursor: pointer;
+  touch-action: pan-y;
   margin-bottom: 6px;
   overflow: hidden;
   background-size: cover;
@@ -1748,7 +1846,6 @@ function replicateText(scope) {
   padding: 4cqh;
 }
 .se-preview-text {
-  text-transform: uppercase;
   /* font-family/font-weight/textShadow/letterSpacing/color/textAlign vêm
      inline via useSlideStyle (paridade com a projeção real). */
   width: 100%;
@@ -1833,7 +1930,6 @@ function replicateText(scope) {
 
 /* Textarea */
 .se-textarea {
-  text-transform: uppercase;
   width: 100%;
   resize: vertical;
   padding: 6px 8px;

@@ -67,6 +67,11 @@
     "audio_file": "Arquivo de Áudio",
     "track_sung": "Cantado",
     "track_playback": "Playback",
+    "convert_to_playback": "Converter esta faixa para Playback",
+    "convert_to_sung": "Converter esta faixa para Cantado",
+    "track_converted_to_playback": "Faixa convertida para Playback com os tempos preservados.",
+    "track_converted_to_sung": "Faixa convertida para Cantado com os tempos preservados.",
+    "tracks_swapped": "Faixas Cantado e Playback invertidas com os tempos preservados.",
     "recording": "Gravação"
   },
   "data": {

@@ -24,6 +24,7 @@ vi.mock("@/helpers/AudioLibrary", () => ({
 }));
 
 vi.mock("@/helpers/UserData", () => ({ default: { set: vi.fn(), get: vi.fn() } }));
+vi.mock("@/helpers/Snackbar", () => ({ default: { show: vi.fn() } }));
 
 vi.mock("@/composables/useSlideStyle", () => ({
   useSlideStyle: () => ({
@@ -68,6 +69,7 @@ describe("slide editor header, audio track status", () => {
             },
           }),
           LjIcon: true,
+          SljaPackagePrompts: true,
           draggable: true,
         },
       },
@@ -151,5 +153,32 @@ describe("slide editor header, audio track status", () => {
     await toggleTrack(editor);
     expect(chip(editor)).toMatchObject({ label: "Playback", title: "playback.wav" });
     expect(chip(editor).audio).toMatch(CLOCK);
+  });
+
+  it("converts active track from Cantado to Playback via ribbon action (#62)", async () => {
+    store({
+      audio_token: "lib://audio/errada.wav",
+      audio_name: "errada.wav",
+      slides: [
+        CustomSongs.newSlide({ tipo: "CAPA", letra: "Capa", tempo_seconds: 0 }),
+        CustomSongs.newSlide({ tipo: "LETRA", letra: "V1", tempo_seconds: 11.4 }),
+      ],
+    });
+    const editor = await mountEditor();
+    expect(chip(editor)).toMatchObject({ label: "Cantado", title: "errada.wav" });
+
+    mocks.listeners.get(BROADCAST_TYPE.MODULE_RIBBON_ACTION)?.({
+      module: "slide_editor",
+      action: "audio_convert",
+    });
+    await flushPromises();
+
+    expect(chip(editor)).toMatchObject({ label: "Playback", title: "errada.wav" });
+    mocks.listeners.get(BROADCAST_TYPE.MODULE_RIBBON_ACTION)?.({
+      module: "slide_editor",
+      action: "next",
+    });
+    await flushPromises();
+    expect(editor.text()).toContain("00:00:11.400");
   });
 });

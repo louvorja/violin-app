@@ -341,6 +341,7 @@ const { t } = useLiturgyI18n();
   border: none;
   padding: var(--lj-space-3) var(--lj-space-5);
   cursor: pointer;
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
   justify-content: center;

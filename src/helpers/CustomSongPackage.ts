@@ -20,6 +20,15 @@ import {
   type SlideTipo,
 } from "@/helpers/CustomSongs";
 
+export type SljaTrackKind = "cantado" | "playback";
+export type SljaExportMode = "classic" | "unified";
+
+export interface LegacyTrackPromptItem {
+  key: string;
+  fileName: string;
+  songName: string;
+}
+
 export interface SongPackageFile {
   fileName: string;
   blob: Blob;
@@ -33,6 +42,8 @@ export interface ImportResult {
   loose: number;
   /** Playbacks com slides diferentes do cantado de mesmo nome, importados à parte. */
   unmatched: number;
+  /** Importação cancelada pelo operador antes de gravar faixas legadas. */
+  cancelled?: boolean;
 }
 
 interface LoadedSlide {
@@ -48,22 +59,28 @@ interface LoadedSlide {
   imagem_posicao: number;
   fundo_letra: boolean;
   tempo_seconds: number;
+  tempo_seconds_pb?: number;
   text_align?: string;
 }
 
 interface LoadedPackage {
-  meta: { nome?: string };
+  meta: { nome?: string; faixa?: string; url_playback?: string };
   slides: LoadedSlide[];
   audio: Blob | null;
   audioName: string | null;
+  playbackAudio?: Blob | null;
+  playbackAudioName?: string | null;
   images: Map<string, Blob>;
   loose: boolean;
 }
 
 interface Part {
+  key: string;
   /** Nome do arquivo sem extensão e sem o sufixo de playback: é a chave do par. */
   name: string;
+  fileName: string;
   playback: boolean;
+  trackKind: "cantado" | "playback" | "both" | "unknown";
   data: LoadedPackage;
 }
 
@@ -98,11 +115,32 @@ function pairName(fileName: string): { name: string; playback: boolean } {
   return { name: base ?? stem, playback: base !== null };
 }
 
-async function readPart(file: Blob, fileName: string): Promise<Part> {
+function resolveTrackKind(
+  data: LoadedPackage,
+  byNamePlayback: boolean
+): Part["trackKind"] {
+  const faixa = String(data.meta?.faixa || "").trim().toLowerCase();
+  if (faixa === "ambos" || data.playbackAudio) return "both";
+  if (faixa === "playback" || byNamePlayback) return "playback";
+  if (faixa === "cantado") return "cantado";
+  if (!data.loose && data.audio) return "unknown";
+  return "cantado";
+}
+
+async function readPart(file: Blob, fileName: string, key = fileName): Promise<Part> {
   const data = (await SljaConverter.loadSlja(file)) as LoadedPackage;
   // Capa/abertura sem fundo herda a imagem do próximo slide que a tenha.
   SljaConverter.fillMissingImages(data.slides);
-  return { ...pairName(fileName), data };
+  const { name, playback: byNamePlayback } = pairName(fileName);
+  const trackKind = resolveTrackKind(data, byNamePlayback);
+  return {
+    key,
+    name,
+    fileName,
+    playback: trackKind === "playback",
+    trackKind,
+    data,
+  };
 }
 
 /** Nome: [Geral].nome → letra do 1º slide (capa) → nome do arquivo. */
@@ -120,6 +158,13 @@ async function toSong(part: Part, store: MediaStore, fallbackName = ""): Promise
   if (data.audio) {
     audioName = (data.audioName || "audio.mp3").replace(/^audio\//, "");
     audioToken = await store.audio(data.audio, audioName);
+  }
+
+  let playbackAudioToken = "";
+  let playbackAudioName = "";
+  if (data.playbackAudio) {
+    playbackAudioName = (data.playbackAudioName || "playback.mp3").replace(/^audio\//, "");
+    playbackAudioToken = await store.audio(data.playbackAudio, playbackAudioName);
   }
 
   const imageTokens = new Map<string, string>();
@@ -150,20 +195,26 @@ async function toSong(part: Part, store: MediaStore, fallbackName = ""): Promise
       imagem_posicao: s.imagem_posicao as ImagemPosicao,
       fundo_letra: s.fundo_letra,
       tempo_seconds: s.tempo_seconds,
+      ...(s.tempo_seconds_pb !== undefined ? { tempo_seconds_pb: s.tempo_seconds_pb } : {}),
       text_align: (s.text_align || "center") as CustomSlide["text_align"],
     };
   });
-  if (!slides.some((slide) => slide.tempo_seconds > 0)) {
+  if (!slides.some((slide) => slide.tempo_seconds > 0 || (slide.tempo_seconds_pb ?? 0) > 0)) {
     console.warn("[CustomSongPackage] pacote sem tempos de sincronia (todos tempo_seconds=0)");
   }
 
   const now = new Date().toISOString();
+  const isDual = !!playbackAudioToken;
   return {
     id: crypto.randomUUID(),
     nome: songName(part) || fallbackName,
-    audio_token: part.playback ? "" : audioToken,
-    audio_name: part.playback ? "" : audioName,
-    ...(part.playback ? { playback_token: audioToken, playback_name: audioName } : {}),
+    audio_token: !isDual && part.playback ? "" : audioToken,
+    audio_name: !isDual && part.playback ? "" : audioName,
+    ...(isDual
+      ? { playback_token: playbackAudioToken, playback_name: playbackAudioName }
+      : part.playback
+        ? { playback_token: audioToken, playback_name: audioName }
+        : {}),
     slides,
     createdAt: now,
     updatedAt: now,
@@ -208,28 +259,95 @@ function withPlayback(sung: CustomSong, playback: CustomSong): CustomSong {
   };
 }
 
+export interface ImportSongFilesOptions {
+  classifyLegacyTracks?: (
+    _items: LegacyTrackPromptItem[]
+  ) => Promise<Record<string, SljaTrackKind> | null>;
+}
+
 /**
  * Importa um lote para a biblioteca, juntando `Música.slja` e `Música -PB.slja`
- * numa música com as duas faixas. As músicas voltam prontas, ainda não salvas.
+ * numa música com as duas faixas. Arquivos legados sem indicação de faixa
+ * podem solicitar classificação via `classifyLegacyTracks`.
  */
-export async function importSongFiles(files: File[]): Promise<ImportResult> {
+export async function importSongFiles(
+  files: File[],
+  options: ImportSongFilesOptions = {}
+): Promise<ImportResult> {
   // O par se decide pelo nome do arquivo, então dá para agrupar antes de abrir
   // qualquer pacote: só os arquivos de uma música ficam em memória por vez.
-  const groups = new Map<string, File[]>();
-  for (const file of files) {
-    const key = pairName(file.name).name.toLowerCase();
-    groups.set(key, [...(groups.get(key) || []), file]);
+  const groups = new Map<string, Array<{ key: string; file: File }>>();
+  files.forEach((file, idx) => {
+    const groupKey = pairName(file.name).name.toLowerCase();
+    const list = groups.get(groupKey) || [];
+    list.push({ key: `${idx}:${file.name}`, file });
+    groups.set(groupKey, list);
+  });
+
+  let failed = 0;
+  let loose = 0;
+  const parsedGroups: Part[][] = [];
+  const legacyPrompts: LegacyTrackPromptItem[] = [];
+  const unknownParts = new Map<string, Part>();
+
+  for (const entries of groups.values()) {
+    const parts: Part[] = [];
+    for (const { key, file } of entries) {
+      try {
+        const part = await readPart(file, file.name, key);
+        if (part.data.loose) loose++;
+        parts.push(part);
+      } catch {
+        failed++;
+      }
+    }
+    if (!parts.length) continue;
+
+    // Se há par cantado + playback no mesmo grupo, o lado sem etiqueta é cantado.
+    const hasExplicitPlayback = parts.some((p) => p.trackKind === "playback");
+    if (!hasExplicitPlayback) {
+      for (const p of parts) {
+        if (p.trackKind === "unknown") {
+          unknownParts.set(p.key, p);
+          legacyPrompts.push({
+            key: p.key,
+            fileName: p.fileName,
+            songName: songName(p) || fileStem(p.fileName),
+          });
+        }
+      }
+    }
+    parsedGroups.push(parts);
   }
 
-  const result: ImportResult = { songs: [], failed: 0, loose: 0, unmatched: 0 };
-  for (const group of groups.values()) {
+  if (legacyPrompts.length && options.classifyLegacyTracks) {
+    const choices = await options.classifyLegacyTracks(legacyPrompts);
+    if (!choices) {
+      return { songs: [], failed, loose, unmatched: 0, cancelled: true };
+    }
+    for (const item of legacyPrompts) {
+      const part = unknownParts.get(item.key);
+      if (!part) continue;
+      if (choices[item.key] === "playback") {
+        part.playback = true;
+        part.trackKind = "playback";
+      } else {
+        part.playback = false;
+        part.trackKind = "cantado";
+      }
+    }
+  }
+
+  const result: ImportResult = { songs: [], failed, loose, unmatched: 0 };
+  for (const parts of parsedGroups) {
     const sung: CustomSong[] = [];
     const playbacks: CustomSong[] = [];
-    for (const file of group) {
+    const duals: CustomSong[] = [];
+    for (const part of parts) {
       try {
-        const part = await readPart(file, file.name);
-        (part.playback ? playbacks : sung).push(await toSong(part, LIBRARY));
-        if (part.data.loose) result.loose++;
+        const song = await toSong(part, LIBRARY);
+        if (part.trackKind === "both") duals.push(song);
+        else (part.playback ? playbacks : sung).push(song);
       } catch {
         result.failed++;
       }
@@ -246,17 +364,37 @@ export async function importSongFiles(files: File[]): Promise<ImportResult> {
     } else if (playback) {
       extras.unshift(playback);
     }
-    result.songs.push(...sung, ...extras);
+    result.songs.push(...duals, ...sung, ...extras);
   }
   return result;
+}
+
+export interface ReadSongFileOptions {
+  classifyLegacyTrack?: (_item: LegacyTrackPromptItem) => Promise<SljaTrackKind | null>;
 }
 
 /** Abre um arquivo no editor: a mídia fica na sessão até o operador salvar. */
 export async function readSongFile(
   file: File,
-  fallbackName = ""
-): Promise<{ song: CustomSong; loose: boolean }> {
-  const part = await readPart(file, file.name);
+  fallbackName = "",
+  options: ReadSongFileOptions = {}
+): Promise<{ song: CustomSong | null; loose: boolean; cancelled?: boolean }> {
+  const part = await readPart(file, file.name, file.name);
+  if (part.trackKind === "unknown" && options.classifyLegacyTrack) {
+    const choice = await options.classifyLegacyTrack({
+      key: part.key,
+      fileName: part.fileName,
+      songName: songName(part) || fallbackName || fileStem(part.fileName),
+    });
+    if (!choice) return { song: null, loose: part.data.loose, cancelled: true };
+    if (choice === "playback") {
+      part.playback = true;
+      part.trackKind = "playback";
+    } else {
+      part.playback = false;
+      part.trackKind = "cantado";
+    }
+  }
   return { song: await toSong(part, SESSION, fallbackName), loose: part.data.loose };
 }
 
@@ -296,21 +434,50 @@ async function audioBlob(token: string | undefined, label: string): Promise<Blob
   return blob;
 }
 
+export interface BuildSongPackagesOptions {
+  mode?: SljaExportMode;
+}
+
 /**
- * Pacotes de uma música: o cantado e, se houver, o playback com o sufixo que o
- * clássico reconhece.
- *
- * @param fileBase  Nome dos arquivos, sem extensão; por padrão o da música.
+ * Pacotes de uma música:
+ * - `"classic"` (padrão): cantado (`Música.slja`) e, se houver, playback (`Música -PB.slja`)
+ *   como o clássico reconhece, ambos já com tag explícita `[Geral].faixa`.
+ * - `"unified"`: quando há as duas faixas, empacota cantado + playback + ambos os tempos
+ *   em um único `.slja` (`faixa=ambos`), mantendo compatibilidade básica para leitura do cantado.
  */
 export async function buildSongPackages(
   song: CustomSong,
-  fileBase: string = song.nome
+  fileBase: string = song.nome,
+  options: BuildSongPackagesOptions = {}
 ): Promise<SongPackageFile[]> {
   const { slides, images } = await exportSlides(song.slides);
   const base = (fileBase || "").replace(/[\\/:*?"<>|]/g, "_");
   const nome = song.nome || "";
   const sung = hasSung(song) ? await audioBlob(song.audio_token, "cantado") : null;
   const playback = hasPlayback(song) ? await audioBlob(song.playback_token, "de playback") : null;
+  const mode = options.mode ?? "classic";
+
+  if (mode === "unified" && sung && playback) {
+    const pbTimes = slideTimes(song.slides, true);
+    const unifiedSlides = slides.map((slide, i) =>
+      pbTimes[i] === slide.tempo_seconds ? slide : { ...slide, tempo_seconds_pb: pbTimes[i] }
+    );
+    return [
+      {
+        fileName: `${base}.slja`,
+        blob: await SljaConverter.writeSlja({
+          slides: unifiedSlides,
+          audio: sung,
+          audioName: song.audio_name || "audio.mp3",
+          playbackAudio: playback,
+          playbackAudioName: song.playback_name || "playback.mp3",
+          images,
+          nome,
+          meta: { faixa: "ambos" },
+        }),
+      },
+    ];
+  }
 
   const files: SongPackageFile[] = [];
   // Só com playback o pacote cantado não sai: ele iria sem faixa e, no
@@ -324,6 +491,7 @@ export async function buildSongPackages(
         audioName: song.audio_name || "audio.mp3",
         images,
         nome,
+        ...(sung ? { meta: { faixa: "cantado" } } : {}),
       }),
     });
   }
@@ -337,6 +505,7 @@ export async function buildSongPackages(
         audioName: song.playback_name || "playback.mp3",
         images,
         nome,
+        meta: { faixa: "playback" },
       }),
     });
   }
@@ -345,9 +514,10 @@ export async function buildSongPackages(
 
 export async function downloadSongPackages(
   song: CustomSong,
-  fileBase?: string
+  fileBase?: string,
+  options?: BuildSongPackagesOptions
 ): Promise<SongPackageFile[]> {
-  const files = await buildSongPackages(song, fileBase);
+  const files = await buildSongPackages(song, fileBase, options);
   for (const file of files) {
     const url = URL.createObjectURL(file.blob);
     const a = document.createElement("a");

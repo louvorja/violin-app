@@ -23,6 +23,9 @@
         :item-key="(item: LiturgyItem) => item.id"
         :disabled="locked"
         handle="[data-handle='true']"
+        :delay="300"
+        :delay-on-touch-only="true"
+        :touch-start-threshold="10"
         tag="div"
         class="liturgy-tl-list"
         :animation="150"
@@ -409,6 +412,7 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   margin: var(--lj-space-6) 0 var(--lj-space-2);
   padding: var(--lj-space-3) var(--lj-space-5);
   cursor: grab;
+  touch-action: pan-y;
   user-select: none;
   background: color-mix(in srgb, var(--cat-color, var(--lj-divider)) 10%, transparent);
   border-radius: var(--lj-radius-lg);

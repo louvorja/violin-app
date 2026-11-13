@@ -154,20 +154,66 @@ function stringifyIni(sections, sectionOrder) {
   return lines.join("\r\n");
 }
 
-function hmsToSeconds(hms) {
-  if (!hms) return 0;
-  const parts = hms.split(":").map(Number);
-  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  if (parts.length === 2) return parts[0] * 60 + parts[1];
-  return parts[0] || 0;
+function roundMs(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n * 1000) / 1000;
 }
 
-function secondsToHms(seconds) {
-  const total = Math.max(0, Math.floor(seconds || 0));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+function hmsToSeconds(hms) {
+  if (!hms) return 0;
+  const normalized = String(hms).trim().replace(",", ".");
+  const parts = normalized.split(":").map(Number);
+  if (parts.some((n) => !Number.isFinite(n))) return 0;
+  if (parts.length === 3) return roundMs(parts[0] * 3600 + parts[1] * 60 + parts[2]);
+  if (parts.length === 2) return roundMs(parts[0] * 60 + parts[1]);
+  return roundMs(parts[0] || 0);
+}
+
+function secondsToHms(seconds, { fractional = true } = {}) {
+  const rounded = roundMs(seconds);
+  const totalMs = Math.round(rounded * 1000);
+  const wholeSeconds = fractional ? Math.floor(totalMs / 1000) : Math.floor(rounded);
+  const ms = fractional ? totalMs % 1000 : 0;
+  const h = Math.floor(wholeSeconds / 3600);
+  const m = Math.floor((wholeSeconds % 3600) / 60);
+  const s = wholeSeconds % 60;
+  const base = [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+  return ms > 0 ? `${base}.${String(ms).padStart(3, "0")}` : base;
+}
+
+function parseTempoPair(hmsRaw, bytesRaw, bytesPerSecond) {
+  const hasHms = typeof hmsRaw === "string" && hmsRaw.trim() !== "";
+  if (hasHms && /[.,]\d+/.test(hmsRaw)) {
+    return hmsToSeconds(hmsRaw);
+  }
+
+  const bytesNum = Number(bytesRaw || 0);
+  if (hasHms) {
+    const hmsSeconds = hmsToSeconds(hmsRaw);
+    // Preserva milissegundos de `tempo` quando `tempo_hms` veio truncado em inteiros.
+    if (Number.isFinite(bytesNum) && bytesNum > 0) {
+      const byteSeconds = roundMs(bytesNum / bytesPerSecond);
+      if (Math.floor(byteSeconds) === Math.floor(hmsSeconds)) {
+        return byteSeconds;
+      }
+    }
+    return hmsSeconds;
+  }
+
+  return Number.isFinite(bytesNum) && bytesNum > 0 ? roundMs(bytesNum / bytesPerSecond) : 0;
+}
+
+function parseSlideTempoSeconds(sec, bytesPerSecond) {
+  return parseTempoPair(sec.tempo_hms, sec.tempo, bytesPerSecond);
+}
+
+function parseSlidePlaybackTempoSeconds(sec, bytesPerSecond) {
+  const hasPb =
+    (typeof sec.tempo_hms_pb === "string" && sec.tempo_hms_pb.trim() !== "") ||
+    (typeof sec.tempo_pb === "string" && sec.tempo_pb.trim() !== "");
+  if (!hasPb) return undefined;
+  return parseTempoPair(sec.tempo_hms_pb, sec.tempo_pb, bytesPerSecond);
 }
 
 function decodeLetra(letra) {
@@ -180,7 +226,11 @@ function encodeLetra(letra) {
   return letra.replace(/\r\n/g, "|").replace(/\n/g, "|");
 }
 
-function parseSlja(iniText, bytesPerSecond = DEFAULT_BYTES_PER_SECOND) {
+function parseSlja(
+  iniText,
+  bytesPerSecond = DEFAULT_BYTES_PER_SECOND,
+  playbackBytesPerSecond = bytesPerSecond
+) {
   const sections = parseIniWithSections(iniText);
   const geral = sections["Geral"] || sections["_default"] || {};
   const slidesCount = parseInt(geral.slides || "0", 10);
@@ -190,6 +240,7 @@ function parseSlja(iniText, bytesPerSecond = DEFAULT_BYTES_PER_SECOND) {
     const sec = sections[`Slide:${i}`];
     if (!sec) continue;
 
+    const tempo_seconds_pb = parseSlidePlaybackTempoSeconds(sec, playbackBytesPerSecond);
     slides.push({
       index: i,
       tipo: sec.tipo || (i === 1 ? "CAPA" : "LETRA"),
@@ -203,9 +254,8 @@ function parseSlja(iniText, bytesPerSecond = DEFAULT_BYTES_PER_SECOND) {
       cor_fundo: sec.cor_fundo || "#000000",
       imagem: sec.imagem || "",
       imagem_posicao: parseInt(sec.imagem_posicao || "5", 10),
-      tempo_seconds: sec.tempo_hms
-        ? hmsToSeconds(sec.tempo_hms)
-        : Math.round(Number(sec.tempo || 0) / bytesPerSecond),
+      tempo_seconds: parseSlideTempoSeconds(sec, bytesPerSecond),
+      ...(tempo_seconds_pb !== undefined ? { tempo_seconds_pb } : {}),
       text_align: sec.text_align || "center",
     });
   }
@@ -215,6 +265,10 @@ function parseSlja(iniText, bytesPerSecond = DEFAULT_BYTES_PER_SECOND) {
       slides_count: slidesCount,
       versao: geral.versao || "",
       url_musica: geral.url_musica || "",
+      url_playback: geral.url_playback || "",
+      faixa: String(geral.faixa || "")
+        .trim()
+        .toLowerCase(),
       audio: geral.audio || "0",
       // Nome da música gravado pelo LouvorJA no export (pode faltar em
       // arquivos legados/Delphi).
@@ -306,16 +360,20 @@ function buildIniFromSlides({
   meta = {},
   slides = [],
   audioPath = "",
+  playbackPath = "",
   bytesPerSecond = DEFAULT_BYTES_PER_SECOND,
+  playbackBytesPerSecond = bytesPerSecond,
 }) {
   const sections = {};
   const order = ["Geral"];
 
   sections["Geral"] = {
     slides: String(slides.length),
-    audio: meta.audio || (audioPath ? "1" : "0"),
+    audio: meta.audio || (audioPath || playbackPath ? "1" : "0"),
   };
   if (audioPath) sections["Geral"].url_musica = audioPath;
+  if (playbackPath) sections["Geral"].url_playback = playbackPath;
+  if (meta.faixa) sections["Geral"].faixa = meta.faixa;
   if (meta.versao) sections["Geral"].versao = meta.versao;
   if (meta.nome) sections["Geral"].nome = meta.nome;
 
@@ -344,6 +402,12 @@ function buildIniFromSlides({
     const seconds = Number(s.tempo_seconds || 0);
     sec.tempo_hms = secondsToHms(seconds);
     sec.tempo = String(Math.round(seconds * bytesPerSecond));
+
+    if (s.tempo_seconds_pb !== undefined) {
+      const pbSeconds = Number(s.tempo_seconds_pb || 0);
+      sec.tempo_hms_pb = secondsToHms(pbSeconds);
+      sec.tempo_pb = String(Math.round(pbSeconds * playbackBytesPerSecond));
+    }
 
     sections[name] = sec;
   });
@@ -392,8 +456,7 @@ async function loadSlja(file) {
   // Varredura da raiz com normalização de separador — zips gerados pelo
   // Delphi gravam entradas como "imagens\foto.png" (barra invertida), que
   // zip.folder() não encontra.
-  let audio = null;
-  let audioName = null;
+  const audioEntries = [];
   const images = new Map();
   const pending = [];
 
@@ -408,11 +471,10 @@ async function loadSlja(file) {
     }
 
     const audMatch = norm.match(/^audio\/(.*)$/i);
-    if (audMatch && !audio) {
+    if (audMatch) {
       pending.push(
         zipEntry.async("blob").then((b) => {
-          audio = b;
-          audioName = audMatch[1];
+          audioEntries.push({ norm: norm.toLowerCase(), name: audMatch[1], blob: b });
         })
       );
     }
@@ -420,20 +482,63 @@ async function loadSlja(file) {
 
   await Promise.all(pending);
 
-  const parsed = parseSlja(iniText, await audioBytesPerSecond(audio));
+  const sections = parseIniWithSections(iniText);
+  const geral = sections["Geral"] || sections["_default"] || {};
+  const normRef = (v) =>
+    String(v || "")
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "")
+      .toLowerCase();
+  const urlMusica = normRef(geral.url_musica);
+  const urlPlayback = normRef(geral.url_playback);
 
-  return { ...parsed, audio, audioName, images, loose: false };
+  const playbackEntry = urlPlayback
+    ? audioEntries.find(
+        (e) => e.norm === urlPlayback || e.norm.endsWith(`/${urlPlayback.replace(/^audio\//, "")}`)
+      ) || null
+    : null;
+  const primaryEntry =
+    (urlMusica
+      ? audioEntries.find(
+          (e) =>
+            e !== playbackEntry &&
+            (e.norm === urlMusica || e.norm.endsWith(`/${urlMusica.replace(/^audio\//, "")}`))
+        )
+      : null) ||
+    audioEntries.find((e) => e !== playbackEntry) ||
+    null;
+
+  const audio = primaryEntry?.blob || null;
+  const audioName = primaryEntry?.name || null;
+  const playbackAudio = playbackEntry?.blob || null;
+  const playbackAudioName = playbackEntry?.name || null;
+
+  const bpsPrimary = await audioBytesPerSecond(audio);
+  const bpsPlayback = playbackAudio ? await audioBytesPerSecond(playbackAudio) : bpsPrimary;
+  const parsed = parseSlja(iniText, bpsPrimary, bpsPlayback);
+
+  return {
+    ...parsed,
+    audio,
+    audioName,
+    playbackAudio,
+    playbackAudioName,
+    images,
+    loose: false,
+  };
 }
 
 /**
  * Escreve um pacote .slja como Blob.
  *
  * @param {object} input
- * @param {object} [input.meta]                 Metadados gerais (versao, audio).
+ * @param {object} [input.meta]                 Metadados gerais (versao, audio, faixa).
  * @param {string} [input.nome]                 Nome da música — gravado em [Geral].nome.
  * @param {Array} input.slides                  Lista de slides (schema CustomSlide).
- * @param {Blob | null} [input.audio]           Blob do MP3 (será gravado em audio/<audioName>).
+ * @param {Blob | null} [input.audio]           Blob do MP3 principal (gravado em audio/<audioName>).
  * @param {string} [input.audioName]            Nome do arquivo de áudio (default: 'audio.mp3').
+ * @param {Blob | null} [input.playbackAudio]   Blob opcional da faixa de playback (export unificado).
+ * @param {string} [input.playbackAudioName]    Nome do arquivo de playback (default: 'playback.mp3').
  * @param {Map<string, Blob>} [input.images]    Imagens deduplicadas: chave = path no ZIP (`imagens/<name>`), valor = Blob.
  * @returns {Promise<Blob>}                     Pacote .slja pronto para download/save.
  */
@@ -443,6 +548,8 @@ async function writeSlja({
   slides = [],
   audio = null,
   audioName = "audio.mp3",
+  playbackAudio = null,
+  playbackAudioName = "playback.mp3",
   images = null,
 } = {}) {
   const jszipMod = await import("jszip");
@@ -455,6 +562,14 @@ async function writeSlja({
     zip.file(audioPath, audio);
   }
 
+  let playbackPath = "";
+  if (playbackAudio) {
+    const cleanPb = playbackAudioName.replace(/^audio\//, "");
+    const candidate = `audio/${cleanPb}`;
+    playbackPath = candidate === audioPath ? `audio/pb-${cleanPb}` : candidate;
+    zip.file(playbackPath, playbackAudio);
+  }
+
   const slidesForIni = slides.map((s) => {
     if (!s.imagem) return s;
     const path = s.imagem.startsWith("imagens/")
@@ -463,11 +578,15 @@ async function writeSlja({
     return { ...s, imagem: path };
   });
 
+  const bpsPrimary = await audioBytesPerSecond(audio);
+  const bpsPlayback = playbackAudio ? await audioBytesPerSecond(playbackAudio) : bpsPrimary;
   const iniText = buildIniFromSlides({
     meta: { ...meta, ...(nome ? { nome } : {}) },
     slides: slidesForIni,
     audioPath,
-    bytesPerSecond: await audioBytesPerSecond(audio),
+    playbackPath,
+    bytesPerSecond: bpsPrimary,
+    playbackBytesPerSecond: bpsPlayback,
   });
   zip.file("slides.lja", encodeCp1252(iniText));
 

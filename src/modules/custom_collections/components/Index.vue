@@ -204,6 +204,7 @@
     </div>
 
     <input ref="fileSlja" type="file" accept=".slja,.lja" multiple hidden @change="onImportSlja" />
+    <SljaPackagePrompts ref="sljaPrompts" />
     <LjToast
       v-model="importStatus.show"
       :text="importStatus.text"
@@ -220,6 +221,7 @@ import draggable from "vuedraggable";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
+import SljaPackagePrompts from "@/components/SljaPackagePrompts.vue";
 import { LjButton, LjCard, LjEmpty, LjIcon, LjMenu, LjTabs, LjToast } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { MUSIC_EXECUTIONS, canExecute } from "@/config/MusicAction";
@@ -228,6 +230,8 @@ import CustomSongs, { hasPlayback, hasSung } from "@/helpers/CustomSongs";
 import { playCustomSong } from "@/helpers/CustomMusicCatalog";
 import { downloadSongPackages, importSongFiles } from "@/helpers/CustomSongPackage";
 import AudioLibrary from "@/helpers/AudioLibrary";
+
+const sljaPrompts = ref(null);
 import $alert from "@/helpers/Alert";
 import { useViewport } from "@/composables/useViewport";
 import Platform from "@/helpers/Platform";
@@ -436,9 +440,15 @@ async function confirmDeleteSong(s) {
   await loadAll();
 }
 
-// Com cantado e playback saem dois arquivos, `Música.slja` e `Música -PB.slja`.
+// Com cantado e playback permite escolher pacote único (.slja) ou par clássico (`Música.slja` + `Música -PB.slja`).
 async function exportSong(s) {
-  await downloadSongPackages(s);
+  let mode = "classic";
+  if (hasSung(s) && hasPlayback(s) && sljaPrompts.value) {
+    const picked = await sljaPrompts.value.chooseExportMode();
+    if (!picked) return;
+    mode = picked;
+  }
+  await downloadSongPackages(s, undefined, { mode });
 }
 
 function actImport() {
@@ -456,7 +466,12 @@ async function onImportSlja(e) {
   e.target.value = "";
   if (!files.length) return;
 
-  const result = await importSongFiles(files);
+  const result = await importSongFiles(files, {
+    classifyLegacyTracks: sljaPrompts.value
+      ? (items) => sljaPrompts.value.classifyLegacyTracks(items)
+      : undefined,
+  });
+  if (result.cancelled) return;
   let ok = 0;
   let paired = 0;
   let fail = result.failed;
