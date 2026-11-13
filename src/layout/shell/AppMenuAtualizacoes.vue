@@ -632,8 +632,17 @@ async function checkDbUpdate(): Promise<void> {
     $userdata.set(KEYS.OPTIONS.LAST_DB_CHECK, lastDbCheck.value);
   } catch (error) {
     dbStatus.value = "error";
-    Telemetry.captureException(error, { source: "database_update_check", stage: "config" });
-    Telemetry.track("database_update_check_failed", failureDetails(error));
+    const details = failureDetails(error);
+    Telemetry.track("database_update_check_failed", details);
+    const offlineOrNetwork =
+      (typeof navigator !== "undefined" && navigator.onLine === false) ||
+      details.reason === "timeout" ||
+      details.reason === "network_or_type_error" ||
+      details.reason === "NetworkError" ||
+      details.reason === "AbortError";
+    if (!offlineOrNetwork) {
+      Telemetry.captureException(error, { source: "database_update_check", stage: "config" });
+    }
   } finally {
     dbChecking.value = false;
   }

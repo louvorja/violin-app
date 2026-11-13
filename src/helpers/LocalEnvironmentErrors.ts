@@ -27,6 +27,9 @@ export function classifyLocalEnvironmentError(error: unknown): LocalEnvironmentE
   if (name === "AbortError" && /transaction was aborted/i.test(message)) {
     return "storage_unavailable";
   }
+  if (name === "SecurityError" && /service worker|disabled/i.test(message)) {
+    return "storage_unavailable";
+  }
   return null;
 }
 

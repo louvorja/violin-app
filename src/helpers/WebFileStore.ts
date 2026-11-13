@@ -232,10 +232,19 @@ async function downloadOne(
 
 type QueueItem = { remote: string; url: string; netFailures: number };
 
-/** Falha de transporte (rede caiu, página suspensa), não resposta ruim do servidor. */
+/** Falha de transporte (rede caiu, página suspensa, Cache.put interrompido), não resposta ruim do servidor. */
 function isNetworkFailure(e: unknown): boolean {
-  if (e instanceof WebDownloadFailure) return e.stage === "download" && isNetworkFailure(e.cause);
-  return e instanceof TypeError || (e instanceof DOMException && e.name === "TimeoutError");
+  if (e instanceof WebDownloadFailure) {
+    return (
+      (e.stage === "download" ||
+        (e.stage === "persist" && e.cause instanceof DOMException && e.cause.name === "NetworkError")) &&
+      isNetworkFailure(e.cause)
+    );
+  }
+  return (
+    e instanceof TypeError ||
+    (e instanceof DOMException && (e.name === "TimeoutError" || e.name === "NetworkError"))
+  );
 }
 
 // Três falhas de rede seguidas já indicam conexão fora, não arquivo ruim.

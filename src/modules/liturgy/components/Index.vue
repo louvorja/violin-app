@@ -644,14 +644,23 @@ _broadcastUnlisten = Broadcast.listen((data) => {
   }
 });
 
+let _warmTimer: ReturnType<typeof setTimeout> | null = null;
+const yieldFrame = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
 onMounted(async () => {
-  await loadMusicsList();
-  await loadVideosList();
+  // Exibe a liturgia do dia antes de carregar catálogos grandes para não
+  // travar a thread principal durante module.open:liturgy.
   await syncLiturgyForDay(activeDay.value);
   liturgyAutoLoad.checkAutoLoad();
+  _warmTimer = setTimeout(async () => {
+    await loadMusicsList();
+    await yieldFrame();
+    await loadVideosList();
+  }, 0);
 });
 
 onBeforeUnmount(() => {
+  if (_warmTimer) clearTimeout(_warmTimer);
   if (_broadcastUnlisten) _broadcastUnlisten();
 });
 

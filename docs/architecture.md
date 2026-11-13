@@ -97,22 +97,15 @@ SW — sem isso o próximo `get` regravava o JSON antigo. Nenhuma dessas ações
 
 ## Armazenamento desktop
 
-No desktop, todos os dados persistentes ficam em uma raiz única, por padrão
-`Documentos/LouvorJA Violin`, ou na pasta definida em Armazenamento. `paths.dataDir()`
-resolve essa raiz: mídia em `files/` (com os exports do Canva em `files/canva/`),
-vídeos baixados em `Videos/`, preferências em `storage/`, documentos em `library/`,
-cache do banco em `json_db/`, ferramentas em `bin/` e dados internos do Electron
-(IndexedDB, cookies, caches, logs) em `.electron/`.
-O endereço original de AppData/Application Support guarda a âncora `data-location.json`
-e o lock de instância única. Downloads e dados existentes são migrados sem sobrescrever
-destinos. Ao mover a raiz em Armazenamento, o perfil ainda aberto termina a migração no
-próximo boot; a tela indica que é preciso reiniciar.
+No desktop, o perfil privado do usuário fica separado do acervo e dos vídeos configuráveis:
 
-O cache de export do Canva (`files/canva/`) vive dentro do acervo, mas não é tratado como
-ele: tem contagem própria na tela de Armazenamento, sobrevive ao "Limpar mídia" e fica
-fora do limite de espaço e da remoção de arquivos não referenciados — apagá-lo por idade
-forçaria uma reexportação, que gasta a cota do Canva. Ele só sai pelos selos da aba Canva
-ou pelo botão "Limpar exportações do Canva".
+- **Perfil privado (`paths.dataDir()`):** fixo em `<appData>/LouvorJA Violin/profile`. Guarda preferências (`storage/`), cache do banco (`json_db/`), cache de export do Canva (`canva/`, da conta e nunca no acervo compartilhado), anexos privados (`attachments/media/`), temporários (`temp/videos/`) e dados internos do Electron — IndexedDB, cookies, caches e logs — em `.electron/`.
+- **Acervo (`paths.mediaDir()` / `paths.filesDir()`):** pasta configurável independente. Padrões compartilhados: `%PUBLIC%/Documents/LouvorJA Violin/Acervo` (Windows), `/Users/Shared/LouvorJA Violin/Acervo` (macOS) e `/var/lib/louvorja-violin/acervo` (Linux), sem fallback silencioso para `Documentos` particulares.
+- **Vídeos (`paths.videosDir()`):** pasta configurável independente, por padrão `<pasta de vídeos do sistema>/LouvorJA Violin`.
+
+A pasta base de `<appData>/LouvorJA Violin` guarda `storage-layout.json` e o lock de instância única. Ao alterar as pastas de acervo ou vídeos em Armazenamento, a cópia verificada é aplicada no próximo boot preservando a origem; o `storageAccess` limita a um escritor por pasta e desativa a limpeza automática do acervo compartilhado. Quem migrava de versão antiga mantém acervo e vídeos em `<dados>/files` e `<dados>/Videos` apenas quando escolhidos explicitamente, enquanto dados pessoais (incluindo cache do Canva e anexos privados da liturgia) permanecem no perfil privado. Se a pasta configurada estiver indisponível ou a cópia falhar, o app abre em perfil provisório (`<appData>/LouvorJA Violin/fallback`) com aviso, sem publicar nada sobre a origem.
+
+O cache de export do Canva (`canva/`, no perfil privado) tem contagem própria na tela de Armazenamento, sobrevive ao "Limpar mídia" e fica fora do limite de espaço e da remoção de arquivos não referenciados — apagá-lo por idade forçaria uma reexportação, que gasta a cota do Canva. Ele só sai pelos selos da aba Canva ou pelo botão "Limpar exportações do Canva".
 
 ## 🧠 Stack
 

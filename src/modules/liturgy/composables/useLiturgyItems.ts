@@ -915,7 +915,7 @@ export function useLiturgyItems(
     }
   }
 
-  const videosCache = ref<VideoItem[]>([]);
+  const videosCache = shallowRef<VideoItem[]>([]);
 
   // ─── Biblioteca de Mídia / Som de fundo (itens por ref_id) ───
 
