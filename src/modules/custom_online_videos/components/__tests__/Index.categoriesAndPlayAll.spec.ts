@@ -10,6 +10,7 @@ const idbPut = vi.fn(async () => {});
 const snackbarShow = vi.fn();
 const alertError = vi.fn();
 const openYouTube = vi.fn(async () => true);
+const viewModePref = ref<string>("grid");
 
 const savedVideos = [
   {
@@ -108,6 +109,13 @@ vi.mock("@/helpers/Snackbar", () => ({
   default: { show: snackbarShow },
 }));
 
+vi.mock("@/helpers/UserData", () => ({
+  default: {
+    get: (key: string, fallback?: unknown) =>
+      key === "options.online_video_view_mode" ? viewModePref.value : fallback,
+  },
+}));
+
 const { default: Index } = await import("../Index.vue");
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 10));
@@ -176,6 +184,7 @@ describe("custom_online_videos — categorias visíveis e Tocar Todas (#51, #67)
     idbPut.mockClear();
     alertError.mockClear();
     snackbarShow.mockClear();
+    viewModePref.value = "grid";
   });
 
   it("mantém chips de categoria fora da área rolável e destaca o cabeçalho ao arrastar (#51)", async () => {
@@ -307,5 +316,20 @@ describe("custom_online_videos — categorias visíveis e Tocar Todas (#51, #67)
     });
     expect(idbPut).not.toHaveBeenCalled();
     expect(wrapper.findAll(".cv-grid-card")).toHaveLength(2);
+  });
+
+  it("alterna entre miniatura e lista conforme preferência global em Configurações", async () => {
+    const wrapper = mountView();
+    await flush();
+
+    expect(wrapper.find(".cv-grid").exists()).toBe(true);
+    expect(wrapper.find(".cv-list").exists()).toBe(false);
+
+    viewModePref.value = "list";
+    await flush();
+
+    expect(wrapper.find(".cv-list").exists()).toBe(true);
+    expect(wrapper.find(".cv-grid").exists()).toBe(false);
+    expect(wrapper.findAll(".cv-list-item")).toHaveLength(2);
   });
 });

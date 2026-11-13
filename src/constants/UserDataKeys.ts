@@ -402,6 +402,8 @@ export const KEYS = {
     TELEMETRY: `${OPTIONS}.telemetry`,
     TELEMETRY_ID: `${OPTIONS}.telemetry_id`,
     YOUTUBE_ACTION: `${OPTIONS}.youtube_action`,
+    /** Modo de exibição em Vídeos On-line e Meus Vídeos Online: `"grid"` (Miniaturas) ou `"list"` (Lista). */
+    ONLINE_VIDEO_VIEW_MODE: `${OPTIONS}.online_video_view_mode`,
     DEV: {
       DEVTOOLS_MAIN_WINDOW: `${OPTIONS}.dev.devtools_main_window`,
       DEVTOOLS_PROJECTIONS: `${OPTIONS}.dev.devtools_projections`,

@@ -381,7 +381,9 @@ import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import $alert from "@/helpers/Alert";
 import $snackbar from "@/helpers/Snackbar";
 import $idb from "@/helpers/IndexedDB";
+import $userdata from "@/helpers/UserData";
 import { DB_TABLE } from "@/constants/DbTables";
+import { KEYS } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
 import { RibbonAction } from "@/types/Ribbon";
 import Media from "@/composables/useMedia";
@@ -429,7 +431,9 @@ const videoTitles = createVideoTitleEnrichment<VideoItem>({
   fetchTitle: fetchYoutubeTitle,
   persist: (v) => $idb.put(VIDEOS_TABLE, v),
 });
-const viewMode = ref<string>("grid");
+const viewMode = computed<"grid" | "list">(() =>
+  $userdata.get<string>(KEYS.OPTIONS.ONLINE_VIDEO_VIEW_MODE, "grid") === "list" ? "list" : "grid"
+);
 const search = ref<string>("");
 const projectingId = ref<string>("");
 const thumbUrls = reactive<Record<string, string>>({});
@@ -935,8 +939,6 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => 
   if (data?.module !== "custom_online_videos") return;
   if (data.action === "add") {
     openAdd();
-  } else if (data.action === "toggle_view") {
-    viewMode.value = viewMode.value === "list" ? "grid" : "list";
   } else if (data.action === "play_all") {
     playAllVideos();
   } else if (data.action === "personal_url") {

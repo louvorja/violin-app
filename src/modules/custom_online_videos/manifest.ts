@@ -46,13 +46,6 @@ export const contextualPages: RibbonPage[] = [
             color: "#27ae60",
           },
           {
-            id: `${moduleId}_toggle_view`,
-            icon: ICONS.UI.GRID_LARGE,
-            label: "ribbon.btn.custom_online_videos_toggle_view",
-            action: `${moduleId}_toggle_view`,
-            color: "#7f8c8d",
-          },
-          {
             id: `${moduleId}_manage_categories`,
             icon: ICONS.UI.TUNE,
             label: `${modulePath}.manage_categories`,

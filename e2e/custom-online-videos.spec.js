@@ -5,6 +5,22 @@ test.use({ serviceWorkers: "block" });
 async function mockNetwork(context) {
   await context.route("**/*", (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname.includes("collections_online")) {
+      return route.fulfill({
+        json: {
+          channels: [
+            {
+              channel_id: "ch-1",
+              title: "Canal Teste",
+              custom_url: "@canalteste",
+              default_image: "",
+            },
+          ],
+          playlists: [],
+          videos: [],
+        },
+      });
+    }
     if (url.pathname.includes("/json_db/") || url.origin === "http://e2e.mock") {
       return route.fulfill({ json: [] });
     }
@@ -161,9 +177,12 @@ test.describe("Meus Vídeos Online: categorias fixas (#51) e Tocar Todas (#67)",
     await seedCustomVideos(page, 2);
     await openCustomVideos(page);
 
-    // Ribbon contextual do módulo: remove Tocar Todas redundante e empilha URL + Parar em 2 linhas compactas.
+    // Ribbon contextual do módulo: remove Tocar Todas e Lista/Miniatura redundantes, e empilha URL + Parar.
     await expect(
       page.locator('[data-testid="ribbon-btn-custom_online_videos_play_all"]')
+    ).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid="ribbon-btn-custom_online_videos_toggle_view"]')
     ).toHaveCount(0);
     const settingsBtn = page.locator('[data-testid="ribbon-btn-custom_online_videos_settings"]');
     const settingsLabelMetrics = await settingsBtn.evaluate((btn) => {
@@ -231,5 +250,37 @@ test.describe("Meus Vídeos Online: categorias fixas (#51) e Tocar Todas (#67)",
     await page.locator(".alert-btn").click();
     await dialog.getByRole("button", { name: "Cancelar" }).click();
     await expect(page.locator(".cv-grid-card")).toHaveCount(3);
+  });
+
+  test("modo Lista / Miniaturas em Configurações altera Meus Vídeos Online e Vídeos On-line", async ({
+    page,
+    context,
+  }) => {
+    await mockNetwork(context);
+    await page.goto("/");
+    await page
+      .locator('[data-testid="modules-ready"]')
+      .waitFor({ state: "attached", timeout: 30_000 });
+    await seedCustomVideos(page, 2);
+    await openCustomVideos(page);
+
+    await expect(page.locator(".cv-grid")).toBeVisible();
+
+    // Abre Configurações pelo botão do próprio módulo para ir direto à aba Vídeos On-line.
+    await page.locator('[data-testid="ribbon-btn-custom_online_videos_settings"]').click();
+    await expect(page.locator("#opt-sec-videos")).toBeVisible({ timeout: 10_000 });
+
+    await page.locator("#opt-videos-view-mode").click();
+    await page.locator(".lj-select__item").filter({ hasText: "Lista" }).click();
+    await page.locator(".app-menu-back").click();
+
+    await expect(page.locator(".cv-list")).toBeVisible();
+    await expect(page.locator(".cv-list-item")).toHaveCount(3);
+
+    // Vídeos On-line também passa a exibir cards em modo lista.
+    await page.locator("#ribbon-tab-collections").click();
+    await page.locator('[data-testid="ribbon-btn-online_videos"]').click();
+    await expect(page.locator(".ov-list")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator(".ov-card--list")).toHaveCount(1);
   });
 });

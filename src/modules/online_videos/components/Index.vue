@@ -19,7 +19,7 @@
       <template v-if="searching">
         <div class="ov-section-title">{{ tm("search_results") }}</div>
         <div v-if="!searchResults.length" class="ov-empty">{{ tm("empty") }}</div>
-        <div class="ov-grid">
+        <div :class="viewMode === 'list' ? 'ov-list' : 'ov-grid'">
           <OnlineVideoCard
             v-for="video in searchResults"
             :key="video.video_id"
@@ -27,6 +27,7 @@
             height="150"
             :entity="video"
             variant="video"
+            :layout="viewMode"
             :active="projectingId === video.video_id"
             :subtitle="playlistTitle(video.playlist_id)"
             @select="projectVideo(video)"
@@ -51,7 +52,7 @@
       <template v-if="!searching && level === 1">
         <div class="ov-section-title">{{ tm("channels") }}</div>
         <div v-if="!channels.length && !loading" class="ov-empty">{{ tm("empty") }}</div>
-        <div class="ov-grid">
+        <div :class="viewMode === 'list' ? 'ov-list' : 'ov-grid'">
           <OnlineVideoCard
             v-for="ch in channels"
             :key="ch.channel_id"
@@ -59,6 +60,7 @@
             height="200"
             :entity="ch"
             variant="channel"
+            :layout="viewMode"
             play-all
             :subtitle="ch.custom_url"
             @select="selectChannel(ch)"
@@ -71,7 +73,7 @@
       <template v-if="!searching && level === 2">
         <div class="ov-section-title">{{ tm("playlists") }}</div>
         <div v-if="!playlists.length" class="ov-empty">{{ tm("empty") }}</div>
-        <div class="ov-grid">
+        <div :class="viewMode === 'list' ? 'ov-list' : 'ov-grid'">
           <OnlineVideoCard
             v-for="pl in playlists"
             :key="pl.playlist_id"
@@ -79,6 +81,7 @@
             height="200"
             :entity="pl"
             variant="playlist"
+            :layout="viewMode"
             play-all
             :first-video-id="firstVideoIdOfPlaylist(pl.playlist_id) ?? ''"
             :subtitle="`${videosOf(pl.playlist_id)} ${tm('videos_count')}`"
@@ -92,7 +95,7 @@
       <template v-if="!searching && level === 3">
         <div class="ov-section-title">{{ tm("videos") }}</div>
         <div v-if="!videos.length" class="ov-empty">{{ tm("empty") }}</div>
-        <div class="ov-grid">
+        <div :class="viewMode === 'list' ? 'ov-list' : 'ov-grid'">
           <OnlineVideoCard
             v-for="video in videos"
             :key="video.video_id"
@@ -100,6 +103,7 @@
             height="150"
             :entity="video"
             variant="video"
+            :layout="viewMode"
             :active="projectingId === video.video_id"
             @select="projectVideo(video)"
           />
@@ -142,6 +146,9 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const level = ref(1);
 const search = ref("");
+const viewMode = computed<"grid" | "list">(() =>
+  $userdata.get<string>(KEYS.OPTIONS.ONLINE_VIDEO_VIEW_MODE, "grid") === "list" ? "list" : "grid"
+);
 const selectedChannel = ref<Channel | null>(null);
 const selectedPlaylist = ref<Playlist | null>(null);
 const projectingId = ref<string>("");
@@ -468,6 +475,11 @@ function close(): void {
   align-items: flex-start;
   justify-content: flex-start;
   gap: 10px;
+}
+.ov-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .ov-empty {
   font-size: 12px;

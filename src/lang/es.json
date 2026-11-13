@@ -853,6 +853,9 @@
       "open_return_at": "Pantalla de retorno del vídeo en:",
       "show_return": "Mostrar en la pantalla de retorno",
       "title": "Vídeos On-line",
+      "view_mode": "Visualización de los videos:",
+      "view_mode_grid": "Miniaturas",
+      "view_mode_list": "Lista",
       "youtube_action": "Al ejecutar enlace de YouTube en la liturgia, abrir:"
     },
     "player": {

@@ -133,4 +133,18 @@ describe("OnlineVideoCard — download do vídeo", () => {
       expect(w.find(".ov-card-download-badge").exists()).toBe(false);
     }
   });
+
+  it("no modo lista renderiza linha horizontal com ações inline", async () => {
+    const { Card } = await load([{ id: ID, size: 42 * MB, usedAt: 1, kept: true }]);
+    const w = mountIn(Card, { entity, variant: "video", layout: "list", playAll: true });
+
+    expect(w.find(".ov-card").classes()).toContain("ov-card--list");
+    expect(w.find(".ov-card-list-actions").exists()).toBe(true);
+    expect(button(w, "Remover download").exists()).toBe(true);
+
+    await w.find(".ov-card-list-play-all").trigger("click");
+    const card = w.findComponent(Card);
+    expect(card.emitted("playAll")).toHaveLength(1);
+    expect(card.emitted("select")).toBeUndefined();
+  });
 });

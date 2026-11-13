@@ -1238,6 +1238,17 @@
           @update:model-value="saveUserData(KEYS.OPTIONS.YOUTUBE_ACTION, $event)"
         />
       </div>
+      <div class="opt-row">
+        <label class="opt-label" for="opt-videos-view-mode">
+          {{ $t("options.videos.view_mode") }}
+        </label>
+        <LjSelect
+          id="opt-videos-view-mode"
+          :items="opcoesModoVisualizacaoVideo"
+          :model-value="videoViewMode"
+          @update:model-value="saveUserData(KEYS.OPTIONS.ONLINE_VIDEO_VIEW_MODE, $event)"
+        />
+      </div>
       <template v-if="isDesktop">
         <div class="opt-row">
           <label class="opt-checkbox">
@@ -1767,6 +1778,15 @@ const opcoesAcaoYoutube = computed(() => [
   { value: "video", label: t("options.videos.action_video") },
   { value: "link", label: t("options.videos.action_link") },
 ]);
+
+const opcoesModoVisualizacaoVideo = computed(() => [
+  { value: "grid", label: t("options.videos.view_mode_grid") },
+  { value: "list", label: t("options.videos.view_mode_list") },
+]);
+
+const videoViewMode = computed(() =>
+  getUserData<string>(KEYS.OPTIONS.ONLINE_VIDEO_VIEW_MODE, "grid") === "list" ? "list" : "grid"
+);
 
 const opcoesMonitor = computed(() => [
   { value: "", label: t("options.slides.none") },
