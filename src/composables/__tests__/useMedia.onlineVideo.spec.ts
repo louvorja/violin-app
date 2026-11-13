@@ -270,6 +270,7 @@ describe("acompanhar o download do yt-dlp e projetar", () => {
         url: `louvorja://onlinevideo/${ID}.mp4`,
         title: "Louvor",
         mediaType: "video",
+        videoId: ID,
       },
       true
     );
@@ -424,6 +425,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
         title: "Louvor",
         mediaType: "video",
         videoUrl: video.url,
+        videoId: ID,
       },
       true
     );
@@ -469,7 +471,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     controlledDownloads();
     expect(await openStream(embed(ID), "Louvor")).toBe(true);
     expect(openAudio).toHaveBeenCalledWith(
-      { url: file, title: "Louvor", mediaType: "video" },
+      { url: file, title: "Louvor", mediaType: "video", videoId: ID },
       true
     );
     expect(embedded).not.toHaveBeenCalled();
@@ -489,6 +491,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
         url: `louvorja://onlinevideo/${ID}.mp4`,
         title: "Louvor",
         mediaType: "video",
+        videoId: ID,
       },
       true
     );

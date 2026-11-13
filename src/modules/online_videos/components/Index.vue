@@ -125,6 +125,7 @@ import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import Media from "@/composables/useMedia";
 import { prepare as prepareOnlineVideo } from "@/helpers/OnlineVideo";
 import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
+import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $database from "@/helpers/Database";
 import $userdata from "@/helpers/UserData";
@@ -135,6 +136,7 @@ import { LjTooltip } from "@components/ui";
 const { t: i18nT, locale } = useI18n();
 const tm = (key: string): string => i18nT(`modules.online_videos.${key}`);
 const downloads = useOnlineVideoDownloads();
+const playlistPlayback = usePlaylistPlayback();
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -217,29 +219,55 @@ function firstVideoIdOfPlaylist(playlistId: string): string | null {
   return list[0]?.video_id || null;
 }
 
-/** Reproduz o primeiro vídeo do canal/playlist — inicia a sequência. */
-function playFirstVideoOf(playlistId: string): void {
-  const list = (apiData.value?.videos ?? [])
-    .filter((v) => v.playlist_id === playlistId)
-    .sort(byTitle);
-  if (!list.length) return;
-  projectVideo(list[0]);
+function startVideoSequence(name: string, list: OnlineVideo[]): void {
+  const unique = dedupeByVideoId(list);
+  if (!unique.length) return;
+  playlistPlayback.playOnlineVideoSequence(
+    name,
+    unique.map((video) => ({
+      url: buildEmbedUrl(video.video_id),
+      title: video.title,
+      videoId: video.video_id,
+      itemKey: video.video_id,
+    }))
+  );
 }
 
 function playChannelVideos(channelId: string): void {
-  const pls = (apiData.value?.playlists ?? []).filter((p) => p.channel_id === channelId);
+  const ch = (apiData.value?.channels ?? []).find((c) => c.channel_id === channelId);
+  const pls = (apiData.value?.playlists ?? [])
+    .filter((p) => p.channel_id === channelId)
+    .sort(byTitle);
+  const list: OnlineVideo[] = [];
   for (const pl of pls) {
-    const first = (apiData.value?.videos ?? []).find((v) => v.playlist_id === pl.playlist_id);
-    if (first) {
-      playFirstVideoOf(first.playlist_id);
-      return;
-    }
+    const plVideos = (apiData.value?.videos ?? [])
+      .filter((v) => v.playlist_id === pl.playlist_id)
+      .sort(byTitle);
+    list.push(...plVideos);
   }
+  startVideoSequence(ch?.title || tm("channels"), list);
 }
 
 function playPlaylistVideos(playlistId: string): void {
-  playFirstVideoOf(playlistId);
+  const list = (apiData.value?.videos ?? [])
+    .filter((v) => v.playlist_id === playlistId)
+    .sort(byTitle);
+  startVideoSequence(playlistTitle(playlistId) || tm("playlists"), list);
 }
+
+watch(
+  () => playlistPlayback.currentSong.value,
+  (song) => {
+    const key = song?.onlineVideo?.itemKey;
+    if (key) {
+      projectingId.value = key;
+      $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, true);
+    } else if (!song && projectingId.value) {
+      projectingId.value = "";
+      $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, false);
+    }
+  }
+);
 
 function videosOf(playlistId: string) {
   return (apiData.value?.videos ?? []).filter((v) => v.playlist_id === playlistId).length;

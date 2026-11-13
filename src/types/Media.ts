@@ -20,6 +20,8 @@ export interface MediaOpenParams {
    * baixa: trilha de vídeo e trilha de áudio). O player do app a mostra, muda.
    */
   videoUrl?: string;
+  /** Identificador do vídeo on-line quando reproduzido a partir de cache/stream. */
+  videoId?: string;
 }
 
 export interface MediaConfig {

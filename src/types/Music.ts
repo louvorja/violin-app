@@ -56,11 +56,20 @@ export interface SearchMusicItem extends MusicItem {
   has_audio?: boolean;
 }
 
+export interface OnlineVideoPlaylistItem {
+  url: string;
+  title: string;
+  videoId?: string;
+  itemKey?: string;
+}
+
 export interface PlaylistSong {
   id_music: number;
   name: string;
   duration: number;
   has_instrumental_music: boolean;
+  /** Presente em filas de "Tocar Todas" de vídeos on-line. */
+  onlineVideo?: OnlineVideoPlaylistItem;
 }
 
 export interface Playlist {

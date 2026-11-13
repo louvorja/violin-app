@@ -19,9 +19,11 @@
       <LjIcon :icon="ICONS.PLAYER.PLAYLIST" :size="14" class="playlist-bar-icon" />
       <span class="playlist-bar-name">{{ playlist.currentPlaylist.value?.name }}</span>
       <span class="playlist-bar-meta">
-        {{ playlist.playedCount.value }}/{{ playlist.totalSongs.value }} ·
-        {{ formatDuration(playlist.playedDuration.value) }} /
-        {{ formatDuration(playlist.totalDuration.value) }}
+        {{ playlist.playedCount.value }}/{{ playlist.totalSongs.value }}
+        <template v-if="playlist.totalDuration.value > 0">
+          · {{ formatDuration(playlist.playedDuration.value) }} /
+          {{ formatDuration(playlist.totalDuration.value) }}
+        </template>
       </span>
       <div class="playlist-bar-controls">
         <LjTooltip :text="$t('shell.player.prev')">

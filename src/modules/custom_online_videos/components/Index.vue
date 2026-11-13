@@ -7,176 +7,125 @@
     <div class="cv-body">
       <OnlineVideoDownloadsBar :items="libraryItems" />
 
-      <!-- Chips de categorias (filtro) -->
-      <div v-if="categories.length || uncategorizedCount > 0" class="cv-chips">
-        <span class="cv-chips-title">{{ tm("categories") }}</span>
-        <CategoryChip
-          v-for="cat in categories"
-          :key="cat.id"
-          :category-id="cat.id"
-          :name="cat.name"
-          :icon="cat.icon"
-          :icon-type="cat.iconType"
-          :color="cat.color"
-          :count="videos.filter((v) => v.categoryId === cat.id).length"
-          :active="selectedCategoryIds.has(cat.id)"
-          :drop-target="dropTargetId === cat.id"
-          :add-item-label="t('ribbon.btn.add_item')"
-          :edit-label="t('shell.category.edit_category')"
-          show-add
-          :add-label="tm('add_video')"
-          @select="onCategoryChipClick(cat.id)"
-          @add="onAddCategoryClick(cat.id)"
-          @edit="editCategoryFromChip(cat.id)"
-          @dragover="onCategoryDragOver($event, cat.id)"
-          @dragleave="onCategoryDragLeave($event, cat.id)"
-          @drop="onCategoryDrop($event, cat.id)"
-        />
-        <CategoryChip
-          v-if="categories.length > 0 || uncategorizedCount > 0"
-          category-id=""
-          :name="tm('uncategorized')"
-          :icon="ICONS.MEDIA.YOUTUBE"
-          icon-type="icon"
-          color="var(--lj-text-muted)"
-          :count="uncategorizedCount"
-          :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
-          :drop-target="dropTargetId === UNCATEGORIZED_ID"
-          :editable="false"
-          :add-item-label="t('ribbon.btn.add_item')"
-          show-add
-          :add-label="tm('add_video')"
-          @select="onCategoryChipClick(UNCATEGORIZED_ID)"
-          @add="onAddCategoryClick()"
-          @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
-          @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
-          @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
-        />
-      </div>
-
-      <LjEmpty
-        v-if="!videos.length"
-        class="cv-empty"
-        :icon="ICONS.MEDIA.YOUTUBE"
-        :title="categories.length ? tm('empty') : tm('no_categories')"
-      />
-
-      <!-- List view -->
-      <div v-else-if="viewMode === 'list'" class="cv-list">
-        <template v-for="v in filteredVideos" :key="v.id">
-          <div
-            class="cv-list-item"
-            :class="{ 'cv-list-item--active': projectingId === v.id }"
-            :style="{ '--card-category-color': categoryColor(v.categoryId) }"
-            draggable="true"
-            @dragstart="onCardDragStart($event, v)"
-            @dragend="onCardDragEnd"
-            @touchstart.passive="onCardTouchStart($event, v)"
-            @contextmenu.prevent
-          >
-            <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="20" class="cv-youtube" />
-            <span class="cv-list-name">{{ v.name }}</span>
-            <span v-if="categoryName(v.categoryId)" class="cv-list-category">
-              {{ categoryName(v.categoryId) }}
-            </span>
-            <span class="lj-u-spacer" />
-            <OnlineVideoDownload
-              :video-id="extractYoutubeId(v.url)"
-              :name="v.name"
-              data-no-category-drag
-              @dragstart.stop.prevent
-              @cancelled="stopIfProjecting(v)"
-            />
-            <LjButton
-              size="sm"
-              variant="primary"
-              :disabled="projectingId == v.id"
-              data-no-category-drag
-              @dragstart.stop.prevent
-              @click="projectVideo(v)"
-            >
-              {{ tm("project") }}
-            </LjButton>
-            <LjButton
-              size="sm"
-              variant="ghost"
-              icon-only
-              :icon="ICONS.ACTIONS.EDIT"
-              :title="tm('edit')"
-              :aria-label="tm('edit')"
-              data-no-category-drag
-              @dragstart.stop.prevent
-              @click="openEdit(v)"
-            />
-            <LjButton
-              size="sm"
-              variant="ghost"
-              icon-only
-              class="cv-btn-danger"
-              :icon="ICONS.ACTIONS.DELETE"
-              :title="tm('delete')"
-              :aria-label="tm('delete')"
-              data-no-category-drag
-              @dragstart.stop.prevent
-              @click="confirmDelete(v)"
-            />
-          </div>
+      <!-- Chips de categorias (filtro) + ações rápidas -->
+      <div
+        v-if="categories.length || uncategorizedCount > 0 || filteredVideos.length > 0"
+        class="cv-chips"
+        :class="{ 'cv-chips--dragging': draggingId !== null }"
+      >
+        <template v-if="categories.length || uncategorizedCount > 0">
+          <span class="cv-chips-title">{{ tm("categories") }}</span>
+          <CategoryChip
+            v-for="cat in categories"
+            :key="cat.id"
+            :category-id="cat.id"
+            :name="cat.name"
+            :icon="cat.icon"
+            :icon-type="cat.iconType"
+            :color="cat.color"
+            :count="videos.filter((v) => v.categoryId === cat.id).length"
+            :active="selectedCategoryIds.has(cat.id)"
+            :drop-target="dropTargetId === cat.id"
+            :add-item-label="t('ribbon.btn.add_item')"
+            :play-label="tm('play_category')"
+            :show-play="videos.some((v) => v.categoryId === cat.id)"
+            :edit-label="t('shell.category.edit_category')"
+            show-add
+            :add-label="tm('add_video')"
+            @select="onCategoryChipClick(cat.id)"
+            @play="playCategoryVideos(cat.id)"
+            @add="onAddCategoryClick(cat.id)"
+            @edit="editCategoryFromChip(cat.id)"
+            @dragover="onCategoryDragOver($event, cat.id)"
+            @dragleave="onCategoryDragLeave($event, cat.id)"
+            @drop="onCategoryDrop($event, cat.id)"
+          />
+          <CategoryChip
+            v-if="categories.length > 0 || uncategorizedCount > 0"
+            category-id=""
+            :name="tm('uncategorized')"
+            :icon="ICONS.MEDIA.YOUTUBE"
+            icon-type="icon"
+            color="var(--lj-text-muted)"
+            :count="uncategorizedCount"
+            :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
+            :drop-target="dropTargetId === UNCATEGORIZED_ID"
+            :editable="false"
+            :add-item-label="t('ribbon.btn.add_item')"
+            :play-label="tm('play_category')"
+            :show-play="uncategorizedCount > 0"
+            show-add
+            :add-label="tm('add_video')"
+            @select="onCategoryChipClick(UNCATEGORIZED_ID)"
+            @play="playCategoryVideos(UNCATEGORIZED_ID)"
+            @add="onAddCategoryClick()"
+            @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
+            @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
+            @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
+          />
+          <span v-if="draggingId !== null" class="cv-chips-drag-hint">
+            {{ tm("drop_category_hint") }}
+          </span>
         </template>
+        <LjButton
+          v-if="filteredVideos.length > 0"
+          size="sm"
+          variant="primary"
+          class="cv-chips-play-all"
+          :icon="ICONS.PLAYER.PLAY"
+          @click="playAllVideos()"
+        >
+          {{ tm("play_all") }} ({{ filteredVideos.length }})
+        </LjButton>
       </div>
 
-      <!-- Grid / Thumbnail view -->
-      <div v-else class="cv-grid">
-        <template v-for="v in filteredVideos" :key="v.id">
-          <LjCard
-            flush
-            class="cv-grid-card"
-            :class="{ 'cv-grid-card--active': projectingId === v.id }"
-            :style="{ '--card-category-color': categoryColor(v.categoryId) }"
-            draggable="true"
-            @click="onCardClick(v)"
-            @dragstart="onCardDragStart($event, v)"
-            @dragend="onCardDragEnd"
-            @touchstart="onCardTouchStart($event, v)"
-            @contextmenu.prevent
-          >
-            <div class="cv-grid-thumb">
-              <img
-                v-if="thumbUrls[v.id]"
-                :src="thumbUrls[v.id]"
-                alt=""
-                class="cv-grid-img"
-                draggable="false"
-              />
-              <div v-else class="cv-grid-placeholder">
-                <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="40" class="cv-youtube" />
-              </div>
-              <div class="cv-grid-overlay">
-                <LjIcon :icon="ICONS.PLAYER.PLAY" :size="36" class="cv-grid-play" />
-              </div>
-              <CategoryItemIcon
-                v-if="categoryFor(v.categoryId)"
-                placement="top-left"
-                translucent
-                :icon="categoryFor(v.categoryId)?.icon || ''"
-                :icon-type="categoryFor(v.categoryId)?.iconType || 'icon'"
-                :color="categoryFor(v.categoryId)?.color || 'var(--lj-text-muted)'"
-                :label="categoryFor(v.categoryId)?.name || ''"
-              />
-            </div>
-            <div class="cv-grid-name">{{ v.name }}</div>
-            <div v-if="categoryName(v.categoryId)" class="cv-grid-category">
-              {{ categoryName(v.categoryId) }}
-            </div>
-            <div class="cv-grid-actions" data-no-category-drag @dragstart.stop.prevent>
-              <span class="cv-grid-size-badge">
-                <OnlineVideoDownloadBadge :video-id="extractYoutubeId(v.url)" compact />
+      <div class="cv-scroll">
+        <LjEmpty
+          v-if="!videos.length"
+          class="cv-empty"
+          :icon="ICONS.MEDIA.YOUTUBE"
+          :title="categories.length ? tm('empty') : tm('no_categories')"
+        />
+
+        <!-- List view -->
+        <div v-else-if="viewMode === 'list'" class="cv-list">
+          <template v-for="v in filteredVideos" :key="v.id">
+            <div
+              class="cv-list-item"
+              :class="{
+                'cv-list-item--active': projectingId === v.id,
+                'cv-list-item--dragging': draggingId === v.id,
+              }"
+              :style="{ '--card-category-color': categoryColor(v.categoryId) }"
+              draggable="true"
+              @dragstart="onCardDragStart($event, v)"
+              @dragend="onCardDragEnd"
+              @touchstart.passive="onCardTouchStart($event, v)"
+              @contextmenu.prevent
+            >
+              <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="20" class="cv-youtube" />
+              <span class="cv-list-name">{{ v.name }}</span>
+              <span v-if="categoryName(v.categoryId)" class="cv-list-category">
+                {{ categoryName(v.categoryId) }}
               </span>
+              <span class="lj-u-spacer" />
               <OnlineVideoDownload
                 :video-id="extractYoutubeId(v.url)"
                 :name="v.name"
-                :show-status="false"
+                data-no-category-drag
+                @dragstart.stop.prevent
                 @cancelled="stopIfProjecting(v)"
               />
+              <LjButton
+                size="sm"
+                variant="primary"
+                :disabled="projectingId == v.id"
+                data-no-category-drag
+                @dragstart.stop.prevent
+                @click="projectVideo(v)"
+              >
+                {{ tm("project") }}
+              </LjButton>
               <LjButton
                 size="sm"
                 variant="ghost"
@@ -184,7 +133,9 @@
                 :icon="ICONS.ACTIONS.EDIT"
                 :title="tm('edit')"
                 :aria-label="tm('edit')"
-                @click.stop="openEdit(v)"
+                data-no-category-drag
+                @dragstart.stop.prevent
+                @click="openEdit(v)"
               />
               <LjButton
                 size="sm"
@@ -194,11 +145,121 @@
                 :icon="ICONS.ACTIONS.DELETE"
                 :title="tm('delete')"
                 :aria-label="tm('delete')"
-                @click.stop="confirmDelete(v)"
+                data-no-category-drag
+                @dragstart.stop.prevent
+                @click="confirmDelete(v)"
               />
+              <LjMenu :items="moveMenuItems(v)" align="end">
+                <template #trigger>
+                  <LjButton
+                    size="sm"
+                    variant="ghost"
+                    icon-only
+                    :icon="ICONS.UI.DOTS_VERTICAL"
+                    :title="tm('more_actions')"
+                    :aria-label="tm('more_actions')"
+                    data-no-category-drag
+                    @dragstart.stop.prevent
+                    @click.stop
+                  />
+                </template>
+              </LjMenu>
             </div>
-          </LjCard>
-        </template>
+          </template>
+        </div>
+
+        <!-- Grid / Thumbnail view -->
+        <div v-else class="cv-grid">
+          <template v-for="v in filteredVideos" :key="v.id">
+            <LjCard
+              flush
+              class="cv-grid-card"
+              :class="{
+                'cv-grid-card--active': projectingId === v.id,
+                'cv-grid-card--dragging': draggingId === v.id,
+              }"
+              :style="{ '--card-category-color': categoryColor(v.categoryId) }"
+              draggable="true"
+              @click="onCardClick(v)"
+              @dragstart="onCardDragStart($event, v)"
+              @dragend="onCardDragEnd"
+              @touchstart="onCardTouchStart($event, v)"
+              @contextmenu.prevent
+            >
+              <div class="cv-grid-thumb">
+                <img
+                  v-if="thumbUrls[v.id]"
+                  :src="thumbUrls[v.id]"
+                  alt=""
+                  class="cv-grid-img"
+                  draggable="false"
+                />
+                <div v-else class="cv-grid-placeholder">
+                  <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="40" class="cv-youtube" />
+                </div>
+                <div class="cv-grid-overlay">
+                  <LjIcon :icon="ICONS.PLAYER.PLAY" :size="36" class="cv-grid-play" />
+                </div>
+                <CategoryItemIcon
+                  v-if="categoryFor(v.categoryId)"
+                  placement="top-left"
+                  translucent
+                  :icon="categoryFor(v.categoryId)?.icon || ''"
+                  :icon-type="categoryFor(v.categoryId)?.iconType || 'icon'"
+                  :color="categoryFor(v.categoryId)?.color || 'var(--lj-text-muted)'"
+                  :label="categoryFor(v.categoryId)?.name || ''"
+                />
+              </div>
+              <div class="cv-grid-name">{{ v.name }}</div>
+              <div v-if="categoryName(v.categoryId)" class="cv-grid-category">
+                {{ categoryName(v.categoryId) }}
+              </div>
+              <div class="cv-grid-actions" data-no-category-drag @dragstart.stop.prevent>
+                <span class="cv-grid-size-badge">
+                  <OnlineVideoDownloadBadge :video-id="extractYoutubeId(v.url)" compact />
+                </span>
+                <OnlineVideoDownload
+                  :video-id="extractYoutubeId(v.url)"
+                  :name="v.name"
+                  :show-status="false"
+                  @cancelled="stopIfProjecting(v)"
+                />
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  :icon="ICONS.ACTIONS.EDIT"
+                  :title="tm('edit')"
+                  :aria-label="tm('edit')"
+                  @click.stop="openEdit(v)"
+                />
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  class="cv-btn-danger"
+                  :icon="ICONS.ACTIONS.DELETE"
+                  :title="tm('delete')"
+                  :aria-label="tm('delete')"
+                  @click.stop="confirmDelete(v)"
+                />
+                <LjMenu :items="moveMenuItems(v)" align="end">
+                  <template #trigger>
+                    <LjButton
+                      size="sm"
+                      variant="ghost"
+                      icon-only
+                      :icon="ICONS.UI.DOTS_VERTICAL"
+                      :title="tm('more_actions')"
+                      :aria-label="tm('more_actions')"
+                      @click.stop
+                    />
+                  </template>
+                </LjMenu>
+              </div>
+            </LjCard>
+          </template>
+        </div>
       </div>
     </div>
 
@@ -254,7 +315,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
@@ -263,6 +324,7 @@ import OnlineVideoDownload from "@/components/OnlineVideoDownload.vue";
 import OnlineVideoDownloadBadge from "@/components/OnlineVideoDownloadBadge.vue";
 import OnlineVideoDownloadsBar from "@/components/OnlineVideoDownloadsBar.vue";
 import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
+import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
 import { createVideoTitleEnrichment } from "../helpers/VideoTitleEnrichment";
 import { fetchYoutubeTitle, prepare as prepareOnlineVideo } from "@/helpers/OnlineVideo";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
@@ -274,7 +336,9 @@ import {
   LjField,
   LjIcon,
   LjInput,
+  LjMenu,
   LjSelect,
+  type LjMenuItem,
 } from "@/components/ui";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import $alert from "@/helpers/Alert";
@@ -320,6 +384,7 @@ const tm = (key: string, named?: Record<string, unknown>): string =>
 const t = (key: string, named?: Record<string, unknown>): string =>
   moduleContainer.value?.t?.(key, named) || key;
 const downloads = useOnlineVideoDownloads();
+const playlistPlayback = usePlaylistPlayback();
 
 const videos = ref<VideoItem[]>([]);
 const videoTitles = createVideoTitleEnrichment<VideoItem>({
@@ -413,7 +478,43 @@ async function moveVideoToCategory(video: VideoItem, categoryId: string): Promis
   $snackbar.show(t("moved_to_category", { category }));
 }
 
+function moveMenuItems(video: VideoItem): LjMenuItem[] {
+  const currentCategoryId = video.categoryId || "";
+  const categoryItems: LjMenuItem[] = [
+    {
+      label: tm("uncategorized"),
+      icon: ICONS.MEDIA.YOUTUBE,
+      checked: currentCategoryId === UNCATEGORIZED_ID,
+      action: () => {
+        void moveVideoToCategory(video, UNCATEGORIZED_ID);
+      },
+    },
+    ...categories.value.map((cat) => ({
+      label: cat.name,
+      icon: cat.iconType === "icon" ? cat.icon : undefined,
+      checked: currentCategoryId === cat.id,
+      action: () => {
+        void moveVideoToCategory(video, cat.id);
+      },
+    })),
+  ];
+
+  return [
+    { label: tm("move_to_category") },
+    ...categoryItems,
+    { separator: true },
+    {
+      label: tm("manage_categories"),
+      icon: ICONS.UI.TUNE,
+      action: () => {
+        showManageDialog.value = true;
+      },
+    },
+  ];
+}
+
 const {
+  draggingId,
   dropTargetId,
   touchGhost,
   shouldSuppressClick,
@@ -721,6 +822,52 @@ async function stopProjection(): Promise<void> {
   Media.close(true);
 }
 
+function startVideoSequence(label: string, list: VideoItem[]): void {
+  const queue = list
+    .map((v) => {
+      const embedUrl = buildEmbedUrl(v.url);
+      if (!embedUrl) return null;
+      return {
+        url: embedUrl,
+        title: v.name,
+        videoId: extractYoutubeId(v.url) || undefined,
+        itemKey: v.id,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+  if (!queue.length) {
+    $alert.error({ text: "modules.custom_online_videos.invalid_url" });
+    return;
+  }
+  playlistPlayback.playOnlineVideoSequence(label, queue);
+}
+
+function playAllVideos(): void {
+  const selectedIds = [...selectedCategoryIds.value];
+  let label = tm("title");
+  if (selectedIds.length === 1) {
+    const id = selectedIds[0];
+    label = id ? categoryName(id) || tm("title") : tm("uncategorized");
+  }
+  startVideoSequence(label, filteredVideos.value);
+}
+
+function playCategoryVideos(categoryId: string): void {
+  const list = videos.value.filter((v) => (v.categoryId || UNCATEGORIZED_ID) === categoryId);
+  if (!list.length) return;
+  const label = categoryId ? categoryName(categoryId) || tm("title") : tm("uncategorized");
+  startVideoSequence(label, list);
+}
+
+watch(
+  () => playlistPlayback.currentSong.value,
+  (song) => {
+    const key = song?.onlineVideo?.itemKey;
+    if (key) projectingId.value = key;
+    else if (!song && projectingId.value) projectingId.value = "";
+  }
+);
+
 async function projectUrl(rawUrl: string): Promise<void> {
   const embedUrl = buildEmbedUrl(rawUrl);
   if (!embedUrl) {
@@ -739,6 +886,8 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => 
     openAdd();
   } else if (data.action === "toggle_view") {
     viewMode.value = viewMode.value === "list" ? "grid" : "list";
+  } else if (data.action === "play_all") {
+    playAllVideos();
   } else if (data.action === "personal_url") {
     const url = data.payload?.url;
     if (url) projectUrl(url);
@@ -787,9 +936,17 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   padding: var(--lj-space-4) var(--lj-space-5);
-  gap: var(--lj-space-4);
-  overflow-y: auto;
+  gap: var(--lj-space-3);
+  overflow: hidden;
   flex: 1;
+  min-height: 0;
+}
+
+.cv-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: var(--lj-space-3);
 }
 
 .cv-empty {
@@ -798,10 +955,38 @@ onBeforeUnmount(() => {
 
 /* ── Chips de categorias (filtro) ── */
 .cv-chips {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--lj-space-3);
+  flex-shrink: 0;
+  padding: var(--lj-space-2) 0;
+  background: var(--lj-surface-bg);
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast),
+    background var(--lj-transition-fast);
+}
+
+.cv-chips--dragging {
+  border-bottom-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-shadow-2);
+  padding-inline: var(--lj-space-2);
+  border-radius: var(--lj-radius-md);
+}
+
+.cv-chips-drag-hint {
+  font-size: var(--lj-text-xs);
+  color: var(--lj-ui-accent);
+  font-weight: var(--lj-weight-medium);
+}
+
+.cv-chips-play-all {
+  margin-left: auto;
 }
 
 .cv-chips-title {
@@ -883,6 +1068,10 @@ onBeforeUnmount(() => {
   background: var(--lj-ui-accent-soft);
 }
 
+.cv-list-item--dragging {
+  opacity: 0.45;
+}
+
 .cv-list-name {
   font-size: var(--lj-text-md);
   white-space: nowrap;
@@ -924,6 +1113,10 @@ onBeforeUnmount(() => {
 
 .cv-grid .cv-grid-card--active {
   border-color: var(--lj-ui-accent);
+}
+
+.cv-grid .cv-grid-card--dragging {
+  opacity: 0.45;
 }
 
 .cv-grid-thumb {

@@ -79,6 +79,13 @@ export const contextualPages: RibbonPage[] = [
         title: "ribbon.groups.actions",
         buttons: [
           {
+            id: `${moduleId}_play_all`,
+            icon: ICONS.FORMAT.LIST_NUMBERED,
+            label: "ribbon.btn.play_all",
+            action: `${moduleId}_play_all`,
+            color: "#9b59b6",
+          },
+          {
             id: `${moduleId}_personal_url`,
             type: "action_input",
             icon: ICONS.PROJECTION.START,

@@ -76,7 +76,7 @@ function _closeAlbumForPresentation(): void {
 let _loadingId: string | number | null = null;
 let _playlistOnEnd: (() => boolean) | null = null;
 let _playlistOnClose: (() => void) | null = null;
-let _playlistOnPlayback: ((_idMusic: unknown) => void) | null = null;
+let _playlistOnPlayback: ((_idMusic: unknown, _videoId?: string) => void) | null = null;
 /**
  * O que está carregado no player agora é um ARQUIVO DE ÁUDIO avulso (Biblioteca
  * de Mídia), não uma música?
@@ -247,7 +247,7 @@ function _warnNoTrack(playback: boolean): void {
 function _setPlaybackContext(context: AudioTelemetryContext | null): void {
   _activePlayback = context;
   // Toda reprodução nova passa por aqui: música, música personalizada, arquivo e vídeo.
-  if (context) _playlistOnPlayback?.(context.id_music);
+  if (context) _playlistOnPlayback?.(context.id_music, context.video_id);
   const active = context !== null;
   if (active !== _mediaActivitySent) {
     _mediaActivitySent = active;
@@ -650,7 +650,9 @@ async function _runDownloadedYouTube(
 
   if (res.ok) {
     if (registered) tasks.completeTask(taskId);
-    return (await _openVideoFileProjection(res.url, title, res.url, seq)) ? "playing" : "stopped";
+    return (await _openVideoFileProjection(res.url, title, res.url, seq, id))
+      ? "playing"
+      : "stopped";
   }
 
   const kind = res.error.kind;
@@ -684,7 +686,8 @@ async function _openVideoFileProjection(
   url: string,
   title: string,
   audioUrl: string = url,
-  seq?: number
+  seq?: number,
+  videoId?: string
 ): Promise<boolean> {
   if (seq !== undefined && seq !== _ytPrepareSeq) return false;
   const projectionEpoch = nextFileProjectionEpoch();
@@ -714,6 +717,7 @@ async function _openVideoFileProjection(
       url: audioUrl,
       title,
       mediaType: "video",
+      ...(videoId ? { videoId } : {}),
       // Imagem e som em arquivos diferentes: o player do app mostra a imagem por conta própria.
       ...(audioUrl !== url ? { videoUrl: url } : {}),
     },
@@ -838,7 +842,7 @@ async function _runStreamedYouTube(
     }
 
     phaseStartedAt = _mediaClockMs();
-    if (!(await _openVideoFileProjection(res.video.url, title, res.audio.url, seq))) {
+    if (!(await _openVideoFileProjection(res.video.url, title, res.audio.url, seq, id))) {
       projectionOpenMs = _mediaElapsedMs(phaseStartedAt);
       outcome = "superseded";
       return "stopped";
@@ -2460,8 +2464,9 @@ const _self = {
     keepProjectionWindows = false,
     preserveStageEpoch = false
   ): void {
-    // Só o fechamento efetivo encerra a playlist: o pedido sem `force` ainda espera o "Sim".
-    if (force) _playlistOnClose?.();
+    // Só o fechamento efetivo encerra a playlist: o pedido sem `force` ainda espera o "Sim",
+    // e trocas internas entre player embutido e arquivo (`preserveStageEpoch`) mantêm a fila.
+    if (force && !preserveStageEpoch) _playlistOnClose?.();
     if (force && !preserveStageEpoch) {
       ++_stageEpoch;
       _opening.value = null;
@@ -2631,6 +2636,7 @@ const _self = {
     const playbackContext: AudioTelemetryContext = {
       playback_id,
       id_music: params.id_music,
+      ...(params.videoId ? { video_id: params.videoId } : {}),
       mode: audioMode,
       media_stage_epoch: stageEpoch,
       title: params.title,
@@ -3038,6 +3044,7 @@ const _self = {
           _isYouTube() &&
           _activePlayback?.playback_id === playback_id
         ) {
+          if (_playlistOnEnd?.()) return;
           // A janela apenas reporta o fim; a Shell é a dona do lifecycle e
           // publica MEDIA_CLOSE uma única vez para todas as projeções.
           _self.close(true);
@@ -3395,7 +3402,7 @@ const _self = {
     _playlistOnClose = null;
   },
 
-  registerPlaylistPlaybackHandler(handler: (_idMusic: unknown) => void): void {
+  registerPlaylistPlaybackHandler(handler: (_idMusic: unknown, _videoId?: string) => void): void {
     _playlistOnPlayback = handler;
   },
 
