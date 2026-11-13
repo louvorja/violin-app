@@ -611,7 +611,7 @@ describe("Projeção de Fundo — as camadas entram e saem com fade", () => {
         /* O CSS do fade lê a variável que cada camada escreve no elemento. */
         expect(fonte).toMatch(/transition: opacity var\(--fade-ms, 500ms\) linear;/);
         expect(fonte).toContain("const fadeDurationMs = computed(");
-        expect(fonte).toContain("fade_duration");
+        expect(fonte).toMatch(/fade_duration|FADE_DURATION/);
       }
     });
 

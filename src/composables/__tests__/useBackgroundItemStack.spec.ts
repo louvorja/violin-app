@@ -3,6 +3,7 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { nextTick, reactive, ref } from "vue";
 import {
   BACKGROUND_FIRST_FRAME_TIMEOUT_MS,
+  shouldStartLoopCrossfade,
   useBackgroundItemStack,
 } from "@/composables/useBackgroundItemStack";
 
@@ -154,5 +155,39 @@ describe("useBackgroundItemStack", () => {
     ctx.item.url = "c";
     await nextTick();
     expect(ctx.api.layers.value).toHaveLength(1);
+  });
+
+  it("empilha nova camada de vídeo para crossfade de loop sem duplicar antes de concluir (#64)", async () => {
+    ctx = montar();
+    await ativar("video.mp4", "video");
+
+    const first = ctx.api.layers.value[0].key;
+    ctx.api.markReady(first);
+    vi.advanceTimersByTime(500);
+
+    // Dispara loop crossfade ao se aproximar do fim do vídeo
+    ctx.api.triggerLoopCrossfade(first);
+    expect(ctx.api.layers.value).toHaveLength(2);
+    const second = ctx.api.layers.value[1].key;
+    expect(ctx.api.pendingKey.value).toBe(second);
+
+    // Chamadas extras de timeupdate no mesmo ciclo não empilham uma 3ª camada
+    ctx.api.triggerLoopCrossfade(first);
+    expect(ctx.api.layers.value).toHaveLength(2);
+
+    ctx.api.markReady(second);
+    expect(ctx.api.enteringKey.value).toBe(second);
+    vi.advanceTimersByTime(500);
+    expect(ctx.api.layers.value).toHaveLength(1);
+    expect(ctx.api.layers.value[0].key).toBe(second);
+  });
+
+  it("calcula janela de crossfade do loop respeitando fadeMs e vídeos curtos (#64)", () => {
+    expect(shouldStartLoopCrossfade(9.4, 10, 500)).toBe(false);
+    expect(shouldStartLoopCrossfade(9.5, 10, 500)).toBe(true);
+    expect(shouldStartLoopCrossfade(9.9, 10, 0)).toBe(false);
+    // Vídeo curto (1.0s) com fade 1000ms dispara nos últimos 25%
+    expect(shouldStartLoopCrossfade(0.7, 1.0, 1000)).toBe(false);
+    expect(shouldStartLoopCrossfade(0.8, 1.0, 1000)).toBe(true);
   });
 });

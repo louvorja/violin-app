@@ -87,8 +87,10 @@
                 }"
                 autoplay
                 muted
-                loop
+                :loop="!loopFadeActive"
                 @loadeddata="markBgLayerReady(layer.key)"
+                @timeupdate="onBgVideoTimeUpdate($event, layer.key)"
+                @ended="onBgVideoEnded(layer.key)"
                 @error="markBgLayerReady(layer.key)"
               ></video>
             </template>
@@ -135,8 +137,6 @@ import { useProjectionState } from "@/composables/useProjectionState";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $userdata from "@/helpers/UserData";
-import $modules from "@/helpers/Modules";
-import { ModuleEnum } from "@/enums/ModuleEnum";
 import { getSetting } from "@/helpers/SettingsStorage";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import Slide from "@/components/Slide.vue";
@@ -154,7 +154,10 @@ import {
   readStoredBackgroundState,
 } from "@/presentation/BackgroundPresentationState";
 import { loadYtApi } from "@/composables/useYouTubeApi";
-import { useBackgroundItemStack } from "@/composables/useBackgroundItemStack";
+import {
+  shouldStartLoopCrossfade,
+  useBackgroundItemStack,
+} from "@/composables/useBackgroundItemStack";
 import { loadPdfDocument, type PDFDocumentProxy } from "@/helpers/PdfRuntime";
 import Telemetry from "@/helpers/Telemetry";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
@@ -173,9 +176,13 @@ interface BgState {
 const curBg = reactive<BgState>({ active: false, type: "", url: "", title: "" });
 const backgroundGate = new BackgroundPresentationGate();
 
-const MODULE_PATH = $modules.getPath(ModuleEnum.BACKGROUND_PROJECTION);
 const fadeDurationMs = computed(
-  () => $userdata.get<number>(`${MODULE_PATH}.fade_duration`, 500) ?? 500
+  () => $userdata.get<number>(KEYS.MODULES.BACKGROUND_PROJECTION.FADE_DURATION, 500) ?? 500
+);
+const loopFadeActive = computed(
+  () =>
+    $userdata.get<boolean>(KEYS.MODULES.BACKGROUND_PROJECTION.LOOP_FADE, false) === true &&
+    fadeDurationMs.value > 0
 );
 
 const {
@@ -183,8 +190,23 @@ const {
   pendingKey: bgPendingKey,
   enteringKey: bgEnteringKey,
   markReady: markBgLayerReady,
+  triggerLoopCrossfade,
   reset: resetBgLayers,
 } = useBackgroundItemStack(curBg, fadeDurationMs);
+
+function onBgVideoTimeUpdate(event: Event, key: string): void {
+  if (!loopFadeActive.value) return;
+  const video = event.target as HTMLVideoElement | null;
+  if (!video) return;
+  if (shouldStartLoopCrossfade(video.currentTime, video.duration, fadeDurationMs.value)) {
+    triggerLoopCrossfade(key);
+  }
+}
+
+function onBgVideoEnded(key: string): void {
+  if (!loopFadeActive.value) return;
+  triggerLoopCrossfade(key);
+}
 
 function activateBg(value: unknown): void {
   const p = backgroundGate.accept(value);

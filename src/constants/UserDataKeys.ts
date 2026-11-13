@@ -62,6 +62,8 @@ export const KEYS = {
     },
     BACKGROUND_PROJECTION: {
       SHOW_RETURN: `${MODULES}.${ModuleEnum.BACKGROUND_PROJECTION}.show_return`,
+      FADE_DURATION: `${MODULES}.${ModuleEnum.BACKGROUND_PROJECTION}.fade_duration`,
+      LOOP_FADE: `${MODULES}.${ModuleEnum.BACKGROUND_PROJECTION}.loop_fade`,
       IS_PLAYING: `${MODULES}.${ModuleEnum.BACKGROUND_PROJECTION}.is_playing`,
     },
     BIBLE: {

@@ -92,6 +92,12 @@ export const contextualPages: RibbonPage[] = [
             max: 2000,
             step: 100,
           },
+          {
+            id: `${moduleId}_loop_fade`,
+            type: "checkbox",
+            optionKey: `${modulePath}.loop_fade`,
+            label: `${modulePath}.loop_fade`,
+          },
         ],
       },
       {

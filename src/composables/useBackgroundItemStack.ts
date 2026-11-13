@@ -106,6 +106,16 @@ export function useBackgroundItemStack(item: BackgroundItem, fadeMs: Ref<number>
     { immediate: true }
   );
 
+  /** Crossfade antes do fim de um vídeo em loop: empilha uma nova instância por cima. */
+  function triggerLoopCrossfade(expectedKey?: string): void {
+    if (!item.active || item.type !== "video" || !item.url) return;
+    if (pendingKey.value) return;
+    const currentTop = layers.value[layers.value.length - 1];
+    if (!currentTop || currentTop.type !== "video") return;
+    if (expectedKey && currentTop.key !== expectedKey) return;
+    enqueue(currentTop.type, currentTop.url);
+  }
+
   function reset(): void {
     clearFirstFrameTimer();
     clearPruneTimer();
@@ -116,5 +126,19 @@ export function useBackgroundItemStack(item: BackgroundItem, fadeMs: Ref<number>
 
   onBeforeUnmount(reset);
 
-  return { layers, pendingKey, enteringKey, markReady, reset };
+  return { layers, pendingKey, enteringKey, markReady, triggerLoopCrossfade, reset };
+}
+
+/** Decide se o vídeo em loop deve iniciar a camada de crossfade neste frame. */
+export function shouldStartLoopCrossfade(
+  currentTime: number,
+  duration: number,
+  fadeMs: number
+): boolean {
+  if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(currentTime)) return false;
+  if (fadeMs <= 0) return false;
+  const fadeSec = fadeMs / 1000;
+  // Vídeos quase do tamanho do fade ainda cruzam nos últimos 25% antes do fim.
+  const leadSec = duration > fadeSec * 1.25 ? fadeSec : duration * 0.25;
+  return duration - currentTime <= leadSec;
 }

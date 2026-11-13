@@ -28,6 +28,7 @@
   "upload_image": "Subir imagen",
   "remove_image": "Quitar imagen",
   "fade_duration": "Duración del fundido",
+  "loop_fade": "Aplicar fundido en bucle de videos",
   "bg_position": "Ajuste del imagen",
   "select_category": "Seleccionar categoría",
   "uncategorized": "Sin categoría",
