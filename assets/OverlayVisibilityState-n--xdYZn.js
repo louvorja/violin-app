@@ -1,0 +1,1 @@
+let r=0;function a(){return r=Math.max(Date.now(),r+1),r}class n{epoch=0;accept(o){if(!o||typeof o!="object"||Array.isArray(o))return null;const e=o;return typeof e.enabled!="boolean"||!Number.isSafeInteger(e.overlay_epoch)||e.overlay_epoch<=this.epoch?null:(this.epoch=e.overlay_epoch,{enabled:e.enabled,overlay_epoch:this.epoch})}}export{n as O,a as n};

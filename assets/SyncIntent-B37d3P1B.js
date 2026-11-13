@@ -1,0 +1,1 @@
+import{r as o}from"./vendor-vue-TPQ4uVQG.js";const r=o(null);function u(e){const n=Number(e);!Number.isInteger(n)||n<=0||(r.value=n,window.dispatchEvent(new CustomEvent("louvorja:open-sync")))}export{r as p,u as r};

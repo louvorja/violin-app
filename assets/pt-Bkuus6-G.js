@@ -1,0 +1,1 @@
+const a="Libras",s="Tradução automática de letras para Língua Brasileira de Sinais (Libras).",r="Texto Original",t="Gloss Libras",o="Nenhuma música em reprodução. Abra uma música para ver a tradução.",i="Alternar Libras",e={title:a,description:s,original:r,gloss:t,empty:o,toggle:i};export{e as default,s as description,o as empty,t as gloss,r as original,a as title,i as toggle};

@@ -1,0 +1,1 @@
+const e="Animaciones",i="Animación simple para obtener dependencias",n="ESPANHOL",t={create:{title:"Crear animación",name:"Nombre",description:"Descripción"},edit:{title:"Editar animación",name:"Nombre",description:"Descripción"}},c={title:e,description:i,text:n,modals:t};export{c as default,i as description,t as modals,n as text,e as title};

@@ -1,0 +1,1 @@
+import{U as e}from"./Telemetry-hZNi7TzW.js";import{K as r}from"./modules-manifests-fjqLSeA4.js";import{t as a,f as o,c as n}from"./TimerText-rID5RWDm.js";function i(t=new Date){return e.get(r.MODULES.TIMER.TARGET_TIME,"")||n(t)}function T(){return e.get(r.MODULES.TIMER.SHOW_TARGET_TIME,!0)??!0}function E(t=new Date){return a(o(0),T(),i(t))}export{i as a,T as b,E as t};

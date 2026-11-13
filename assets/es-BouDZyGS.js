@@ -1,0 +1,1 @@
+const o="Reloj",t="Reloj digital con fecha y hora.",e={title_ctx:"Configurar Reloj"},l={toggle_format:"Alternar 12h/24h",toggle_seconds:"Mostrar/ocultar segundos",fullscreen:"Abrir en pantalla completa"},n={title:o,description:t,ribbon:e,actions:l};export{l as actions,n as default,t as description,e as ribbon,o as title};

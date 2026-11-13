@@ -1,0 +1,1 @@
+const o="Favoritos",a="Músicas marcadas como favoritas, com reordenação.",t={empty:"Nenhuma música nos favoritos.",empty_hint:"Clique no ícone de estrela em qualquer música para adicioná-la aqui."},e={remove:"Remover dos favoritos"},s={title:o,description:a,data:t,actions:e};export{e as actions,t as data,s as default,a as description,o as title};

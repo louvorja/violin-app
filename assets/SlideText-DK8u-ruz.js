@@ -1,0 +1,1 @@
+import{S as n}from"./Strings-Cp13WA18.js";function e(r){return n.escapeHtml(r||"").replace(/\r\n|\r|\n/g,"<br>")}function a(r){return r?typeof r.lyric=="string"&&r.lyric?r.lyric:r.cover===!0&&typeof r.name=="string"?r.name:"":""}export{e as p,a as s};

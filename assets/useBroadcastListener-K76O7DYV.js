@@ -1,0 +1,1 @@
+import{a as i}from"./Telemetry-hZNi7TzW.js";import{g as u,o as l,av as c,aw as d,a as f}from"./vendor-vue-TPQ4uVQG.js";function y(t,s){let a=null,r=!1;const e=()=>{a||(a=i.listen(n=>{(t==="*"||n.type===t||Array.isArray(t)&&t.includes(n.type))&&s(n.payload,n)},{replay:!r}),r=!0)},o=()=>{a?.(),a=null};if(!u()){e();return}l(e),c(e),d(o),f(o)}export{y as u};

@@ -1,0 +1,1 @@
+const s="Colecciones Diversas",c="Lista las colecciones",o="Todas las Colecciones",e="Categorías",t={title:"Localizar Músicas"},a={title:s,description:c,all_collections:o,categories:e,music_search:t};export{o as all_collections,e as categories,a as default,c as description,t as music_search,s as title};

@@ -1,0 +1,1 @@
+const o="Aparência",a="Fornece ferramentas para customização das cores do programa.",t={title:o,description:a,"auto-theme":"Automático","auto-hint":"Acompanha o modo claro ou escuro do sistema. No claro, usa o último tema claro escolhido.","light-themes":"Temas Claros","dark-themes":"Temas Escuros"};export{t as default,a as description,o as title};

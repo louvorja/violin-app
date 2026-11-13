@@ -1,0 +1,1 @@
+const t="Animação",e="Simple animation to get dependencies",i="PORTUGUES",o={create:{title:"Criar animação",name:"Nome",description:"Descrição"},edit:{title:"Editar animação",name:"Nome",description:"Descrição"}},n={title:t,description:e,text:i,modals:o};export{n as default,e as description,o as modals,i as text,t as title};

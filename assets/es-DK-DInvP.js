@@ -1,0 +1,1 @@
+const t="Contador",o="Contador simple con incremento y decremento.",n={title_ctx:"Configurar Contador"},e={reset:"Reiniciar"},c={title:t,description:o,ribbon:n,actions:e};export{e as actions,c as default,o as description,n as ribbon,t as title};
