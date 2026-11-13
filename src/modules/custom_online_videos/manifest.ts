@@ -77,14 +77,8 @@ export const contextualPages: RibbonPage[] = [
       {
         id: "ctx_custom_online_videos_actions",
         title: "ribbon.groups.actions",
+        compactRows: 2,
         buttons: [
-          {
-            id: `${moduleId}_play_all`,
-            icon: ICONS.FORMAT.LIST_NUMBERED,
-            label: "ribbon.btn.play_all",
-            action: `${moduleId}_play_all`,
-            color: "#9b59b6",
-          },
           {
             id: `${moduleId}_personal_url`,
             type: "action_input",
@@ -99,6 +93,7 @@ export const contextualPages: RibbonPage[] = [
             icon: ICONS.PROJECTION.STOP,
             label: "ribbon.btn.stop_projection",
             action: `${moduleId}_stop`,
+            size: "small",
             color: "#e74c3c",
           },
         ],

@@ -1,90 +1,127 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest" @close="close">
     <template #header>
-      <div class="cv-header" />
+      <div class="cv-header">
+        <div class="cv-search-wrap">
+          <LjIcon :icon="ICONS.ACTIONS.SEARCH" size="15" class="cv-search-icon" />
+          <input
+            v-model="search"
+            type="text"
+            class="cv-search-input"
+            :placeholder="tm('search')"
+            :aria-label="tm('search')"
+          />
+          <button
+            v-if="search"
+            type="button"
+            class="cv-search-clear"
+            :aria-label="tm('cancel')"
+            @click="search = ''"
+          >
+            <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="14" />
+          </button>
+        </div>
+
+        <div class="cv-header-actions">
+          <LjButton
+            v-if="projectingId"
+            size="sm"
+            variant="danger"
+            class="cv-header-stop"
+            :icon="ICONS.PROJECTION.STOP"
+            @click="stopProjection()"
+          >
+            {{ tm("stop") }}
+          </LjButton>
+          <LjButton
+            v-if="filteredVideos.length > 0"
+            size="sm"
+            variant="primary"
+            class="cv-chips-play-all"
+            :icon="ICONS.PLAYER.PLAY"
+            @click="playAllVideos()"
+          >
+            {{ tm("play_all") }} ({{ filteredVideos.length }})
+          </LjButton>
+        </div>
+      </div>
     </template>
 
     <div class="cv-body">
       <OnlineVideoDownloadsBar :items="libraryItems" />
 
-      <!-- Chips de categorias (filtro) + ações rápidas -->
+      <!-- Chips de categorias (filtro) + dica durante arrasto -->
       <div
-        v-if="categories.length || uncategorizedCount > 0 || filteredVideos.length > 0"
+        v-if="categories.length || uncategorizedCount > 0"
         class="cv-chips"
         :class="{ 'cv-chips--dragging': draggingId !== null }"
       >
-        <template v-if="categories.length || uncategorizedCount > 0">
-          <span class="cv-chips-title">{{ tm("categories") }}</span>
-          <CategoryChip
-            v-for="cat in categories"
-            :key="cat.id"
-            :category-id="cat.id"
-            :name="cat.name"
-            :icon="cat.icon"
-            :icon-type="cat.iconType"
-            :color="cat.color"
-            :count="videos.filter((v) => v.categoryId === cat.id).length"
-            :active="selectedCategoryIds.has(cat.id)"
-            :drop-target="dropTargetId === cat.id"
-            :add-item-label="t('ribbon.btn.add_item')"
-            :play-label="tm('play_category')"
-            :show-play="videos.some((v) => v.categoryId === cat.id)"
-            :edit-label="t('shell.category.edit_category')"
-            show-add
-            :add-label="tm('add_video')"
-            @select="onCategoryChipClick(cat.id)"
-            @play="playCategoryVideos(cat.id)"
-            @add="onAddCategoryClick(cat.id)"
-            @edit="editCategoryFromChip(cat.id)"
-            @dragover="onCategoryDragOver($event, cat.id)"
-            @dragleave="onCategoryDragLeave($event, cat.id)"
-            @drop="onCategoryDrop($event, cat.id)"
-          />
-          <CategoryChip
-            v-if="categories.length > 0 || uncategorizedCount > 0"
-            category-id=""
-            :name="tm('uncategorized')"
-            :icon="ICONS.MEDIA.YOUTUBE"
-            icon-type="icon"
-            color="var(--lj-text-muted)"
-            :count="uncategorizedCount"
-            :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
-            :drop-target="dropTargetId === UNCATEGORIZED_ID"
-            :editable="false"
-            :add-item-label="t('ribbon.btn.add_item')"
-            :play-label="tm('play_category')"
-            :show-play="uncategorizedCount > 0"
-            show-add
-            :add-label="tm('add_video')"
-            @select="onCategoryChipClick(UNCATEGORIZED_ID)"
-            @play="playCategoryVideos(UNCATEGORIZED_ID)"
-            @add="onAddCategoryClick()"
-            @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
-            @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
-            @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
-          />
-          <span v-if="draggingId !== null" class="cv-chips-drag-hint">
-            {{ tm("drop_category_hint") }}
-          </span>
-        </template>
-        <LjButton
-          v-if="filteredVideos.length > 0"
-          size="sm"
-          variant="primary"
-          class="cv-chips-play-all"
-          :icon="ICONS.PLAYER.PLAY"
-          @click="playAllVideos()"
-        >
-          {{ tm("play_all") }} ({{ filteredVideos.length }})
-        </LjButton>
+        <span class="cv-chips-title">{{ tm("categories") }}</span>
+        <CategoryChip
+          v-for="cat in categories"
+          :key="cat.id"
+          :category-id="cat.id"
+          :name="cat.name"
+          :icon="cat.icon"
+          :icon-type="cat.iconType"
+          :color="cat.color"
+          :count="videos.filter((v) => v.categoryId === cat.id).length"
+          :active="selectedCategoryIds.has(cat.id)"
+          :drop-target="dropTargetId === cat.id"
+          :add-item-label="t('ribbon.btn.add_item')"
+          :play-label="tm('play_category')"
+          :show-play="videos.some((v) => v.categoryId === cat.id)"
+          :edit-label="t('shell.category.edit_category')"
+          show-add
+          :add-label="tm('add_video')"
+          @select="onCategoryChipClick(cat.id)"
+          @play="playCategoryVideos(cat.id)"
+          @add="onAddCategoryClick(cat.id)"
+          @edit="editCategoryFromChip(cat.id)"
+          @dragover="onCategoryDragOver($event, cat.id)"
+          @dragleave="onCategoryDragLeave($event, cat.id)"
+          @drop="onCategoryDrop($event, cat.id)"
+        />
+        <CategoryChip
+          v-if="categories.length > 0 || uncategorizedCount > 0"
+          category-id=""
+          :name="tm('uncategorized')"
+          :icon="ICONS.MEDIA.YOUTUBE"
+          icon-type="icon"
+          color="var(--lj-text-muted)"
+          :count="uncategorizedCount"
+          :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
+          :drop-target="dropTargetId === UNCATEGORIZED_ID"
+          :editable="false"
+          :add-item-label="t('ribbon.btn.add_item')"
+          :play-label="tm('play_category')"
+          :show-play="uncategorizedCount > 0"
+          show-add
+          :add-label="tm('add_video')"
+          @select="onCategoryChipClick(UNCATEGORIZED_ID)"
+          @play="playCategoryVideos(UNCATEGORIZED_ID)"
+          @add="onAddCategoryClick()"
+          @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
+          @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
+          @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
+        />
+        <span v-if="draggingId !== null" class="cv-chips-drag-hint">
+          {{ tm("drop_category_hint") }}
+        </span>
       </div>
 
       <div class="cv-scroll">
         <LjEmpty
-          v-if="!videos.length"
+          v-if="!filteredVideos.length"
           class="cv-empty"
           :icon="ICONS.MEDIA.YOUTUBE"
-          :title="categories.length ? tm('empty') : tm('no_categories')"
+          :title="
+            videos.length
+              ? tm('search_empty')
+              : categories.length
+                ? tm('empty')
+                : tm('no_categories')
+          "
         />
 
         <!-- List view -->
@@ -393,6 +430,7 @@ const videoTitles = createVideoTitleEnrichment<VideoItem>({
   persist: (v) => $idb.put(VIDEOS_TABLE, v),
 });
 const viewMode = ref<string>("grid");
+const search = ref<string>("");
 const projectingId = ref<string>("");
 const thumbUrls = reactive<Record<string, string>>({});
 const dialogOpen = ref<boolean>(false);
@@ -439,14 +477,20 @@ const uncategorizedCount = computed(() => {
 });
 
 const filteredVideos = computed(() => {
-  if (!selectedCategoryIds.value.size) return videos.value;
-  return videos.value.filter(
-    (v) =>
-      selectedCategoryIds.value.has(v.categoryId || UNCATEGORIZED_ID) ||
-      (uncategorizedCount.value > 0 &&
-        !v.categoryId &&
-        selectedCategoryIds.value.has(UNCATEGORIZED_ID))
-  );
+  const q = search.value.trim().toLowerCase();
+  return videos.value.filter((v) => {
+    if (selectedCategoryIds.value.size > 0) {
+      const catMatch =
+        selectedCategoryIds.value.has(v.categoryId || UNCATEGORIZED_ID) ||
+        (uncategorizedCount.value > 0 &&
+          !v.categoryId &&
+          selectedCategoryIds.value.has(UNCATEGORIZED_ID));
+      if (!catMatch) return false;
+    }
+    if (!q) return true;
+    const catName = categoryName(v.categoryId).toLowerCase();
+    return v.name.toLowerCase().includes(q) || catName.includes(q);
+  });
 });
 
 const categorySelectItems = computed(() => [
@@ -616,7 +660,7 @@ async function handleDeleteCategory(id: string): Promise<void> {
 
 function extractYoutubeId(url: string): string | null {
   const m = url.match(
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/
+    /(?:youtube\.com\/watch\?(?:[^#]*&)?v=|youtu\.be\/|youtube\.com\/(?:embed|v|shorts)\/)([a-zA-Z0-9_-]{11})/
   );
   return m ? m[1] : null;
 }
@@ -736,6 +780,13 @@ async function saveVideo(): Promise<void> {
   const ytId = extractYoutubeId(url);
   if (!ytId) {
     $alert.error({ text: "modules.custom_online_videos.invalid_url" });
+    return;
+  }
+  const duplicate = videos.value.find(
+    (x) => x.id !== editingId.value && extractYoutubeId(x.url) === ytId
+  );
+  if (duplicate) {
+    $alert.error({ text: "modules.custom_online_videos.duplicate_video" });
     return;
   }
   saving.value = true;
@@ -927,9 +978,67 @@ onBeforeUnmount(() => {
 .cv-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   width: 100%;
-  padding: var(--lj-space-2) var(--lj-space-4);
-  gap: var(--lj-space-4);
+  gap: var(--lj-space-3);
+}
+
+.cv-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  max-width: 360px;
+  display: flex;
+  align-items: center;
+}
+
+.cv-search-icon {
+  position: absolute;
+  left: 8px;
+  color: var(--lj-text-muted);
+  pointer-events: none;
+}
+
+.cv-search-input {
+  width: 100%;
+  padding: 6px 28px 6px 30px;
+  border: 1px solid rgba(var(--lj-on-surface-ch), 0.15);
+  border-radius: var(--lj-radius-md);
+  background: rgba(var(--lj-on-surface-ch), 0.04);
+  color: var(--lj-text);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color var(--lj-transition-fast);
+}
+
+.cv-search-input:focus {
+  border-color: var(--lj-primary);
+}
+
+.cv-search-clear {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--lj-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+
+.cv-search-clear:hover {
+  color: var(--lj-text);
+}
+
+.cv-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .cv-body {
@@ -986,7 +1095,7 @@ onBeforeUnmount(() => {
 }
 
 .cv-chips-play-all {
-  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .cv-chips-title {

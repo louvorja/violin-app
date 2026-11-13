@@ -81,7 +81,8 @@ const iconSize = computed(() => {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  width: var(--lj-large-btn-width);
+  min-width: var(--lj-large-btn-width);
+  width: auto;
   min-height: var(--lj-large-btn-height);
   padding: var(--lj-space-2);
   gap: var(--lj-space-1);
@@ -95,8 +96,9 @@ const iconSize = computed(() => {
   font-size: var(--lj-text-sm);
   text-align: center;
   line-height: 1.15;
-  word-break: keep-all;
-  hyphens: auto;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
   max-width: 100px;
   color: inherit;
   font-weight: var(--lj-weight-regular);

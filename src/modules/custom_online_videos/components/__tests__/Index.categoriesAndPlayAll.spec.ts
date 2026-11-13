@@ -8,6 +8,7 @@ const dropTargetId = ref<string | null>(null);
 const playOnlineVideoSequence = vi.fn();
 const idbPut = vi.fn(async () => {});
 const snackbarShow = vi.fn();
+const alertError = vi.fn();
 const openYouTube = vi.fn(async () => true);
 
 const savedVideos = [
@@ -100,7 +101,7 @@ vi.mock("@/helpers/IndexedDB", () => ({
 }));
 
 vi.mock("@/helpers/Alert", () => ({
-  default: { error: vi.fn(), confirm: vi.fn(async () => false) },
+  default: { error: alertError, confirm: vi.fn(async () => false) },
 }));
 
 vi.mock("@/helpers/Snackbar", () => ({
@@ -148,11 +149,19 @@ function mountView() {
           emits: ["click"],
           template: '<div class="stub-card" @click="$emit(\'click\', $event)"><slot /></div>',
         },
-        LjDialog: { template: "<div />" },
+        LjDialog: {
+          props: ["modelValue"],
+          template: '<div v-if="modelValue" class="stub-dialog"><slot /><slot name="footer" /></div>',
+        },
         LjEmpty: { template: "<div />" },
-        LjField: { template: "<div />" },
+        LjField: { template: '<div class="stub-field"><slot /></div>' },
         LjIcon: { template: "<span />" },
-        LjInput: { template: "<input />" },
+        LjInput: {
+          props: ["modelValue", "placeholder"],
+          emits: ["update:modelValue", "keydown"],
+          template:
+            '<input class="stub-input" :value="modelValue" :placeholder="placeholder" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+        },
         LjSelect: { template: "<select />" },
       },
     },
@@ -165,6 +174,7 @@ describe("custom_online_videos — categorias visíveis e Tocar Todas (#51, #67)
     dropTargetId.value = null;
     playOnlineVideoSequence.mockClear();
     idbPut.mockClear();
+    alertError.mockClear();
     snackbarShow.mockClear();
   });
 
@@ -237,5 +247,65 @@ describe("custom_online_videos — categorias visíveis e Tocar Todas (#51, #67)
     expect(playOnlineVideoSequence).toHaveBeenCalledWith("Sermões", [
       expect.objectContaining({ itemKey: "v2", videoId: "bbbbbbbbbbb" }),
     ]);
+  });
+
+  it("filtra pela busca no cabeçalho e exibe Parar Projeção ao lado de Tocar Todas apenas durante projeção", async () => {
+    const wrapper = mountView();
+    await flush();
+
+    const searchInput = wrapper.find(".cv-search-input");
+    expect(searchInput.exists()).toBe(true);
+    expect(wrapper.find(".cv-header-stop").exists()).toBe(false);
+    expect(wrapper.find(".cv-header-actions .cv-chips-play-all").exists()).toBe(true);
+
+    await searchInput.setValue("Sermões");
+    await flush();
+    expect(wrapper.findAll(".cv-grid-card")).toHaveLength(1);
+    expect(wrapper.find(".cv-chips-play-all").text()).toContain("(1)");
+    expect(wrapper.find(".cv-search-clear").exists()).toBe(true);
+
+    await wrapper.find(".cv-search-clear").trigger("click");
+    await flush();
+    expect(wrapper.findAll(".cv-grid-card")).toHaveLength(2);
+    expect(wrapper.find(".cv-chips-play-all").text()).toContain("(2)");
+
+    await wrapper.find(".stub-card").trigger("click");
+    await flush();
+    const stopBtn = wrapper.find(".cv-header-actions .cv-header-stop");
+    expect(stopBtn.exists()).toBe(true);
+
+    await stopBtn.trigger("click");
+    await flush();
+    expect(wrapper.find(".cv-header-stop").exists()).toBe(false);
+  });
+
+  it("impede duplicar vídeo ao adicionar a mesma URL do YouTube em formato diferente", async () => {
+    const wrapper = mountView();
+    await flush();
+
+    expect(wrapper.findAll(".cv-grid-card")).toHaveLength(2);
+    await wrapper.find(".stub-chip").trigger("dblclick"); // no-op to keep ts happy if needed
+    // Abre dialog de adição clicando no botão "+" dentro da barra de categorias
+    const vm = wrapper.vm as unknown as { openAdd: () => void };
+    vm.openAdd();
+    await flush();
+
+    const urlInput = wrapper.find(".stub-dialog .stub-input");
+    expect(urlInput.exists()).toBe(true);
+    await urlInput.setValue("https://youtu.be/aaaaaaaaaaa");
+    await flush();
+
+    const saveBtn = wrapper
+      .findAll(".stub-dialog button")
+      .find((b) => b.text().includes("save"));
+    expect(saveBtn).toBeDefined();
+    await saveBtn!.trigger("click");
+    await flush();
+
+    expect(alertError).toHaveBeenCalledWith({
+      text: "modules.custom_online_videos.duplicate_video",
+    });
+    expect(idbPut).not.toHaveBeenCalled();
+    expect(wrapper.findAll(".cv-grid-card")).toHaveLength(2);
   });
 });
