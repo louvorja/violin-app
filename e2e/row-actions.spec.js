@@ -91,8 +91,16 @@ test("abrir e fechar o menu ⋮ com o mouse não deixa os ícones presos", async
   await expect(page.getByRole("menu")).toBeVisible();
 
   const cabecalho = await page.locator("thead th").first().boundingBox();
-  await page.mouse.click(cabecalho.x + 5, cabecalho.y + cabecalho.height / 2);
-  await expect(page.getByRole("menu")).toBeHidden();
+  const ponto = { x: cabecalho.x + 5, y: cabecalho.y + cabecalho.height / 2 };
+  // Só falhou no runner do macOS da release, sem captura: a mensagem diz onde o clique caiu.
+  const alvo = await page.evaluate(({ x, y }) => {
+    const el = document.elementFromPoint(x, y);
+    const menu = document.querySelector('[role="menu"]')?.getBoundingClientRect();
+    const caixa = menu ? [menu.x, menu.y, menu.width, menu.height].map(Math.round).join(",") : "-";
+    return `${el?.tagName}.${el?.className} | menu ${caixa} | body ${getComputedStyle(document.body).pointerEvents}`;
+  }, ponto);
+  await page.mouse.click(ponto.x, ponto.y);
+  await expect(page.getByRole("menu"), `clique em ${alvo}`).toBeHidden();
 
   await expect(botoes(linha)).toHaveCount(1);
 

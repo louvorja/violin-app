@@ -1,16 +1,15 @@
 // @vitest-environment node
 /**
- * Cache do Canva no endereço antigo × protocolo `louvorja://local`.
+ * Arquivo pessoal no endereço antigo × protocolo `louvorja://local`.
  *
- * O cache de export saiu de `<dados>/canva` para `<dados>/files/canva`, mas
- * URLs guardadas antes disso continuam apontando para o endereço velho — o
- * `LJ_FILE_PROJECTION` do telão é a que importa, porque é ele que reabre a
- * última projeção. Sem o fallback, abrir o telão depois de atualizar mostraria
- * a tela vazia até o operador projetar de novo.
+ * O cache de export do Canva morava na pasta de dados única (`files/canva` na
+ * beta.18, `<dados>/canva` antes) e agora vive no perfil privado. URLs guardadas
+ * antes disso continuam apontando para o endereço velho — o `LJ_FILE_PROJECTION`
+ * do telão é a que importa, porque é ele que reabre a última projeção.
  *
- * O contrato: o endereço antigo serve o arquivo que agora mora em
- * `files/canva`, e o que não existe em lugar nenhum continua 404 (o fallback
- * não pode virar um "serve qualquer coisa").
+ * O contrato: o endereço antigo serve o arquivo que agora mora no perfil, e o
+ * que não existe em lugar nenhum continua 404 (o fallback não pode virar um
+ * "serve qualquer coisa").
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
@@ -21,9 +20,10 @@ import Path from "@/helpers/Path";
 
 const require = createRequire(import.meta.url);
 const root = fs.mkdtempSync(join(tmpdir(), "louvorja-protocol-canva-"));
-const filesDir = join(root, "files");
-const canvaAntigo = join(root, "canva");
-const canvaNovo = join(filesDir, "canva");
+const legacyRoot = join(root, "Documents", "LouvorJA Violin");
+const profile = join(root, "AppData", "LouvorJA Violin", "profile");
+const canvaAntigo = join(legacyRoot, "files", "canva");
+const canvaNovo = join(profile, "canva");
 const PDF = "%PDF-1.7\n%%EOF";
 let handleRequest;
 
@@ -41,14 +41,19 @@ stub("electron", {
   app: { getAppPath: () => root },
 });
 stub("../paths.js", {
-  dataDir: () => root,
-  filesDir: () => filesDir,
+  dataDir: () => profile,
+  filesDir: () => join(root, "Acervo"),
+  canvaDir: () => canvaNovo,
+  privatePathMappings: () => [
+    { from: canvaAntigo, to: canvaNovo },
+    { from: join(legacyRoot, "canva"), to: canvaNovo },
+  ],
 });
 stub("../onlineVideo/index.js", { fileFor: () => null });
 
 const protocol = require("../protocol.js");
 
-describe("louvorja://local e o cache do Canva no endereço antigo", () => {
+describe("louvorja://local e o cache do Canva no endereço da beta.18", () => {
   beforeAll(async () => {
     await fs.outputFile(join(canvaNovo, "D1.pdf"), PDF);
     protocol.handle();
@@ -63,6 +68,12 @@ describe("louvorja://local e o cache do Canva no endereço antigo", () => {
 
     expect(resposta.status).toBe(200);
     expect(await resposta.text()).toBe(PDF);
+  });
+
+  it("o endereço anterior à beta.18 também é servido do perfil", async () => {
+    const resposta = await handleRequest(new Request(Path.local(join(legacyRoot, "canva", "D1.pdf"))));
+
+    expect(resposta.status).toBe(200);
   });
 
   it("arquivo que não existe em nenhum endereço continua 404", async () => {

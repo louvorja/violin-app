@@ -78,7 +78,13 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="music in filteredMusics" :key="music.id_music" class="lj-music-row">
+            <tr
+              v-for="(music, index) in filteredMusics"
+              :key="music.id_music"
+              class="lj-music-row"
+              :class="{ 'lj-music-row--active': index === nav.index.value }"
+              @mousemove="nav.setActive(index)"
+            >
               <td class="ch-track">{{ music.track }}</td>
               <td>
                 <span class="ch-music-name">{{ music.name }}</span>
@@ -108,10 +114,11 @@
       />
       <div v-else class="ch-albums">
         <button
-          v-for="album in filteredAlbums"
+          v-for="(album, index) in filteredAlbums"
           :key="album.id_album"
           type="button"
           class="ch-album"
+          :class="{ 'ch-album--active': index === nav.index.value }"
           :data-album-id="album.id_album"
           @click="openAlbum(album)"
         >
@@ -141,6 +148,7 @@ import { LjAlert, LjButton, LjEmpty, LjIcon, LjInput, LjProgress, LjTable } from
 import { ICONS } from "@/config/Icons";
 import { module as manifest } from "../manifest";
 import { useQuickSearch } from "@/composables/useQuickSearch";
+import { useListNavigation } from "@/composables/useListNavigation";
 import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
@@ -215,11 +223,21 @@ const filteredMusics = computed(() =>
 );
 
 /*
- * Busca pelo teclado, como no LouvorJA clássico: na lista de álbuns, Enter abre
- * o primeiro achado; dentro do álbum, Enter toca a primeira música (Shift+Enter,
- * o playback). Voltando para cá, o texto anterior fica selecionado.
+ * Busca pelo teclado, como no LouvorJA clássico: ↑/↓ escolhem e Enter age sobre
+ * o destacado — de início, o primeiro achado. Na lista de álbuns, Enter abre o
+ * álbum; dentro dele, toca a música (Shift+Enter, o playback). Voltando para
+ * cá, o texto anterior fica selecionado.
  */
 const quickSearch = useQuickSearch({ moduleId: () => manifest.id, input: searchInput });
+
+const nav = useListNavigation<ChildAlbum | AlbumMusic>({
+  items: () => (selectedAlbum.value ? filteredMusics.value : filteredAlbums.value),
+  container: root,
+  activeSelector: ".lj-music-row--active, .ch-album--active",
+  // Sem texto a lista não é resultado de busca: nada destacado até a primeira seta.
+  start: () => (search.value.trim() ? 0 : -1),
+});
+watch([search, selectedAlbum], () => nav.reset());
 
 function onSearchKey(event: KeyboardEvent): void {
   if (event.key === "Escape" && search.value) {
@@ -227,14 +245,12 @@ function onSearchKey(event: KeyboardEvent): void {
     search.value = "";
     return;
   }
-  if (!isQuickPlayEnter(event) || !search.value.trim()) return;
+  if (nav.handleArrow(event) || !isQuickPlayEnter(event)) return;
   event.preventDefault();
-  if (!selectedAlbum.value) {
-    const album = filteredAlbums.value[0];
-    if (album) openAlbum(album);
-    return;
-  }
-  if (quickPlay(filteredMusics.value[0], event.shiftKey)) quickSearch.afterPlay();
+  const item = nav.active.value;
+  if (!item) return;
+  if (!selectedAlbum.value) return openAlbum(item as ChildAlbum);
+  if (quickPlay(item as AlbumMusic, event.shiftKey)) quickSearch.afterPlay();
 }
 // MusicMenuTable mede a viewport, mas esta tabela pode ocupar só um painel estreito.
 const compactPanel = computed(() => panelWidth.value <= 760);
@@ -544,7 +560,8 @@ onBeforeUnmount(() => {
   border-color: var(--lj-ui-accent);
 }
 
-.ch-album:focus-visible {
+.ch-album:focus-visible,
+.ch-album--active {
   outline: none;
   border-color: var(--lj-ui-accent);
   box-shadow: var(--lj-ui-focus);

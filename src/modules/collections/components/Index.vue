@@ -64,7 +64,7 @@
 
     <p v-if="error" class="col-alert" role="alert">{{ error }}</p>
 
-    <div class="collections-scroll" @scroll="onScroll">
+    <div ref="albumsScroll" class="collections-scroll" @scroll="onScroll">
       <LjAlert
         v-if="offlineLibrary.active.value"
         variant="info"
@@ -85,11 +85,14 @@
 
       <div class="col-grid">
         <button
-          v-for="album in visibleAlbums"
+          v-for="(album, index) in visibleAlbums"
           :key="album.id_album"
           type="button"
           class="col-album"
-          :class="{ 'col-album--wide': width > 350 }"
+          :class="{
+            'col-album--wide': width > 350,
+            'col-album--active': index === nav.index.value,
+          }"
           :style="album.color ? { background: album.color } : undefined"
           @click="openAlbum(album.id_album)"
         >
@@ -111,7 +114,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useViewport } from "@/composables/useViewport";
 import { module as manifest } from "../manifest";
@@ -126,6 +129,7 @@ import Media from "@/composables/useMedia";
 import Path from "@/helpers/Path";
 import { useShell } from "@/composables/useShell";
 import { useQuickSearch } from "@/composables/useQuickSearch";
+import { useListNavigation } from "@/composables/useListNavigation";
 import { useDisabledAlbums } from "@/composables/useMusicCatalog";
 import { isAlbumEnabled, albumYear } from "@root/config/musicCatalog.mjs";
 
@@ -171,10 +175,12 @@ const PAGE_SIZE = 30;
 const visibleCount = ref(PAGE_SIZE);
 const search = ref("");
 
+// Busca textual só filtra a partir de 4 caracteres (performance).
+const filtering = () => Strings.clean(search.value).length >= 4;
+
 const filteredAlbums = computed(() => {
+  if (!filtering()) return albums.value;
   const q = Strings.clean(search.value);
-  // Busca textual só filtra a partir de 4 caracteres (performance).
-  if (!q || q.length < 4) return albums.value;
   return albums.value.filter((a) => Strings.clean(a.name).includes(q));
 });
 
@@ -249,11 +255,27 @@ function setCategory(id = null) {
 }
 
 /*
- * Busca pelo teclado: abriu as Coletâneas, o cursor já está aqui; Enter abre a
- * primeira coletânea achada. Voltando para cá, o texto anterior fica selecionado.
+ * Busca pelo teclado: abriu as Coletâneas, o cursor já está aqui; ↑/↓ escolhem
+ * a coletânea e Enter abre a destacada. Voltando para cá, o texto anterior fica
+ * selecionado.
  */
 const searchInput = ref(null);
 const quickSearch = useQuickSearch({ moduleId: () => manifest.id, input: searchInput });
+
+const albumsScroll = ref(null);
+const nav = useListNavigation({
+  items: () => filteredAlbums.value,
+  container: albumsScroll,
+  activeSelector: ".col-album--active",
+  // Abaixo de 4 letras a lista não filtra: a "primeira" seria uma qualquer, e
+  // nada fica destacado até a primeira seta.
+  start: () => (filtering() ? 0 : -1),
+});
+watch([search, id_category], () => nav.reset());
+// A seta chegou à última coletânea montada: monta a próxima página.
+watch(nav.index, (index) => {
+  if (index >= visibleCount.value - 1) showMore();
+});
 
 function onSearchKey(event) {
   if (event.key === "Escape" && search.value) {
@@ -261,14 +283,13 @@ function onSearchKey(event) {
     search.value = "";
     return;
   }
+  if (nav.handleArrow(event)) return;
   if (event.key !== "Enter" || event.isComposing) return;
   event.preventDefault();
-  // Abaixo de 4 letras a lista não filtra: o "primeiro" seria um qualquer.
-  if (Strings.clean(search.value).length < 4) return;
-  const first = filteredAlbums.value[0];
-  if (!first) return;
+  const album = nav.active.value;
+  if (!album) return;
   quickSearch.afterPlay();
-  openAlbum(first.id_album);
+  openAlbum(album.id_album);
 }
 
 function openAlbum(id_album) {
@@ -440,6 +461,12 @@ onMounted(async () => {
 .col-album:focus-visible {
   outline: none;
   box-shadow: var(--lj-ui-focus);
+}
+
+/* A cor do cartão vem do banco: o destaque fica do lado de fora, no acento. */
+.col-album--active {
+  outline: 2px solid var(--lj-ui-accent);
+  outline-offset: 2px;
 }
 
 .col-album--wide {

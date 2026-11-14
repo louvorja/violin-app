@@ -6,53 +6,137 @@
     size="lg"
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <LjField layout="column" :label="t('library_search.find_label')">
+    <div class="llb-toolbar">
       <LjInput
         ref="inputEl"
         v-model="query"
+        :icon="ICONS.ACTIONS.SEARCH"
+        :placeholder="t('library_search.find_label')"
         autocomplete="off"
-        @keydown.enter.prevent="selectFirstMatch"
-        @keydown.down.prevent="moveSelection(1)"
-        @keydown.up.prevent="moveSelection(-1)"
+        class="llb-search"
+        @keydown="onKeydown"
       />
-    </LjField>
+      <div class="llb-view-toggle" role="group" :aria-label="t('library_search.view_label')">
+        <button
+          type="button"
+          class="llb-view"
+          :class="{ 'llb-view--active': viewMode === 'thumbnails' }"
+          :aria-pressed="viewMode === 'thumbnails'"
+          :title="t('library_search.view_thumbnails')"
+          @click="viewMode = 'thumbnails'"
+        >
+          <LjIcon :icon="ICONS.UI.VIEW_GRID" :size="16" />
+        </button>
+        <button
+          type="button"
+          class="llb-view"
+          :class="{ 'llb-view--active': viewMode === 'list' }"
+          :aria-pressed="viewMode === 'list'"
+          :title="t('library_search.view_list')"
+          @click="viewMode = 'list'"
+        >
+          <LjIcon :icon="ICONS.UI.VIEW_LIST" :size="16" />
+        </button>
+      </div>
+    </div>
 
-    <div class="lls-table-wrap">
-      <table class="lls-table">
-        <thead>
-          <tr>
-            <th class="lls-col-icon" />
-            <th>{{ t("library_search.col_name") }}</th>
-            <th v-if="showDetail" class="lls-col-detail">{{ t("library_search.col_detail") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="!filteredRows.length">
-            <td :colspan="showDetail ? 3 : 2" class="lls-empty">
-              {{ query ? t("library_search.empty_search") : t("library_search.empty") }}
-            </td>
-          </tr>
-          <tr
-            v-for="(row, i) in filteredRows"
-            :key="`${row.id}-${i}`"
-            :class="{ 'is-active': i === activeIndex }"
-            @mouseenter="activeIndex = i"
-            @click="selectRow(row)"
-            @dblclick="selectRow(row)"
-          >
-            <td class="lls-icon-cell">
-              <LjIcon :icon="row.icon" :size="16" />
-            </td>
-            <td>{{ row.name }}</td>
-            <td v-if="showDetail" class="lls-detail-cell">{{ row.detail }}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-if="visibleCategories.length" class="llb-chips">
+      <button
+        type="button"
+        class="llb-chip"
+        :class="{ 'llb-chip--active': categoryFilter === null }"
+        @click="selectCategory(null)"
+      >
+        {{ t("library_search.all_categories") }}
+      </button>
+      <button
+        v-for="category in visibleCategories"
+        :key="category.id"
+        type="button"
+        class="llb-chip"
+        :class="{ 'llb-chip--active': categoryFilter === category.id }"
+        @click="selectCategory(category.id)"
+      >
+        <LjIcon
+          v-if="category.iconType === 'icon' && category.icon"
+          :icon="category.icon"
+          :size="13"
+          :style="{ color: category.color }"
+        />
+        <img
+          v-else-if="category.iconType === 'image' && category.icon"
+          :src="category.icon"
+          alt=""
+          class="llb-chip-icon"
+        />
+        {{ category.name }}
+      </button>
+    </div>
+
+    <div ref="viewport" class="llb-body">
+      <div v-if="!flatItems.length" class="llb-empty">
+        {{ query ? t("library_search.empty_search") : t("library_search.empty") }}
+      </div>
+      <template v-else>
+        <LibraryGroupedView :groups="groups" :view="viewMode === 'thumbnails' ? 'grid' : 'list'">
+          <template #grid-item="{ item }">
+            <button
+              type="button"
+              class="llb-thumb"
+              :class="{
+                'llb-thumb--active': item.id === activeId,
+                'llb-thumb--selected': item.id === selectedId,
+              }"
+              :data-library-active="item.id === activeId || undefined"
+              :style="{ '--llb-item-color': itemColor(item) }"
+              :title="item.name"
+              @click="pick(item)"
+            >
+              <span class="llb-thumb-media">
+                <img
+                  v-if="item.thumbnail"
+                  :src="item.thumbnail"
+                  alt=""
+                  loading="lazy"
+                  draggable="false"
+                />
+                <LjIcon v-else :icon="item.icon || ICONS.UI.FILE_MULTIPLE" :size="28" />
+                <span v-if="item.detail" class="llb-thumb-detail">{{ item.detail }}</span>
+              </span>
+              <span class="llb-thumb-name">{{ item.name }}</span>
+              <span v-if="item.typeLabel" class="llb-thumb-type">{{ item.typeLabel }}</span>
+            </button>
+          </template>
+
+          <template #list-item="{ item }">
+            <button
+              type="button"
+              class="llb-row"
+              :class="{
+                'llb-row--active': item.id === activeId,
+                'llb-row--selected': item.id === selectedId,
+              }"
+              :data-library-active="item.id === activeId || undefined"
+              :style="{ '--llb-item-color': itemColor(item) }"
+              :title="item.name"
+              @click="pick(item)"
+            >
+              <span class="llb-row-icon">
+                <img v-if="item.thumbnail" :src="item.thumbnail" alt="" draggable="false" />
+                <LjIcon v-else :icon="item.icon || ICONS.UI.FILE_MULTIPLE" :size="18" />
+              </span>
+              <span class="llb-row-name">{{ item.name }}</span>
+              <span v-if="item.typeLabel" class="llb-row-type">{{ item.typeLabel }}</span>
+            </button>
+          </template>
+        </LibraryGroupedView>
+      </template>
     </div>
 
     <template #footer>
-      <span class="lls-count">{{ filteredRows.length }} / {{ allRows.length }}</span>
+      <span class="llb-count">{{ flatItems.length }} / {{ items.length }}</span>
       <span class="lj-u-spacer" />
+      <span class="llb-hint">{{ t("library_search.keyboard_hint") }}</span>
       <LjButton size="sm" @click="$emit('update:modelValue', false)">
         {{ t("actions.cancel") }}
       </LjButton>
@@ -62,38 +146,68 @@
 
 <script setup lang="ts">
 /**
- * LiturgyLibrarySearch — busca genérica reutilizável na Liturgia para
- * selecionar itens de bibliotecas locais (Biblioteca de Mídia, Som de
- * fundo, …). Filtro sem acentos + navegação por teclado, no padrão dos
- * demais dialogs de busca do módulo.
+ * LiturgyLibrarySearch — navegador genérico das bibliotecas da Liturgia.
+ *
+ * A mesma visualização serve para Biblioteca de Mídia, Som de Fundo e
+ * Projeção de Fundo. O pai entrega os itens já normalizados (nome, miniatura,
+ * categoria) e o componente cuida de busca, categorias, miniaturas/lista e
+ * teclado. O padrão é miniaturas.
  */
-import { useLiturgyI18n } from "../i18n";
 import { computed, nextTick, ref, watch } from "vue";
-import { LjButton, LjDialog, LjField, LjIcon, LjInput } from "@/components/ui";
+import { LjButton, LjDialog, LjIcon, LjInput } from "@/components/ui";
+import LibraryGroupedView from "@/components/LibraryGroupedView.vue";
 import { ICONS } from "@/config/Icons";
+import { useListNavigation } from "@/composables/useListNavigation";
+import { useLiturgyI18n } from "../i18n";
 
 export interface LibrarySearchItem {
   id: string;
   name: string;
   icon?: string;
-  /** Texto opcional da coluna extra (tipo, duração…). */
   detail?: string;
+  categoryId?: string;
+  thumbnail?: string;
+  typeLabel?: string;
+  /** Cor da categoria/item, aplicada como fundo atenuado no card. */
+  color?: string;
+  /** Tipo da biblioteca de origem (image, video, audio, pdf, …). */
+  type?: string;
+}
+
+export interface LibrarySearchCategory {
+  id: string;
+  name: string;
+  icon?: string;
+  iconType?: "icon" | "image";
+  color?: string;
+}
+
+interface Group {
+  id: string;
+  name: string;
+  items: LibrarySearchItem[];
 }
 
 const props = withDefaults(
   defineProps<{
     modelValue?: boolean;
     items?: LibrarySearchItem[];
+    categories?: LibrarySearchCategory[];
     title?: string;
     icon?: string;
-    showDetail?: boolean;
+    emptyText?: string;
+    selectedId?: string;
+    defaultView?: "thumbnails" | "list";
   }>(),
   {
     modelValue: false,
     items: () => [],
+    categories: () => [],
     title: "",
     icon: ICONS.ACTIONS.SEARCH,
-    showDetail: false,
+    emptyText: "",
+    selectedId: "",
+    defaultView: "thumbnails",
   }
 );
 
@@ -103,122 +217,395 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useLiturgyI18n();
-
 const query = ref("");
-const activeIndex = ref(0);
+const viewMode = ref<"thumbnails" | "list">(props.defaultView);
+const categoryFilter = ref<string | null>(null);
 const inputEl = ref<{ focus: () => void } | null>(null);
+const viewport = ref<HTMLElement | null>(null);
 
-const allRows = computed(() => props.items ?? []);
+const categoryById = computed(
+  () => new Map(props.categories.map((category) => [category.id, category]))
+);
 
-const filteredRows = computed(() => {
-  const norm = (s: string): string =>
-    s
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
-  const q = norm(query.value);
-  if (!q) return allRows.value;
-  const detail = props.showDetail;
-  return allRows.value.filter(
-    (r) => norm(r.name).includes(q) || (detail && r.detail ? norm(r.detail).includes(q) : false)
+function itemColor(item: LibrarySearchItem): string {
+  return item.color || categoryById.value.get(item.categoryId || "")?.color || "transparent";
+}
+
+const itemsWithCategory = computed(() =>
+  props.items.map((item) => ({
+    ...item,
+    categoryId: item.categoryId || "",
+  }))
+);
+
+const knownCategoryIds = computed(() => new Set(props.categories.map((category) => category.id)));
+
+const filteredItems = computed(() => {
+  const q = query.value.trim().toLocaleLowerCase();
+  return itemsWithCategory.value.filter((item) => {
+    if (categoryFilter.value !== null) {
+      const uncategorized = !item.categoryId || !knownCategoryIds.value.has(item.categoryId);
+      const matches = categoryFilter.value
+        ? item.categoryId === categoryFilter.value
+        : uncategorized;
+      if (!matches) return false;
+    }
+    return !q || item.name.toLocaleLowerCase().includes(q);
+  });
+});
+
+const visibleCategories = computed(() => {
+  const used = new Set(itemsWithCategory.value.map((item) => item.categoryId).filter(Boolean));
+  const categories = props.categories
+    .filter((category) => used.has(category.id))
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      icon: category.icon,
+      iconType: category.iconType,
+      color: category.color,
+    }));
+  const hasUncategorized = itemsWithCategory.value.some(
+    (item) => !item.categoryId || !knownCategoryIds.value.has(item.categoryId)
   );
+  if (hasUncategorized || itemsWithCategory.value.length > 0) {
+    categories.push({
+      id: "",
+      name: t("library_search.uncategorized"),
+      icon: ICONS.UI.FILE_MULTIPLE,
+      iconType: "icon",
+      color: "var(--lj-text-subtle)",
+    });
+  }
+  return categories;
 });
 
-watch(filteredRows, () => {
-  activeIndex.value = 0;
+const groups = computed<Group[]>(() => {
+  if (categoryFilter.value !== null) {
+    const category = categoryById.value.get(categoryFilter.value);
+    return [
+      {
+        id: categoryFilter.value || "uncategorized",
+        name: category?.name || t("library_search.uncategorized"),
+        items: filteredItems.value,
+      },
+    ];
+  }
+
+  const result: Group[] = [];
+  for (const category of props.categories) {
+    const items = filteredItems.value.filter((item) => item.categoryId === category.id);
+    if (items.length) result.push({ id: category.id, name: category.name, items });
+  }
+  const withoutCategory = filteredItems.value.filter(
+    (item) => !item.categoryId || !knownCategoryIds.value.has(item.categoryId)
+  );
+  if (withoutCategory.length) {
+    result.push({
+      id: "uncategorized",
+      name: t("library_search.uncategorized"),
+      items: withoutCategory,
+    });
+  }
+  if (!result.length) result.push({ id: "all", name: "", items: filteredItems.value });
+  return result;
 });
+
+const flatItems = computed(() => groups.value.flatMap((group) => group.items));
+const startIndex = () => {
+  const index = flatItems.value.findIndex((item) => item.id === props.selectedId);
+  return index >= 0 ? index : 0;
+};
+const nav = useListNavigation<LibrarySearchItem>({
+  items: () => flatItems.value,
+  container: viewport,
+  activeSelector: '[data-library-active="true"]',
+  start: startIndex,
+});
+const activeId = computed(() => nav.active.value?.id || "");
+
+watch(flatItems, () => nav.reset());
+
+function selectCategory(categoryId: string | null): void {
+  categoryFilter.value = categoryId;
+}
+
+function pick(item: LibrarySearchItem): void {
+  emit("pick", item);
+  emit("update:modelValue", false);
+}
+
+function selectActive(): void {
+  const item = nav.active.value;
+  if (item) pick(item);
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    selectActive();
+    return;
+  }
+  const grid = viewMode.value === "thumbnails";
+  const delta =
+    event.key === "ArrowDown"
+      ? 1
+      : event.key === "ArrowUp"
+        ? -1
+        : grid && event.key === "ArrowRight"
+          ? 1
+          : grid && event.key === "ArrowLeft"
+            ? -1
+            : 0;
+  if (!delta) return;
+  event.preventDefault();
+  nav.move(delta);
+}
 
 watch(
   () => props.modelValue,
-  (v) => {
-    if (v) {
-      query.value = "";
-      activeIndex.value = 0;
-      // O campo só existe depois que o diálogo monta o conteúdo; o nextTick
-      // roda depois do autofoco do próprio diálogo, então o foco fica aqui.
-      nextTick(() => inputEl.value?.focus());
-    }
-  }
+  (open) => {
+    if (!open) return;
+    query.value = "";
+    categoryFilter.value = null;
+    viewMode.value = props.defaultView;
+    nav.reset();
+    nextTick(() => inputEl.value?.focus());
+  },
+  { immediate: true }
 );
-
-function moveSelection(delta: number): void {
-  const max = filteredRows.value.length - 1;
-  if (max < 0) return;
-  activeIndex.value = Math.max(0, Math.min(max, activeIndex.value + delta));
-}
-
-function selectFirstMatch(): void {
-  const row = filteredRows.value[activeIndex.value];
-  if (row) selectRow(row);
-}
-
-function selectRow(row: LibrarySearchItem): void {
-  emit("pick", row);
-  emit("update:modelValue", false);
-}
 </script>
 
-<!-- O corpo do diálogo viaja num portal, mas é compilado AQUI (slot do
-     consumidor), então o Vue carimba o atributo de escopo nele e `scoped`
-     funciona normalmente. -->
 <style scoped>
-/* Tabela não tem primitivo equivalente no catálogo: markup nativo sobre os
-   tokens, com cabeçalho fixo enquanto a lista rola. */
-.lls-table-wrap {
-  max-height: 50vh;
-  overflow-y: auto;
-  border: 1px solid var(--lj-surface-border);
-  border-radius: var(--lj-radius-md);
+.llb-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
 }
-.lls-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--lj-text-base);
+.llb-search {
+  flex: 1;
+  min-width: 0;
 }
-.lls-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--lj-surface-bg-soft);
-  text-align: left;
-  padding: var(--lj-space-4) var(--lj-space-5);
-  font-weight: var(--lj-weight-medium);
-  border-bottom: 1px solid var(--lj-surface-border);
+.llb-view-toggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
 }
-.lls-table tbody td {
-  padding: var(--lj-space-3) var(--lj-space-5);
-  border-bottom: 1px solid var(--lj-surface-divider);
+.llb-view {
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: var(--lj-radius-xs);
+  background: transparent;
+  color: var(--lj-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  white-space: nowrap;
+}
+.llb-view:hover,
+.llb-view--active {
+  border-color: var(--lj-surface-border);
+  background: var(--lj-surface-bg-soft);
+  color: var(--lj-text);
+}
+.llb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lj-space-2);
+  margin: var(--lj-space-3) 0;
+}
+.llb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  padding: 4px 9px;
+  border: 1px solid var(--lj-surface-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lj-text-muted);
+  font: inherit;
+  font-size: var(--lj-text-sm);
+  cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.lls-table tbody tr:hover,
-.lls-table tbody tr.is-active {
-  background: var(--lj-ui-accent-soft);
+.llb-chip:hover,
+.llb-chip--active {
+  border-color: var(--lj-navy);
+  background: color-mix(in srgb, var(--lj-navy) 10%, transparent);
+  color: var(--lj-text);
 }
-.lls-col-icon {
-  width: 34px;
+.llb-chip-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
 }
-.lls-icon-cell {
-  line-height: 0;
+.llb-body {
+  max-height: 54vh;
+  overflow-y: auto;
+  padding-right: 2px;
 }
-.lls-col-detail {
-  width: 28%;
-}
-.lls-detail-cell {
-  color: var(--lj-text-muted);
-  font-size: var(--lj-text-base);
-}
-.lls-empty {
+.llb-empty {
+  padding: var(--lj-space-5);
   text-align: center;
-  padding: var(--lj-space-8) var(--lj-space-5);
-  color: var(--lj-text-subtle);
-  cursor: default;
-}
-
-.lls-count {
-  font-size: var(--lj-text-sm);
   color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
+}
+.llb-group {
+  margin-top: var(--lj-space-4);
+}
+.llb-group:first-child {
+  margin-top: 0;
+}
+.llb-group-title {
+  margin: 0 0 var(--lj-space-2);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-semibold);
+}
+.llb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: var(--lj-space-3);
+}
+.llb-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--lj-radius-sm);
+  background: color-mix(in srgb, var(--llb-item-color, transparent) 10%, transparent);
+  color: var(--lj-text);
+  text-align: left;
+  cursor: pointer;
+}
+.llb-thumb:hover,
+.llb-thumb--active {
+  border-color: var(--lj-surface-border);
+  background: color-mix(
+    in srgb,
+    var(--llb-item-color, var(--lj-navy)) 18%,
+    var(--lj-surface-bg-soft)
+  );
+}
+.llb-thumb--selected {
+  border-color: var(--lj-navy);
+}
+.llb-thumb-media {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--lj-radius-xs);
+  background: var(--lj-surface-bg-soft);
+  color: var(--lj-text-muted);
+}
+.llb-thumb-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.llb-thumb-detail {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 4px;
+  border-radius: var(--lj-radius-xs);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 10px;
+}
+.llb-thumb-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--lj-text-xs);
+}
+.llb-thumb-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--lj-text-muted);
+  font-size: 10px;
+}
+.llb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.llb-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  width: 100%;
+  padding: var(--lj-space-2) var(--lj-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--lj-radius-sm);
+  background: color-mix(in srgb, var(--llb-item-color, transparent) 10%, transparent);
+  color: var(--lj-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.llb-row:hover,
+.llb-row--active {
+  border-color: var(--lj-surface-border);
+  background: color-mix(
+    in srgb,
+    var(--llb-item-color, var(--lj-navy)) 18%,
+    var(--lj-surface-bg-soft)
+  );
+}
+.llb-row--selected {
+  border-color: var(--lj-navy);
+}
+.llb-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 26px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: var(--lj-radius-xs);
+  color: var(--lj-text-muted);
+}
+.llb-row-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.llb-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.llb-row-type {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-xs);
+}
+.llb-count {
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-xs);
+}
+.llb-hint {
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-xs);
+  margin-right: var(--lj-space-3);
+}
+@media (max-width: 640px) {
+  .llb-hint {
+    display: none;
+  }
 }
 </style>

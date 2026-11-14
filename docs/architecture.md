@@ -77,6 +77,11 @@ Sem rede, a recuperação conserva o registro existente e pode aplicar código j
 guardado; não registra o HTML antigo sobre uma instalação mais recente.
 Antes da interface montar, também acompanha registros tardios e o fim da
 instalação para ativar um SW em espera; só recarrega após terminar a ativação.
+O `sw.js` importa `public/sw-skip-waiting.js`, que atende o `SKIP_WAITING` enviado
+pela página. No Chrome, só esse pedido feito depois da instalação encerra o SW antigo
+assim que ele fica livre. Sem ele, os pedidos da própria página mantinham o antigo
+ativo, e a versão nova esperava até 5 minutos (o limite do Chrome), com a aplicação
+falhando por timeout nesse meio-tempo.
 Falhas de registro, verificação e instalação têm novas tentativas automáticas
 com espera crescente de 15 segundos até 5 minutos, somente online e visível.
 O timeout de 30 segundos limita a espera sem descartar um registro nativo que
@@ -85,8 +90,10 @@ termine depois. O diagnóstico mantém a etapa e distingue `TimeoutError`;
 `update_status` preserva o estado textual no PostHog.
 
 A Shell e a seção Aplicativo em Atualizações avisam quando é preciso recarregar.
-A aplicação manual, a recuperação ao retomar o app e a recuperação de imports
-de código/CSS que falharam aguardam as escritas de liturgia e finalizam o save web pendente
+A atualização pronta é aplicada automaticamente assim que a janela estiver visível
+e sem trabalho ativo, inclusive se o download terminar após o boot ou numa verificação
+periódica. A aplicação manual e a recuperação de imports de código/CSS que falharam
+usam a mesma guarda: aguardam as escritas de liturgia e finalizam o save web pendente
 das preferências; fica bloqueada durante apresentação, reprodução, tarefas e
 enquanto o editor de slides está aberto ou há um campo/modal em edição. A recuperação
 solicitada fica pendente até o código novo estar pronto e o trabalho terminar;
@@ -352,6 +359,16 @@ há projeção visível. O `windowFactory` desliga esse throttling somente enqua
 uma janela auxiliar de projeção está visível, preservando relógios e timers no
 telão sem manter CPU alta quando o operador minimiza o app.
 
+No Windows, a janela principal abre maximizada no primeiro uso e depois restaura
+o modo, o tamanho e a posição escolhidos em `options.windows.main`. A geometria
+é ajustada à área útil dos monitores disponíveis, e minimizar ou usar tela cheia
+temporariamente não altera essa preferência. A maximização espera a exibição
+da interface para não antecipar o fechamento do splash.
+
+A reconciliação dos monitores mantém a projeção local quando nenhum monitor foi
+atribuído ou a escolha é "Mesma janela". Um monitor configurado que ficou ausente
+ou ambíguo continua ocultando sua projeção até que o destino volte a estar disponível.
+
 ---
 
 ## 🔄 Gerenciamento de Estado
@@ -562,6 +579,8 @@ SHA-256. O gerador da API valida referências e todos os capítulos esperados a
 partir das versões e livros antes de publicar. O Worker do app verifica CRC,
 manifesto, nomes, arquivos faltantes/extras, tipo do pacote e SHA-256 antes de
 entregar cada JSON. O manifesto não é um dataset e nunca vai para o IndexedDB.
+`Sha256.ts` usa WebCrypto quando disponível e SHA-256 em JavaScript nos demais
+ambientes, preservando a validação dos pacotes e os hashes da biblioteca de mídia.
 
 `BundleInstaller.install({ catalogOnly: true })` baixa o catálogo com `no-store`,
 usa fallback da API quando necessário e publica os datasets e o marcador na mesma
@@ -579,8 +598,12 @@ O marcador bíblico usa revisão 2 e só é gravado após todos os capítulos.
 
 - PWA instalado: pode garantir o catálogo após oito segundos, online, sem economia
   de dados e fora de redes 2G. Aba comum não faz esse download automático.
-- Desktop: Verificação Inicial e Sincronizar garantem o catálogo antes de leituras
-  em massa, com progresso na própria tela. Esse download não traz capítulos.
+- Desktop: baixa o catálogo automaticamente assim que o armazenamento estiver
+  pronto, sem confirmação, mesmo quando a Verificação Inicial está oculta. Se
+  estiver offline, tenta ao reconectar. O diálogo acompanha a mesma instalação
+  e oferece nova tentativa em caso de falha; a varredura detalhada é opcional.
+  Sincronizar também garante o catálogo antes de leituras em massa. O catálogo
+  já instalado é reaproveitado, e esse download não traz áudios nem capítulos.
 - Aplicar atualização do catálogo usa o pacote menor. Reinstalar/restaurar o banco
   explicitamente usa o pacote completo.
 - Catálogos instalados são conferidos no boot/retomada/reconexão, com intervalo
@@ -620,6 +643,17 @@ adaptador `helpers/WebFileStore.ts`, que grava no Cache Storage (`louvorja-audio
 plataforma: o PWA mostra só a aba Coletâneas (Bíblia, pasta de dados e versão
 clássica seguem exclusivos do desktop).
 
+- **Disponibilidade por música.** Os indicadores das coletâneas contam IDs de
+  músicas com todos os áudios declarados disponíveis (cantado/playback), sem
+  incluir imagens nem músicas sem áudio. Capas e fundos são cache compartilhado:
+  remover uma coletânea apaga seus áudios e preserva as imagens.
+  A limpeza geral de mídia continua removendo ambos apenas em acervo privado.
+  Em pasta compartilhada, o escritor ativo pode excluir manualmente os downloads
+  selecionados após confirmação; a limpeza geral e automática permanece bloqueada.
+  Cada conta assina o acervo ao abrir (`electron/main/collectionAccounts.js`, pasta
+  `.louvorja-contas/`), e a confirmação nomeia as outras contas que abriram nos
+  últimos 90 dias. Só esta conta, com assinatura de 30 dias ou mais, é tratada
+  como pasta privada; antes disso, o aviso é genérico.
 - **URL é a chave.** O arquivo é guardado sob a mesma URL que o player pede
   (`Path.file`), então o service worker o serve sem nenhuma mudança nos consumidores.
 - **Service worker** (`vite.config.js`): as rotas de áudio e imagem não têm
@@ -732,7 +766,79 @@ No Windows, os dois `Program Files` e as pastas expostas por
 | **In-window**         | `src/helpers/Hotkeys.js`     | Apenas com janela do app em foco |
 | **Global (OS-level)** | `electron/main/shortcuts.js` | System-wide                      |
 
-Atalhos in-window registrados em `src/main.js` via `Hotkeys.register()`.
+Atalhos in-window registrados em `src/bootstrap/main-shell.js` via `Hotkeys.register()`.
+
+O Play/Pause multimídia nativo passa por `src/helpers/PlayerMediaSession.ts`
+(`navigator.mediaSession`) e chama o mesmo `useMedia` do Space e dos botões, respeitando
+o fade. Só a janela principal instala esses controles, enquanto há mídia carregada.
+Durante o fade, cada toque inverte o pedido atual: o sistema pode enviar `pause`
+novamente porque o elemento ainda toca durante o fade-out. Os atalhos globais opcionais
+do Electron também enviam sempre à principal, mesmo com projeção ou retorno em foco.
+
+### Command no Mac
+
+As combinações com modificador moram em `src/constants/HotkeyCombos.ts` (`HOTKEY.*`),
+e o registro, as dicas (`LjTooltip :shortcut`, `RibbonButton.shortcut`) e a lista do F1
+leem dali. `Mod` é o Command no Mac e o Ctrl nos outros sistemas; o rótulo sai de
+`formatShortcut()` (`⇧⌘N` no Mac, `Ctrl+Shift+N` fora dele) — não escreva "Ctrl+X" em
+texto traduzido.
+
+`Ctrl` explícito fica só onde o Mac já usa o Command: ⌃M (⌘M minimiza), ⌃Tab (⌘Tab troca
+de app), ⌃Espaço (⌘Espaço é o Spotlight) e ⌃⌥D (⌥⌘D é o Dock). No Mac o Ctrl continua
+valendo por baixo do Command, sem aparecer na lista: o controle remoto manda Ctrl seja qual
+for o sistema. No navegador do Mac, ⌘N, ⇧⌘N e ⌘W ficam com o Chrome, então ali a interface
+mostra o Ctrl.
+
+⌘W / Ctrl+W fecha a aba à vista, como no Chrome; sem aba, a janela — pelo mesmo
+`window:close` do botão de fechar, que com projeção no ar só tira a janela da frente. O
+app não define menu, e o "Fechar" do menu padrão do Electron usa essa tecla: no Mac ele a
+pega antes da página, e no Windows e no Linux age sempre que a página não a cancela — o
+que acontece com o foco num diálogo, num menu aberto ou com um alerta na tela, onde o
+Hotkeys não age. Por isso o `before-input-event` da janela principal
+(`electron/main/closeTabKey.js`) cancela a tecla nos três sistemas e a entrega ao Hotkeys
+pelo mesmo evento sintético do `/api/keyboard`; onde ele não age, nada fecha.
+
+A barra de abas, o Ctrl+Tab e o Ctrl+W leem as abas de `Modules.tabs()`, na ordem da
+barra (a que o operador arrasta). A ordem de registro dos módulos é alfabética por pasta,
+e usada por engano fazia o Ctrl+Tab saltar e o Ctrl+W fechar a aba errada. Fechar a aba
+ativa passa para a da direita; fechando a última, para a da esquerda.
+
+Tecla que só age com mídia aberta passa por `_ifMedia` com `preventDefault: false`: é ele
+que cancela quando age. Com o cancelamento automático do Hotkeys, PageUp não rolava lista
+nenhuma e Ctrl+← não pulava palavra em campo nenhum, com ou sem música.
+
+Atalho com `when` só age quando a condição vale; senão é pulado sem cancelar a tecla, e
+ela segue para o próximo registrado com a mesma combinação — como acontece com o campo de
+texto sem `allowInForm`.
+
+### O teclado é do player ou da tela
+
+Setas (também com Ctrl), PageUp/PageDown, Home/End e espaço passam o slide só quando o player tem o teclado
+(`src/helpers/PlayerKeyboard.ts`), como no Delphi, onde só agiam com a janela da música
+ou a do operador ativa. Antes, com uma música aberta, a seta passava o slide de qualquer
+lugar, até com o cursor num campo; uma seta para rolar uma lista em outro módulo avançou
+o slide no meio do culto.
+
+- **O player tem o teclado** com a janela da mídia na tela (ela é modal), depois de um
+  clique numa área `[data-lj-player]` (o rodapé, a barra da Biblioteca) e quando o
+  operador põe algo no ar — `PlayerKeyboard.claim()` nos métodos
+  de abertura do `useMedia` e no início da projeção de anúncios. Só conta a ativação
+  recente do usuário na própria janela: o que entra no ar sozinho (fim da música,
+  playlist, temporizador, controle remoto) não tira as teclas de onde ele está.
+- **A tela retoma as teclas** com um clique fora do player, com a troca de aba
+  (`lj:module-open`) e ao minimizar a janela da mídia (pelo botão ou pelo clique fora,
+  que devolve o cursor à busca). O foco movido pelo próprio app não conta: ele
+  acompanha o clique, e a ordem entre os dois não é garantida.
+- **Campo de texto fica com as setas** da tecla real; só o controle remoto passa o slide
+  com o cursor num campo do desktop.
+- **Valem em qualquer foco:** o controle remoto (evento sintético, `isTrusted: false`),
+  o ESC e a tecla Pause.
+- **As janelas de projeção e de retorno** passam o slide pelas mesmas teclas
+  (`useProjectionSlideKeys`), pedindo à principal.
+- **A Bíblia** só anda no versículo pela seta com ela à vista e o teclado fora do player.
+- **Exceção:** a página da web projetada (`takeSiteKey`) ainda recebe as teclas de
+  qualquer tela, porque não há na janela principal um controle dela para clicar e
+  devolver as teclas.
 
 ### Cartão da biblioteca: projetar ou enfileirar
 
@@ -759,7 +865,7 @@ o clique; o que muda é o estado de lista em volta.
 
 ### Quem responde às setas
 
-`←`/`→` são registrados **uma única vez**, em `main-shell.js`, e chegam em
+`←`/`→` da mídia são registrados **uma única vez**, em `main-shell.js`, e chegam em
 `Media.nextSlide()`/`prevSlide()`. Quem responde depende do que está no telão, e a
 ordem é o contrato:
 
@@ -1177,7 +1283,7 @@ MusicMenuTable → usePlaylists.addSong() → playlist song
 **MusicMenuTable (context menu):**
 
 - Submenu "Adicionar à playlist" com todas as playlists
-- Só aparece quando `showPlaylistMenu={true}` (módulo músicas)
+- Aparece em toda lista de músicas do acervo (Músicas, Hinário, Ctrl+M…); não na música personalizada
 - Marca músicas já existentes na playlist
 
 ---
@@ -1275,9 +1381,9 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   Tocar um vídeo que só esperava na fila de pré-download o tira da fila (`runNow`, sem ocupar
   raia: nada segura o play, nem o fim de outro download); pedir outro vídeo cancela o que a
   projeção esperava — menos o download que o operador pediu de propósito (botão, link novo),
-  que só deixa de ser esperado; cancelar mata a árvore de processos (yt-dlp → python → ffmpeg). A troca/renovação das ferramentas só acontece com um único
-  download em curso (no Windows o `.exe` em uso não é sobrescrito). A barra é única e
-  monótona: na primeira vez as ferramentas ocupam os primeiros 25%.
+  que só deixa de ser esperado; cancelar mata a árvore de processos (yt-dlp → python → ffmpeg). O reparo
+  das ferramentas (apagar e reinstalar) só acontece com um único download em curso. A barra é
+  única e monótona: na primeira vez as ferramentas ocupam os primeiros 25%.
 - **Cancelar e pedir de novo** funciona na hora: um job já abortado, mas ainda saindo, não é
   reaproveitado por quem pede em seguida (`manager.ensure` espera o antigo largar a pasta de
   parciais e recomeça), e no renderer `_dropPendingDownload` também descarta o preparo
@@ -1285,9 +1391,16 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
 - **Ferramentas (yt-dlp + ffmpeg)** são instaladas uma vez, por todos: pedidos simultâneos
   compartilham a instalação e todos recebem o andamento (quem chega no meio parte do estado
   atual). Cancelar só faz quem cancelou parar de esperar — a instalação segue, porque o
-  operador que trocou de vídeo no primeiro uso a aproveita em vez de recomeçar do zero. Abrir
-  "Vídeos On-line" ou "Meus Vídeos Online" já dispara a instalação em silêncio
-  (`onlineVideo:prepare`, uma vez por sessão).
+  operador que trocou de vídeo no primeiro uso a aproveita em vez de recomeçar do zero. O
+  main as instala sozinho 3 min depois do boot (`maintainTools` em `index.js`: opção "Baixar"
+  ligada, sem projeção aberta nem download em curso), e abrir "Vídeos On-line" ou "Meus
+  Vídeos Online" dispara a mesma instalação (`onlineVideo:prepare`).
+- **yt-dlp em pasta, não em arquivo único**: o arquivo único (PyInstaller onefile) se
+  descompacta numa pasta temporária a cada execução — 3,5 s medidos no macOS só para o
+  `--version`, contra 0,35 s da versão em pasta; a resolução de um vídeo caiu de 6,6 s para
+  2,95 s. O zip é extraído em fluxo (`unzip.js`, ~0,5 s) para `bin/ytdlp/<sha256[0:16]>/`, e o
+  `tools.json` aponta a pasta atual: trocar de versão não mexe na que está rodando (no Windows o
+  `.exe` em uso nem seria sobrescrito), e as antigas saem na abertura seguinte (`cleanup`).
 - **Progresso** aparece em "Processos em segundo plano" (`useBackgroundTasks`, com botão de
   cancelar). Vídeo já em cache não pisca tarefa nenhuma.
 - **Vídeos baixados** em `<dados>/Videos/` (por padrão, `Documents/LouvorJA Violin/Videos`).
@@ -1309,7 +1422,9 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   já começa o download e guarda o vídeo, salvo com o download desligado nas opções.
 - **A cópia única** (`onlineVideo:stream`, `progressive.js`): o yt-dlp pede só os **links** das
   duas trilhas (`-J`, sem baixar) e o main as baixa **uma vez**, em pedaços de 2 MB, para
-  arquivos do tamanho final em `Videos/.stream/<id>/` que vão sendo preenchidos.
+  arquivos do tamanho final em `Videos/.stream/<id>/` que vão sendo preenchidos. Os links dos
+  clientes de TV só valem alguns segundos depois de emitidos (`available_at` no JSON, ~4 s):
+  pedir antes dá 403, então `resolveStreams` só os devolve nessa hora.
   Projeção, retorno, operador e o player do app leem desses arquivos por `Range`, em
   `louvorja://onlinestream/<id>/video|audio` — o handler espera o trecho que ainda não chegou
   e, num salto, o baixador pula para lá. Começa em ~7 s. Ao terminar, o ffmpeg junta as trilhas
@@ -1338,12 +1453,16 @@ mesmas trilhas e não abre uma segunda conexão. Só um vídeo sem trilhas servi
   ou de país → só avisa o operador e **nada vai para o telão**; cancelamento → silencioso;
   qualquer outra (sem GitHub, ferramenta quebrada, `bot`, disco cheio, transmissão ao vivo) →
   aviso e cai no player do YouTube (`openEmbeddedYouTube`).
-- **yt-dlp desatualizado** (o YouTube muda o player a cada poucas semanas): falha que uma
-  versão nova resolve (`unknown`, `forbidden`, `format`, `bot`) renova o yt-dlp e repete uma
-  vez, no máximo uma renovação por hora.
+- **yt-dlp desatualizado** (o YouTube muda o player a cada poucas semanas): o canal é o
+  nightly, que o próprio yt-dlp recomenda e onde as correções saem primeiro (o estável ficou
+  dois meses parado em 2026). Falha que uma versão nova resolve (`unknown`, `forbidden`,
+  `format`, `bot`) renova e repete uma vez, no máximo uma renovação por hora; sem release
+  nova, a renovação custa só o `SHA2-256SUMS` (~1,5 KB). Além disso, `checkForUpdate` olha uma
+  vez por dia, para quem usou vídeo on-line no último mês, e troca a versão que já tem uma
+  semana; o arquivo único de versões anteriores do app migra para a pasta na primeira checagem.
 - **Web/PWA** não baixa: continua só com o player do YouTube.
 
-Arquivos: `electron/main/onlineVideo/{ids,store,runner,rangeSet,progressive,tools,manager,index}.js`,
+Arquivos: `electron/main/onlineVideo/{ids,store,runner,rangeSet,progressive,tools,unzip,manager,index}.js`,
 `src/helpers/OnlineVideo.ts`, `src/composables/useMedia.ts` (`openYouTube`),
 `src/composables/useOnlineVideoDownloads.ts` e os componentes
 `src/components/OnlineVideoDownload{,Badge,sBar}.vue`.

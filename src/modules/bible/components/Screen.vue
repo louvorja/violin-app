@@ -10,11 +10,9 @@
       padding: `${Number(borderSpacing) || 10}px`,
     }"
   >
-    <img
+    <ModuleBackgroundMedia
       v-if="image"
       :src="image"
-      alt=""
-      loading="eager"
       :style="{
         top: 0,
         left: 0,
@@ -26,7 +24,7 @@
       }"
     />
 
-    <div v-if="bible" class="lj-u-col" style="width: 100%; max-width: 100%">
+    <div v-if="bible" class="lj-u-col" style="width: fit-content; max-width: 100%" :style="textBox">
       <span
         v-if="displayText"
         class="bible-text"
@@ -36,7 +34,6 @@
           fontSize: `${fontSizePc(fontSize)}px`,
           fontFamily: fontFamily,
           textAlign: horizontalTextAlign(horizontalAlign),
-          backgroundColor: textBackgroundEnabled ? textBackgroundColor : 'transparent',
           ...textShadowStyle,
         }"
       >
@@ -60,17 +57,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, type ComputedRef } from "vue";
+import { computed, ref, type ComputedRef, type CSSProperties } from "vue";
 import { module as manifest } from "../manifest";
 import Modules from "@/helpers/Modules";
 import UserData from "@/helpers/UserData";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import AppData from "@/helpers/AppData";
 import { useContainerSize } from "@/composables/useContainerSize";
+import { useStoredImageUrl } from "@/composables/useStoredImageUrl";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { ModuleState } from "@/types/Module";
 import { FONT, resolveFont } from "@/config/Fonts";
-import { horizontalTextAlign, moduleCustomizationDefault } from "@/helpers/ModuleFormatting";
+import {
+  horizontalTextAlign,
+  moduleCustomizationDefault,
+  textBoxStyle,
+} from "@/helpers/ModuleFormatting";
 
 interface BibleData {
   text?: string;
@@ -107,7 +110,7 @@ const verticalAlign = computed(() => ud("vertical_align", "center"));
 const horizontalAlign = computed(() => ud("horizontal_align", "center"));
 const backgroundColor = computed(() => ud("background_color", "transparent"));
 const borderSpacing = computed(() => ud("border_spacing", 10));
-const image = computed(() => ud("image", null));
+const image = useStoredImageUrl(() => ud("image", ""));
 const imageFit = computed(() => ud("image_fit", "cover"));
 const imageOpacity = computed(() => ud("image_opacity", 100));
 const fontColor = computed(() => ud("font_color", "#ffffff"));
@@ -123,6 +126,29 @@ const textShadowColor = computed(() => ud("text_shadow_color", "#000000"));
 const textShadowBlur = computed(() => ud("text_shadow_blur", 4));
 const textBackgroundEnabled = computed(() => ud("text_background_enabled", false));
 const textBackgroundColor = computed(() => ud("text_background_color", "transparent"));
+const textBackgroundOpacity = computed(() => ud("text_background_opacity", 100));
+const textPaddingX = computed(() => ud("text_padding_x", 0));
+const textPaddingY = computed(() => ud("text_padding_y", 0));
+const textBorderEnabled = computed(() => ud("text_border_enabled", false));
+const textBorderColor = computed(() => ud("text_border_color", "#FFFFFF"));
+const textBorderOpacity = computed(() => ud("text_border_opacity", 100));
+const textBorderRadius = computed(() => ud("text_border_radius", 0));
+const textBorderWidth = computed(() => ud("text_border_width", 2));
+const textBox = computed<CSSProperties>(
+  () =>
+    textBoxStyle({
+      enabled: textBackgroundEnabled.value,
+      color: textBackgroundColor.value,
+      opacity: textBackgroundOpacity.value,
+      paddingX: textPaddingX.value,
+      paddingY: textPaddingY.value,
+      borderEnabled: textBorderEnabled.value,
+      borderColor: textBorderColor.value,
+      borderOpacity: textBorderOpacity.value,
+      borderRadius: textBorderRadius.value,
+      borderWidth: textBorderWidth.value,
+    }) as CSSProperties
+);
 const textShadowStyle = computed(() => {
   if (!textShadow.value) return {};
   const color = textShadowColor.value || "#000000";

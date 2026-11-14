@@ -6,15 +6,15 @@
 import { ModuleEnum } from "@/enums/ModuleEnum";
 
 //Variáveis Locais
-const OPTIONS = "options"
-const MODULES = "modules"
+const OPTIONS = "options";
+const MODULES = "modules";
 const STORAGE = "storage";
-const OPTIONS_DISPLAYS = `${OPTIONS}.displays`
-const OPTIONS_SLIDE = `${OPTIONS}.slide`
-const OPTIONS_FILE_PROJECTION = `${OPTIONS}.file_projection`
-const OPTIONS_ONLINE_VIDEO_PROJECTION = `${OPTIONS}.online_video_projection`
-const OPTIONS_SITE_PROJECTION = `${OPTIONS}.site_projection`
-const OPTIONS_INTEGRATIONS = `${OPTIONS}.integrations`
+const OPTIONS_DISPLAYS = `${OPTIONS}.displays`;
+const OPTIONS_SLIDE = `${OPTIONS}.slide`;
+const OPTIONS_FILE_PROJECTION = `${OPTIONS}.file_projection`;
+const OPTIONS_ONLINE_VIDEO_PROJECTION = `${OPTIONS}.online_video_projection`;
+const OPTIONS_SITE_PROJECTION = `${OPTIONS}.site_projection`;
+const OPTIONS_INTEGRATIONS = `${OPTIONS}.integrations`;
 const MODULES_BIBLE = `${MODULES}.${ModuleEnum.BIBLE}`;
 const MODULES_BIBLE_DATA = `${MODULES}.${ModuleEnum.BIBLE}.data`;
 const MODULES_LIBRAS = `${MODULES}.${ModuleEnum.LIBRAS}`;
@@ -41,7 +41,6 @@ export const KEY_LITURGY_ACTIVE_DAY = `${MODULES_LITURGY}.active_day`;
 export function moduleShowInMainMenu(id: string): string {
   return `${MODULES}.${id}.show_in_main_menu`;
 }
-
 
 export const KEYS = {
   MODULES: {
@@ -96,6 +95,7 @@ export const KEYS = {
       DAY_NOTES: `${MODULES_LITURGY}.day_notes`,
       SCHEDULED_ITEMS: `${MODULES_LITURGY}.scheduled_items`,
       SCHEDULED_CATEGORIES: `${MODULES_LITURGY}.scheduled_categories`,
+      SCHEDULED_MIGRATED: `${MODULES_LITURGY}.scheduled_migrated`,
       LEGACY_ITEMS: `${MODULES_LITURGY}.items`,
       LEGACY_WEEKS: `${MODULES_LITURGY}.weeks`,
       LEGACY_ACTIVE_WEEK: `${MODULES_LITURGY}.active_week`,
@@ -158,7 +158,6 @@ export const KEYS = {
     MEDIA: {
       IS_PLAYING: `${MODULES_MEDIA}.is_playing`,
       FADE_AUDIO: `${MODULES_MEDIA}.fade_audio`,
-      LAZY_LOAD: `${MODULES_MEDIA}.lazy_load`,
       MINIMIZED: `${MODULES_MEDIA}.minimized`,
       LOADING: `${MODULES_MEDIA}.loading`,
       SHOW: `${MODULES_MEDIA}.show`,
@@ -216,11 +215,24 @@ export const KEYS = {
         CIRCLE_ORIGIN: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.transition_options.circle_origin`,
       },
     },
+    DRAW: {
+      MODE: `${MODULES}.${ModuleEnum.DRAW}.mode`,
+      RANGE_MIN: `${MODULES}.${ModuleEnum.DRAW}.range_min`,
+      RANGE_MAX: `${MODULES}.${ModuleEnum.DRAW}.range_max`,
+      EFFECT_DURATION: `${MODULES}.${ModuleEnum.DRAW}.effect_duration`,
+      ROULETTE_SOUND: `${MODULES}.${ModuleEnum.DRAW}.roulette_sound`,
+      SHOW_DRAWN_HISTORY: `${MODULES}.${ModuleEnum.DRAW}.show_drawn_history`,
+      RANDOM_FINISH: `${MODULES}.${ModuleEnum.DRAW}.random_finish`,
+      NAMES: `${MODULES}.${ModuleEnum.DRAW}.names`,
+      NAMES_RUNNING: `${MODULES}.${ModuleEnum.DRAW}.names_running`,
+      LIST_OPEN: `${MODULES}.${ModuleEnum.DRAW}.list_open`,
+    },
+    /** Chaves antigas do módulo Sorteio de Nomes; lidas apenas na migração. */
     NAME_DRAW: {
-      RUNNING: `${MODULES}.${ModuleEnum.NAME_DRAW}.running`,
-      SHOW_DRAWN: `${MODULES}.${ModuleEnum.NAME_DRAW}.show_drawn`,
-      EFFECT_DURATION: `${MODULES}.${ModuleEnum.NAME_DRAW}.effect_duration`,
-      NAMES: `${MODULES}.${ModuleEnum.NAME_DRAW}.names`,
+      RUNNING: `${MODULES}.name_draw.running`,
+      SHOW_DRAWN: `${MODULES}.name_draw.show_drawn`,
+      EFFECT_DURATION: `${MODULES}.name_draw.effect_duration`,
+      NAMES: `${MODULES}.name_draw.names`,
     },
     ONLINE_VIDEOS: {
       IS_PROJECTING: `${MODULES}.${ModuleEnum.ONLINE_VIDEOS}.is_projecting`,
@@ -251,6 +263,12 @@ export const KEYS = {
       MODE: `${MODULES_STOPWATCH}.mode`,
       TARGET_SECONDS: `${MODULES_STOPWATCH}.target_seconds`,
       SHOW_SECONDS: `${MODULES_STOPWATCH}.show_seconds`,
+      /** Regressivo continua depois do zero, mostrando "-mm:ss". */
+      COUNT_OVERTIME: `${MODULES_STOPWATCH}.count_overtime`,
+      /** Segundos antes do fim em que o aviso amarelo começa (0 desliga). */
+      WARNING_SECONDS: `${MODULES_STOPWATCH}.warning_seconds`,
+      /** Bordas pulsando na tela e no telão durante os avisos. */
+      FLASH_BORDERS: `${MODULES_STOPWATCH}.flash_borders`,
     },
     SLIDE_EDITOR: {
       PROJECTING: `${MODULES}.${ModuleEnum.SLIDE_EDITOR}.projecting`,
@@ -264,6 +282,10 @@ export const KEYS = {
       SHOW_TARGET_TIME: `${MODULES_TIMER}.show_target_time`,
       SHOW_ALERT: `${MODULES_TIMER}.show_alert`,
       ALERT_SECONDS: `${MODULES_TIMER}.alert_seconds`,
+      /** Regressivo continua depois do zero, mostrando "-hh:mm:ss". */
+      COUNT_OVERTIME: `${MODULES_TIMER}.count_overtime`,
+      /** Bordas pulsando na tela e no telão durante os avisos. */
+      FLASH_BORDERS: `${MODULES_TIMER}.flash_borders`,
       END_ACTION: `${MODULES_TIMER}.timer_end_action`,
       END_ACTION_AUDIO: `${MODULES_TIMER}.timer_end_data_audio`,
       END_ACTION_MUSIC: `${MODULES_TIMER}.timer_end_data_music`,
@@ -276,6 +298,10 @@ export const KEYS = {
       SHOW_TARGET_TIME: `${MODULES_TIMER_WORSHIP}.show_target_time`,
       SHOW_ALERT: `${MODULES_TIMER_WORSHIP}.show_alert`,
       ALERT_SECONDS: `${MODULES_TIMER_WORSHIP}.alert_seconds`,
+      /** Regressivo continua depois do zero, mostrando "-hh:mm:ss". */
+      COUNT_OVERTIME: `${MODULES_TIMER_WORSHIP}.count_overtime`,
+      /** Bordas pulsando na tela e no telão durante os avisos. */
+      FLASH_BORDERS: `${MODULES_TIMER_WORSHIP}.flash_borders`,
       SOUND_START: `${MODULES_TIMER_WORSHIP}.sound_start`,
       SOUND_FIVE_MIN: `${MODULES_TIMER_WORSHIP}.sound_five_min`,
       SOUND_ONE_MIN: `${MODULES_TIMER_WORSHIP}.sound_one_min`,
@@ -387,6 +413,8 @@ export const KEYS = {
     SKIP_STARTUP_CHECK: `${OPTIONS}.skip_startup_check`,
     /** A verificação inicial já foi apresentada uma vez; é de instalação nova. */
     STARTUP_CHECK_DONE: `${OPTIONS}.startup_check_done`,
+    /** Exibe a dica de abertura na próxima inicialização. */
+    SHOW_STARTUP_TIPS: `${OPTIONS}.show_startup_tips`,
     USE_BETA_UPDATES: `${OPTIONS}.use_beta_updates`,
     CHECK_UPDATES_ON_START: `${OPTIONS}.check_updates_on_start`,
     AUTO_DOWNLOAD_UPDATES: `${OPTIONS}.auto_download_updates`,
@@ -396,8 +424,8 @@ export const KEYS = {
     STORAGE_QUOTA_GB: `${OPTIONS}.storage_quota_gb`,
     /**
      * Estado (modo, tamanho e posição) das janelas COMUNS, por feature —
-     * gravado e lido só pelo processo principal. Hoje: `operador` (tela do
-     * operador). Projeções são fullscreen e não entram aqui.
+     * gravado e lido só pelo processo principal: `operador` e `main` (janela
+     * principal no Windows). Projeções são fullscreen e não entram aqui.
      */
     WINDOWS: `${OPTIONS}.windows`,
     OPEN_RETURN: `${OPTIONS}.open_return`,

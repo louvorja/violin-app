@@ -73,6 +73,15 @@ const ALBUM_DETAIL = {
   ],
 };
 
+// Catálogo completo (`{lang}_musics`): a contagem dos cards vem daqui, sem
+// precisar baixar cada `album_<id>.json`. A régua ignora id_music 0.
+const MUSICS = [
+  { id_music: 101, name: "Abraços", albums: [{ id_album: 7 }] },
+  { id_music: 0, name: "linha inválida", albums: [{ id_album: 7 }] },
+  { id_music: 102, name: "Marcha", albums: [{ id_album: 7 }] },
+  { id_music: 201, name: "Faixa Nova", albums: [{ id_album: 9 }] },
+];
+
 // `let` + reset no beforeEach: alguns testes acrescentam uma música órfã
 // (fora de toda coletânea) e precisam voltar ao estado base sem órfãs.
 let COLLECTIONS = [{ id: "uuid-1", nome: "Natal", cor: "#FF0000", song_ids: ["s2", "s1"] }];
@@ -145,6 +154,7 @@ beforeAll(async () => {
   await fs.writeFile(path.join(root, "es_hymnal.json"), JSON.stringify(HYMNAL));
   await fs.writeFile(path.join(root, "es_hymnal_1996.json"), JSON.stringify(HYMNAL_1996));
   await fs.writeFile(path.join(root, "album_7.json"), JSON.stringify(ALBUM_DETAIL));
+  await fs.writeFile(path.join(root, "pt_musics.json"), JSON.stringify(MUSICS));
   const cover = path.join(root, "cover.jpg");
   await fs.writeFile(cover, Buffer.from([0xff, 0xd8, 0xff]));
 
@@ -246,10 +256,10 @@ describe("GET /api/music-library?action=albums", () => {
       title: "Louvor 2020",
       source: "official",
       color: "#123456",
-      count: 2, // faixas válidas do album_7.json (id_music 0 ficou de fora)
+      count: 2, // faixas válidas do pt_musics (id_music 0 ficou de fora)
     });
     expect(byId["album:7"].image).toContain("/api/music-library/image?path=");
-    expect(byId["album:9"].count).toBe(0); // sem album_9.json → badge some
+    expect(byId["album:9"].count).toBe(1); // contagem vem do catálogo, sem album_9.json
     expect(byId["collection:uuid-1"]).toMatchObject({
       title: "Natal",
       source: "custom",
@@ -261,6 +271,27 @@ describe("GET /api/music-library?action=albums", () => {
     expect(ids).not.toContain("album:8"); // desativado
     expect(ids).not.toContain("album:629"); // hinário 1996 com toggle desligado
     expect(isMusicLibraryAlbumsResponse(res.body)).toBe(true);
+  });
+
+  it("catálogo ausente no disco é baixado sob demanda para contar as faixas", async () => {
+    await fs.rm(path.join(root, "pt_musics.json"));
+    databaseUrl = "https://db.test/json_db";
+    const jsonCache = require("../../jsonCache.js");
+    const fetch = vi.spyOn(jsonCache, "fetchJson").mockImplementation(async () => {
+      const body = Buffer.from(JSON.stringify(MUSICS));
+      await fs.writeFile(path.join(root, "pt_musics.json"), body);
+      return { status: 200, body };
+    });
+
+    const res = await callGet("/api/music-library", { action: "albums", lang: "pt" });
+
+    expect(res.code).toBe(200);
+    expect(res.body.albums.find((album) => album.id === "album:7").count).toBe(2);
+    expect(res.body.albums.find((album) => album.id === "album:9").count).toBe(1);
+    expect(fetch).toHaveBeenCalledWith("pt_musics", "https://db.test/json_db", {});
+
+    fetch.mockRestore();
+    databaseUrl = "";
   });
 
   it("sem música órfã não existe o álbum virtual", async () => {

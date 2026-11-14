@@ -48,8 +48,14 @@
       <p v-if="appUpdate.installRequiresElevation" class="ua-hint ua-hint--warning">
         {{ t("options.updates.app_install_admin_required") }}
       </p>
-      <div v-if="releaseNotes" class="ua-notes">
-        <pre class="ua-notes__raw">{{ releaseNotes }}</pre>
+      <!-- Mesmo HTML do diálogo de novidades: o texto cru mostraria os ** e ## das notas. -->
+      <div
+        v-if="releaseNotes?.bodyHtml"
+        class="ua-notes lj-md"
+        v-html="releaseNotes.bodyHtml"
+      ></div>
+      <div v-else-if="releaseNotes?.body" class="ua-notes">
+        <pre class="ua-notes__raw">{{ releaseNotes.body }}</pre>
       </div>
     </template>
 
@@ -98,6 +104,7 @@ import DontShowAgainCheckbox from "@/components/inputs/DontShowAgainCheckbox.vue
 import { LjButton, LjDialog, LjIcon, LjProgress, LjSpinner } from "@/components/ui";
 import { KEYS } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
+import type { ReleaseNotes } from "@/types/Update";
 
 interface AppUpdateState {
   status: string;
@@ -125,7 +132,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const internalShow = ref(props.modelValue);
-const releaseNotes = ref<string | null>(null);
+const releaseNotes = ref<Pick<ReleaseNotes, "body" | "bodyHtml"> | null>(null);
 const appUpdate = ref<AppUpdateState>({
   status: "idle",
   version: "?",
@@ -210,7 +217,7 @@ async function load() {
     try {
       const notes = await Platform.updater.getReleaseNotes(props.version);
       if (notes && loadId === _loadId) {
-        releaseNotes.value = notes.body || null;
+        releaseNotes.value = notes.body || notes.bodyHtml ? notes : null;
       }
     } catch (_) {
       /* ignore */

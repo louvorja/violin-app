@@ -17,6 +17,7 @@ export const SLIDE_STYLE_DEFAULT = Object.freeze({
   color_aux: "#EFB400",
   background_color: "#000000",
   background_image: "",
+  background_is_video: false,
   background_position: "cover", // modo cru: cover|contain|center|stretch|tile (estiloDeFundo converte)
   progress_color: "#EFB400",
   show_progress_bar: true, // progresso do retorno
@@ -43,9 +44,11 @@ export const SLIDE_STYLE_DEFAULT = Object.freeze({
   custom_return_background_active: false,
   return_bg_top_color: "#1a201a", // verde escuro atual (hardcoded)
   return_bg_top_image: "",
+  return_bg_top_is_video: false,
   return_bg_top_position: "cover", // opção "Ajuste": cover|contain|center|stretch|tile
   return_bg_bottom_color: "#1d251d", // topo do gradiente atual
   return_bg_bottom_image: "",
+  return_bg_bottom_is_video: false,
   return_bg_bottom_position: "cover",
 
   // Formatação de texto do retorno

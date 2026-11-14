@@ -5,7 +5,7 @@
     <div class="rp-keys">
       <button
         type="button"
-        class="rp-key"
+        class="rp-key rp-key-next"
         :aria-label="t('actions.next')"
         @click="send('ArrowRight')"
       >
@@ -13,7 +13,7 @@
       </button>
       <button
         type="button"
-        class="rp-key"
+        class="rp-key rp-key-previous"
         :aria-label="t('actions.previous')"
         @click="send('ArrowLeft')"
       >
@@ -110,8 +110,6 @@ async function startBackgroundSound(): Promise<void> {
 }
 
 .rp-key {
-  flex: 1;
-  min-height: 112px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -123,6 +121,12 @@ async function startBackgroundSound(): Promise<void> {
   transition:
     transform 80ms,
     background 150ms;
+}
+.rp-key-next {
+  height: 70%;
+}
+.rp-key-previous {
+  height: 30%;
 }
 
 .rp-key:active {

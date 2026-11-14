@@ -53,11 +53,15 @@
       </thead>
       <tbody>
         <tr
-          v-for="item in data.data"
+          v-for="(item, index) in data.data"
           :key="item.id_music"
           class="lj-music-row"
-          :class="{ 'hymnal-row--selected': selectedId === item.id_music }"
+          :class="{
+            'hymnal-row--selected': selectedId === item.id_music,
+            'lj-music-row--active': index === nav.index.value,
+          }"
           @click="selectedId = item.id_music"
+          @mousemove="nav.setActive(index)"
         >
           <td class="lj-u-text-end">
             {{ item.track }}
@@ -103,7 +107,7 @@
 <script setup>
 import { ICONS } from "@/config/Icons";
 import { LjAlert, LjInput } from "@/components/ui";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { getModules } from "@/config/modules";
 import ModuleContainer from "@/components/ModuleContainer.vue";
@@ -113,14 +117,15 @@ import DateTime from "@/helpers/DateTime";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import Media from "@/composables/useMedia";
-import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { HYMNAL_ALBUM_IDS } from "@root/config/musicCatalog.mjs";
 import { useQuickSearch } from "@/composables/useQuickSearch";
+import { useListNavigation } from "@/composables/useListNavigation";
 import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 import { executeMusic } from "@/helpers/MusicExecution";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
+import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
 
 const props = defineProps({
   moduleId: { type: String, required: true },
@@ -136,35 +141,52 @@ const data = ref([]);
 const scroll = ref({});
 const has_scroll = ref(false);
 const selectedId = ref(null);
-const sequenceQueue = ref([]);
-const _sequenceTimer = ref(null);
 
 const tm = (text) => i18nT(`modules.${props.moduleId}.${text}`);
+const playlistPlayback = usePlaylistPlayback();
 
 /*
  * Busca pelo teclado, como no LouvorJA clássico: abriu o Hinário, o cursor já
  * está aqui; digitou o número e deu Enter, o hino vai para a tela (Shift+Enter,
- * o playback). Voltando para cá, o número anterior fica selecionado.
+ * o playback). ↑/↓ escolhem outro hino da lista, e o escolhido fica selecionado
+ * para os botões da faixa de opções. Voltando para cá, o número anterior fica
+ * selecionado.
  */
 const searchInput = ref(null);
 const table = ref(null);
 const quickSearch = useQuickSearch({ moduleId: () => props.moduleId, input: searchInput });
 
-function onSearchKey(event) {
+const tableEl = computed(() => table.value?.$el ?? null);
+const nav = useListNavigation({
+  items: () => data.value?.data ?? [],
+  container: tableEl,
+  activeSelector: ".lj-music-row--active",
+  // Sem busca aplicada a lista é o hinário inteiro: nada destacado até a primeira seta.
+  start: () => (table.value?.searching() ? 0 : -1),
+});
+watch(
+  () => data.value?.revision,
+  () => nav.reset()
+);
+
+async function onSearchKey(event) {
   if (event.key === "Escape" && search.value) {
     event.preventDefault();
     search.value = "";
     return;
   }
-  if (!isQuickPlayEnter(event)) return;
+  const arrow = event.key === "ArrowDown" || event.key === "ArrowUp";
+  if (!arrow && !isQuickPlayEnter(event)) return;
   event.preventDefault();
-  // Lista filtrada agora: o Enter logo depois do número não espera o debounce.
-  const results = table.value?.currentResults() ?? [];
-  const first = results.find((item) => item.id_music != null);
-  if (!first || !search.value.trim()) return;
-  clearQueue();
-  selectedId.value = first.id_music;
-  if (quickPlay(first, event.shiftKey)) quickSearch.afterPlay();
+  // O número recém-digitado vale já: a lista é refeita antes de andar ou tocar.
+  table.value?.flush();
+  await nextTick();
+  if (arrow) nav.handleArrow(event);
+  const hymn = nav.active.value;
+  if (!hymn) return;
+  selectedId.value = hymn.id_music;
+  if (arrow) return;
+  if (quickPlay(hymn, event.shiftKey)) quickSearch.afterPlay();
 }
 
 const disabledAlbums = computed(() => {
@@ -183,80 +205,49 @@ function hasScroll(val) {
   has_scroll.value = val;
 }
 
-function _clearSequenceTimer() {
-  if (_sequenceTimer.value) {
-    clearInterval(_sequenceTimer.value);
-    _sequenceTimer.value = null;
-  }
-}
-
-let _lastSeqProgress = 0;
-
-function _pollSequence() {
-  const show = $appdata.get(KEYS.MODULES.MEDIA.SHOW, false);
-  const progress = $appdata.get(KEYS.MODULES.MEDIA.CONFIG.PROGRESS, 0);
-  const idMusic = $appdata.get(KEYS.MODULES.MEDIA.ID_MUSIC, null);
-
-  if (show && progress > 0) {
-    _lastSeqProgress = progress;
-  } else if (!show && sequenceQueue.value.length) {
-    if (_lastSeqProgress >= 0.95) {
-      _clearSequenceTimer();
-      const nextId = sequenceQueue.value.shift();
-      void executeMusic({ id_music: nextId }, MusicActionEnum.AUDIO);
-      _lastSeqProgress = 0;
-    } else if (_lastSeqProgress > 0 && _lastSeqProgress < 0.95) {
-      _clearSequenceTimer();
-      sequenceQueue.value = [];
-      _lastSeqProgress = 0;
-    }
-  }
+// O hinário inteiro em ordem numérica: a lista da tela tem a busca e só as linhas já desenhadas.
+function hymnSongs() {
+  return (table.value?.allRows() || [])
+    .filter((item) => item.id_music != null)
+    .map((item) => ({
+      id_music: item.id_music,
+      name: item.name,
+      duration: item.duration,
+      has_instrumental_music: !!item.has_instrumental_music,
+    }));
 }
 
 function playAll() {
-  const allItems = data.value?.data || [];
-  const validItems = allItems.filter((item) => item.id_music != null);
-  if (!validItems.length) return;
-
-  const startIndex = Math.floor(Math.random() * validItems.length);
-  const ordered = [...validItems.slice(startIndex), ...validItems.slice(0, startIndex)];
-
-  sequenceQueue.value = ordered.slice(1).map((item) => item.id_music);
-  _lastSeqProgress = 0;
-  _clearSequenceTimer();
-  _sequenceTimer.value = setInterval(_pollSequence, 300);
-  void executeMusic({ id_music: ordered[0].id_music }, MusicActionEnum.AUDIO);
+  const songs = hymnSongs();
+  if (songs.length) playlistPlayback.playSequence(tm("title"), songs);
 }
 
-function clearQueue() {
-  sequenceQueue.value = [];
+function playFromSelected() {
+  const songs = hymnSongs();
+  const start = songs.findIndex((song) => song.id_music === selectedId.value);
+  if (start >= 0) playlistPlayback.playSequence(tm("title"), songs.slice(start));
 }
 
 const HYMN_ACTIONS = {
   lyric: () => {
-    clearQueue();
     Media.openLyric(selectedId.value);
   },
   sing: () => {
-    clearQueue();
     void executeMusic({ id_music: selectedId.value }, MusicActionEnum.AUDIO);
   },
   playback: () => {
-    clearQueue();
     void executeMusic({ id_music: selectedId.value }, MusicActionEnum.INSTRUMENTAL);
   },
   no_audio: () => {
-    clearQueue();
     void executeMusic({ id_music: selectedId.value }, MusicActionEnum.NO_AUDIO);
   },
   audio_sing: () => {
-    clearQueue();
     void executeMusic({ id_music: selectedId.value }, MusicActionEnum.AUDIO_ONLY);
   },
   audio_playback: () => {
-    clearQueue();
     void executeMusic({ id_music: selectedId.value }, MusicActionEnum.PLAYBACK_ONLY);
   },
+  in_sequence: () => playFromSelected(),
   sequence: () => playAll(),
   report_error: () =>
     window.open("https://louvorja.com.br/telegram", "_blank", "noopener,noreferrer"),

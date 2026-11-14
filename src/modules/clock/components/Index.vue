@@ -19,7 +19,12 @@
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'clock'" :manifest="manifest" />
       <div ref="container" class="clock-stage" :style="rootStyle">
-        <img v-if="bgImage" :src="bgImage" class="clock-bg-img" :style="imageStyle" alt="" />
+        <ModuleBackgroundMedia
+          v-if="bgImage"
+          :src="bgImage"
+          class="clock-bg-img"
+          :style="imageStyle"
+        />
         <div
           v-fit-clock-line="{ size: textStyle.fontSize, widthFrom: container }"
           class="clock-time"
@@ -48,6 +53,7 @@ import { useI18n } from "vue-i18n";
 import { localeTag } from "@/helpers/DateTime";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import UserData from "@/helpers/UserData";
 import { open as openProjection } from "@/helpers/Projection";
@@ -57,7 +63,7 @@ import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
-import { DEFAULT_CLOCK_DATE_FORMAT, formatClockDate } from "../formatClockDate";
+import { clockDateText, clockIs24h, clockShowsSeconds, clockTimeText } from "../projectionText";
 import { vFitClockLine } from "../vFitClockLine";
 
 const { locale } = useI18n();
@@ -80,32 +86,6 @@ let timer = null;
 
 const tm = (key) => moduleContainer.value?.tm(key) || key;
 
-// Lê configs do UserData (escritas pelo FormatPanel ou pelas actions da ribbon).
-function read() {
-  return {
-    is24h: (fmt.hour_cycle ?? "24h") === "24h",
-    showSeconds: (fmt.time_format ?? "hh:mm:ss") === "hh:mm:ss",
-    showDate: fmt.show_date === true,
-    dateFormat: fmt.date_format ?? DEFAULT_CLOCK_DATE_FORMAT,
-  };
-}
-
-function formatTime(now) {
-  const { is24h, showSeconds } = read();
-  return now.toLocaleTimeString(localeTag(locale.value), {
-    hour: "2-digit",
-    minute: "2-digit",
-    ...(showSeconds ? { second: "2-digit" } : {}),
-    hour12: !is24h,
-  });
-}
-
-function formatDate(now) {
-  const { showDate, dateFormat, showSeconds } = read();
-  if (!showDate) return "";
-  return formatClockDate(now, localeTag(locale.value), dateFormat, showSeconds);
-}
-
 // Quando user muda qualquer config do clock (FormatPanel ou ribbon),
 // refaz tick imediatamente sem esperar 1s.
 useBroadcastListener(BROADCAST_TYPE.MODULE_FORMAT_CHANGED, (payload) => {
@@ -123,8 +103,8 @@ useBroadcastListener(BROADCAST_TYPE.USERDATA_PATCH, (payload) => {
 
 function tick() {
   const now = new Date();
-  time.value = formatTime(now);
-  date.value = formatDate(now);
+  time.value = clockTimeText(now, localeTag(locale.value), fmt);
+  date.value = clockDateText(now, localeTag(locale.value), fmt);
   projection.emit({ text: time.value, reference: date.value, active: true });
 }
 
@@ -141,10 +121,9 @@ function toggleSeconds() {
 const canProject = canOpenWebWindows();
 
 function openFullscreen() {
-  const { is24h, showSeconds } = read();
   const params = new URLSearchParams({
-    h24: is24h ? "1" : "0",
-    sec: showSeconds ? "1" : "0",
+    h24: clockIs24h(fmt) ? "1" : "0",
+    sec: clockShowsSeconds(fmt) ? "1" : "0",
   });
   // Feature própria: a projeção do módulo (feature "clock") usa outra rota,
   // e um registry compartilhado só focaria a janela errada.

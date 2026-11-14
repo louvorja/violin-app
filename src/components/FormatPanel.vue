@@ -49,6 +49,7 @@ const TYPE_TO_COMPONENT = {
   color: FieldColor,
   "font-size": FieldNumber,
   "border-spacing": FieldNumber,
+  padding: FieldNumber,
   opacity: FieldNumber,
   // Raio e espessura da borda da caixa de texto: MESMO campo numérico, com
   // faixas próprias no FieldNumber (raio admite 0 = sem cantos arredondados).
@@ -85,11 +86,14 @@ const FIELD_LABEL_KEYS = {
   text_background_enabled: "components.customization.text_bg_toggle",
   text_background_color: "components.customization.text_bg_color",
   text_background_opacity: "components.customization.text_bg_opacity",
+  text_padding_x: "components.customization.text_padding_x",
+  text_padding_y: "components.customization.text_padding_y",
   text_border_enabled: "components.customization.text_border_toggle",
   text_border_color: "components.customization.text_border_color",
   text_border_opacity: "components.customization.text_border_opacity",
   text_border_radius: "components.customization.text_border_radius",
   text_border_width: "components.customization.text_border_width",
+  warning_color: "components.customization.warning_color",
   alert_color: "components.customization.alert_color",
   background_color: "components.customization.color",
   border_spacing: "components.customization.border",
@@ -168,6 +172,8 @@ const groupedFields = computed(() => {
       key === "text_background_color" ||
       /* Fundo do texto e borda vivem no mesmo grupo: é o mesmo "caixa" na tela. */
       key === "text_background_opacity" ||
+      key === "text_padding_x" ||
+      key === "text_padding_y" ||
       key === "text_border_enabled" ||
       key === "text_border_color" ||
       key === "text_border_opacity" ||

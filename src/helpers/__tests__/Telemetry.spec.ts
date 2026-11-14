@@ -368,7 +368,9 @@ describe("Telemetry", () => {
     } as unknown as PerformanceEntry;
     observers.find((observer) => observer.type === "long-animation-frame")?.deliver([idleFrame]);
     const sleep = { entryType: "longtask", name: "self", startTime: 300, duration: 102_870_116 };
-    observers.find((observer) => observer.type === "longtask")?.deliver([sleep as PerformanceEntry]);
+    observers
+      .find((observer) => observer.type === "longtask")
+      ?.deliver([sleep as PerformanceEntry]);
 
     const incidents = posthog.logger.error.mock.calls.filter(([, attributes]) =>
       /renderer_long_(task|animation_frame)/.test(String(attributes.incident_type))
@@ -438,9 +440,18 @@ describe("Telemetry", () => {
     expect(Telemetry.markEnd("module.open", "closed")).toBeNull();
     expect(posthog.capture).not.toHaveBeenCalledWith("performance_measurement", expect.anything());
     expect(Telemetry.markEnd("module.open", "mounted")).toEqual(expect.any(Number));
+    Telemetry.flushDiagnostics();
     expect(posthog.capture).toHaveBeenCalledWith(
-      "performance_measurement",
-      expect.objectContaining({ measurement: "module.open" })
+      "telemetry_activity_summary",
+      expect.objectContaining({
+        groups: [
+          expect.objectContaining({
+            event: "performance_measurement",
+            count: 1,
+            labels: { measurement: "module.open" },
+          }),
+        ],
+      })
     );
   });
 
@@ -719,6 +730,51 @@ describe("Telemetry", () => {
     const beforeSend = () =>
       (posthog.init.mock.calls[0][1] as { before_send: BeforeSend }).before_send;
 
+    it("preserva o lote e a árvore do Replay sem remover a sanitização dos metadados", async () => {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      let node: Record<string, unknown> = { type: 3, id: 20, textContent: "Texto público" };
+      for (let id = 19; id >= 1; id--) {
+        node = { type: 2, id, tagName: "div", attributes: {}, childNodes: [node] };
+      }
+      const snapshots = [
+        { type: 2, timestamp: 1000, data: { node, initialOffset: { top: 0, left: 0 } } },
+        ...Array.from({ length: 150 }, (_, i) => ({
+          type: 3,
+          timestamp: 1001 + i,
+          data: { source: 3, id: 20, x: i, y: 0 },
+        })),
+      ];
+      const result = beforeSend()({
+        event: "$snapshot",
+        properties: {
+          token: "phc_fixture",
+          $snapshot_data: snapshots,
+          $session_id: "session-fixture",
+          diagnostic: { access_token: "secret", url: "https://example.test/?token=secret" },
+        },
+      });
+      expect(result?.properties.$snapshot_data).toEqual(snapshots);
+      expect(result?.properties.token).toBe("phc_fixture");
+      expect(result?.properties.diagnostic).toEqual({
+        url: "https://example.test/?token=[REDACTED]",
+      });
+    });
+
+    it("mantém os limites de propriedades nos eventos comuns, mesmo com chave parecida com Replay", async () => {
+      const Telemetry = await loadTelemetry();
+      await Telemetry.init();
+      const result = beforeSend()({
+        event: "custom_event",
+        properties: {
+          $snapshot_data: Array.from({ length: 150 }, (_, i) => i),
+          message: "x".repeat(30000),
+        },
+      });
+      expect(result?.properties.$snapshot_data).toHaveLength(100);
+      expect(result?.properties.message).toHaveLength(20000);
+    });
+
     it("não grava no boot nem ao religar a telemetria", async () => {
       const Telemetry = await loadTelemetry();
       await Telemetry.init();
@@ -765,14 +821,17 @@ describe("Telemetry", () => {
           beforeSend()(exception(`erro aos ${minute} min`));
           await vi.advanceTimersByTimeAsync(4 * 60_000);
         }
-        expect(posthog.startSessionRecording).toHaveBeenCalledTimes(2);
+        expect(posthog.startSessionRecording).toHaveBeenCalledOnce();
         expect(posthog.stopSessionRecording).toHaveBeenCalledOnce();
+        beforeSend()(exception("novo incidente depois do intervalo"));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(posthog.startSessionRecording).toHaveBeenCalledTimes(2);
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it("um erro depois do teto reinicia a gravação mesmo que o timer de parada tenha atrasado", async () => {
+    it("um timer atrasado encerra no teto e respeita o intervalo antes de gravar novamente", async () => {
       const Telemetry = await loadTelemetry();
       await Telemetry.init();
       vi.useFakeTimers();
@@ -786,6 +845,10 @@ describe("Telemetry", () => {
         await vi.advanceTimersByTimeAsync(0);
 
         expect(posthog.stopSessionRecording).toHaveBeenCalledOnce();
+        expect(posthog.startSessionRecording).toHaveBeenCalledOnce();
+        await vi.advanceTimersByTimeAsync(5 * 60_000);
+        beforeSend()(exception("novo incidente"));
+        await vi.advanceTimersByTimeAsync(0);
         expect(posthog.startSessionRecording).toHaveBeenCalledTimes(2);
       } finally {
         vi.useRealTimers();
@@ -1585,4 +1648,97 @@ describe("routeForTelemetry", () => {
     /* Casa o padrão de URL mas o `new URL` recusa: cai no marcador. */
     expect(Telemetry.routeForTelemetry("http://[")).toBe("[external]");
   });
+});
+
+it("protege comandos recentes da rajada e enriquece exceções nativas com build e contexto", async () => {
+  const Telemetry = await loadTelemetry();
+  vi.stubEnv("VITE_APP_BUILD", "build-fixture");
+  vi.stubEnv("VITE_APP_COMMIT", "commit-fixture");
+  await Telemetry.init();
+  Telemetry.setRuntimeContext({ playback_id: "p-current", presentation_revision: 4 });
+  const { withTelemetryActionSource } = await import("@/helpers/TelemetryAction");
+  withTelemetryActionSource("keyboard", () => Telemetry.breadcrumb("seek", { requested_time: 12 }));
+  for (let i = 0; i < 1000; i++) {
+    Telemetry.track("network_request", {
+      source: "libras-bundle",
+      ok: false,
+      status: 404,
+      duration_ms: 10,
+    });
+    Telemetry.track("module_view_mounted", { module_id: "music" });
+  }
+  const config = posthog.init.mock.calls[0][1];
+  const result = config.before_send({
+    event: "$exception",
+    properties: { $exception_list: [{ type: "Error", value: "fixture" }] },
+  });
+  expect(result.properties).toMatchObject({
+    app_build: "build-fixture",
+    app_commit: "commit-fixture",
+    playback_id: "p-current",
+    presentation_revision: 4,
+  });
+  expect(result.properties.breadcrumbs).toContainEqual(
+    expect.objectContaining({
+      event: "seek",
+      properties: { action_source: "keyboard", requested_time: 12 },
+    })
+  );
+  expect(result.properties.breadcrumbs.length).toBeLessThanOrEqual(50);
+  Telemetry.flushDiagnostics();
+  const rows = posthog.capture.mock.calls.find(
+    ([event]) => event === "telemetry_activity_summary"
+  )?.[1].groups;
+  expect(rows.find((row: any) => row.event === "network_request").count).toBe(1000);
+  expect(posthog.capture.mock.calls.filter(([event]) => event === "network_request")).toHaveLength(
+    1
+  );
+  Telemetry.setEnabled(false);
+});
+
+it("arrastar um controle vira uma ação só, sem juntar comandos repetidos de propósito", async () => {
+  const Telemetry = await loadTelemetry();
+  await Telemetry.init();
+  for (let volume = 80; volume >= 0; volume -= 5) {
+    Telemetry.breadcrumb("media_volume_changed", { from_volume: 80, volume }, "action", {
+      mergeWithinMs: 1000,
+    });
+  }
+  Telemetry.breadcrumb("next_slide");
+  Telemetry.breadcrumb("next_slide");
+  const config = posthog.init.mock.calls[0][1];
+  const { breadcrumbs } = config.before_send({
+    event: "$exception",
+    properties: { $exception_list: [{ type: "Error", value: "fixture" }] },
+  }).properties;
+  type Entrada = { event: string; properties: Record<string, unknown> };
+  const volume = breadcrumbs.filter((item: Entrada) => item.event === "media_volume_changed");
+  expect(volume).toHaveLength(1);
+  expect(volume[0].properties).toMatchObject({ from_volume: 80, volume: 0 });
+  expect(breadcrumbs.filter((item: Entrada) => item.event === "next_slide")).toHaveLength(2);
+  Telemetry.setEnabled(false);
+});
+
+it("incidente funcional inicia Replay, conta repetições e fecha quando o relógio volta a avançar", async () => {
+  const Telemetry = await loadTelemetry();
+  await Telemetry.init();
+  vi.useFakeTimers();
+  Telemetry.track("music_playback_stalled", { playback_id: "p" });
+  Telemetry.track("music_playback_stalled", { playback_id: "p" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(posthog.startSessionRecording).toHaveBeenCalledOnce();
+  expect(posthog.captureException).not.toHaveBeenCalled();
+  expect(
+    posthog.capture.mock.calls.filter(([event]) => event === "music_playback_stalled")
+  ).toHaveLength(1);
+  Telemetry.track("music_playback_progress_recovered", { playback_id: "p" });
+  expect(posthog.capture).toHaveBeenCalledWith(
+    "functional_incident_closed",
+    expect.objectContaining({ occurrence_count: 2, incident_status: "recovered" })
+  );
+  Telemetry.setEnabled(false);
+  Telemetry.track("music_playback_stalled", { playback_id: "p2" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(posthog.startSessionRecording).toHaveBeenCalledOnce();
+  vi.useRealTimers();
 });

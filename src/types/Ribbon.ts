@@ -15,6 +15,13 @@ export interface RibbonGroup {
   buttons?: RibbonButton[];
   /** Linhas do grid de controles compactos (padrão: 3). */
   compactRows?: 1 | 2 | 3;
+  /**
+   * Rótulo dos campos (select, número) em cima do controle, em letra pequena —
+   * como o "TEMPO" do Cronômetro — em vez de ao lado com a largura fixa de
+   * alinhamento. Para grupos apertados, em que essa largura empurrava a caixa
+   * para longe e fazia a ribbon rolar.
+   */
+  stackedFields?: boolean;
   customCategory?: Component
   modules?: string[];
 }
@@ -25,12 +32,16 @@ export interface RibbonButton {
   label: string;
   module?: string;
   action?: string;
+  /** Combinação de `HOTKEY` que faz o mesmo que o botão; aparece na dica. */
+  shortcut?: string;
   disabled?: boolean;
   /** Caminho no AppData que precisa ser `true` para o botão ficar habilitado — o estado real do app, não só o clique. */
   enabledWhen?: string;
   /** Botão de tela aberta: rótulo com a janela no ar ("Parar tela principal"). */
   labelActive?: string;
   color?: string;
+  /** Chave booleana que deixa o botão visualmente pressionado. */
+  activePath?: string;
   size?: "small";
   style?: CSSProperties;
   type?: "screen" | "checkbox" | "switch" | "action_input" | "select" | "slider" | "number";

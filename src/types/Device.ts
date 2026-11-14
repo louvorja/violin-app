@@ -13,6 +13,7 @@
  * - media_library: navegar/projetar a Biblioteca de Mídia (e o Canva
  *   integrado) e enviar arquivos do celular para o desktop pelo remoto
  * - keyboard: enviar teclas de atalho (módulo Atalhos do app)
+ * - draw: configurar e iniciar o Sorteio (números ou nomes)
  */
 export type DevicePermission =
   | "root"
@@ -20,6 +21,7 @@ export type DevicePermission =
   | "background_sound"
   | "bible"
   | "chat"
+  | "draw"
   | "keyboard"
   | "liturgy"
   | "media_library"
@@ -34,6 +36,7 @@ export const DEVICE_PERMISSIONS: DevicePermission[] = [
   "background_sound",
   "bible",
   "chat",
+  "draw",
   "keyboard",
   "liturgy",
   "media_library",
@@ -50,6 +53,7 @@ export const DEVICE_PERMISSION_LABELS: Record<DevicePermission, string> = {
   liturgy: "options.transmission.permission_liturgy",
   announce: "options.transmission.permission_announce",
   chat: "options.transmission.permission_chat",
+  draw: "options.transmission.permission_draw",
   online_videos: "options.transmission.permission_online_videos",
   background_sound: "options.transmission.permission_background_sound",
   volume: "options.transmission.permission_volume",

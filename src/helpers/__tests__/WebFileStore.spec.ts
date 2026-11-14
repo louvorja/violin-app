@@ -46,6 +46,7 @@ import {
   webDownload,
   webStorage,
   webStorageUsage,
+  auditWebStorage,
   type WebFileEntry,
 } from "../WebFileStore";
 
@@ -79,6 +80,41 @@ beforeEach(() => {
     delete: async (name: string) => stores.delete(name),
   });
   vi.stubGlobal("navigator", { storage: { persist: async () => true } });
+});
+
+describe("auditoria do armazenamento web", () => {
+  it("não trata ausência de Cache Storage como falha da auditoria", async () => {
+    vi.stubGlobal("caches", undefined);
+    const failure = vi.spyOn(ReliabilityDiagnostics, "reportReliabilityFailure");
+    const event = vi.spyOn(ReliabilityDiagnostics, "reportReliabilityEvent");
+    try {
+      await auditWebStorage("boot");
+      expect(failure).not.toHaveBeenCalled();
+      expect(event).toHaveBeenCalledWith("web_storage_unavailable", {
+        source: "boot",
+        reason: "cache_storage_unavailable",
+      });
+    } finally {
+      failure.mockRestore();
+      event.mockRestore();
+    }
+  });
+
+  it("continua registrando falhas reais ao abrir um Cache Storage disponível", async () => {
+    const error = new Error("Falha no disco");
+    vi.stubGlobal("caches", {
+      open: async () => {
+        throw error;
+      },
+    });
+    const failure = vi.spyOn(ReliabilityDiagnostics, "reportReliabilityFailure");
+    try {
+      await auditWebStorage("boot");
+      expect(failure).toHaveBeenCalledWith("web_storage_check_failed", error, { stage: "boot" });
+    } finally {
+      failure.mockRestore();
+    }
+  });
 });
 
 describe("migração das chaves antigas do /file", () => {
@@ -295,7 +331,7 @@ describe("WebFileStore", () => {
   it("queda de rede pausa a fila e retoma sem contar falha quando a conexão volta", async () => {
     const listeners: Array<() => void> = [];
     vi.stubGlobal("window", {
-      addEventListener: (_: string, cb: () => void) => listeners.push(cb),
+      addEventListener: (event: string, cb: () => void) => { if (event === "online") listeners.push(cb); },
       removeEventListener: () => {},
     });
     let offline = true;

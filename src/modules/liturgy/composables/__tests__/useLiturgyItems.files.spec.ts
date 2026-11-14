@@ -70,6 +70,26 @@ beforeEach(() => {
   mocks.removeFile.mockResolvedValue(undefined);
 });
 
+describe("item Projeção de Fundo", () => {
+  it("salva a referência, o nome e o tipo da biblioteca", async () => {
+    const ui = useLiturgyItems(ref(0), ref([]));
+    ui.quickAdd(LiturgyItemTypeEnum.BG_PROJECTION);
+    ui.setFormField("ref_id", "bgp-1");
+    ui.setFormField("item", "Fundo do culto");
+    ui.setFormField("subitem", "Fundo do culto");
+    ui.setFormField("subtipo", "image");
+
+    await ui.saveItem();
+
+    expect(saved.value[0]).toMatchObject({
+      tipo: LiturgyItemTypeEnum.BG_PROJECTION,
+      ref_id: "bgp-1",
+      item: "Fundo do culto",
+      subtipo: "image",
+    });
+  });
+});
+
 describe("seletor de arquivos da liturgia", () => {
   it("persiste somente a última seleção ao salvar e mantém a referência ao reabrir", async () => {
     const ui = form();

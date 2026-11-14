@@ -56,7 +56,7 @@ describe("formatSelector", () => {
 
   it("para tocar direto, cada alternativa exige um arquivo servido por HTTP (nada de fragmentos ou HLS)", () => {
     const alternatives = runner.formatSelector(1080, { direct: true }).split("/");
-    expect(alternatives).toHaveLength(4);
+    expect(alternatives).toHaveLength(2);
     expect(alternatives[0]).toBe(
       "bv*[height<=1080][vcodec^=avc1][protocol=https]+ba[acodec^=mp4a][protocol=https]"
     );
@@ -98,6 +98,29 @@ describe("buildArgs", () => {
 
   it("recusa ID que não seja de vídeo em vez de montar a linha de comando", () => {
     expect(() => runner.buildArgs({ ...base, id: "--exec=calc" })).toThrow();
+  });
+
+  it("passa plugin, provedor e cliente do PO token quando informados", () => {
+    const args = runner.buildArgs({
+      ...base,
+      pluginDir: "/plugins",
+      potCli: "/bin/bgutil-pot",
+      playerClient: "web,mweb",
+    });
+    expect(args[args.indexOf("--plugin-dirs") + 1]).toBe("/plugins");
+    expect(args).toContain("youtubepot-bgutilcli:cli_path=/bin/bgutil-pot");
+    expect(args).toContain("youtube:player_client=web,mweb");
+
+    const resolve = runner.buildResolveArgs({
+      id: ID,
+      maxHeight: 1080,
+      pluginDir: "/plugins",
+      potCli: "/bin/bgutil-pot",
+      playerClient: "web,mweb",
+    });
+    expect(resolve[resolve.indexOf("--plugin-dirs") + 1]).toBe("/plugins");
+    expect(resolve).toContain("youtubepot-bgutilcli:cli_path=/bin/bgutil-pot");
+    expect(resolve).toContain("youtube:player_client=web,mweb");
   });
 
   it("só passa runtime JS e cache quando informados", () => {
@@ -438,6 +461,61 @@ const audioFormat = (extra = {}) => ({
   ...extra,
 });
 
+describe("cabeçalhos das trilhas diretas", () => {
+  it("mantém só os cabeçalhos do cliente que o yt-dlp usou", () => {
+    const out = runner.parseStreams({
+      http_headers: {
+        "User-Agent": "top-ua",
+        Cookie: "session=secret",
+        Range: "bytes=5-9",
+        "Accept-Encoding": "gzip",
+      },
+      requested_formats: [
+        videoFormat({
+          http_headers: {
+            "User-Agent": "video-ua",
+            Accept: "text/html",
+            "Sec-Fetch-Mode": "navigate",
+            "Content-Length": "10",
+          },
+        }),
+        audioFormat(),
+      ],
+    });
+    expect(out.video.headers).toEqual({
+      "User-Agent": "video-ua",
+      Accept: "text/html",
+      "Sec-Fetch-Mode": "navigate",
+      Cookie: "session=secret",
+    });
+    expect(out.audio.headers).toEqual({
+      "User-Agent": "top-ua",
+      Cookie: "session=secret",
+    });
+    expect(out.video.headers).not.toHaveProperty("Range");
+    expect(out.video.headers).not.toHaveProperty("Accept-Encoding");
+    expect(out.video.headers).not.toHaveProperty("Content-Length");
+  });
+});
+
+describe("parseStreams — só MP4/H.264+AAC no caminho direto", () => {
+  it("recusa VP9/Opus/WebM para não entregar WebM com MIME de MP4", () => {
+    expect(() =>
+      runner.parseStreams({
+        requested_formats: [
+          videoFormat({ ext: "webm", vcodec: "vp9" }),
+          audioFormat({ ext: "webm", acodec: "opus" }),
+        ],
+      })
+    ).toThrow(expect.objectContaining({ kind: "format" }));
+    expect(() =>
+      runner.parseStreams({
+        ...videoFormat({ ext: "webm", vcodec: "vp9", acodec: "opus" }),
+      })
+    ).toThrow(expect.objectContaining({ kind: "format" }));
+  });
+});
+
 describe("parseStreams (o que o yt-dlp devolve para tocar direto)", () => {
   it("entrega o link do vídeo e o do áudio (trilhas separadas), a altura e quando vencem", () => {
     const out = runner.parseStreams({
@@ -496,6 +574,14 @@ describe("parseStreams (o que o yt-dlp devolve para tocar direto)", () => {
     const out = runner.parseStreams({ requested_formats: [audioFormat(), videoFormat()] });
     expect(out.video.url).toContain("video%2Fmp4");
     expect(out.audio.url).toContain("audio%2Fmp4");
+  });
+
+  it("guarda quando o googlevideo passa a aceitar o link (o mais tardio das duas trilhas)", () => {
+    const out = runner.parseStreams({
+      requested_formats: [videoFormat({ available_at: 1_800_000_003.5 }), audioFormat({ available_at: 1_800_000_002 })],
+    });
+    expect(out.availableAt).toBe(1_800_000_003_500);
+    expect(runner.parseStreams({ requested_formats: [videoFormat(), audioFormat()] }).availableAt).toBeNull();
   });
 
   it("sem parâmetro de validade, assume meia hora a partir de agora", () => {
@@ -588,6 +674,55 @@ describe("resolveStreams", () => {
     expect(spawnImpl.mock.calls[0][0]).toBe("/fake/yt-dlp");
     expect(Array.isArray(spawnImpl.mock.calls[0][1])).toBe(true);
     expect(spawnImpl.mock.calls[0][2].shell).toBeUndefined();
+  });
+
+  it("segura os links até o horário em que o googlevideo os aceita (antes disso ele responde 403)", async () => {
+    const child = fakeChild();
+    let clock = 1_000_000;
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child, now: () => clock });
+    const availableAt = (clock + 60) / 1000;
+    child.stdout.write(json({ requested_formats: [videoFormat({ available_at: availableAt }), audioFormat()] }));
+    child.emit("close", 0);
+    let settled = false;
+    void promise.then(() => (settled = true));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(settled).toBe(false);
+    const out = await promise;
+    expect(out.availableAt).toBe(clock + 60);
+  });
+
+  it("link já liberado não espera nada", async () => {
+    const child = fakeChild();
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child, now: () => 5_000_000 });
+    child.stdout.write(json({ requested_formats: [videoFormat({ available_at: 4_000 }), audioFormat()] }));
+    child.emit("close", 0);
+    await expect(promise).resolves.toMatchObject({ availableAt: 4_000_000 });
+  });
+
+  it("espera longa demais vira 403, para cair no download completo do yt-dlp", async () => {
+    const child = fakeChild();
+    const promise = runner.resolveStreams({ tools, id: ID, spawnImpl: () => child, now: () => 0 });
+    child.stdout.write(json({ requested_formats: [videoFormat({ available_at: 60 }), audioFormat()] }));
+    child.emit("close", 0);
+    await expect(promise).rejects.toMatchObject({ kind: "forbidden" });
+  });
+
+  it("cancelar durante a espera rejeita como cancelado", async () => {
+    const child = fakeChild();
+    const controller = new AbortController();
+    const promise = runner.resolveStreams({
+      tools,
+      id: ID,
+      spawnImpl: () => child,
+      killImpl: () => {},
+      signal: controller.signal,
+      now: () => 0,
+    });
+    child.stdout.write(json({ requested_formats: [videoFormat({ available_at: 5 }), audioFormat()] }));
+    child.emit("close", 0);
+    await new Promise((r) => setTimeout(r, 10));
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ kind: "cancelled" });
   });
 
   it("só liga o Electron-como-Node quando o runtime é node:", async () => {
@@ -929,4 +1064,13 @@ describe("certificado que o yt-dlp não reconhece (proxy ou antivírus que inspe
     expect(usesSystemCerts(spawnImpl.mock.calls[1][1])).toBe(true);
     expect(certTrust.system).toBe(true);
   });
+});
+
+
+it.each([403, 429])("preserva status HTTP %s mesmo quando a última linha de stderr é genérica", async (status) => {
+  const child = fakeChild();
+  const pending = runner.run({ tools, id: ID, outDir: tmpDir(), spawnImpl: () => child });
+  child.stderr.write(`ERROR: HTTP Error ${status}: refused\nERROR: unable to download video data\n`);
+  child.emit("close", 1);
+  await expect(pending).rejects.toMatchObject({ kind: "forbidden", httpStatus: status });
 });

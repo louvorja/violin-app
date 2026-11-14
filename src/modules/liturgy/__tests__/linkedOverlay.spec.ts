@@ -237,6 +237,7 @@ describe("itemAssumePalco", () => {
     ["arquivo", item(), true],
     ["anúncios", item({ tipo: LiturgyItemTypeEnum.ANUNCIOS }), true],
     ["site", item({ tipo: LiturgyItemTypeEnum.SITE }), true],
+    ["projeção de fundo", item({ tipo: LiturgyItemTypeEnum.BG_PROJECTION }), true],
     ["anotação", item({ tipo: LiturgyItemTypeEnum.ANOTACAO }), false],
     ["som de fundo", item({ tipo: LiturgyItemTypeEnum.BG_SOUND }), false],
   ])("%s", (_nome, alvo, esperado) => {

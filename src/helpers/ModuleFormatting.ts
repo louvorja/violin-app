@@ -8,11 +8,7 @@ import { corComAlfa, larguraDeBorda, raioDeBorda } from "@/helpers/ColorAlpha";
  * para defaults. Sem isso, uma preferência ausente em instalações antigas
  * acabava como 50% no programa e 15% na projeção, por exemplo.
  */
-export function moduleCustomizationDefault<T>(
-  moduleId: string,
-  key: string,
-  fallback: T
-): T {
+export function moduleCustomizationDefault<T>(moduleId: string, key: string, fallback: T): T {
   const value = getModule(moduleId)?.customization?.[key]?.default;
   return (value === undefined ? fallback : value) as T;
 }
@@ -28,6 +24,9 @@ export interface TextBoxStyleInput {
   enabled?: boolean;
   color?: string;
   opacity?: number;
+  /** Espaçamento horizontal/vertical da caixa (a cor de fundo cresce com ele). */
+  paddingX?: number;
+  paddingY?: number;
   borderEnabled?: boolean;
   borderColor?: string;
   borderOpacity?: number;
@@ -37,6 +36,7 @@ export interface TextBoxStyleInput {
 
 export interface TextBoxStyle {
   backgroundColor: string;
+  padding?: string;
   border?: string;
   borderRadius?: string;
   boxSizing: "border-box";
@@ -57,8 +57,11 @@ export function textBoxStyle(input: TextBoxStyleInput): TextBoxStyle {
   const bordaAtiva = fundoAtivo && input.borderEnabled === true;
   const cor = corComAlfa(input.color ?? "transparent", input.opacity ?? 100);
 
+  const paddingX = fundoAtivo ? Math.max(0, Number(input.paddingX) || 0) : 0;
+  const paddingY = fundoAtivo ? Math.max(0, Number(input.paddingY) || 0) : 0;
   const estilo: TextBoxStyle = {
     backgroundColor: fundoAtivo ? cor : "transparent",
+    ...(paddingX || paddingY ? { padding: `${paddingY}px ${paddingX}px` } : {}),
     boxSizing: "border-box",
   };
 

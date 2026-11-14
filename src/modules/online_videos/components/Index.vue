@@ -124,6 +124,7 @@ import OnlineVideoCard, {
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import Media from "@/composables/useMedia";
 import { prepare as prepareOnlineVideo } from "@/helpers/OnlineVideo";
+import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $database from "@/helpers/Database";
 import $userdata from "@/helpers/UserData";
@@ -133,6 +134,7 @@ import { LjTooltip } from "@components/ui";
 
 const { t: i18nT, locale } = useI18n();
 const tm = (key: string): string => i18nT(`modules.online_videos.${key}`);
+const downloads = useOnlineVideoDownloads();
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -287,6 +289,9 @@ async function loadData(): Promise<void> {
 onMounted(() => {
   prepareOnlineVideo();
   void loadData();
+  // O selo do cartão reflete o disco; sem isso um vídeo já baixado apareceria
+  // como "baixar" até alguém abrir o módulo Meus Vídeos Online.
+  if (downloads.available) void downloads.refresh().catch(() => {});
 });
 
 watch(locale, () => {

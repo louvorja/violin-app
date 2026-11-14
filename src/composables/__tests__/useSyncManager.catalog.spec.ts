@@ -1,6 +1,6 @@
 /**
- * useSyncManager.catalog.spec.ts — o boot só verifica o marker local. Instalar o
- * ZIP geral e abrir milhares de registros do catálogo exigem uma ação explícita.
+ * useSyncManager.catalog.spec.ts — instalação compartilhada do catálogo e scan
+ * local. O scan detalhado continua separado da instalação automática no boot.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createApp, ref } from "vue";
@@ -127,7 +127,7 @@ afterEach(() => {
 });
 
 describe("Verificação Inicial leve", () => {
-  it("no primeiro boot consulta apenas o marker, sem ZIP nem leitura do catálogo", async () => {
+  it("o scan leve consulta apenas o marker, sem ZIP nem leitura do catálogo", async () => {
     const sync = await mountSync();
 
     const result = await sync.runScan("pt");
@@ -315,7 +315,7 @@ describe("Verificação Inicial leve", () => {
       expect(result.partialAlbums?.size).toBe(0);
       present.add("/musics/pt/A/1.opus");
       result = await sync.scanCache("pt", CATALOG.pt_categories as never, [], [], { force: true });
-      expect(result.partialAlbums?.get(7)).toEqual({ have: 3, total: 4 });
+      expect(result.partialAlbums?.get(7)).toEqual({ have: 1, total: 2 });
       present.clear();
       result = await sync.scanCache("pt", CATALOG.pt_categories as never, [], [], { force: true });
       expect(result.partialAlbums?.size).toBe(0);
@@ -694,6 +694,25 @@ describe("abrir o Sincronizar (desktop, primeiro uso)", () => {
 
     expect(h.fullInstall).not.toHaveBeenCalled();
   });
+});
+
+it("boot e diálogo compartilham a instalação e reutilizam o catálogo nas próximas chamadas", async () => {
+  const pending = deferred();
+  h.fullInstall.mockImplementation(async () => {
+    await pending.promise;
+    h.hasBundleMarker.mockResolvedValue(true);
+  });
+  const sync = await mountSync();
+  const boot = sync.ensureCatalogBundle();
+  const dialog = sync.ensureCatalogBundle();
+  await vi.waitFor(() => expect(h.fullInstall).toHaveBeenCalledTimes(1));
+  pending.resolve();
+
+  expect(await boot).toBe(true);
+  expect(await dialog).toBe(true);
+  expect(await sync.ensureCatalogBundle()).toBe(true);
+  expect(h.fullInstall).toHaveBeenCalledTimes(1);
+  expect(h.fullInstall).toHaveBeenCalledWith(expect.objectContaining({ catalogOnly: true }));
 });
 
 it("catálogo menor não marca Bíblia instalada e mantém o download bíblico independente", async () => {

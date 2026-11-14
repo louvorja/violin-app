@@ -55,6 +55,7 @@ beforeEach(() => {
       onFileError: listener,
       onQueueDone: listener,
       onQueueCancelled: listener,
+      checkConnection: vi.fn(async () => ({ ok: false, error: "Failed to fetch" })),
       start: h.start,
       cancel: vi.fn(),
     },
@@ -69,6 +70,13 @@ afterEach(() => {
 const FILES = [{ remote: "/a.opus", local: "a.opus", expectedSize: 0 }];
 
 describe("download sem nada a baixar", () => {
+  it("explica a falta de conexão sem exibir Failed to fetch", async () => {
+    const { sync } = await mountSync();
+    expect(await sync.checkFtp(true)).toBe(false);
+    expect(sync.ftpError.value).toBe("options.collections_download.network_error");
+    expect(sync.ftpChecking.value).toBe(false);
+  });
+
   it("fecha a tarefa, zera o progresso e solta os assinantes", async () => {
     h.start.mockResolvedValue({ queued: 0, message: "Todos os arquivos já estão atualizados" });
     const { sync, tasks } = await mountSync();

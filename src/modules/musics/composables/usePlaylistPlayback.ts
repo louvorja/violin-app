@@ -21,9 +21,12 @@ const { playlists } = usePlaylists();
 
 const _advanceLock = ref(false);
 const _songAvailable = shallowRef<(_song: PlaylistSong) => boolean>(() => true);
+/** Fila provisória, não salva: o "Tocar Todas" de uma lista toca por aqui. */
+const _sequence = shallowRef<Playlist | null>(null);
 
 const currentPlaylist = computed<Playlist | null>(() => {
   if (!_currentPlaylistId.value) return null;
+  if (_sequence.value?.id === _currentPlaylistId.value) return _sequence.value;
   return playlists.value.find((p) => p.id === _currentPlaylistId.value) || null;
 });
 
@@ -56,12 +59,13 @@ const currentSong = computed<PlaylistSong | null>(() => {
   return currentPlaylist.value.songs[_currentIndex.value] || null;
 });
 
+// Aleatório e repetição são opções das playlists; a fila provisória vai do primeiro ao último.
 function _getShuffleEnabled(): boolean {
-  return !!$userdata.get(KEYS.MODULES.MUSICS.PLAYLIST_SHUFFLE, false);
+  return !_sequence.value && !!$userdata.get(KEYS.MODULES.MUSICS.PLAYLIST_SHUFFLE, false);
 }
 
 function _getRepeatEnabled(): boolean {
-  return !!$userdata.get(KEYS.MODULES.MUSICS.PLAYLIST_REPEAT, false);
+  return !_sequence.value && !!$userdata.get(KEYS.MODULES.MUSICS.PLAYLIST_REPEAT, false);
 }
 
 function _generateShuffleOrder(length: number): number[] {
@@ -112,6 +116,14 @@ function _stopInternal(): void {
   _playedSongs.value = new Set();
   _shuffleOrder.value = [];
   _songAvailable.value = () => true;
+  _sequence.value = null;
+}
+
+/** Outra música, arquivo ou vídeo assumiu o player: a fila acaba e não volta sozinha. */
+function _onPlaybackStarted(idMusic: unknown): void {
+  if (!_isActive.value || Number(idMusic) === currentSong.value?.id_music) return;
+  $dev.write("playlist:interrupted", { id_music: idMusic });
+  _stopInternal();
 }
 
 function _nextIndex(): number | null {
@@ -224,7 +236,40 @@ function playPrev(): void {
   }
 }
 
+function playPlaylist(
+  playlist: Playlist,
+  startIndex = 0,
+  isAvailable: (_song: PlaylistSong) => boolean = () => true
+): void {
+  if (_sequence.value?.id !== playlist.id) _sequence.value = null;
+  _songAvailable.value = isAvailable;
+  const eligible = playlist.songs
+    .map((song, index) => (isAvailable(song) ? index : -1))
+    .filter((index) => index >= 0);
+  if (!eligible.length) {
+    _stopInternal();
+    return;
+  }
+  _isActive.value = true;
+  _currentPlaylistId.value = playlist.id;
+  _currentIndex.value = startIndex;
+  _playedSongs.value = new Set();
+
+  if (_getShuffleEnabled()) {
+    _shuffleOrder.value = _generateShuffleOrder(playlist.songs.length);
+    const firstIdx = _shuffleOrder.value.find((index) => eligible.includes(index))!;
+    $dev.write("playlist:start", { name: playlist.name, shuffle: true, startIndex: firstIdx });
+    _playSongAt(firstIdx);
+  } else {
+    _shuffleOrder.value = [];
+    $dev.write("playlist:start", { name: playlist.name, startIndex });
+    _playSongAt(eligible.find((index) => index >= startIndex) ?? eligible[0]);
+  }
+}
+
 Media.registerPlaylistEndHandler(_onSongEnded);
+Media.registerPlaylistCloseHandler(_stopInternal);
+Media.registerPlaylistPlaybackHandler(_onPlaybackStarted);
 
 $broadcast.listen((msg) => {
   if (msg.type === BROADCAST_TYPE.MEDIA_PREV_MUSIC && _isActive.value) playPrev();
@@ -233,6 +278,8 @@ $broadcast.listen((msg) => {
 
 onUnmounted(() => {
   Media.unregisterPlaylistEndHandler();
+  Media.unregisterPlaylistCloseHandler();
+  Media.unregisterPlaylistPlaybackHandler();
 });
 
 export function usePlaylistPlayback() {
@@ -250,43 +297,17 @@ export function usePlaylistPlayback() {
     currentSong,
     playedSongs: _playedSongs,
 
-    playPlaylist(
-      playlist: Playlist,
-      startIndex = 0,
-      isAvailable: (_song: PlaylistSong) => boolean = () => true
-    ): void {
-      _songAvailable.value = isAvailable;
-      const eligible = playlist.songs
-        .map((song, index) => (isAvailable(song) ? index : -1))
-        .filter((index) => index >= 0);
-      if (!eligible.length) {
-        _stopInternal();
-        return;
-      }
-      _isActive.value = true;
-      _currentPlaylistId.value = playlist.id;
-      _currentIndex.value = startIndex;
-      _playedSongs.value = new Set();
+    playPlaylist,
 
-      if (_getShuffleEnabled()) {
-        _shuffleOrder.value = _generateShuffleOrder(playlist.songs.length);
-        const firstIdx = _shuffleOrder.value.find((index) => eligible.includes(index))!;
-        $dev.write("playlist:start", { name: playlist.name, shuffle: true, startIndex: firstIdx });
-        _playSongAt(firstIdx);
-      } else {
-        _shuffleOrder.value = [];
-        $dev.write("playlist:start", { name: playlist.name, startIndex });
-        _playSongAt(eligible.find((index) => index >= startIndex) ?? eligible[0]);
-      }
+    /** Toca a lista do primeiro ao último item, sem salvá-la como playlist. */
+    playSequence(name: string, songs: PlaylistSong[]): void {
+      const now = new Date().toISOString();
+      const sequence = { id: `sequence:${name}`, name, songs, createdAt: now, updatedAt: now };
+      _sequence.value = sequence;
+      playPlaylist(sequence);
     },
 
     playNext,
     playPrev,
-
-    stopPlaylist(): void {
-      $dev.write("playlist:stop");
-      _stopInternal();
-      Media.close(true);
-    },
   };
 }

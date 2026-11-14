@@ -251,26 +251,46 @@ async function fetchJson(relPath, remoteBaseUrl, headers = {}, { fresh = false }
   return promise;
 }
 
-/**
- * Invalida (remove) todo o cache JSON.
- * Útil para o módulo de update forçar re-download.
- */
-async function clearCache() {
-  const dir = CACHE_DIR();
-  if (await fs.pathExists(dir)) {
-    await fs.remove(dir);
-    await fs.ensureDir(dir);
-    console.log("[jsonCache] Cache limpo:", dir);
-  }
-}
-
 /** Arquivo, dentro do cache, que guarda a versão do app que o preencheu. */
 const VERSION_MARKER = ".app-version";
 
+const EXPIRED_AT = new Date(0);
+
+async function expireDirectory(directory) {
+  let expired = 0;
+  for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) expired += await expireDirectory(file);
+    else if (entry.isFile() && entry.name.endsWith(".json")) {
+      await fs.utimes(file, EXPIRED_AT, EXPIRED_AT);
+      expired++;
+    }
+  }
+  return expired;
+}
+
 /**
- * Expira os JSONs ao atualizar o app, preservando-os como fallback offline.
- * A próxima leitura tenta a rede antes do disco, sem apagar um banco utilizável.
+ * Expira os JSONs sem apagá-los: a próxima leitura busca na rede, e o arquivo
+ * antigo continua servindo se a rede falhar. Sem `files`, expira o cache todo.
+ *
+ * @param {string[]} [files]  Chaves do banco (ex.: "pt_musics")
  */
+async function expire(files) {
+  const dir = CACHE_DIR();
+  if (!(await fs.pathExists(dir))) return { expired: 0 };
+  if (!Array.isArray(files)) return { expired: await expireDirectory(dir) };
+  let expired = 0;
+  for (const file of files) {
+    if (typeof file !== "string" || !file) continue;
+    const localPath = safeLocalPath(file);
+    if (!(await fs.pathExists(localPath))) continue;
+    await fs.utimes(localPath, EXPIRED_AT, EXPIRED_AT);
+    expired++;
+  }
+  return { expired };
+}
+
+/** Expira os JSONs ao atualizar o app, preservando-os como fallback offline. */
 async function expireOnAppUpdate(appVersion) {
   const dir = CACHE_DIR();
   const marker = path.join(dir, VERSION_MARKER);
@@ -278,18 +298,7 @@ async function expireOnAppUpdate(appVersion) {
   try { stored = (await fs.readFile(marker, "utf8")).trim(); } catch { /* primeira versão */ }
   if (stored === appVersion) return { expired: 0 };
   await fs.ensureDir(dir);
-  let expired = 0;
-  async function expireDirectory(directory) {
-    for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
-      const file = path.join(directory, entry.name);
-      if (entry.isDirectory()) await expireDirectory(file);
-      else if (entry.isFile() && entry.name.endsWith(".json")) {
-        await fs.utimes(file, new Date(0), new Date(0));
-        expired++;
-      }
-    }
-  }
-  await expireDirectory(dir);
+  const expired = await expireDirectory(dir);
   await fs.writeFile(marker, String(appVersion));
   return { expired };
 }
@@ -302,4 +311,4 @@ function dir() {
   return CACHE_DIR();
 }
 
-module.exports = { fetchJson, clearCache, dir, safeLocalPath, expireOnAppUpdate };
+module.exports = { fetchJson, expire, dir, safeLocalPath, expireOnAppUpdate };

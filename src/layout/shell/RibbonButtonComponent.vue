@@ -3,7 +3,7 @@
     type="button"
     class="ribbon-btn"
     :class="[`ribbon-btn--${size}`, { 'ribbon-btn--active': active }]"
-    :title="label"
+    :title="shortcut ? `${label} (${shortcut})` : label"
     :data-testid="testid"
     :disabled="disabled"
     @click="$emit('click', $event)"
@@ -26,6 +26,7 @@ import { ICONS } from "@/config/Icons";
 const props = defineProps({
   icon: { type: String, required: true },
   label: { type: String, required: true },
+  shortcut: { type: String, default: undefined },
   size: { type: String, default: "large" },
   active: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },

@@ -39,8 +39,8 @@
                 <span class="video-unavailable__title">
                   {{ $t("projection.video_unavailable") }}
                 </span>
-                <span class="video-unavailable__hint">
-                  {{ $t("projection.video_unavailable_hint") }}
+                <span v-if="videoFailure" class="video-unavailable__hint">
+                  {{ $t(VIDEO_FAILURE_HINT[videoFailure]) }}
                 </span>
               </div>
             </template>
@@ -118,6 +118,11 @@ import {
   mediaLibraryDetails,
   mediaDiagnosticLog,
 } from "@/helpers/MediaDiagnostics";
+import {
+  reportVideoFailure,
+  VIDEO_FAILURE_HINT,
+  type VideoFailure,
+} from "@/helpers/LocalFileStatus";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
 import { applyVideoState } from "@/helpers/VideoSync";
 import $idb from "@/helpers/IndexedDB";
@@ -169,6 +174,7 @@ useScreenVideoReport(
   () => fileProjection.active && fileProjection.type === "video"
 );
 const videoFailed = ref(false);
+const videoFailure = ref<VideoFailure | null>(null);
 const videoStateGate = new VideoStateGate();
 const activationGate = new FileProjectionActivationGate();
 const videoFrameConfirmation = new VideoFrameConfirmation(
@@ -288,7 +294,7 @@ async function loadPdf(
     pdfDoc = null;
     if (previousDoc) {
       try {
-        await (previousDoc as unknown as { destroy: () => Promise<void> }).destroy();
+        await previousDoc.loadingTask.destroy();
       } catch {
         /* ignore */
       }
@@ -306,7 +312,7 @@ async function loadPdf(
       expectedPlaybackId !== fileProjection.playback_id ||
       !fileProjection.active
     ) {
-      await (doc as unknown as { destroy: () => Promise<void> }).destroy();
+      await doc.loadingTask.destroy();
       return;
     }
     pdfDoc = doc;
@@ -502,6 +508,7 @@ function onVideoReady(event: Event): void {
     ready_state: el.readyState,
   });
   Telemetry.track("file_projection_return_video_ready", {
+    readiness: event.type,
     playback_id: fileProjection.playback_id,
     duration: Number.isFinite(el.duration) ? el.duration : 0,
     width: el.videoWidth,
@@ -568,42 +575,35 @@ function onVideoBuffering(event: Event): void {
 function onVideoError(event: Event): void {
   const el = event.currentTarget as HTMLVideoElement | null;
   videoFailed.value = true;
+  videoFailure.value = null;
   videoFrameConfirmation.cancel();
   videoFirstFrame.cancel();
-  const code = el?.error?.code;
-  const reason = code === 3 ? "decode" : code === 4 ? "source_not_supported" : "unknown";
-  const error = new Error(`File projection return video ${reason}`);
-  const diagnostics = {
-    ...mediaElementDetails(el),
-    ...videoSourceDiagnostics,
-    window_role: "auxiliary_return",
-    phase: "media_element",
-  };
-  mediaDiagnosticLog("error", "file projection video failed", {
-    ...diagnostics,
-    playback_id: fileProjection.playback_id,
-    reason,
+  const url = fileProjection.url;
+  const playbackId = fileProjection.playback_id;
+  // Aviso, não erro: a gravidade sai do motivo, decidido em reportVideoFailure.
+  console.warn("[FileProjectionReturn] vídeo local falhou:", {
+    playback_id: playbackId,
+    code: el?.error?.code,
+    message: mediaDiagnosticMessage(el?.error?.message),
+    source: mediaSourceDetails(url),
   });
-  Telemetry.captureException(error, {
-    ...diagnostics,
-    playback_id: fileProjection.playback_id,
+  void reportVideoFailure({
+    el,
+    url,
+    label: "File projection return video",
+    event: "file_projection_return_video_failed",
     operation: "file_projection_return_video",
-    reason,
-  });
-  console.error("[FileProjectionReturn] vídeo local falhou:", error, {
-    playback_id: fileProjection.playback_id,
-    code,
-    message: mediaDiagnosticMessage(el?.error?.message),
-    source: mediaSourceDetails(fileProjection.url),
-  });
-  Telemetry.track("file_projection_return_video_failed", {
-    ...diagnostics,
-    playback_id: fileProjection.playback_id,
-    reason,
-    code,
-    message: mediaDiagnosticMessage(el?.error?.message),
-    ready_state: el?.readyState,
-    network_state: el?.networkState,
+    details: {
+      ...mediaElementDetails(el),
+      ...videoSourceDiagnostics,
+      window_role: "auxiliary_return",
+      phase: "media_element",
+      playback_id: playbackId,
+    },
+  }).then((failure) => {
+    if (playbackId === fileProjection.playback_id && url === fileProjection.url) {
+      videoFailure.value = failure;
+    }
   });
 }
 
@@ -694,7 +694,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
   }
 });
 
-useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
+useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
   activationGate.retire();
   ++activationGeneration;
   ++pdfLoadGeneration;
@@ -702,7 +702,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, async () => {
   _destroyYoutube();
   if (pdfDoc) {
     try {
-      await (pdfDoc as any).destroy();
+      void pdfDoc.loadingTask.destroy().catch(() => {});
     } catch {
       /* ignore */
     }
@@ -1124,13 +1124,15 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  ++pdfLoadGeneration;
+  fileProjection.active = false;
   pdfRenderQueue.invalidate();
   videoFrameConfirmation.dispose();
   videoFirstFrame.dispose();
   if (wpBlobUrl) URL.revokeObjectURL(wpBlobUrl);
   if (pdfDoc) {
     try {
-      (pdfDoc as any).destroy();
+      void pdfDoc.loadingTask.destroy().catch(() => {});
     } catch {
       /* ignore */
     }

@@ -39,6 +39,32 @@ describe("louvorja:// local media requests", () => {
     fs.removeSync(root);
   });
 
+  it.each(["bytes=3-999", `bytes=3-${"9".repeat(400)}`])(
+    "limits %s to the bytes that actually exist",
+    async (range) => {
+      const response = await handleRequest(new Request(Path.local(localFile), {
+        headers: { Range: range },
+      }));
+      const body = await response.text();
+      expect(response.status).toBe(206);
+      expect(body).toBe("3456789");
+      expect(response.headers.get("Content-Length")).toBe(String(body.length));
+      expect(response.headers.get("Content-Range")).toBe("bytes 3-9/10");
+    }
+  );
+
+  it.each(["bytes=8-3", `bytes=${"9".repeat(400)}-`])(
+    "rejects %s without opening an invalid file stream",
+    async (range) => {
+      const response = await handleRequest(new Request(Path.local(localFile), {
+        headers: { Range: range },
+      }));
+      expect(response.status).toBe(416);
+      expect(response.headers.get("Content-Range")).toBe("bytes */10");
+      expect(await response.text()).toBe("");
+    }
+  );
+
   it("serves files and local paths with async stat while preserving full and Range responses", async () => {
     const syncStat = vi.spyOn(fs, "statSync").mockImplementation(() => {
       throw new Error("statSync reached from protocol request");

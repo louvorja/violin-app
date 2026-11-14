@@ -137,6 +137,22 @@ describe("jsonCache — falha de rede × resposta ruim", () => {
     expect(resultado.status).toBe(200);
     expect(JSON.parse(resultado.body.toString("utf-8"))).toEqual([{ id: 1 }]);
   });
+  it("limpar o cache expira sem apagar: a leitura seguinte vai à rede e, sem ela, serve a cópia", async () => {
+    responde(200, '{"version":1}');
+    await jsonCache.fetchJson("/pt_expira", baseUrl);
+    responde(200, '{"version":2}');
+    const dentroDoPrazo = await jsonCache.fetchJson("/pt_expira", baseUrl);
+    expect(JSON.parse(dentroDoPrazo.body)).toEqual({ version: 1 });
+
+    expect(await jsonCache.expire(["pt_expira", "nao_baixado"])).toEqual({ expired: 1 });
+
+    const semRede = await jsonCache.fetchJson("/pt_expira", portaMorta);
+    expect(semRede.fromCache).toBe(true);
+    expect(JSON.parse(semRede.body)).toEqual({ version: 1 });
+    const comRede = await jsonCache.fetchJson("/pt_expira", baseUrl);
+    expect(comRede.fromCache).toBe(false);
+    expect(JSON.parse(comRede.body)).toEqual({ version: 2 });
+  });
 });
 
 describe("jsonCache — preservação offline quando o app é atualizado", () => {
@@ -193,5 +209,23 @@ describe("jsonCache — preservação offline quando o app é atualizado", () =>
 
     expect(result).toEqual({ expired: 0 });
     expect(existsSync(join(cacheRoot, "json_db", ".app-version"))).toBe(true);
+  });
+
+  it("limpar tudo expira cada JSON, inclusive em subpastas, e mantém os arquivos", async () => {
+    const dir = novoCache();
+    writeFileSync(join(dir, "pt_musics.json"), "{}");
+    mkdirSync(join(dir, "sub"));
+    writeFileSync(join(dir, "sub", "bible_1_1_1.json"), "{}");
+
+    expect(await jsonCache.expire()).toEqual({ expired: 2 });
+
+    expect(statSync(join(dir, "pt_musics.json")).mtimeMs).toBe(0);
+    expect(statSync(join(dir, "sub", "bible_1_1_1.json")).mtimeMs).toBe(0);
+    expect(readFileSync(join(dir, "pt_musics.json"), "utf8")).toBe("{}");
+  });
+
+  it("uma chave com .. não sai da pasta do cache", async () => {
+    novoCache();
+    expect(await jsonCache.expire(["../../../etc/hosts"])).toEqual({ expired: 0 });
   });
 });

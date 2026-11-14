@@ -67,6 +67,13 @@ export default {
     return api ? api.version : null;
   },
 
+  /** true no macOS, inclusive no browser/PWA, para atalhos e rótulos. */
+  get isMac() {
+    if (this.platform) return this.platform === "darwin";
+    if (typeof navigator === "undefined") return false;
+    return /mac/i.test(navigator.platform || navigator.userAgent || "");
+  },
+
   /** Informações do executável expostas por um canal IPC específico. */
   get app() {
     return api?.app ?? null;
@@ -129,7 +136,7 @@ export default {
    * Controle do cache JSON local em userData/json_db/ (D2).
    * null quando rodando no browser/PWA.
    *
-   * @returns {{ clear, dir } | null}
+   * @returns {{ expire, dir } | null}
    */
   get jsonCache() {
     return api?.jsonCache ?? null;
@@ -182,6 +189,11 @@ export default {
   /** Sinal de mídia ativa para diagnóstico desktop sem metadados pessoais. */
   get presentation() {
     return api?.presentation ?? null;
+  },
+
+  /** Conferência do áudio de vídeos locais (ver AudioPacketScan). */
+  get audioRepair() {
+    return api?.audioRepair ?? null;
   },
 
   /**
@@ -293,7 +305,7 @@ export default {
 
   /**
    * Registra um listener para eventos emitidos pelo servidor HTTP (D5).
-   * Eventos: "http:song-slides", "http:open-song", "http:drawing-number", "http:drawing-name"
+   * Eventos: "http:song-slides", "http:open-song", "http:drawing-number", "http:drawing-name", "http:draw"
    * Retorna função de cleanup. No-op no browser/PWA.
    *
    * @param {(eventType: string, data: object) => void} cb

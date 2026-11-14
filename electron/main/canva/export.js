@@ -13,7 +13,7 @@
  * parada. Por isso isto é uma OPÇÃO na tela de Integrações, não o único
  * caminho.
  *
- * Cache: `<dados>/files/canva/<designId>.<ext>` + `.json` com o `updated_at` do
+ * Cache: `<perfil>/canva/<designId>.<ext>` + `.json` com o `updated_at` do
  * design. Editou no Canva → o timestamp muda → o arquivo local é considerado
  * velho e exportamos de novo. Sem isso, o operador projetaria uma versão antiga
  * sem perceber.
@@ -25,7 +25,6 @@ const paths = require("../paths.js");
 const api = require("./api.js");
 const { comPrazo } = require("./http.js");
 const auth = require("./auth.js");
-const { migrarCacheCanva } = require("./migration.js");
 
 /** Escopo que os dois endpoints do export exigem (POST e GET /v1/exports). */
 const EXPORT_SCOPE = "design:content:read";
@@ -54,41 +53,13 @@ function formatoDe(nome) {
 }
 
 /**
- * Onde o export vive: dentro de `files/`, junto do acervo.
- *
- * Ficou fora por um tempo (`<dados>/canva`), e a troca de raiz em Armazenamento
- * deixava os PDFs para trás. Aqui eles acompanham a pasta de dados, entram na
- * contagem da tela de Armazenamento como categoria própria e o operador acha
- * todos os arquivos do app no mesmo lugar.
+ * Onde o export vive: no perfil privado da conta. O acervo é compartilhado entre
+ * contas e PDF exportado do Canva é da conta que o exportou. A migração de layout
+ * (`storageLayout.js`) traz o cache dos endereços antigos (`<dados>/canva` e
+ * `<dados>/files/canva`) e reescreve as referências guardadas.
  */
 function pastaCanva() {
-  return path.join(paths.filesDir(), "canva");
-}
-
-/**
- * Traz o cache do endereço antigo (`<dados>/canva`) para `files/canva`.
- *
- * Chamado UMA vez no boot. Sem isso o selo de cache apagaria e todo design
- * seria reexportado, gastando cota do Canva sem o operador entender por quê.
- *
- * TODO: remover na versão seguinte, junto com `canva/migration.js` — roteiro em
- * `docs/canva-cache-migration-removal.md`.
- *
- * @returns {Promise<{movidos: number, falhas: number}>}
- */
-async function migrarCacheAntigo() {
-  const antigo = path.join(paths.dataDir(), "canva");
-  const novo = pastaCanva();
-  const resumo = await migrarCacheCanva(antigo, novo);
-  if (resumo.movidos) {
-    console.log(`[canva] Cache movido: ${antigo} → ${novo} (${resumo.movidos} arquivos)`);
-  }
-  if (resumo.falhas) {
-    console.warn(`[canva] Cache: ${resumo.falhas} arquivo(s) não migraram de ${antigo}`);
-  }
-  /* Os dois endereços saem daqui: quem chama precisa deles para reescrever as
-     referências guardadas (playlist) — o módulo é quem sabe dos caminhos. */
-  return { ...resumo, antigo, novo };
+  return paths.canvaDir();
 }
 
 /** Design id é `[A-Za-z0-9_-]`, mas não confiamos nisso para nome de arquivo. */
@@ -499,7 +470,6 @@ module.exports = {
   listarCachePdf,
   limparCachePdf,
   limparTodoCachePdf,
-  migrarCacheAntigo,
   baixar,
   alvosDoDesign,
   pastaCanva,

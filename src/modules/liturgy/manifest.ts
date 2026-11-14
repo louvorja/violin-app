@@ -7,6 +7,7 @@ import { ICONS } from "@/config/Icons"
 import { ModuleEnum } from "@/enums/ModuleEnum"
 import { getModulePath } from "@/helpers/ModulePath"
 import { KEYS } from "@/constants/UserDataKeys"
+import { HOTKEY } from "@/constants/HotkeyCombos"
 import { COLORS } from "@constants/Colors";
 import { liturgySidebarDefault } from "@/helpers/LiturgySidebar";
 
@@ -43,7 +44,7 @@ export const contextualPages: RibbonPage[] = [
         id: `${moduleCtxId}_add`,
         title: "ribbon.groups.add",
         buttons: [
-          { id: "add_item", icon: ICONS.ACTIONS.ADD, label: "ribbon.btn.add_item", action: "lit_add_item"},
+          { id: "add_item", icon: ICONS.ACTIONS.ADD, label: "ribbon.btn.add_item", action: "lit_add_item", shortcut: HOTKEY.LITURGY_NEW_ITEM },
         ],
       },
       {

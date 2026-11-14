@@ -1,4 +1,6 @@
+import { Buffer } from "node:buffer";
 import { expect, test } from "@playwright/test";
+import music1 from "./fixtures/music_1.json";
 
 test.use({ serviceWorkers: "block", reducedMotion: "reduce" });
 
@@ -110,6 +112,30 @@ test("álbum curto segue o tema, compartilha ações por hover e cabe no celular
   ).toBe(false);
 });
 
+test("álbum pelo teclado: abre na primeira faixa, ↓ escolhe e Esc fecha", async ({ page }) => {
+  await start(page);
+  const dialog = await openAlbum(page, 9876503, [
+    music(993001, 1),
+    music(993002, 2),
+    music(993003, 3),
+  ]);
+  const active = dialog.locator("tr.lj-music-row--active");
+  await expect(dialog.locator(".album-tracks")).toBeFocused();
+  await expect(active).toContainText("Música 1");
+  await page.keyboard.press("ArrowDown");
+  await expect(active).toContainText("Música 2");
+
+  // O Esc é da camada de cima: fecha o álbum.
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  expect(
+    await page.evaluate(async () => {
+      const appData = (await import("/src/helpers/AppData.ts")).default;
+      return appData.get("modules.album.show", false);
+    })
+  ).toBe(false);
+});
+
 test("álbum longo rola com cabeçalho fixo e álbum vazio mostra orientação", async ({ page }) => {
   await start(page);
   const dialog = await openAlbum(
@@ -163,4 +189,44 @@ test("iniciar uma faixa pelo atalho ou menu fecha o álbum antes de abrir o play
     media.open(993004);
   });
   await expect(external).not.toBeVisible();
+});
+
+test("Tocar Todas toca o CD inteiro, na ordem das faixas (#50)", async ({ page }) => {
+  await start(page);
+  const rate = 8000;
+  const size = 30 * rate * 2;
+  const wav = Buffer.alloc(44 + size);
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(36 + size, 4);
+  wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(rate, 24);
+  wav.writeUInt32LE(rate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(size, 40);
+  await page.route(/\/music_\d+/, (route) => {
+    const id = Number(new URL(route.request().url()).pathname.match(/music_(\d+)/)[1]);
+    return route.fulfill({
+      json: { ...music1, id_music: id, name: `Música ${id - 991010}`, url_music: `t/${id}.wav` },
+    });
+  });
+  await page.route(/\.wav/, (route) => route.fulfill({ body: wav, contentType: "audio/wav" }));
+
+  const dialog = await openAlbum(page, 9876502, [
+    music(991011, 1),
+    music(991012, 2),
+    music(991013, 3),
+  ]);
+  await dialog.getByRole("button", { name: /Tocar Todas/ }).click();
+
+  await expect(dialog).not.toBeVisible();
+  const bar = page.locator(".playlist-bar");
+  await expect(bar).toContainText("Meu Lugar no Mundo");
+  await expect(bar).toContainText("/3");
+  const media = page.locator(".lj-window").filter({ has: page.locator(".media-body") });
+  await expect(media.locator(".lj-window-title")).toHaveText("Música 1");
 });

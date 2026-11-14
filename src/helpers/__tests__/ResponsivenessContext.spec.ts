@@ -68,6 +68,28 @@ describe("responsiveness diagnostic evidence", () => {
     expect(JSON.stringify(result)).not.toMatch(/password|secret|private|token|window"/);
   });
 
+  it("identifies the invoking element and event without leaking media paths or URL secrets", () => {
+    const scripts = (invoker: string) =>
+      (
+        animationFrameDiagnostic({
+          entryType: "long-animation-frame",
+          startTime: 0,
+          duration: 1200,
+          scripts: [{ invoker, invokerType: "event-listener", duration: 1100 }],
+        } as unknown as PerformanceEntry) as { scripts: Array<{ invoker?: string }> }
+      ).scripts[0].invoker;
+
+    expect(scripts("INPUT#music-search.oninput")).toBe("INPUT#music-search.oninput");
+    expect(scripts("Window.requestAnimationFrame")).toBe("Window.requestAnimationFrame");
+    expect(scripts("IMG[src=louvorja://files/Users/maria/fundo.png].onload")).toBe(
+      "IMG_src_.onload"
+    );
+    expect(scripts("https://user:pw@app.test/assets/a.js?token=x")).toBe(
+      "https://app.test/assets/a.js"
+    );
+    expect(scripts("file:///C:/Users/maria/a.js")).toBeUndefined();
+  });
+
   it("bounds script and span history and ignores malformed durations", () => {
     const history = createResponsivenessContext();
     for (let i = 0; i < 100; i++) history.record({ name: `op${i}`, startedAt: i }, i + 1000);

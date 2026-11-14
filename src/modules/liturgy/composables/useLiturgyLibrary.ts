@@ -268,6 +268,7 @@ export function useLiturgyLibrary() {
 
   async function remove(id: string): Promise<void> {
     await $docs.del(TABLE, id);
+    $liturgy.clearLibraryReferences(id);
   }
 
   function exportToJson(items: LiturgyLibraryItem["items"], name: string): void {

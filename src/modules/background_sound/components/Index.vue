@@ -27,37 +27,45 @@
       <!-- Category chips -->
       <div v-if="categories.length || uncategorizedCount > 0" class="bgs-chips">
         <span class="bgm-header-title">{{ tm("categories") }}</span>
-        <div
+        <CategoryChip
           v-for="cat in categories"
           :key="cat.id"
-          class="bgs-chip"
-          :class="{ 'bgm-chip--active': selectedCategoryIds.has(cat.id) }"
-          :style="{ '--chip-color': cat.color }"
-          @click="toggleCategoryChip(cat.id)"
-        >
-          <span class="bgs-chip-icon-wrap">
-            <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
-            <img v-else :src="cat.icon" class="bgs-chip-img" alt="" />
-          </span>
-          <span class="bgm-chip-name">{{ cat.name }}</span>
-          <span class="bgs-chip-count">
-            {{ libraryFiles.filter((f) => f.categoryId === cat.id).length }}
-          </span>
-        </div>
+          :category-id="cat.id"
+          :name="cat.name"
+          :icon="cat.icon"
+          :icon-type="cat.iconType"
+          :color="cat.color"
+          :count="libraryFiles.filter((f) => f.categoryId === cat.id).length"
+          :active="selectedCategoryIds.has(cat.id)"
+          :drop-target="dropTargetId === cat.id"
+          :add-item-label="t('ribbon.btn.add_item')"
+          :edit-label="t('shell.category.edit_category')"
+          @select="onCategoryChipClick(cat.id)"
+          @add="addItemsToCategory(cat.id)"
+          @edit="editCategoryFromChip(cat.id)"
+          @dragover="onCategoryDragOver($event, cat.id)"
+          @dragleave="onCategoryDragLeave($event, cat.id)"
+          @drop="onCategoryDrop($event, cat.id)"
+        />
         <!-- Virtual: arquivos sem categoria -->
-        <div
-          v-if="uncategorizedCount > 0"
-          class="bgs-chip"
-          :class="{ 'bgm-chip--active': selectedCategoryIds.has(UNCATEGORIZED_ID) }"
-          :style="{ '--chip-color': UNCATEGORIZED_COLOR }"
-          @click="toggleCategoryChip(UNCATEGORIZED_ID)"
-        >
-          <span class="bgs-chip-icon-wrap">
-            <LjIcon :icon="ICONS.MUSIC.NOTE_OUTLINE" :size="14" />
-          </span>
-          <span class="bgm-chip-name">{{ tm("uncategorized") }}</span>
-          <span class="bgs-chip-count">{{ uncategorizedCount }}</span>
-        </div>
+        <CategoryChip
+          v-if="categories.length > 0 || uncategorizedCount > 0"
+          category-id=""
+          :name="tm('uncategorized')"
+          :icon="ICONS.MUSIC.NOTE_OUTLINE"
+          icon-type="icon"
+          :color="UNCATEGORIZED_COLOR"
+          :count="uncategorizedCount"
+          :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
+          :drop-target="dropTargetId === UNCATEGORIZED_ID"
+          :editable="false"
+          :add-item-label="t('ribbon.btn.add_item')"
+          @select="onCategoryChipClick(UNCATEGORIZED_ID)"
+          @add="addItemsToCategory(UNCATEGORIZED_ID)"
+          @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
+          @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
+          @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
+        />
       </div>
       <!-- Audio cards grid -->
       <div v-if="visibleFiles.length" class="bgs-audio-grid">
@@ -66,10 +74,15 @@
           :key="item.file.id"
           class="bgs-audio-card"
           :style="{ '--card-color': item.color }"
-          @click="toggleFile(item.file)"
+          draggable="true"
+          @click="onCardClick(item)"
+          @dragstart="onCardDragStart($event, item.file)"
+          @dragend="onCardDragEnd"
+          @touchstart.passive="onCardTouchStart($event, item.file)"
+          @contextmenu.prevent
         >
           <div class="bgs-audio-card-top">
-            <div class="bgs-audio-card-play">
+            <div class="bgs-audio-card-play" data-no-category-drag @dragstart.stop.prevent>
               <LjButton
                 size="lg"
                 variant="ghost"
@@ -79,7 +92,7 @@
                 @click.stop="toggleFile(item.file)"
               />
             </div>
-            <div class="bgs-audio-card-actions">
+            <div class="bgs-audio-card-actions" data-no-category-drag @dragstart.stop.prevent>
               <!-- Estrela = som padrão (o ponteiro único que o Apresentador inicia). -->
               <LjButton
                 size="sm"
@@ -130,11 +143,10 @@
 
       <!-- Category Manager -->
       <CategoryManagerDialog
+        ref="categoryManagerRef"
         v-model="showManageDialog"
         :categories="categories"
         :saving="saving"
-        :icon-options="iconOptions"
-        :color-presets="colorPresets"
         :module-id="'background_sound'"
         @save="handleSaveCategory"
         @delete="handleDeleteCategory"
@@ -229,6 +241,8 @@
         class="bgs-file-input"
         @change="onAudioFilesSelected"
       />
+
+      <CategoryDragGhost :ghost="touchGhost" :compact="dropTargetId !== null" />
     </div>
   </ModuleContainer>
 </template>
@@ -244,6 +258,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import Alert from "@/helpers/Alert";
+import $snackbar from "@/helpers/Snackbar";
 import {
   classifyLocalEnvironmentError,
   type LocalEnvironmentErrorKind,
@@ -273,6 +288,10 @@ import { DB_TABLE } from "@/constants/DbTables";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { MediaFile } from "@/types/Media";
+import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
+import { useCategoryDrag } from "@/composables/useCategoryDrag";
+import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
+import CategoryChip from "@/components/CategoryChip.vue";
 
 const { width: viewportWidth } = useViewport();
 const isMobileWeb = computed(() => viewportWidth.value > 0 && viewportWidth.value <= 700);
@@ -346,11 +365,14 @@ async function getFilesByCategory(categoryId: string): Promise<BgSoundFile[]> {
 /*  Module helpers                                                     */
 /* ------------------------------------------------------------------ */
 
-const moduleContainer = ref<{ tm(key: string, named?: Record<string, unknown>): string } | null>(
-  null
-);
+const moduleContainer = ref<{
+  tm(_key: string, _named?: Record<string, unknown>): string;
+  t?(_key: string, _named?: Record<string, unknown>): string;
+} | null>(null);
 const tm = (key: string, named?: Record<string, unknown>): string =>
   moduleContainer.value?.tm(key, named as any) || key;
+const t = (key: string, named?: Record<string, unknown>): string =>
+  moduleContainer.value?.t?.(key, named as any) || key;
 
 /* ------------------------------------------------------------------ */
 /*  State                                                              */
@@ -380,6 +402,9 @@ function selectAllCategoriesAndUncategorized(): void {
   selectedCategoryIds.value = next;
 }
 const showManageDialog = ref(false);
+const categoryManagerRef = ref<{
+  openEditCategory: (_category: CategoryFileData) => void;
+} | null>(null);
 const showAddAudioDialog = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const saving = ref(false);
@@ -471,38 +496,14 @@ const isMuted = ref(false);
 const previousVolume = ref(50);
 
 /* ------------------------------------------------------------------ */
-/*  Icon options                                                       */
-/* ------------------------------------------------------------------ */
-
-const iconOptions = Object.entries(ICONS.CATEGORY).map(([key, value]) => ({
-  value,
-}));
-
-const colorPresets = [
-  "#4CAF50",
-  "#2196F3",
-  "#9C27B0",
-  "#FF9800",
-  "#F44336",
-  "#00BCD4",
-  "#3F51B5",
-  "#E91E63",
-  "#8BC34A",
-  "#FF5722",
-  "#607D8B",
-  "#795548",
-  "#9E9E9E",
-  "#CDDC39",
-  "#03A9F4",
-];
-
-/* ------------------------------------------------------------------ */
 /*  Computed                                                           */
 /* ------------------------------------------------------------------ */
 
+const AUDIO_FILE_RE = /\.(mp3|wav|ogg|flac|m4a|aac|wma|opus|webm)$/i;
+
 const visibleFiles = computed(() => {
   const result: {
-    file: MediaFile;
+    file: BgSoundFile;
     categoryId: string;
     categoryName: string;
     color: string;
@@ -510,7 +511,6 @@ const visibleFiles = computed(() => {
     displayName: string;
     ext: string;
   }[] = [];
-  const audioExts = /\.(mp3|wav|ogg|flac|m4a|aac|wma|opus|webm)$/i;
   const catById = new Map(categories.value.map((c) => [c.id, c]));
   const selected = selectedCategoryIds.value;
 
@@ -525,26 +525,101 @@ const visibleFiles = computed(() => {
         categoryName: tm("uncategorized"),
         color: UNCATEGORIZED_COLOR,
         icon: ICONS.MUSIC.NOTE_OUTLINE,
-        displayName:
-          f.name || (f.fileName.match(audioExts) ? f.fileName.replace(audioExts, "") : f.fileName),
-        ext: f.fileName.match(audioExts)?.[1]?.toUpperCase() || "",
+        displayName: soundDisplayName(f),
+        ext: f.fileName.match(AUDIO_FILE_RE)?.[1]?.toUpperCase() || "",
       });
       continue;
     }
     if (!selected.has(cat.id)) continue;
-    const extMatch = f.fileName.match(audioExts);
+    const extMatch = f.fileName.match(AUDIO_FILE_RE);
     result.push({
       file: f,
       categoryId: cat.id,
       categoryName: cat.name,
       color: cat.color,
-      icon: cat.iconType === "icon" ? cat.icon : ICONS.MUSIC.MUSIC,
-      displayName: f.name || (extMatch ? f.fileName.replace(audioExts, "") : f.fileName),
+      icon: categoryIcon(f),
+      displayName: soundDisplayName(f),
       ext: extMatch ? extMatch[1].toUpperCase() : "",
     });
   }
   return result;
 });
+
+function soundDisplayName(file: BgSoundFile): string {
+  const ext = file.fileName.match(AUDIO_FILE_RE);
+  return file.name || (ext ? file.fileName.replace(AUDIO_FILE_RE, "") : file.fileName);
+}
+
+function categoryIcon(file: BgSoundFile): string {
+  const cat = categories.value.find((c) => c.id === file.categoryId);
+  if (!cat) return ICONS.MUSIC.NOTE_OUTLINE;
+  return cat.iconType === "icon" ? cat.icon : ICONS.MUSIC.MUSIC;
+}
+
+async function moveFileToCategory(file: BgSoundFile, categoryId: string): Promise<void> {
+  if ((file.categoryId || "") === categoryId) return;
+  if (categoryId && !categories.value.some((category) => category.id === categoryId)) return;
+
+  const previous = file.categoryId;
+  file.categoryId = categoryId;
+  try {
+    await saveLibraryFile(file);
+  } catch (error) {
+    file.categoryId = previous;
+    throw error;
+  }
+
+  const category = categoryId
+    ? categories.value.find((item) => item.id === categoryId)?.name || ""
+    : tm("uncategorized");
+  $snackbar.show(t("moved_to_category", { category }));
+}
+
+const {
+  draggingId,
+  dropTargetId,
+  touchGhost,
+  shouldSuppressClick,
+  shouldSuppressCategoryClick,
+  onCardDragStart,
+  onCardDragEnd,
+  onCategoryDragOver,
+  onCategoryDragLeave,
+  onCategoryDrop,
+  onCardTouchStart,
+} = useCategoryDrag<BgSoundFile>({
+  source: "background_sound",
+  findItem: (id) => libraryFiles.value.find((file) => file.id === id) || null,
+  canDrop: (file, categoryId) =>
+    (file.categoryId || "") !== categoryId &&
+    (!categoryId || categories.value.some((category) => category.id === categoryId)),
+  assign: moveFileToCategory,
+  label: soundDisplayName,
+  icon: categoryIcon,
+});
+
+function onCardClick(item: { file: BgSoundFile }): void {
+  if (shouldSuppressClick(item.file.id)) return;
+  toggleFile(item.file);
+}
+
+function onCategoryChipClick(categoryId: string): void {
+  if (shouldSuppressCategoryClick(categoryId)) return;
+  toggleCategoryChip(categoryId);
+}
+
+function addItemsToCategory(categoryId: string): void {
+  pendingCategoryId = categoryId;
+  pendingDropFiles.value = [];
+  fileInput.value?.click();
+}
+
+function editCategoryFromChip(categoryId: string): void {
+  const category = categories.value.find((item) => item.id === categoryId);
+  if (!category) return;
+  showManageDialog.value = true;
+  categoryManagerRef.value?.openEditCategory(category);
+}
 
 const editCategorySelectItems = computed(() => [
   { title: tm("uncategorized"), value: UNCATEGORIZED_ID },
@@ -611,16 +686,19 @@ async function handleDeleteCategory(id: string): Promise<void> {
 /*  Drag & drop                                                        */
 /* ------------------------------------------------------------------ */
 
-function onDragEnter(): void {
+function onDragEnter(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = true;
   dragCounter++;
 }
 
-function onDragOver(): void {
+function onDragOver(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = true;
 }
 
-function onDragLeave(): void {
+function onDragLeave(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   dragCounter--;
   if (dragCounter <= 0) {
     isDragOver.value = false;
@@ -629,6 +707,7 @@ function onDragLeave(): void {
 }
 
 async function onDrop(e: DragEvent): Promise<void> {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = false;
   dragCounter = 0;
   const droppedFiles = e.dataTransfer?.files;
@@ -1153,75 +1232,6 @@ onBeforeUnmount(() => {
   letter-spacing: 0.4px;
   color: var(--lj-group-label-color, var(--lj-text-subtle));
 }
-.bgs-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--lj-space-2);
-  padding: var(--lj-space-2) 10px;
-  border-radius: var(--lj-radius-pill);
-  border: 1.5px solid var(--chip-color);
-  background: transparent;
-  color: var(--chip-color);
-  cursor: pointer;
-  font-size: var(--lj-text-base);
-  font-family: inherit;
-  transition:
-    background var(--lj-transition-normal),
-    color var(--lj-transition-normal),
-    opacity var(--lj-transition-normal);
-  opacity: 0.5;
-  outline: none;
-  white-space: nowrap;
-}
-.bgs-chip:hover {
-  opacity: 0.85;
-}
-.bgm-chip--active {
-  background: color-mix(in srgb, var(--chip-color) 20%, transparent);
-  opacity: 1;
-}
-.bgs-chip-icon-wrap {
-  display: flex;
-  align-items: center;
-}
-.bgs-chip-img {
-  width: 14px;
-  height: 14px;
-  object-fit: contain;
-}
-.bgs-chip-count {
-  font-size: var(--lj-text-xs);
-  background: color-mix(in srgb, var(--chip-color) 30%, transparent);
-  border-radius: var(--lj-radius-pill);
-  padding: 0 5px;
-  line-height: 16px;
-}
-.bgs-chip-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: inherit;
-  padding: 0;
-  opacity: 0.6;
-  transition:
-    opacity var(--lj-transition-fast),
-    background var(--lj-transition-fast);
-}
-.bgs-chip-add:hover {
-  opacity: 1;
-  background: color-mix(in srgb, var(--chip-color) 20%, transparent);
-}
-.bgs-chip-add:focus-visible {
-  outline: none;
-  opacity: 1;
-  box-shadow: var(--lj-ui-focus);
-}
 
 /* ── Audio cards grid ── */
 .bgs-audio-grid {
@@ -1243,10 +1253,13 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--card-color) 85%, var(--lj-white));
   position: relative;
   min-height: 80px;
-  cursor: pointer;
+  cursor: grab;
   transition:
     transform var(--lj-transition-normal),
-    box-shadow var(--lj-transition-normal);
+    box-shadow var(--lj-transition-normal),
+    opacity var(--lj-transition-fast);
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 .bgs-audio-card:hover {
   transform: translateY(-2px);
@@ -1410,8 +1423,7 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 700px) {
-  .bgs-header-actions :deep(.lj-btn),
-  .bgs-chip {
+  .bgs-header-actions :deep(.lj-btn) {
     min-height: 44px;
   }
 

@@ -3,7 +3,12 @@
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'counter'" :manifest="manifest" />
       <div ref="container" class="counter-stage" :style="rootStyle">
-        <img v-if="bgImage" :src="bgImage" class="counter-bg-img" :style="imageStyle" alt="" />
+        <ModuleBackgroundMedia
+          v-if="bgImage"
+          :src="bgImage"
+          class="counter-bg-img"
+          :style="imageStyle"
+        />
         <div class="counter-display" :style="textStyle">{{ count }}</div>
       </div>
     </div>
@@ -14,10 +19,12 @@
 import { ref, watch } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
+import { COUNTER_START } from "../projectionText";
 
 const { show_format } = useModuleFormat("counter", manifest);
 
@@ -32,7 +39,7 @@ const projection = useModuleProjection("counter", {
   },
 });
 
-const count = ref(0);
+const count = ref(COUNTER_START);
 
 watch(
   count,
@@ -49,10 +56,10 @@ function decrement() {
   count.value--;
 }
 function reset() {
-  count.value = 0;
+  count.value = COUNTER_START;
 }
 function close() {
-  count.value = 0;
+  count.value = COUNTER_START;
 }
 </script>
 

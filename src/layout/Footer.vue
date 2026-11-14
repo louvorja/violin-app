@@ -2,6 +2,7 @@
   <footer
     id="footer-bar"
     ref="footerEl"
+    data-lj-player
     class="footer"
     :class="{
       'footer--active': footerActive,
@@ -50,7 +51,7 @@
             type="button"
             class="player-btn player-btn--danger"
             :aria-label="$t('shell.player.close')"
-            @click="playlist.stopPlaylist()"
+            @click="closeMedia"
           >
             <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="16" />
           </button>
@@ -349,12 +350,7 @@ const rewind = () => Media.advanceTime(-10);
 const forward = () => Media.advanceTime(10);
 const nextSlide = () => Media.nextSlide();
 const lastSlide = () => Media.lastSlide();
-const closeMedia = () => {
-  if (playlist.isActive.value) {
-    playlist.stopPlaylist();
-  }
-  Media.close();
-};
+const closeMedia = () => Media.close();
 const maximizeMedia = () => Media.maximize();
 const fullscreenMedia = () => Media.fullscreen(true);
 

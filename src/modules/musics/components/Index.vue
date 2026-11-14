@@ -138,10 +138,12 @@
       </thead>
       <tbody>
         <tr
-          v-for="item in data.data"
+          v-for="(item, index) in data.data"
           :key="item.id_music"
           class="lj-music-row"
+          :class="{ 'lj-music-row--active': index === nav.index.value }"
           :data-testid="`music-row-${item.id_music}`"
+          @mousemove="nav.setActive(index)"
         >
           <td>
             {{ item.name }}
@@ -217,7 +219,6 @@
                 :has_instrumental_music="item.has_instrumental_music"
                 :custom-song-id="item.custom_song_id"
                 :has-audio="item.has_audio !== false"
-                :show-playlist-menu="true"
                 defer-quick-actions
               />
             </div>
@@ -258,6 +259,7 @@ import { useViewport } from "@/composables/useViewport";
 import Platform from "@/helpers/Platform";
 import Media from "@/composables/useMedia";
 import { useQuickSearch } from "@/composables/useQuickSearch";
+import { useListNavigation } from "@/composables/useListNavigation";
 import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 import AppData from "@/helpers/AppData";
 import DateTime from "@/helpers/DateTime";
@@ -408,8 +410,9 @@ const scopeLabelId = useId();
 const search = ref("");
 
 /*
- * Busca pelo teclado: Enter toca a primeira música da lista (Shift+Enter, o
- * playback); ao voltar para cá, o texto anterior fica selecionado.
+ * Busca pelo teclado: ↑/↓ escolhem a música e Enter toca a destacada — de
+ * início, a primeira achada (Shift+Enter, o playback); ao voltar para cá, o
+ * texto anterior fica selecionado.
  */
 const searchInput = ref(null);
 const table = ref(null);
@@ -419,19 +422,34 @@ const quickSearch = useQuickSearch({
   enabled: () => !mobileLayout.value || mobileView.value === "music",
 });
 
-function onSearchKey(event) {
+const tableEl = computed(() => table.value?.$el ?? null);
+const nav = useListNavigation({
+  items: () => data.value?.data ?? [],
+  container: tableEl,
+  activeSelector: ".lj-music-row--active",
+  // Sem busca aplicada a lista é o acervo inteiro: nada destacado até a primeira seta.
+  start: () => (table.value?.searching() ? 0 : -1),
+});
+watch(
+  () => data.value?.revision,
+  () => nav.reset()
+);
+
+async function onSearchKey(event) {
   if (event.key === "Escape" && search.value) {
     event.preventDefault();
     search.value = "";
     return;
   }
-  if (!isQuickPlayEnter(event)) return;
+  const arrow = event.key === "ArrowDown" || event.key === "ArrowUp";
+  if (!arrow && !isQuickPlayEnter(event)) return;
   event.preventDefault();
-  // Lista filtrada agora: o Enter logo depois da digitação não espera o debounce.
-  const results = table.value?.currentResults() ?? [];
-  const first = results.find((item) => item.id_music != null || item.custom_song_id);
-  if (!first || !search.value.trim()) return;
-  if (quickPlay(first, event.shiftKey)) quickSearch.afterPlay();
+  // A busca recém-digitada vale já: a lista é refeita antes de andar ou tocar.
+  table.value?.flush();
+  await nextTick();
+  if (nav.handleArrow(event)) return;
+  const music = nav.active.value;
+  if (music && quickPlay(music, event.shiftKey)) quickSearch.afterPlay();
 }
 const scroll = ref({});
 const has_scroll = ref(false);

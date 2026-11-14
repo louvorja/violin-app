@@ -23,7 +23,11 @@ export function usePwaUpdates() {
   const tasks = useBackgroundTasks();
   const backgroundSound = useBackgroundSound();
   const store = useAppStore();
-  let recoveryPending = false;
+  // O download pode terminar depois do boot ou numa verificação periódica.
+  // A versão pronta deve ser aplicada assim que for seguro, sem depender de
+  // clique, retorno à aba ou falha de importação para autorizar a recarga.
+  let recoveryPending = true;
+  let reloadCurrentBuild = false;
   let recovering = false;
   let disposed = false;
   let nextRecoveryAt = 0;
@@ -51,20 +55,22 @@ export function usePwaUpdates() {
     unsubscribe();
     clearInterval(timer);
   });
-  const apply = () =>
+  const applySafely = (reloadCurrentBuild: boolean) =>
     applyPwaUpdate({
+      reloadCurrentBuild,
       canReload: () => !disposed && !hasWork(),
       beforeReload: async () => {
         await ScheduledStore.flush();
         UserData.flushPendingWebSave();
       },
     });
+  const apply = () => applySafely(false);
   const recoverWhenSafe = async () => {
     if (
       disposed ||
       recovering ||
       !recoveryPending ||
-      !state.value.ready ||
+      (!state.value.ready && !(reloadCurrentBuild && state.value.status === "current")) ||
       document.visibilityState === "hidden" ||
       hasWork() ||
       Date.now() < nextRecoveryAt
@@ -72,7 +78,7 @@ export function usePwaUpdates() {
       return;
     recovering = true;
     try {
-      recoveryPending = !(await apply());
+      recoveryPending = !(await applySafely(reloadCurrentBuild));
       // Uma gravação indisponível não pode causar uma tentativa a cada segundo.
       if (recoveryPending) nextRecoveryAt = Date.now() + 60_000;
     } finally {
@@ -96,11 +102,19 @@ export function usePwaUpdates() {
   const recover = () => {
     void checkAndApply();
   };
+  const reload = () => {
+    // Só o clique autoriza recarregar a mesma versão. Uma falha automática de
+    // importação ou o retorno à aba não deve criar ciclos de recarga.
+    reloadCurrentBuild = true;
+    void checkAndApply();
+  };
   document.addEventListener("visibilitychange", resumed);
   window.addEventListener("lj:pwa-recover", recover);
+  window.addEventListener("lj:pwa-reload", reload);
   onScopeDispose(() => {
     document.removeEventListener("visibilitychange", resumed);
     window.removeEventListener("lj:pwa-recover", recover);
+    window.removeEventListener("lj:pwa-reload", reload);
   });
   return {
     state: readonly(state),

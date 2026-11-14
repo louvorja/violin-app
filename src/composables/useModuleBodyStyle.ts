@@ -6,11 +6,12 @@
  *   - fundo:    background_color, image, image_opacity, image_fit
  *   - layout:   border_spacing, vertical_align, horizontal_align
  *   - alarme:   alert_color
+ *   - aviso:    warning_color (Cronômetro e Temporizadores)
  *
  * Escuta MODULE_FORMAT_CHANGED e USERDATA_PATCH para refletir ao vivo.
  * Retorna estilos prontos para aplicar no template do módulo.
  *
-* Uso:
+ * Uso:
  *   const { rootStyle, textStyle, alertStyle, bgImage, imageStyle, container } = useModuleBodyStyle("timer");
  */
 import { ref, computed, type CSSProperties } from "vue";
@@ -18,6 +19,7 @@ import UserData from "@/helpers/UserData";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useContainerSize } from "@/composables/useContainerSize";
+import { useStoredImageUrl } from "@/composables/useStoredImageUrl";
 import { FONT, resolveFont } from "@/config/Fonts";
 import {
   horizontalTextAlign,
@@ -50,15 +52,14 @@ export function useModuleBodyStyle(moduleId: string) {
     return v == null ? manifestDefault : v;
   }
 
-  const font = computed(() =>
-    resolveFont(read<string>("font", ""), FONT.PROJECTION.FALLBACK)
-  );
+  const font = computed(() => resolveFont(read<string>("font", ""), FONT.PROJECTION.FALLBACK));
   const font_color = computed(() => read<string>("font_color", "#FFFFFF"));
   const font_size = computed(() => read<number>("font_size", 50));
   const text_shadow = computed(() => read<boolean>("text_shadow", false));
   const text_shadow_color = computed(() => read<string>("text_shadow_color", "#000000"));
   const text_shadow_blur = computed(() => read<number>("text_shadow_blur", 4));
   const alert_color = computed(() => read<string>("alert_color", "#E74C3C"));
+  const warning_color = computed(() => read<string>("warning_color", "#F59E0B"));
   const background_color = computed(() => read<string>("background_color", "#000000"));
   const border_spacing = computed(() => read<number>("border_spacing", 10));
   const vertical_align = computed(() => read<string>("vertical_align", "center"));
@@ -78,6 +79,8 @@ export function useModuleBodyStyle(moduleId: string) {
     read<string>("text_background_color", "transparent")
   );
   const text_background_opacity = computed(() => read<number>("text_background_opacity", 100));
+  const text_padding_x = computed(() => read<number>("text_padding_x", 0));
+  const text_padding_y = computed(() => read<number>("text_padding_y", 0));
   const text_border_enabled = computed(() => read<boolean>("text_border_enabled", false));
   const text_border_color = computed(() => read<string>("text_border_color", "#FFFFFF"));
   const text_border_opacity = computed(() => read<number>("text_border_opacity", 100));
@@ -93,6 +96,8 @@ export function useModuleBodyStyle(moduleId: string) {
       enabled: text_background_enabled.value,
       color: text_background_color.value,
       opacity: text_background_opacity.value,
+      paddingX: text_padding_x.value,
+      paddingY: text_padding_y.value,
       borderEnabled: text_border_enabled.value,
       borderColor: text_border_color.value,
       borderOpacity: text_border_opacity.value,
@@ -106,10 +111,18 @@ export function useModuleBodyStyle(moduleId: string) {
   //   justifyContent → eixo vertical (main axis)
   //   alignItems     → eixo horizontal (cross axis)
   const alignItems = computed(() =>
-    horizontal_align.value === "start" ? "flex-start" : horizontal_align.value === "end" ? "flex-end" : "center"
+    horizontal_align.value === "start"
+      ? "flex-start"
+      : horizontal_align.value === "end"
+        ? "flex-end"
+        : "center"
   );
   const justifyContent = computed(() =>
-    vertical_align.value === "start" ? "flex-start" : vertical_align.value === "end" ? "flex-end" : "center"
+    vertical_align.value === "start"
+      ? "flex-start"
+      : vertical_align.value === "end"
+        ? "flex-end"
+        : "center"
   );
 
   /** Estilos do container do body (fundo + padding + alinhamento). */
@@ -161,8 +174,11 @@ export function useModuleBodyStyle(moduleId: string) {
   /** Cor do alerta (estado de alarme). */
   const alertStyle = computed<CSSProperties>(() => ({ color: alert_color.value }));
 
+  /** Cor do aviso (perto do fim, antes do alarme) nos módulos de contagem. */
+  const warningStyle = computed<CSSProperties>(() => ({ color: warning_color.value }));
+
   /** Imagem de fundo (opcional). */
-  const bgImage = computed(() => image.value || "");
+  const bgImage = useStoredImageUrl(image);
 
   /** Estilos da imagem de fundo (opacidade + object-fit). */
   const imageStyle = computed<CSSProperties>(() => ({
@@ -175,6 +191,7 @@ export function useModuleBodyStyle(moduleId: string) {
     textStyle,
     referenceStyle,
     alertStyle,
+    warningStyle,
     bgImage,
     imageStyle,
     container,

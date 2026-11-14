@@ -8,7 +8,12 @@ import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { openAnnouncementsWindow, openSiteWindow } from "@/helpers/ProjectionWindows";
+import {
+  activateBackgroundProjection,
+  type BackgroundProjectionRecord,
+} from "@/helpers/BackgroundProjectionPlayback";
 import { beginAnnouncementIntent } from "@/presentation/AnnouncementsPresentationState";
+import { loadAnnouncements } from "@/modules/announcements/storage";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import $idb from "@/helpers/IndexedDB";
@@ -28,6 +33,8 @@ import { LITURGY_VERSION_ACTION } from "@/config/MusicAction";
 import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
+import { localFileStatus, type LocalFileStatus } from "@/helpers/LocalFileStatus";
+import { mediaSourceDetails } from "@/helpers/MediaDiagnostics";
 import Telemetry from "@/helpers/Telemetry";
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
 import {
@@ -118,6 +125,9 @@ export function useLiturgyExecution() {
           break;
         case LiturgyItemTypeEnum.MEDIA_LIBRARY:
           projected = await executeMediaLibraryItem(item);
+          break;
+        case LiturgyItemTypeEnum.BG_PROJECTION:
+          projected = await executeBackgroundProjectionItem(item);
           break;
         case LiturgyItemTypeEnum.BG_SOUND:
           await executeBgSoundItem(item);
@@ -325,7 +335,12 @@ export function useLiturgyExecution() {
       $alert.error({ text: "modules.custom_online_videos.invalid_url" });
       return false;
     }
-    return $media.openYouTube(embedUrl, item.item || item.subitem || url);
+    // O subitem guarda o título do vídeo (YouTube); o item é o nome do item
+    // litúrgico. A tarefa de download em segundo plano precisa do primeiro.
+    const videoName = String(item.subitem || "")
+      .replace(/^URL:\s*/i, "")
+      .trim();
+    return $media.openYouTube(embedUrl, videoName || item.item || url);
   }
 
   /**
@@ -370,19 +385,17 @@ export function useLiturgyExecution() {
   async function executeAnnouncements(item: LiturgyItem, startIndex = 0): Promise<boolean> {
     const announcementToken = beginAnnouncementIntent();
     try {
-      const all = (
-        await $idb.getAll<{
-          id: string;
-          nome: string;
-          ordem: number;
-          texto?: string;
-          imageData?: ArrayBuffer;
-          imageMime?: string;
-          videoData?: ArrayBuffer;
-          videoMime?: string;
-          style?: Record<string, unknown>;
-        }>(DB_TABLE.ANNOUNCEMENTS)
-      ).sort((a, b) => a.ordem - b.ordem);
+      const all = await loadAnnouncements<{
+        id: string;
+        nome: string;
+        ordem: number;
+        texto?: string;
+        imageData?: Blob;
+        imageMime?: string;
+        videoData?: Blob;
+        videoMime?: string;
+        style?: Record<string, unknown>;
+      }>();
 
       const ids = item.anuncios_ids;
       const selected = Array.isArray(ids) ? all.filter((a) => ids.includes(String(a.id))) : all;
@@ -475,6 +488,34 @@ export function useLiturgyExecution() {
     return p;
   }
 
+  /**
+   * Projeção de Fundo: troca a mídia na janela do módulo, abrindo-a se ainda
+   * não estiver ativa. Ao contrário de som de fundo, é uma projeção visual —
+   * por isso confirma sucesso para permitir o overlay vinculado.
+   */
+  async function executeBackgroundProjectionItem(item: LiturgyItem): Promise<boolean> {
+    if (!item.ref_id) {
+      reportMissingResource("execute_background_projection", "background_projection");
+      $alert.error({ text: t("alerts.media_not_found") });
+      return false;
+    }
+    try {
+      const rec = await $idb.get<BackgroundProjectionRecord>(
+        DB_TABLE.BACKGROUND_PROJECTION_LIBRARY,
+        item.ref_id
+      );
+      if (!rec) {
+        reportMissingResource("execute_background_projection", "background_projection");
+        $alert.error({ text: t("alerts.media_not_found") });
+        return false;
+      }
+      return await activateBackgroundProjection(rec);
+    } catch (error) {
+      reportExecutionError(error, "execute_background_projection", { has_ref_id: true });
+      return false;
+    }
+  }
+
   /** Som de fundo: reproduz no PLAYER do módulo Som de Fundo (fade/volume). */
   async function executeBgSoundItem(item: LiturgyItem): Promise<void> {
     if (!item.ref_id) {
@@ -524,6 +565,44 @@ export function useLiturgyExecution() {
     return $path.file(dir);
   }
 
+  /**
+   * O arquivo ainda pode ser lido no caminho salvo? Pedir 1 byte evita abrir a
+   * projeção e deixar a tela preta/erro de áudio quando o arquivo foi movido,
+   * apagado ou ficou inacessível. Só vale para caminhos locais absolutos;
+   * URLs remotas/blob seguem o fluxo normal (a falha ali é de rede/formato).
+   */
+  async function _localFileStatus(dir: string): Promise<LocalFileStatus> {
+    if (!dir || !Platform.isDesktop) return "ok";
+    if (/^(blob|data):/i.test(dir)) return "ok";
+    const hasProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir);
+    if (hasProtocol && !/^louvorja:\/\/local\//i.test(dir)) return "ok";
+    const isLocalPath =
+      /^louvorja:\/\/local\//i.test(dir) ||
+      dir.startsWith("/") ||
+      /^[A-Za-z]:[\\/]/.test(dir) ||
+      dir.startsWith("\\\\");
+    if (!isLocalPath) return "ok";
+    return localFileStatus(/^louvorja:\/\//i.test(dir) ? dir : _resolveFileUrl(dir));
+  }
+
+  /**
+   * "Arquivo não encontrado" só quando ele não existe: é engano do operador e
+   * fica como evento. Sem permissão ou disco que não responde é defeito do
+   * ambiente — vai para o error tracking, com o motivo na tela.
+   */
+  function _alertUnopenableFile(status: Exclude<LocalFileStatus, "ok">, dir: string): void {
+    if (status === "not_found") {
+      reportMissingResource("open_file", "file");
+      $alert.error({ text: dir, title: "modules.media.alerts.file_not_found" });
+      return;
+    }
+    reportExecutionError(new Error(`Liturgy file ${status}`), "open_file_access", {
+      file_status: status,
+      ...mediaSourceDetails(dir),
+    });
+    $alert.error({ text: dir, title: `modules.media.alerts.file_${status}` });
+  }
+
   /** Cache de objectURLs para HEIC→JPEG (evita reconverter a cada projeção). */
   const _heicProjectionCache = new Map<string, string>();
 
@@ -555,12 +634,14 @@ export function useLiturgyExecution() {
     extraPayload?: Record<string, unknown>
   ): Promise<boolean> {
     const intent = ++fileOpenIntent;
+    const stageIsCurrent = $media.captureStageGuard();
+    const isCurrent = () => intent === fileOpenIntent && stageIsCurrent();
     let dir = item.dir || "";
     const storedFile =
       item.tipo === LiturgyItemTypeEnum.ARQUIVO && item.ref_id
         ? await resolveLiturgyFile(item.ref_id)
         : null;
-    if (item.tipo === LiturgyItemTypeEnum.ARQUIVO && item.ref_id && intent !== fileOpenIntent) {
+    if (!isCurrent()) {
       if (storedFile) releaseLiturgyFileUrl(storedFile.url);
       return false;
     }
@@ -576,7 +657,29 @@ export function useLiturgyExecution() {
         ...extraPayload,
         libRef: { table: DB_TABLE.LITURGY_FILES, id: item.ref_id },
       };
+    } else {
+      // Uma liturgia importada pode guardar o caminho do computador de origem.
+      // O navegador precisa que o operador escolha os bytes pelo seletor: não
+      // pode abrir esse caminho nem tratá-lo como um endereço do acervo.
+      if (
+        !Platform.isDesktop &&
+        (/^[A-Za-z]:[\\/]/.test(dir) ||
+          dir.startsWith("\\\\") ||
+          /^(?:file:|louvorja:\/\/local\/)/i.test(dir))
+      ) {
+        reportMissingResource("open_file", "local_file_selection");
+        $alert.error({ text: chaveLiturgia("alerts.file_choose_again_web") });
+        return false;
+      }
+      const status = await _localFileStatus(dir);
+      // Outro item pode ter sido pedido enquanto o disco era consultado.
+      if (intent !== fileOpenIntent) return false;
+      if (status !== "ok") {
+        _alertUnopenableFile(status, dir);
+        return false;
+      }
     }
+    if (intent !== fileOpenIntent) return false;
     const ext = dir.split(/[?#]/)[0].split(".").pop()?.toLowerCase() || "";
     // Tipo efetivo: extensão do caminho; sem extensão (ex.: blob URLs),
     // usa o hint informado pelo chamador (subtipo do item).
@@ -591,17 +694,24 @@ export function useLiturgyExecution() {
     if (
       !storedFile &&
       (kind === "audio" || kind === "video") &&
-      Boolean($userdata.get(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, false)) &&
-      (await openWithSystemPlayer(dir, kind))
+      Boolean($userdata.get(KEYS.OPTIONS.USE_SYSTEM_MEDIA_PLAYER, false))
     ) {
-      // Não deixe uma projeção anterior congelada enquanto o Windows assume
-      // a reprodução deste arquivo.
-      $media.close(true);
-      return false;
+      const opened = await openWithSystemPlayer(dir, kind);
+      // O SO pode responder minutos depois. Nem o sucesso deve fechar uma
+      // apresentação nova, nem a falha deve iniciar o arquivo antigo no app.
+      if (!isCurrent()) return false;
+      if (opened) {
+        $media.close(true);
+        return false;
+      }
     }
 
     // HEIC/HEIF: converte para JPEG antes de enviar à projeção.
     const url = storedFile?.url || (await _resolveRenderableUrl(dir));
+    if (!isCurrent()) {
+      if (storedFile) releaseLiturgyFileUrl(url);
+      return false;
+    }
 
     if (
       !url ||
@@ -686,11 +796,12 @@ export function useLiturgyExecution() {
       }
     } else if (!kind && !typeHint) {
       // Tipo desconhecido sem hint: comportamento legado (abrir com SO).
-      if (!(await openWithSystemPlayer(dir, "unknown"))) openUrl(dir);
+      if (!(await openWithSystemPlayer(dir, "unknown")) && isCurrent()) openUrl(dir);
       return false;
     } else {
-      reportMissingResource("open_file", "renderable_file");
-      $alert.error({ text: url, title: "modules.media.alerts.file_not_found" });
+      // O arquivo existe; é o tipo dele que o app não sabe abrir.
+      Telemetry.track("liturgy_file_unsupported", { operation: "open_file", extension: ext, kind });
+      $alert.error({ text: dir, title: "modules.media.alerts.file_unsupported" });
       return false;
     }
   }

@@ -21,6 +21,7 @@
 
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import type { ModuleWheelState } from "@/presentation/ModulePresentationState";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 
 interface ProjectionPayload {
@@ -34,6 +35,12 @@ interface ProjectionPayload {
   active?: boolean;
   /** Cor de destaque do texto (ex: alerta do timer/timer_worship). */
   color?: string;
+  /** Tipo do sorteio no módulo draw: número ou nome. */
+  mode?: "number" | "names";
+  /** Roda 3D exibida apenas enquanto o sorteio está girando. */
+  wheel?: ModuleWheelState;
+  /** Borda pulsando no telão: amarela perto do fim, vermelha depois dele. */
+  alert?: "warning" | "danger";
 }
 
 interface UseModuleProjectionOptions {

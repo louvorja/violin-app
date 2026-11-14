@@ -16,10 +16,10 @@
  * Só teclas de mídia são registradas para evitar conflito com PowerPoint/OBS.
  */
 
-const { globalShortcut, BrowserWindow } = require("electron");
+const { globalShortcut } = require("electron");
 const { safeSend } = require("./safeWebContents.js");
 
-/** @type {BrowserWindow | null} */
+/** @type {import("electron").BrowserWindow | null} */
 let _mainWindow = null;
 
 /** @type {Set<string>} */
@@ -29,27 +29,20 @@ let _enabled = false;
 
 /**
  * Define a janela principal. Chamado imediatamente após createWindow() no main.cjs.
- * @param {BrowserWindow} win
+ * @param {import("electron").BrowserWindow} win
  */
 function setMainWindow(win) {
   _mainWindow = win;
 }
 
 /**
- * Despacha uma ação para a janela em foco (se for nossa) ou para a main.
- * As janelas escutam via Shortcuts.js no renderer (ipcRenderer.on("shortcut")).
+ * Despacha para a principal, que controla a reprodução e registra Shortcuts.js.
+ * Projeção e retorno podem estar em foco, mas não possuem esse listener.
  *
  * @param {string} action  Ex: "slide:next", "audio:toggle"
  * @param {object} [payload]
  */
 function dispatch(action, payload = {}) {
-  // Prioridade 1: janela do nosso app que está em foco
-  const focused = BrowserWindow.getFocusedWindow();
-  if (focused && safeSend(focused, "shortcut", { action, payload })) {
-    return;
-  }
-
-  // Prioridade 2: janela principal (app pode estar em background)
   safeSend(_mainWindow, "shortcut", { action, payload });
 }
 

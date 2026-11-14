@@ -103,6 +103,7 @@
                   :icon="resolveBtnIcon(btn)"
                   :icon-color="resolveBtnColor(btn)"
                   :label="$t(resolveBtnLabel(btn))"
+                  :shortcut="btn.shortcut ? formatShortcut(btn.shortcut) : undefined"
                   :size="btn.size || 'large'"
                   :active="isButtonActive(btn)"
                   :disabled="isBtnDisabled(btn)"
@@ -118,7 +119,14 @@
           <div
             v-if="compactButtons(group).length"
             class="ribbon-group-track"
-            :class="getCompactTrackClass()"
+            :class="[
+              getCompactTrackClass(),
+              {
+                'ribbon-group-track--stacked-fields': group.stackedFields,
+                'ribbon-group-track--stacked-span':
+                  group.stackedFields && (group.compactRows ?? 3) === 3,
+              },
+            ]"
             :style="
               group.compactRows
                 ? { gridTemplateRows: `repeat(${group.compactRows}, max-content)` }
@@ -255,6 +263,7 @@
                   :icon="resolveBtnIcon(btn)"
                   :icon-color="resolveBtnColor(btn)"
                   :label="$t(resolveBtnLabel(btn))"
+                  :shortcut="btn.shortcut ? formatShortcut(btn.shortcut) : undefined"
                   :size="btn.size || 'small'"
                   :active="isButtonActive(btn)"
                   :disabled="isBtnDisabled(btn)"
@@ -300,6 +309,7 @@ import $alert from "@/helpers/Alert";
 import $database from "@/helpers/Database";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { formatShortcut } from "@/helpers/Hotkeys";
 import { getRibbonModules, isModuleVisible } from "@/config/modules";
 import { KEYS } from "@/constants/UserDataKeys";
 import type { RibbonButton, RibbonGroup, RibbonPage } from "@/types/Ribbon";
@@ -451,7 +461,7 @@ function executeInputAction(btn: RibbonButton): void {
   const val = inputValues[btn.id]?.trim();
   if (!val) return;
   const m = btn.action?.match(
-    /^(counter|draw|name_draw|clock|stopwatch|timer_worship|timer|message_board|online_videos|custom_online_videos|background_sound)_(.+)$/
+    /^(counter|draw|clock|stopwatch|timer_worship|timer|message_board|online_videos|custom_online_videos|background_sound)_(.+)$/
   );
   if (m) {
     Broadcast.send(BROADCAST_TYPE.MODULE_RIBBON_ACTION, {
@@ -616,6 +626,7 @@ function isModuleOpen(moduleId: string | null): boolean {
 }
 
 function isButtonActive(btn: RibbonButton): boolean {
+  if (btn.activePath) return $userdata.get<boolean>(btn.activePath, false) === true;
   if (!btn.module) return false;
   if (!openModuleIds.value.includes(btn.module)) return false;
   const lastBtn = $appdata.get<string | null>(`modules.${btn.module}.last_btn`);
@@ -808,7 +819,6 @@ function executeButton(btn: RibbonButton): void {
     const actions = [
       "counter",
       "draw",
-      "name_draw",
       "clock",
       "stopwatch",
       "timer_worship",
@@ -1150,6 +1160,26 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
 
 .ribbon-group-item--field .ribbon-field-label {
   min-width: var(--lj-ribbon-field-label-width);
+}
+
+/* Grupo com `stackedFields`: rótulo em cima, no mesmo tom do "TEMPO" do
+   TimeDurationInput, e sem a largura de alinhamento. */
+.ribbon-group-track--stacked-fields .ribbon-group-item--compact .ribbon-field-wrap {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+/* Com três linhas, o campo empilhado ocupa duas: sozinho numa linha ele a
+   esticava e as caixinhas da coluna ao lado ficavam desencontradas. */
+.ribbon-group-track--stacked-span .ribbon-group-item--field {
+  grid-row: span 2;
+  align-self: start;
+}
+.ribbon-group-track--stacked-fields .ribbon-group-item--field .ribbon-field-label {
+  min-width: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .ribbon-field-select {

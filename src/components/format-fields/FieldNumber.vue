@@ -24,13 +24,16 @@ defineEmits(["update:modelValue"]);
  * legítimos, não ausência.
  */
 const min = computed(() =>
-  props.field.type === "opacity" || props.field.type === "radius" ? 0 : 1
+  props.field.type === "opacity" || props.field.type === "radius" || props.field.type === "padding"
+    ? 0
+    : 1
 );
 const max = computed(() => {
   if (props.field.type === "opacity") return 100;
   if (props.field.type === "radius") return 50;
   if (props.field.type === "border-width") return 20;
   if (props.field.type === "border-spacing") return 50;
+  if (props.field.type === "padding") return 100;
   return 300;
 });
 </script>

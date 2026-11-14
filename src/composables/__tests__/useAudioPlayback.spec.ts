@@ -70,8 +70,11 @@ describe("useAudioPlayback.play", () => {
     const el = audio.getElement();
     audio.setTelemetryContext({ playback_id: "p-buffer", id_music: 42, mode: "audio" });
 
+    vi.useFakeTimers();
     el.dispatchEvent(new Event("waiting"));
+    vi.advanceTimersByTime(1200);
     el.dispatchEvent(new Event("playing"));
+    vi.useRealTimers();
 
     expect(Telemetry.track).toHaveBeenCalledWith(
       "music_buffering_started",
@@ -243,6 +246,209 @@ describe("useAudioPlayback.media element", () => {
   });
 });
 
+describe("useAudioPlayback lifecycle", () => {
+  beforeEach(() => {
+    audio.reset();
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    audio.cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("preserva a URL emprestada da biblioteca ao alternar de faixa", async () => {
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", class extends URL { static revokeObjectURL = revokeObjectURL; });
+    audio.setSrc("blob:library-sung");
+    const instrumental = document.createElement("audio");
+    instrumental.src = "blob:library-instrumental";
+
+    await audio.takeOver(instrumental, () => 0, false);
+    audio.setSrc("blob:library-sung");
+
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    expect(audio.getElement().getAttribute("src")).toBe("blob:library-sung");
+  });
+
+  it("revoga a cópia criada pelo player ao parar, sem revogar a fonte da biblioteca", () => {
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", class extends URL { static revokeObjectURL = revokeObjectURL; });
+    audio.setSrc("blob:player-copy", false, true);
+    audio.stop();
+    audio.setSrc("blob:library");
+    audio.stop();
+
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:player-copy");
+  });
+
+  it.each(["stop", "reset", "cleanup"] as const)(
+    "%s cancela o fade e seu callback antes de outra música assumir",
+    (action) => {
+      const el = audio.getElement();
+      Object.defineProperty(el, "paused", { configurable: true, value: false });
+      el.volume = 1;
+      const pauseOldTrack = vi.fn();
+      audio.fadeOut(pauseOldTrack);
+      vi.advanceTimersByTime(40);
+
+      audio[action]();
+      audio.setSrc("blob:outra-musica");
+      audio.setVolume(100);
+      vi.advanceTimersByTime(500);
+
+      expect(pauseOldTrack).not.toHaveBeenCalled();
+      expect(audio.getElement().volume).toBe(1);
+      expect(audio.isFading.value).toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
+    }
+  );
+
+  it("fade-out interrompido avisa quem espera por ele, sem chamar o callback de fim", () => {
+    const el = audio.getElement();
+    Object.defineProperty(el, "paused", { configurable: true, value: false });
+    el.volume = 1;
+    const finished = vi.fn();
+    const interrupted = vi.fn();
+    audio.fadeOut(finished, interrupted);
+    vi.advanceTimersByTime(40);
+
+    audio.pause();
+    vi.advanceTimersByTime(500);
+
+    expect(interrupted).toHaveBeenCalledOnce();
+    expect(finished).not.toHaveBeenCalled();
+  });
+
+  it("fade-out que chega ao fim não dispara o aviso de interrupção", () => {
+    const el = audio.getElement();
+    Object.defineProperty(el, "paused", { configurable: true, value: false });
+    el.volume = 1;
+    const finished = vi.fn();
+    const interrupted = vi.fn();
+    audio.fadeOut(finished, interrupted);
+    vi.advanceTimersByTime(500);
+    audio.stop();
+
+    expect(finished).toHaveBeenCalledOnce();
+    expect(interrupted).not.toHaveBeenCalled();
+  });
+
+  it("retomar durante o fade de pausa cancela a pausa antiga e termina o fade", () => {
+    const el = audio.getElement();
+    Object.defineProperty(el, "paused", { configurable: true, value: false });
+    el.volume = 1;
+    const pauseOldTrack = vi.fn();
+    const resumed = vi.fn();
+    audio.fadeOut(pauseOldTrack);
+    vi.advanceTimersByTime(60);
+    audio.fadeIn(100, resumed);
+    vi.advanceTimersByTime(500);
+
+    expect(pauseOldTrack).not.toHaveBeenCalled();
+    expect(resumed).toHaveBeenCalledOnce();
+    expect(el.volume).toBe(1);
+    expect(audio.isFading.value).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("não promove uma faixa cujo play terminou depois de fechar e abrir outra música", async () => {
+    const current = audio.getElement();
+    const next = document.createElement("audio");
+    next.src = "blob:playback-antigo";
+    let started!: () => void;
+    next.play = vi.fn(() => new Promise<void>((resolve) => { started = resolve; }));
+    const result = audio.takeOver(next, () => 0, true).catch((error) => error);
+
+    audio.stop();
+    audio.reset();
+    audio.setSrc("blob:nova-musica");
+    started();
+    const outcome = await result;
+
+    expect(outcome).toMatchObject({ name: "AbortError" });
+    expect(audio.getElement()).toBe(current);
+    expect(current.getAttribute("src")).toBe("blob:nova-musica");
+    expect(next.hasAttribute("src")).toBe(false);
+    expect(next.isConnected).toBe(false);
+  });
+
+  it("mantém a pausa solicitada enquanto a nova faixa ainda esperava play()", async () => {
+    const next = document.createElement("audio");
+    next.src = "blob:playback";
+    let paused = false;
+    Object.defineProperty(next, "paused", { configurable: true, get: () => paused });
+    next.pause = vi.fn(() => { paused = true; });
+    let started!: () => void;
+    next.play = vi.fn(() => new Promise<void>((resolve) => { started = resolve; }));
+    const result = audio.takeOver(next, () => 0, true);
+    audio.pause();
+    started();
+    await result;
+
+    expect(audio.getElement()).toBe(next);
+    expect(next.pause).toHaveBeenCalledOnce();
+    expect(audio.isPaused.value).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([0, 35])("preserva volume %s escolhido enquanto a troca aguarda play()", async (volume) => {
+    const next = document.createElement("audio");
+    next.src = "blob:playback";
+    Object.defineProperty(next, "paused", { configurable: true, value: false });
+    let started!: () => void;
+    next.play = vi.fn(() => new Promise<void>((resolve) => { started = resolve; }));
+    const result = audio.takeOver(next, () => 0, true);
+
+    audio.setVolume(volume);
+    // Vale antes de o navegador começar a tocar, sem um pico na faixa nova.
+    expect(next.volume).toBe(volume / 100);
+    started();
+    await result;
+
+    expect(audio.getElement()).toBe(next);
+    expect(audio.volume.value).toBe(volume);
+    expect(next.volume).toBe(volume / 100);
+  });
+
+  it.each([0, 35])("preserva volume %s escolhido durante fade de retomada", (volume) => {
+    const el = audio.getElement();
+    el.volume = 0;
+    const resumed = vi.fn();
+    audio.fadeIn(100, resumed);
+    vi.advanceTimersByTime(60);
+
+    audio.setVolume(volume);
+    vi.advanceTimersByTime(500);
+
+    expect(audio.volume.value).toBe(volume);
+    expect(el.volume).toBe(volume / 100);
+    expect(resumed).toHaveBeenCalledOnce();
+    expect(audio.isFading.value).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("ajustar volume durante fade de pausa mantém a pausa solicitada", () => {
+    const el = audio.getElement();
+    Object.defineProperty(el, "paused", { configurable: true, value: false });
+    el.volume = 1;
+    const paused = vi.fn();
+    audio.fadeOut(paused);
+    vi.advanceTimersByTime(40);
+    audio.setVolume(35);
+    vi.advanceTimersByTime(500);
+
+    expect(paused).toHaveBeenCalledOnce();
+    expect(audio.volume.value).toBe(35);
+    expect(el.volume).toBe(0);
+    expect(audio.isFading.value).toBe(false);
+  });
+});
+
 describe("useAudioPlayback.prepare", () => {
   beforeEach(() => {
     audio.reset();
@@ -333,4 +539,30 @@ describe("useAudioPlayback.prepare", () => {
       expect(vi.getTimerCount()).toBe(baselineTimers);
     }
   );
+});
+
+it("buffering curto só registra recuperação e playing repetido não repete início", () => {
+  audio.reset();
+  vi.clearAllMocks();
+  vi.useFakeTimers();
+  const el = audio.getElement();
+  audio.setTelemetryContext({ playback_id: "p-fast", mode: "audio" });
+  el.dispatchEvent(new Event("playing"));
+  el.dispatchEvent(new Event("playing"));
+  el.dispatchEvent(new Event("waiting"));
+  vi.advanceTimersByTime(150);
+  el.dispatchEvent(new Event("playing"));
+  el.dispatchEvent(new Event("playing"));
+  expect(
+    vi.mocked(Telemetry.track).mock.calls.filter(([event]) => event === "music_play_started")
+  ).toHaveLength(1);
+  expect(
+    vi.mocked(Telemetry.track).mock.calls.filter(([event]) => event === "music_playback_resumed")
+  ).toHaveLength(1);
+  expect(Telemetry.track).not.toHaveBeenCalledWith("music_buffering_started", expect.anything());
+  expect(Telemetry.histogram).toHaveBeenCalledWith("louvorja.music.buffering.duration", 150, {
+    phase: "playback",
+  });
+  audio.reset();
+  vi.useRealTimers();
 });

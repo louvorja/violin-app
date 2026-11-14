@@ -261,6 +261,7 @@
       <LiturgyVideoSearch
         v-model="videoSearchOpen"
         :videos-list="videosList"
+        :selected-url="form.url"
         @pick="onVideoSearchPicked"
       />
       <div style="margin: 20px 0 20px 0">OU</div>
@@ -312,7 +313,33 @@
         :title="t('library_search.title_media')"
         :icon="ICONS.MEDIA.LIBRARY"
         :items="libraryItems"
+        :categories="libraryCategories"
+        :selected-id="form.ref_id"
         @pick="onLibraryPicked"
+      />
+    </section>
+
+    <!-- ─── Painel PROJEÇÃO DE FUNDO ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.BG_PROJECTION" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.projecao-de-fundo") }}</h3>
+      <LjField layout="column" :label="t('inputs.projection_select')">
+        <div>
+          <LjButton variant="primary" :icon="ICONS.ACTIONS.SEARCH" @click="openProjectionSearch">
+            {{ t("inputs.projection_search_btn") }}
+          </LjButton>
+        </div>
+      </LjField>
+      <LjChip v-if="form.ref_id" class="lif-selected" :icon="ICONS.MODULES.BACKGROUND_PROJECTION">
+        <span class="lif-selected__name">{{ form.item || form.subitem }}</span>
+      </LjChip>
+      <LiturgyLibrarySearch
+        v-model="projectionSearchOpen"
+        :title="t('library_search.title_projection')"
+        :icon="ICONS.MODULES.BACKGROUND_PROJECTION"
+        :items="projectionItems"
+        :categories="projectionCategories"
+        :selected-id="form.ref_id"
+        @pick="onProjectionPicked"
       />
     </section>
 
@@ -321,7 +348,7 @@
       <h3 class="lif-panel__title">{{ t("types.som-de-fundo") }}</h3>
       <LjField layout="column" :label="t('inputs.sound_select')">
         <div>
-          <LjButton variant="ghost" :icon="ICONS.ACTIONS.SEARCH" @click="openBgSoundSearch">
+          <LjButton variant="primary" :icon="ICONS.ACTIONS.SEARCH" @click="openBgSoundSearch">
             {{ t("inputs.sound_search_btn") }}
           </LjButton>
         </div>
@@ -334,7 +361,8 @@
         :title="t('library_search.title_sound')"
         :icon="ICONS.MUSIC.PLAYBACK"
         :items="bgSoundItems"
-        show-detail
+        :categories="bgSoundCategories"
+        :selected-id="form.ref_id"
         @pick="onBgSoundPicked"
       />
     </section>
@@ -450,7 +478,7 @@
 
 <script setup lang="ts">
 import { useLiturgyI18n } from "../i18n";
-import { ref, watch, computed, nextTick } from "vue";
+import { ref, watch, computed, nextTick, onBeforeUnmount } from "vue";
 import {
   LjButton,
   LjCheckbox,
@@ -465,10 +493,14 @@ import {
   LjTooltip,
 } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import Liturgy from "@/helpers/Liturgy";
+import Liturgy, { musicDurationMinutes } from "@/helpers/Liturgy";
 import DateTime from "@/helpers/DateTime";
+import Path from "@/helpers/Path";
 import LiturgyVideoSearch, { type VideoSearchItem } from "./LiturgyVideoSearch.vue";
-import LiturgyLibrarySearch, { type LibrarySearchItem } from "./LiturgyLibrarySearch.vue";
+import LiturgyLibrarySearch, {
+  type LibrarySearchCategory,
+  type LibrarySearchItem,
+} from "./LiturgyLibrarySearch.vue";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
 import type { LiturgyItem, LiturgyMusicItem, ScheduledCategory } from "@/types/Liturgy";
@@ -497,7 +529,7 @@ const props = withDefaults(
     musicsList?: LiturgyMusicItem[];
     scheduledCategories?: ScheduledCategory[];
     blocoItems?: LiturgyItem[];
-    videosList?: { id: string; name: string; url: string }[];
+    videosList?: VideoSearchItem[];
     overlaySlots?: OverlaySlot[];
     setFormField: (key: string, value: unknown) => void;
     onTypeChange: () => void;
@@ -592,6 +624,7 @@ const typeOptions = computed(() => [
   { value: LiturgyItemTypeEnum.MUSICA, label: t("types.musica") },
   { value: LiturgyItemTypeEnum.SITE, label: t("types.site") },
   { value: LiturgyItemTypeEnum.OVERLAY, label: t("types.overlay") },
+  { value: LiturgyItemTypeEnum.BG_PROJECTION, label: t("types.projecao-de-fundo") },
   { value: LiturgyItemTypeEnum.BG_SOUND, label: t("types.som-de-fundo") },
   { value: LiturgyItemTypeEnum.VIDEO_ONLINE, label: t("types.video-online") },
 ]);
@@ -644,14 +677,8 @@ function updateDurationForVersion(version: string) {
   if (musicId <= 0) return;
   const m = props.musicsList?.find((x) => Number(x.id_music) === musicId);
   if (!m) return;
-  const raw = m as Record<string, unknown>;
-  const useInstrumental = version === "pb" || version === "audio_pb";
-  const timeStr: string = useInstrumental
-    ? (raw.instrumental_duration as string) || (raw.duration as string) || ""
-    : (raw.duration as string) || (raw.instrumental_duration as string) || "";
-  if (!timeStr) return;
-  const totalSeconds = DateTime.toNumber(timeStr);
-  const minutes = Math.ceil(totalSeconds / 60);
+  const minutes = musicDurationMinutes(m, version);
+  if (minutes === null) return;
   props.setFormField("duration", minutes);
 }
 
@@ -723,13 +750,16 @@ function setSaveToMyVideos(ativo: boolean): void {
  */
 async function salvarItem(): Promise<void> {
   if (videoUrlBusy.value) return;
-  if (!videoUrl.value.trim()) {
-    await nomearVideoLegado();
-    props.saveItem();
-    return;
-  }
+  // O caminho do vídeo escolhido também faz I/O (disco/oEmbed): sem a trava,
+  // dois cliques em Salvar gravariam dois itens.
   videoUrlBusy.value = true;
   try {
+    if (!videoUrl.value.trim()) {
+      await nomearVideoLegado();
+      await baixarVideoSelecionado();
+      props.saveItem();
+      return;
+    }
     const aplicou = await aplicarUrlColada();
     if (!aplicou) return;
     props.saveItem();
@@ -769,17 +799,49 @@ async function aplicarUrlColada(): Promise<boolean> {
     await props.reloadVideos?.();
   }
 
-  /*
-   * Aviso só onde há download de verdade: no web/PWA o `download` devolve
-   * false e o operador veria "Baixando" sem que nada baixasse.
-   */
-  if (downloadAvailable()) {
-    const globalT = i18nAtual()?.global?.t;
-    const aviso = globalT ? String(globalT("online_video.preparing")) : "";
-    if (aviso) $snackbar.info(aviso, { key: "liturgy-video-download", timeout: 5000 });
-  }
-  void videoDownloads.download(ytId, nome, { keep: saveToMyVideos.value });
+  await baixarVideo(ytId, nome, saveToMyVideos.value);
   return true;
+}
+
+/**
+ * Baixa o vídeo do item (link colado ou escolhido da coletânea) se ele ainda
+ * não estiver no disco. O aviso usa o título do YouTube, não o nome do item
+ * litúrgico — é ele que identifica o vídeo na tarefa de segundo plano.
+ */
+async function baixarVideo(id: string, nome: string, keep: boolean): Promise<void> {
+  // No web/PWA o download devolve false: avisar "Baixando" faria o operador
+  // esperar algo que não vai acontecer.
+  if (!downloadAvailable()) return;
+  try {
+    await videoDownloads.refresh();
+  } catch {
+    /* A checagem de disco é só para evitar um aviso falso; o download decide. */
+  }
+  if (videoDownloads.stateOf(id) === "downloaded") {
+    // Já está no disco: nada de aviso nem download, mas o checkbox ainda pode
+    // querer marcá-lo como mantido (o cache automático não o despeja).
+    if (keep) void videoDownloads.download(id, nome, { keep: true });
+    return;
+  }
+
+  const globalT = i18nAtual()?.global?.t;
+  const aviso = globalT ? String(globalT("online_video.preparing_named", { title: nome })) : "";
+  if (aviso) $snackbar.info(aviso, { key: "liturgy-video-download", timeout: 5000 });
+  void videoDownloads.download(id, nome, { keep });
+}
+
+/** Item de vídeo escolhido da coletânea: salvar também prepara o arquivo. */
+async function baixarVideoSelecionado(): Promise<void> {
+  if (props.form.tipo !== LiturgyItemTypeEnum.VIDEO_ONLINE) return;
+  const url = String(props.form.url || "");
+  const id = videoIdFromUrl(url);
+  if (!id) return;
+  const nome =
+    selectedVideoName.value ||
+    String(props.form.subitem || "") ||
+    String(props.form.item || "") ||
+    url;
+  await baixarVideo(id, nome, saveToMyVideos.value);
 }
 
 const SUBTITULO_LEGADO = /^URL:\s*/i;
@@ -800,13 +862,8 @@ async function nomearVideoLegado(): Promise<void> {
     props.setFormField("subitem", url);
     return;
   }
-  videoUrlBusy.value = true;
-  try {
-    const nome = (await fetchYoutubeTitle(ytId)) || url;
-    props.setFormField("subitem", nome);
-  } finally {
-    videoUrlBusy.value = false;
-  }
+  const nome = (await fetchYoutubeTitle(ytId)) || url;
+  props.setFormField("subitem", nome);
 }
 
 const selectedVideoName = computed(() => {
@@ -824,12 +881,18 @@ const selectedVideoName = computed(() => {
 
 const librarySearchOpen = ref(false);
 const bgSoundSearchOpen = ref(false);
+const projectionSearchOpen = ref(false);
 const libraryItems = ref<LibrarySearchItem[]>([]);
 const bgSoundItems = ref<LibrarySearchItem[]>([]);
+const projectionItems = ref<LibrarySearchItem[]>([]);
+const libraryCategories = ref<LibrarySearchCategory[]>([]);
+const bgSoundCategories = ref<LibrarySearchCategory[]>([]);
+const projectionCategories = ref<LibrarySearchCategory[]>([]);
 
 const MEDIA_TYPE_ICONS: Record<string, string> = {
   image: ICONS.MEDIA.IMAGE,
   video: ICONS.MEDIA.VIDEO_FILE,
+  audio: ICONS.MEDIA.AUDIO,
   pdf: ICONS.UI.FILE_PDF,
 };
 
@@ -837,36 +900,131 @@ function mediaIconFor(subtipo?: string): string {
   return MEDIA_TYPE_ICONS[subtipo || ""] || ICONS.MEDIA.LIBRARY;
 }
 
+const libraryObjectUrls = new Set<string>();
+
+function releaseLibraryObjectUrls(): void {
+  for (const url of libraryObjectUrls) URL.revokeObjectURL(url);
+  libraryObjectUrls.clear();
+}
+
+function libraryThumbnail(
+  raw: string | undefined,
+  data: ArrayBuffer | undefined,
+  mime: string | undefined,
+  type: string
+): string {
+  if (type !== "image" && type !== "video") return "";
+  const value = String(raw || "");
+  if (data && mime && (!value || value.startsWith("blob:"))) {
+    const url = URL.createObjectURL(new Blob([data], { type: mime }));
+    libraryObjectUrls.add(url);
+    return url;
+  }
+  if (!value) return "";
+  if (/^(blob|data|https?|louvorja|file):/i.test(value)) return value;
+  return Platform.isDesktop ? Path.local(value) : value;
+}
+
+function mediaCategories(records: LibrarySearchCategory[]): LibrarySearchCategory[] {
+  return records.map((category) => ({
+    id: category.id,
+    name: category.name,
+    icon: category.icon,
+    iconType: category.iconType,
+    color: category.color,
+  }));
+}
+
 async function openMediaLibrarySearch(): Promise<void> {
-  const all = await $idb.getAll<{
-    id: string;
-    name: string;
-    type: "image" | "video" | "pdf";
-  }>(DB_TABLE.MEDIA_LIBRARY);
+  releaseLibraryObjectUrls();
+  const [all, categories] = await Promise.all([
+    $idb.getAll<{
+      id: string;
+      name: string;
+      type: "image" | "video" | "audio" | "pdf";
+      thumb?: string;
+      path?: string;
+      data?: ArrayBuffer;
+      mime?: string;
+      categoryId?: string;
+    }>(DB_TABLE.MEDIA_LIBRARY),
+    $idb.getAll<LibrarySearchCategory>(DB_TABLE.MEDIA_LIBRARY_CATEGORY),
+  ]);
+  libraryCategories.value = mediaCategories(categories);
   libraryItems.value = all.map((f) => ({
     id: f.id,
     name: f.name,
     icon: mediaIconFor(f.type),
-    detail: t("library_search.detail_type_" + f.type),
+    categoryId: f.categoryId,
+    type: f.type,
+    typeLabel: f.type.toUpperCase(),
+    thumbnail: libraryThumbnail(
+      f.thumb || (f.type === "image" ? f.path : ""),
+      f.data,
+      f.mime,
+      f.type
+    ),
   }));
   librarySearchOpen.value = true;
 }
 
 async function openBgSoundSearch(): Promise<void> {
-  const all = await $idb.getAll<{
-    id: string;
-    name: string;
-    fileName?: string;
-    mime?: string;
-  }>(DB_TABLE.BACKGROUND_SOUND_LIBRARY);
+  releaseLibraryObjectUrls();
+  const [all, categories] = await Promise.all([
+    $idb.getAll<{
+      id: string;
+      name: string;
+      fileName?: string;
+      mime?: string;
+      categoryId?: string;
+    }>(DB_TABLE.BACKGROUND_SOUND_LIBRARY),
+    $idb.getAll<LibrarySearchCategory>(DB_TABLE.BACKGROUND_SOUND_CATEGORY),
+  ]);
+  bgSoundCategories.value = mediaCategories(categories);
   // O som de fundo guarda o rótulo em fileName ("name" pode vir vazio).
   bgSoundItems.value = all.map((s) => ({
     id: s.id,
     name: s.fileName || s.name || s.id,
     icon: ICONS.MUSIC.PLAYBACK,
     detail: s.mime?.replace("audio/", "").toUpperCase(),
+    categoryId: s.categoryId,
+    type: "audio",
+    typeLabel: s.mime?.replace("audio/", "").toUpperCase(),
   }));
   bgSoundSearchOpen.value = true;
+}
+
+async function openProjectionSearch(): Promise<void> {
+  releaseLibraryObjectUrls();
+  const [all, categories] = await Promise.all([
+    $idb.getAll<{
+      id: string;
+      name: string;
+      type: "image" | "video";
+      thumb?: string;
+      path?: string;
+      data?: ArrayBuffer;
+      mime?: string;
+      categoryId?: string;
+    }>(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY),
+    $idb.getAll<LibrarySearchCategory>(DB_TABLE.BACKGROUND_PROJECTION_CATEGORIES),
+  ]);
+  projectionCategories.value = mediaCategories(categories);
+  projectionItems.value = all.map((f) => ({
+    id: f.id,
+    name: f.name,
+    icon: f.type === "video" ? ICONS.MEDIA.VIDEO_FILE : ICONS.MEDIA.IMAGE,
+    categoryId: f.categoryId,
+    type: f.type,
+    typeLabel: f.type === "video" ? "VIDEO" : "IMAGE",
+    thumbnail: libraryThumbnail(
+      f.thumb || (f.type === "image" ? f.path : ""),
+      f.data,
+      f.mime,
+      f.type
+    ),
+  }));
+  projectionSearchOpen.value = true;
 }
 
 function onLibraryPicked(item: LibrarySearchItem): void {
@@ -875,7 +1033,7 @@ function onLibraryPicked(item: LibrarySearchItem): void {
   props.setFormField("subitem", item.name);
   props.setFormField(
     "subtipo",
-    Object.entries(MEDIA_TYPE_ICONS).find(([, icon]) => icon === item.icon)?.[0] || ""
+    item.type || Object.entries(MEDIA_TYPE_ICONS).find(([, icon]) => icon === item.icon)?.[0] || ""
   );
 }
 
@@ -885,6 +1043,22 @@ function onBgSoundPicked(item: LibrarySearchItem): void {
   props.setFormField("subitem", item.name);
   props.setFormField("subtipo", "audio");
 }
+
+function onProjectionPicked(item: LibrarySearchItem): void {
+  props.setFormField("ref_id", item.id);
+  props.setFormField("item", item.name);
+  props.setFormField("subitem", item.name);
+  props.setFormField("subtipo", item.type || "");
+}
+
+watch(
+  [librarySearchOpen, bgSoundSearchOpen, projectionSearchOpen],
+  ([media, sound, projection]) => {
+    if (!media && !sound && !projection) releaseLibraryObjectUrls();
+  }
+);
+
+onBeforeUnmount(releaseLibraryObjectUrls);
 
 // ─── Anúncios ────────────────────────────────────────────────────────
 

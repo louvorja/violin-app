@@ -1,6 +1,7 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { classifyLocalEnvironmentError } from "@/helpers/LocalEnvironmentErrors";
+import { classifyNetworkError } from "@/helpers/Http";
 import Platform from "@/helpers/Platform";
 import Database from "@/helpers/Database";
 import $idb from "@/helpers/IndexedDB";
@@ -38,6 +39,13 @@ interface MusicData {
   url_image?: string;
   lyric?: MusicLine[];
   musics?: Array<{ id_music: number | string }>;
+}
+
+type MusicAudioFiles = Map<number, string[]>;
+
+interface FileListOptions {
+  localOnly?: boolean;
+  musicAudioFiles?: MusicAudioFiles;
 }
 
 interface DiskUsage {
@@ -82,7 +90,7 @@ let ftpInflight: Promise<boolean> | null = null;
 /** Por quanto tempo uma conexão confirmada é considerada válida. */
 const FTP_OK_TTL_MS = 60_000;
 
-/** Quantos arquivos de uma coleção já estão no disco, quando faltam outros. */
+/** Disponíveis/total na unidade exibida: músicas no acervo, capítulos na Bíblia. */
 export interface PartialProgress {
   have: number;
   total: number;
@@ -94,7 +102,7 @@ interface ScanCacheResult {
   classicAlbums: Set<number>;
   hymnalCached: boolean;
   hymnal1996Cached: boolean;
-  /** Álbuns com parte dos arquivos no disco (interrompidos ou removidos à mão). */
+  /** Álbuns com parte dos áudios no disco (interrompidos ou removidos à mão). */
   partialAlbums?: Map<number, PartialProgress>;
   partialHymnal?: PartialProgress | null;
   partialHymnal1996?: PartialProgress | null;
@@ -260,6 +268,22 @@ export function syncBibleChaptersProgress(done: number, total: number): number {
 // baixadas ou removidas). As telas que mostram "o que está baixado" — Bíblia e
 // Sincronizar — releem quando ele muda, em vez de ficar com a foto de quando
 // abriram.
+/**
+ * Categoria de uma falha de arquivo da fila, para a telemetria: o código do
+ * sistema ou o status HTTP. A mensagem crua traz o caminho do usuário.
+ */
+export function downloadErrorKind(message: unknown): string {
+  if (typeof message !== "string" || !message) return "unknown";
+  const http = /\bHTTP (\d{3})\b/.exec(message);
+  if (http) return `http_${http[1]}`;
+  const code = /\b(E[A-Z]{2,15})\b/.exec(message);
+  if (code) return code[1];
+  if (/timeout/i.test(message)) return "timeout";
+  if (/somente para leitura|em uso por outra conta/i.test(message)) return "collection_readonly";
+  if (/incompleto|parcial/i.test(message)) return "incomplete";
+  return "other";
+}
+
 const bibleRevision = ref(0);
 function bumpBibleRevision(): void {
   bibleRevision.value += 1;
@@ -289,6 +313,13 @@ export function useSyncManager() {
   let _downloadCleanup: CleanupFn[] = [];
 
   // ─── FTP ────────────────────────────────────────────────────────
+
+  function connectionErrorMessage(error: unknown): string {
+    if (classifyNetworkError(error) === "network") {
+      return t("options.collections_download.network_error");
+    }
+    return error instanceof Error ? error.message : String(error);
+  }
 
   /**
    * @param force ignora o resultado em cache (botão "Verificar conexão").
@@ -331,11 +362,13 @@ export function useSyncManager() {
           ftpError.value = r.msg;
         }
       } else {
-        ftpError.value = r.error || "Disconnected";
+        ftpError.value = r.error
+          ? connectionErrorMessage(r.error)
+          : t("options.collections_download.disconnected");
       }
     } catch (e) {
       console.error("[useSyncManager] checkFtp → exceção:", e);
-      ftpError.value = (e as Error).message;
+      ftpError.value = connectionErrorMessage(e);
     } finally {
       ftpChecking.value = false;
       ftpOkUntil = ftpOk.value ? Date.now() + FTP_OK_TTL_MS : 0;
@@ -439,8 +472,8 @@ export function useSyncManager() {
       };
 
     // O scan nunca instala nada. Sem um catálogo concluído no disco, abrir cada
-    // álbum/música viraria milhares de GETs; a tela oferece a instalação como
-    // uma ação explícita e este caminho retorna um estado vazio recuperável.
+    // álbum/música viraria milhares de GETs. A instalação cabe ao chamador;
+    // este caminho retorna um estado vazio recuperável.
     if (!(await hasCatalogForBulkRead())) {
       return {
         cachedAlbums: new Set(),
@@ -463,9 +496,9 @@ export function useSyncManager() {
       await Promise.all(
         slice.map(async (id) => {
           try {
-            const files = await collectAlbumFileList(id, { localOnly: true });
-            if (files.length === 0) return;
-            const state = await localStateOfFileList(files);
+            const musicAudioFiles: MusicAudioFiles = new Map();
+            await collectAlbumFileList(id, { localOnly: true, musicAudioFiles });
+            const state = await localStateOfMusicFiles(musicAudioFiles);
             if (state.origin) cachedAlbums.add(id);
             if (state.origin === "classic") classicAlbums.add(id);
             if (!state.origin && state.partial) {
@@ -484,9 +517,10 @@ export function useSyncManager() {
     let partialHymnal: PartialProgress | null = null;
     if (hymnalIds.length) {
       try {
-        const hymFiles = await collectHymnalFileList(hymnalIds, { localOnly: true });
-        const state = await localStateOfFileList(hymFiles);
-        hymnalCached = hymFiles.length > 0 && !!state.origin;
+        const musicAudioFiles: MusicAudioFiles = new Map();
+        await collectHymnalFileList(hymnalIds, { localOnly: true, musicAudioFiles });
+        const state = await localStateOfMusicFiles(musicAudioFiles);
+        hymnalCached = !!state.origin;
         if (!hymnalCached && state.partial) {
           partialHymnal = { have: state.have, total: state.total };
         }
@@ -500,9 +534,10 @@ export function useSyncManager() {
     let partialHymnal1996: PartialProgress | null = null;
     if (hymnal1996Ids.length) {
       try {
-        const hymFiles = await collectHymnalFileList(hymnal1996Ids, { localOnly: true });
-        const state = await localStateOfFileList(hymFiles);
-        hymnal1996Cached = hymFiles.length > 0 && !!state.origin;
+        const musicAudioFiles: MusicAudioFiles = new Map();
+        await collectHymnalFileList(hymnal1996Ids, { localOnly: true, musicAudioFiles });
+        const state = await localStateOfMusicFiles(musicAudioFiles);
+        hymnal1996Cached = !!state.origin;
         if (!hymnal1996Cached && state.partial) {
           partialHymnal1996 = { have: state.have, total: state.total };
         }
@@ -560,7 +595,7 @@ export function useSyncManager() {
   }
 
   /**
-   * A abertura automática faz somente a checagem local do marker. O scan
+   * Confere o marker local depois que o chamador preparou o catálogo. O scan
    * detalhado abre milhares de registros de álbum/música e, por isso, só roda
    * depois de uma ação explícita da pessoa na tela.
    */
@@ -1076,7 +1111,7 @@ export function useSyncManager() {
 
   async function collectAlbumFileList(
     albumId: number,
-    { localOnly = false }: { localOnly?: boolean } = {}
+    { localOnly = false, musicAudioFiles }: FileListOptions = {}
   ): Promise<FileEntry[]> {
     // Montar a lista a partir de um catálogo de versão anterior baixaria pelos
     // endereços antigos; a leitura local do scan não deve gerar rede.
@@ -1089,24 +1124,30 @@ export function useSyncManager() {
     const musicIds = (album.musics || [])
       .map((m) => Number(m.id_music))
       .filter((n) => Number.isFinite(n));
-    await collectMusicFiles(musicIds, files, { localOnly });
+    await collectMusicFiles(musicIds, files, { localOnly, musicAudioFiles });
     return [...files.values()];
   }
 
   async function collectHymnalFileList(
     hymnalIds: number[],
-    { localOnly = false }: { localOnly?: boolean } = {}
+    { localOnly = false, musicAudioFiles }: FileListOptions = {}
   ): Promise<FileEntry[]> {
     if (!localOnly) return collectFiles(new Set(), true, hymnalIds);
     const files = new Map<string, FileEntry>();
-    await collectMusicFiles(hymnalIds, files, { localOnly });
+    await collectMusicFiles(hymnalIds, files, { localOnly, musicAudioFiles });
     return [...files.values()];
   }
 
   async function collectMusicFiles(
     musicIds: number[],
     files: Map<string, FileEntry>,
-    { localOnly = true, onBatch }: { localOnly?: boolean; onBatch?: (done: number) => void } = {}
+    {
+      localOnly = true,
+      musicAudioFiles,
+      onBatch,
+    }: FileListOptions & {
+      onBatch?: (done: number) => void;
+    } = {}
   ): Promise<void> {
     // `scanCache` pode chamar esta função para até três álbuns ao mesmo tempo.
     // Um lote fixo de quatro limita a rajada de leitura e persistência no IDB
@@ -1119,6 +1160,10 @@ export function useSyncManager() {
           const m = await fetchJson<MusicData>(`music_${mid}`, { localOnly });
           if (!m) throw new CatalogIncompleteError(`music_${mid}`);
           addMusicToFileMap(m, files);
+          const audio = [toFile(m.url_music), toFile(m.url_instrumental_music)]
+            .filter((file): file is FileEntry => !!file)
+            .map((file) => file.remote);
+          if (audio.length) musicAudioFiles?.set(Number(mid), [...new Set(audio)]);
         })
       );
       onBatch?.(Math.min(i + BATCH, musicIds.length));
@@ -1155,43 +1200,29 @@ export function useSyncManager() {
     return localOnly ? Database.getLocal<T>(key, { remember: false }) : Database.get<T>(key);
   }
 
-  /**
-   * Um álbum inteiro disponível no acervo da versão clássica está completo do
-   * mesmo jeito: o operador consegue tocar tudo, e propor download seria pedir
-   * que ele baixe de novo o que já tem no disco.
-   */
-  /** Completa ou quantos arquivos faltam: a mesma leitura do disco, sem custo extra. */
-  async function localStateOfFileList(
-    files: FileEntry[]
+  /** Imagens são cache compartilhado; disponibilidade da coleção conta músicas. */
+  async function localStateOfMusicFiles(
+    musicAudioFiles: MusicAudioFiles
   ): Promise<{ origin: FileOrigin; have: number; total: number; partial: boolean }> {
-    if (!files.length || !Platform.storage?.checkLocal)
+    if (!musicAudioFiles.size || !Platform.storage?.checkLocal)
       return { origin: false, have: 0, total: 0, partial: false };
-    const remotes = files.map((f) => f.remote);
+    const songs = [...musicAudioFiles.values()];
+    const remotes = [...new Set(songs.flat())];
     const local = (await Platform.storage.checkLocal(remotes)) as LocalCheckResult;
-    const have = remotes.filter((r) => local[r] === "own" || local[r] === "classic").length;
-    if (have === remotes.length) {
+    const available = (remote: string) => local[remote] === "own" || local[remote] === "classic";
+    const have = songs.filter((audio) => audio.every(available)).length;
+    if (have === songs.length) {
       return {
         origin: remotes.some((r) => local[r] === "classic") ? "classic" : "own",
         have,
-        total: remotes.length,
+        total: songs.length,
         partial: false,
       };
     }
-    // Fundos são compartilhados entre o hinário e muitos álbuns; capas também
-    // entram no cache ao navegar. Isso não significa que o álbum foi baixado.
-    const audio = remotes.filter((remote) =>
-      AUDIO_EXT.includes(remote.split(/[?#]/)[0].split(".").pop()?.toLowerCase() ?? "")
-    );
-    const partial = audio.length
-      ? audio.some((remote) => local[remote] === "own" || local[remote] === "classic")
-      : have > 0;
-    return { origin: false, have, total: remotes.length, partial };
+    return { origin: false, have, total: songs.length, partial: remotes.some(available) };
   }
   async function isFileListComplete(files: FileEntry[]): Promise<boolean> {
-    if (!files.length || !Platform.storage?.checkLocal) return false;
-    const remotes = files.map((f) => f.remote);
-    const local = (await Platform.storage.checkLocal(remotes)) as LocalCheckResult;
-    return remotes.every((r) => local[r] === "own" || local[r] === "classic");
+    return !!(await originOfFileList(files));
   }
 
   /**
@@ -1201,15 +1232,25 @@ export function useSyncManager() {
    */
   async function originOfFileList(files: FileEntry[]): Promise<FileOrigin> {
     if (!files.length || !Platform.storage?.checkLocal) return false;
-    const remotes = files.map((f) => f.remote);
+    const remotes = files.map((f) => f.remote).filter(isAudioFile);
+    if (!remotes.length) return false;
     const local = (await Platform.storage.checkLocal(remotes)) as LocalCheckResult;
     if (!remotes.every((r) => local[r] === "own" || local[r] === "classic")) return false;
     return remotes.some((r) => local[r] === "classic") ? "classic" : "own";
   }
 
+  function isAudioFile(remote: string): boolean {
+    return AUDIO_EXT.includes(remote.split(/[?#]/)[0].split(".").pop()?.toLowerCase() ?? "");
+  }
+
+  /**
+   * Remover uma coleção remove seus áudios. Capas e fundos pertencem ao cache
+   * compartilhado, que só é apagado na limpeza geral de mídia.
+   */
   async function removeFilesFromCache(files: FileEntry[]): Promise<void> {
     if (!files.length || !Platform.storage?.removeFiles) return;
-    await Platform.storage.removeFiles(files.map((f) => f.remote));
+    const remotes = [...new Set(files.map((file) => file.remote))].filter(isAudioFile);
+    if (remotes.length) await Platform.storage.removeFiles(remotes);
     invalidateScanCache();
   }
 
@@ -1262,8 +1303,10 @@ export function useSyncManager() {
         };
       })
     );
+    let firstError: string | null = null;
     cleanupFns.push(
-      Platform.download.onFileError(() => {
+      Platform.download.onFileError((d: { error?: unknown } | null) => {
+        firstError ??= downloadErrorKind(d?.error);
         downloadFailedCount.value += 1;
         downloadProgress.value = {
           ...downloadProgress.value,
@@ -1303,7 +1346,11 @@ export function useSyncManager() {
             // funcional de erro, inclusive quando o renderer ainda está montando.
             void import("@/helpers/Telemetry")
               .then(({ default: Telemetry }) => {
-                Telemetry.track("download_queue_failed", { code, failed_count: failed });
+                Telemetry.track("download_queue_failed", {
+                  code,
+                  failed_count: failed,
+                  first_error: firstError,
+                });
               })
               .catch(() => {});
           } else {

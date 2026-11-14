@@ -28,13 +28,15 @@
             <label class="rfps-label">{{ tm("bg_color") }}</label>
           </div>
           <div class="rfps-group">
-            <select class="rfps-select" :value="wpPosition" @change="onPos">
-              <option value="cover">Cover</option>
-              <option value="contain">Contain</option>
-              <option value="center">Center</option>
-              <option value="stretch">Stretch</option>
-              <option value="tile">Tile</option>
-            </select>
+            <span class="rfps-select">
+              <LjSelect
+                size="sm"
+                :model-value="wpPosition"
+                :items="opcoesAjuste"
+                :aria-label="tm('bg_position')"
+                @update:model-value="onPos"
+              />
+            </span>
             <label class="rfps-label">{{ tm("bg_position") }}</label>
           </div>
         </template>
@@ -71,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjIcon } from "@/components/ui";
+import { LjButton, LjIcon, LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { useI18n } from "vue-i18n";
@@ -85,8 +87,10 @@ import Broadcast from "@/helpers/Broadcast";
 import { DEFAULT_BACKGROUND_COLOR } from "@/types/Settings";
 import { KEYS } from "@/constants/UserDataKeys";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
+import { opcoesDeAjuste } from "@/helpers/BackgroundStyle";
 
 const { t: i18nT } = useI18n();
+const opcoesAjuste = computed(() => opcoesDeAjuste(i18nT));
 const modulePrefix = $modules.getPath(ModuleEnum.MEDIA_LIBRARY);
 const tm = (key: string) => i18nT(`modules.media_library.${key}`);
 const currentBgImage = computed(() => wpImageUrl.value);
@@ -138,8 +142,8 @@ function onColor(e: Event): void {
   scheduleSave();
 }
 
-function onPos(e: Event): void {
-  wpPosition.value = (e.target as HTMLSelectElement).value;
+function onPos(value: string | number): void {
+  wpPosition.value = String(value);
   scheduleSave();
 }
 
@@ -258,14 +262,7 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 .rfps-select {
-  height: 22px;
-  width: 80px;
-  padding: 0 4px;
-  border: 1px solid #555;
-  border-radius: var(--lj-radius-xs);
-  font-size: 10px;
-  font-family: inherit;
-  outline: none;
+  width: 104px;
 }
 .opt-bg-pick {
   display: flex;

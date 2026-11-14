@@ -70,7 +70,6 @@ export const useUserDataStore = defineStore("userData", {
         },
       },
       media: {
-        lazy_load: true,
         fade_audio: false,
       },
     },

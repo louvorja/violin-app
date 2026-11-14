@@ -70,7 +70,13 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="music in filteredMusics" :key="music.id_music" class="lj-music-row">
+            <tr
+              v-for="(music, index) in filteredMusics"
+              :key="music.id_music"
+              class="lj-music-row"
+              :class="{ 'lj-music-row--active': index === nav.index.value }"
+              @mousemove="nav.setActive(index)"
+            >
               <td class="dx-track-number">{{ music.track }}</td>
               <td>
                 <span class="dx-music-name">{{ music.name }}</span>
@@ -101,10 +107,11 @@
         />
         <div v-else class="dx-albums">
           <button
-            v-for="album in filteredAlbums"
+            v-for="(album, index) in filteredAlbums"
             :key="album.id_album"
             type="button"
             class="dx-album"
+            :class="{ 'dx-album--active': index === nav.index.value }"
             :data-album-id="album.id_album"
             @click="openAlbum(album)"
           >
@@ -148,6 +155,7 @@ import { isAlbumEnabled } from "@root/config/musicCatalog.mjs";
 import { module as manifest } from "../manifest";
 import { useQuickSearch } from "@/composables/useQuickSearch";
 import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
+import { useListNavigation } from "@/composables/useListNavigation";
 
 interface DoxAlbum {
   id_album: number;
@@ -210,11 +218,21 @@ const filteredMusics = computed(() =>
 );
 
 /*
- * Busca pelo teclado, como no LouvorJA clássico: na lista de álbuns, Enter abre
- * o primeiro achado; dentro do álbum, Enter toca a primeira música (Shift+Enter,
- * o playback). Voltando para cá, o texto anterior fica selecionado.
+ * Busca pelo teclado, como no LouvorJA clássico: ↑/↓ escolhem e Enter age sobre
+ * o destacado — de início, o primeiro achado. Na lista de álbuns, Enter abre o
+ * álbum; dentro dele, toca a música (Shift+Enter, o playback). Voltando para
+ * cá, o texto anterior fica selecionado.
  */
 const quickSearch = useQuickSearch({ moduleId: () => manifest.id, input: searchInput });
+
+const nav = useListNavigation<DoxAlbum | AlbumMusic>({
+  items: () => (selectedAlbum.value ? filteredMusics.value : filteredAlbums.value),
+  container: pageEl,
+  activeSelector: ".lj-music-row--active, .dx-album--active",
+  // Sem texto a lista não é resultado de busca: nada destacado até a primeira seta.
+  start: () => (search.value.trim() ? 0 : -1),
+});
+watch([search, selectedAlbum], () => nav.reset());
 
 function onSearchKey(event: KeyboardEvent): void {
   if (event.key === "Escape" && search.value) {
@@ -222,14 +240,12 @@ function onSearchKey(event: KeyboardEvent): void {
     search.value = "";
     return;
   }
-  if (!isQuickPlayEnter(event) || !search.value.trim()) return;
+  if (nav.handleArrow(event) || !isQuickPlayEnter(event)) return;
   event.preventDefault();
-  if (!selectedAlbum.value) {
-    const album = filteredAlbums.value[0];
-    if (album) openAlbum(album);
-    return;
-  }
-  if (quickPlay(filteredMusics.value[0], event.shiftKey)) quickSearch.afterPlay();
+  const item = nav.active.value;
+  if (!item) return;
+  if (!selectedAlbum.value) return openAlbum(item as DoxAlbum);
+  if (quickPlay(item as AlbumMusic, event.shiftKey)) quickSearch.afterPlay();
 }
 
 function positiveId(value: unknown): number | null {
@@ -511,7 +527,8 @@ onBeforeUnmount(() => {
   border-color: var(--lj-ui-accent);
 }
 
-.dx-album:focus-visible {
+.dx-album:focus-visible,
+.dx-album--active {
   outline: none;
   border-color: var(--lj-ui-accent);
   box-shadow: var(--lj-ui-focus);

@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
   readAllOverlaySlots: vi.fn(),
   writeOverlaySlot: vi.fn(),
   userdataSet: vi.fn(),
+  idbGet: vi.fn(),
   idbGetAll: vi.fn(),
+  activateBackgroundProjection: vi.fn(),
   resolveLiturgyFile: vi.fn(),
   releaseLiturgyFileUrl: vi.fn(),
   retainLiturgyFileUrl: vi.fn(),
@@ -27,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   broadcastGetLastPayload: vi.fn(),
   broadcastListen: vi.fn(),
   systemPlayer: false,
+  stage: 0,
   /** Preferências que um caso queira forçar, lidas antes do `fallback`. */
   userdataValues: new Map<string, unknown>(),
 }));
@@ -53,6 +56,10 @@ vi.mock("@/helpers/UserData", () => ({
 }));
 vi.mock("@/composables/useMedia", () => ({
   default: {
+    captureStageGuard: () => {
+      const stage = mocks.stage;
+      return () => stage === mocks.stage;
+    },
     close: mocks.closeMedia,
     stop: vi.fn(),
     open: mocks.openMusic,
@@ -100,8 +107,13 @@ vi.mock("@/helpers/ProjectionWindows", () => ({
   openAnnouncementsWindow: mocks.openAnnouncementsWindow,
   openSiteWindow: mocks.openSiteWindow,
 }));
+vi.mock("@/helpers/BackgroundProjectionPlayback", () => ({
+  activateBackgroundProjection: mocks.activateBackgroundProjection,
+}));
 vi.mock("@/helpers/AppData", () => ({ default: { get: vi.fn(), set: vi.fn() } }));
-vi.mock("@/helpers/IndexedDB", () => ({ default: { getAll: mocks.idbGetAll } }));
+vi.mock("@/helpers/IndexedDB", () => ({
+  default: { get: mocks.idbGet, getAll: mocks.idbGetAll, rewriteRecords: vi.fn(async () => 0) },
+}));
 vi.mock("@/helpers/Overlay", () => ({
   readAllSlots: mocks.readAllOverlaySlots,
   writeSlot: mocks.writeOverlaySlot,
@@ -116,7 +128,10 @@ vi.mock("@/helpers/LiturgyFiles", () => ({
   releaseLiturgyFileUrl: mocks.releaseLiturgyFileUrl,
   retainLiturgyFileUrl: mocks.retainLiturgyFileUrl,
 }));
-vi.mock("@/helpers/Http", () => ({ fetchWithTimeout: vi.fn(), NET_TIMEOUT: { MEDIA: 1 } }));
+vi.mock("@/helpers/Http", () => ({
+  fetchWithTimeout: vi.fn(),
+  NET_TIMEOUT: { MEDIA: 1, QUICK: 1 },
+}));
 vi.mock("@/helpers/Telemetry", () => ({
   default: { track: vi.fn(), captureException: vi.fn() },
 }));
@@ -129,6 +144,9 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import type { LiturgyItem } from "@/types/Liturgy";
 import { DB_TABLE } from "@/constants/DbTables";
 import $alert from "@/helpers/Alert";
+import { fetchWithTimeout } from "@/helpers/Http";
+import Telemetry from "@/helpers/Telemetry";
+import Platform from "@/helpers/Platform";
 
 function arquivo(dir: string, item = "Arquivo"): LiturgyItem {
   return { id: "1", tipo: LiturgyItemTypeEnum.ARQUIVO, item, dir } as LiturgyItem;
@@ -136,6 +154,16 @@ function arquivo(dir: string, item = "Arquivo"): LiturgyItem {
 
 function site(url: string, item = "Site"): LiturgyItem {
   return { id: "s1", tipo: LiturgyItemTypeEnum.SITE, item, url } as LiturgyItem;
+}
+
+function onlineVideo(item = "Item da liturgia", subitem = "Título do YouTube"): LiturgyItem {
+  return {
+    id: "v1",
+    tipo: LiturgyItemTypeEnum.VIDEO_ONLINE,
+    item,
+    subitem,
+    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  } as LiturgyItem;
 }
 
 function linked(item: LiturgyItem): LiturgyItem {
@@ -155,8 +183,10 @@ function music(mode = "sung"): LiturgyItem {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  Platform.isDesktop = true;
   resetarSessaoOverlayVinculado();
   mocks.systemPlayer = false;
+  mocks.stage = 0;
   mocks.userdataValues.clear();
   mocks.openSlja.mockResolvedValue(true);
   mocks.openPath.mockResolvedValue({ ok: true });
@@ -168,7 +198,9 @@ beforeEach(() => {
   mocks.openYouTube.mockResolvedValue(true);
   mocks.readAllOverlaySlots.mockResolvedValue([{ id: "slot-1", enabled: false }]);
   mocks.writeOverlaySlot.mockResolvedValue(undefined);
+  mocks.idbGet.mockResolvedValue(null);
   mocks.idbGetAll.mockResolvedValue([]);
+  mocks.activateBackgroundProjection.mockResolvedValue(true);
   mocks.getCustomSong.mockResolvedValue(null);
   mocks.resolveAudio.mockResolvedValue(null);
   mocks.resolveLiturgyFile.mockResolvedValue(null);
@@ -177,9 +209,29 @@ beforeEach(() => {
   mocks.closeMedia.mockClear();
   mocks.closeProjectionStage.mockClear();
   mocks.broadcastGetLastPayload.mockReturnValue(null);
+  vi.mocked(fetchWithTimeout).mockResolvedValue({
+    ok: true,
+    status: 206,
+    body: { cancel: vi.fn(async () => {}) },
+  } as unknown as Response);
 });
 
 describe("liturgia — arquivo escolhido na web", () => {
+  it.each([
+    "G:\\Meu Drive\\Culto\\Informativo.mp4",
+    "\\\\servidor\\culto\\aviso.png",
+    "file:///C:/Culto/aviso.pdf",
+    "louvorja://local/Users/operador/aviso.png",
+  ])("orienta a escolher novamente o arquivo local importado na web: %s", async (dir) => {
+    Platform.isDesktop = false;
+    const ui = useLiturgyExecution();
+    await ui.executeItem(arquivo(dir));
+    expect($alert.error).toHaveBeenCalledWith({ text: "alerts.file_choose_again_web" });
+    expect(mocks.projectFile).not.toHaveBeenCalled();
+    expect(mocks.openAudio).not.toHaveBeenCalled();
+    expect(Telemetry.captureException).not.toHaveBeenCalled();
+  });
+
   it("projeta bytes locais pela referência após reabrir, sem tratar o nome como caminho", async () => {
     mocks.resolveLiturgyFile.mockResolvedValue({
       url: "blob:local",
@@ -256,6 +308,49 @@ describe("liturgia — arquivo escolhido na web", () => {
 });
 
 describe("liturgia — item de arquivo .slja", () => {
+  it.each([true, false])(
+    "resposta tardia do programa externo (ok=%s) não altera o arquivo mais novo",
+    async (ok) => {
+      mocks.systemPlayer = true;
+      let finish!: (_result: { ok: boolean }) => void;
+      mocks.openPath.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          })
+      );
+      const ui = useLiturgyExecution();
+      const old = ui.openFile(arquivo("/old.mp4"));
+      await vi.waitFor(() => expect(mocks.openPath).toHaveBeenCalledOnce());
+      await ui.openFile(arquivo("/new.png"));
+      finish({ ok });
+      await old;
+      expect(mocks.projectFile).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ url: "louvorja://local/new.png" })
+      );
+      expect(mocks.closeMedia).not.toHaveBeenCalled();
+      expect(mocks.openAudio).not.toHaveBeenCalled();
+    }
+  );
+
+  it("não abre fallback tardio quando outra ação já mudou o palco", async () => {
+    mocks.systemPlayer = true;
+    let reject!: (_error: Error) => void;
+    mocks.openPath.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        })
+    );
+    const old = useLiturgyExecution().openFile(arquivo("/old.mp4"));
+    await vi.waitFor(() => expect(mocks.openPath).toHaveBeenCalledOnce());
+    mocks.stage++;
+    reject(new Error("reply was never sent"));
+    await old;
+    expect(mocks.projectFile).not.toHaveBeenCalled();
+    expect(mocks.closeMedia).not.toHaveBeenCalled();
+  });
+
   it("apresenta dentro do app, sem entregar ao sistema", async () => {
     const { executeItem } = useLiturgyExecution();
 
@@ -398,6 +493,17 @@ describe("liturgia — item de site", () => {
     expect(mocks.openYouTube).toHaveBeenCalledTimes(1);
     expect(mocks.openSiteWindow).not.toHaveBeenCalled();
   });
+
+  it("vídeo da coletânea usa o título do YouTube, não o nome do item litúrgico", async () => {
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(onlineVideo("Abertura do culto", "Título do YouTube"));
+
+    expect(mocks.openYouTube).toHaveBeenCalledWith(
+      "https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&rel=0&controls=0",
+      "Título do YouTube"
+    );
+  });
 });
 
 describe("liturgia — vínculo de sobreposição", () => {
@@ -436,6 +542,24 @@ describe("liturgia — vínculo de sobreposição", () => {
     expect(mocks.openPath).toHaveBeenCalledWith("/Users/ana/aviso.mp4");
     expect(mocks.writeOverlaySlot).not.toHaveBeenCalled();
     expect(mocks.userdataSet).not.toHaveBeenCalled();
+  });
+
+  it("arquivo local ausente não abre projeção e avisa o caminho salvo", async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      body: { cancel: vi.fn(async () => {}) },
+    } as unknown as Response);
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(arquivo("/Users/ana/nao-existe.mp4"));
+
+    expect(mocks.projectFile).not.toHaveBeenCalled();
+    expect(mocks.openAudio).not.toHaveBeenCalled();
+    expect($alert.error).toHaveBeenCalledWith({
+      text: "/Users/ana/nao-existe.mp4",
+      title: "modules.media.alerts.file_not_found",
+    });
   });
 
   it("não liga o slot para áudio ou para anúncios sem slides selecionados", async () => {
@@ -584,6 +708,31 @@ describe("liturgia — ciclo de vida do overlay vinculado", () => {
     expect(mocks.userdataSet).toHaveBeenCalledWith(KEYS.MODULES.OVERLAY.ENABLED, false);
   });
 
+  it("projeção de fundo ativa a mídia e liga o overlay vinculado", async () => {
+    mocks.idbGet.mockResolvedValue({
+      id: "bgp-1",
+      name: "Fundo do culto",
+      path: "/Users/ana/fundo.png",
+      type: "image",
+    });
+    const { executeItem } = useLiturgyExecution();
+
+    await executeItem(
+      linked({
+        id: "bgp-item",
+        tipo: LiturgyItemTypeEnum.BG_PROJECTION,
+        item: "Fundo do culto",
+        ref_id: "bgp-1",
+      } as LiturgyItem)
+    );
+
+    expect(mocks.idbGet).toHaveBeenCalledWith(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY, "bgp-1");
+    expect(mocks.activateBackgroundProjection).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "bgp-1", path: "/Users/ana/fundo.png" })
+    );
+    expect(slots[0].enabled).toBe(true);
+  });
+
   it("fechar a mídia desliga o overlay vinculado", async () => {
     const { executeItem } = useLiturgyExecution();
     await executeItem(linked(arquivo("/Users/ana/aviso.png")));
@@ -644,5 +793,76 @@ describe("liturgia — ciclo de vida do overlay vinculado", () => {
     await playMusic(music("sung"), "lyric");
 
     expect(mocks.writeOverlaySlot).not.toHaveBeenCalled();
+  });
+});
+
+describe("liturgia — 'não encontrado' só quando o arquivo não existe", () => {
+  const responde = (status: number) =>
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: status < 300,
+      status,
+      body: { cancel: vi.fn(async () => {}) },
+    } as unknown as Response);
+
+  it("arquivo ausente avisa 'não encontrado' e não vira exceção", async () => {
+    responde(404);
+    const ui = useLiturgyExecution();
+    expect(await ui.openFile(arquivo("/Users/ana/sumiu.mp4"))).toBe(false);
+    expect($alert.error).toHaveBeenCalledWith({
+      text: "/Users/ana/sumiu.mp4",
+      title: "modules.media.alerts.file_not_found",
+    });
+    expect(Telemetry.track).toHaveBeenCalledWith("liturgy_resource_missing", {
+      operation: "open_file",
+      resource: "file",
+    });
+    expect(Telemetry.captureException).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [403, "permission"],
+    [500, "unreadable"],
+  ])("status %i não é 'não encontrado': motivo próprio e erro registrado", async (status, motivo) => {
+    responde(status);
+    const ui = useLiturgyExecution();
+    expect(await ui.openFile(arquivo("/Users/ana/Informativo.mp4"))).toBe(false);
+    expect(mocks.projectFile).not.toHaveBeenCalled();
+    expect($alert.error).toHaveBeenCalledWith({
+      text: "/Users/ana/Informativo.mp4",
+      title: `modules.media.alerts.file_${motivo}`,
+    });
+    expect(Telemetry.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        source: "liturgy.execution.open_file_access",
+        file_status: motivo,
+        file_basename: "Informativo.mp4",
+      })
+    );
+  });
+
+  it("disco que não responde no prazo tem aviso próprio", async () => {
+    vi.mocked(fetchWithTimeout).mockRejectedValueOnce(
+      Object.assign(new Error("Timeout"), { name: "TimeoutError" })
+    );
+    const ui = useLiturgyExecution();
+    expect(await ui.openFile(arquivo("G:\\Meu Drive\\Informativo.mp4"))).toBe(false);
+    expect($alert.error).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "modules.media.alerts.file_timeout" })
+    );
+  });
+
+  it("tipo que o app não abre não é 'não encontrado'", async () => {
+    const ui = useLiturgyExecution();
+    expect(await ui.openFile(arquivo("/Users/ana/planilha.xlsx"), "document")).toBe(false);
+    expect($alert.error).toHaveBeenCalledWith({
+      text: "/Users/ana/planilha.xlsx",
+      title: "modules.media.alerts.file_unsupported",
+    });
+    expect(Telemetry.track).toHaveBeenCalledWith("liturgy_file_unsupported", {
+      operation: "open_file",
+      extension: "xlsx",
+      kind: "document",
+    });
   });
 });

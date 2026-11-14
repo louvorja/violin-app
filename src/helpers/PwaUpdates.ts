@@ -23,6 +23,8 @@ export interface PwaUpdateState {
 interface ApplyOptions {
   canReload: () => boolean;
   beforeReload: () => Promise<void>;
+  /** Pedido explícito após falha de chunk: a mesma versão também pode precisar de recarga. */
+  reloadCurrentBuild?: boolean;
 }
 
 interface UpdateOptions {
@@ -332,6 +334,19 @@ export function createPwaUpdateController(options: UpdateOptions) {
         else if (verified && !value.installing && !state.ready) publish({ status: "current" });
         publish({ lastCheckedAt: Date.now() });
       } catch (error) {
+        if (
+          stage === "check" &&
+          error instanceof DOMException &&
+          error.name === "InvalidStateError" &&
+          registration === value
+        ) {
+          // Uma instalação que falhou pode deixar o registro sem nenhum worker.
+          // update() nunca recupera esse objeto: a próxima tentativa precisa
+          // registrar de novo, consultando antes a versão publicada.
+          registration = null;
+          registeredBuildId = null;
+          registered = Promise.resolve(null);
+        }
         // Baixar o código novo pode passar do prazo sem nada errado. Com um worker
         // instalando, o acompanhamento dele (updatefound/statechange) publica o
         // resultado: pronto, ou falha se ele terminar redundante.
@@ -348,14 +363,25 @@ export function createPwaUpdateController(options: UpdateOptions) {
     return checking;
   }
 
-  function apply({ canReload, beforeReload }: ApplyOptions): Promise<boolean> {
+  function apply({
+    canReload,
+    beforeReload,
+    reloadCurrentBuild = false,
+  }: ApplyOptions): Promise<boolean> {
     if (applying) return applying;
-    if (!state.ready || !canReload() || disposed) return Promise.resolve(false);
+    const currentBuildRecovery = !state.ready && reloadCurrentBuild && state.status === "current";
+    if (
+      (!state.ready && !currentBuildRecovery) ||
+      !canReload() ||
+      disposed ||
+      (currentBuildRecovery && !online())
+    )
+      return Promise.resolve(false);
     applying = (async () => {
       publish({ status: "applying" });
       try {
         await bounded(beforeReload());
-        if (!canReload() || disposed) return false;
+        if (!canReload() || disposed || (currentBuildRecovery && !online())) return false;
         const waiting = registration?.waiting;
         if (waiting) {
           await bounded(
@@ -386,7 +412,7 @@ export function createPwaUpdateController(options: UpdateOptions) {
         } finally {
           stop();
         }
-        if (!canReload() || disposed) return false;
+        if (!canReload() || disposed || (currentBuildRecovery && !online())) return false;
         options.reload(); // A janela já verificou atividade e persistiu as alterações.
         return true;
       } catch (error) {
@@ -400,7 +426,8 @@ export function createPwaUpdateController(options: UpdateOptions) {
       } finally {
         activation = null;
         applying = null;
-        if (state.status === "applying") publish({ status: "ready" });
+        if (state.status === "applying")
+          publish({ status: state.ready ? "ready" : online() ? "current" : "offline" });
       }
     })();
     return applying;

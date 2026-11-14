@@ -2,7 +2,13 @@
   <TabsRoot v-model="model" class="lj-tabs">
     <TabsList class="lj-tabs__list" :aria-label="ariaLabel">
       <TabsIndicator class="lj-tabs__indicator" />
-      <TabsTrigger v-for="tab in tabs" :key="tab.value" class="lj-tabs__trigger" :value="tab.value">
+      <TabsTrigger
+        v-for="tab in tabs"
+        :key="tab.value"
+        class="lj-tabs__trigger"
+        :value="tab.value"
+        :disabled="disabled"
+      >
         <LjIcon v-if="tab.icon" :icon="tab.icon" :size="14" />
         {{ tab.label }}
         <LjChip v-if="tab.badge !== undefined" size="sm">{{ tab.badge }}</LjChip>
@@ -25,7 +31,15 @@ export interface LjTab {
   badge?: string | number;
 }
 
-const props = defineProps<{ modelValue?: string; tabs: LjTab[]; ariaLabel?: string }>();
+const props = withDefaults(
+  defineProps<{
+    modelValue?: string;
+    tabs: LjTab[];
+    ariaLabel?: string;
+    disabled?: boolean;
+  }>(),
+  { disabled: false }
+);
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
 // O TabsRoot do Reka decide uma única vez, no setup, se é controlado — olhando
@@ -80,8 +94,13 @@ const model = computed({
   user-select: none;
 }
 
-.lj-tabs__trigger:hover {
+.lj-tabs__trigger:hover:not(:disabled) {
   color: var(--lj-text);
+}
+
+.lj-tabs__trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .lj-tabs__trigger[data-state="active"] {

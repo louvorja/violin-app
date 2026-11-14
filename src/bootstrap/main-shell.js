@@ -50,6 +50,7 @@ import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { syncFromIdb as syncDevicesFromIdb } from "@/composables/useDevices";
 import Path from "@/helpers/Path";
 import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
+import { activateBackgroundProjection } from "@/helpers/BackgroundProjectionPlayback";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
 import { musicCommandSessionRejectionReason } from "@/presentation/MusicPresentationPacket";
@@ -67,6 +68,7 @@ import { executeMusic } from "@/helpers/MusicExecution";
 import { LITURGY_VERSION_ACTION, MUSIC_EXECUTIONS } from "@/config/MusicAction";
 import { DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
+import { loadAnnouncements } from "@/modules/announcements/storage";
 import $docs from "@/helpers/DocStore";
 import ScheduledStore from "@/helpers/ScheduledStore";
 import ProjectionWindows from "@/helpers/ProjectionWindows";
@@ -76,8 +78,14 @@ import {
   writeSlot as writeOverlaySlot,
 } from "@/helpers/Overlay";
 import Shortcuts from "@/helpers/Shortcuts";
+import PlayerMediaSession from "@/helpers/PlayerMediaSession";
 import Telemetry from "@/helpers/Telemetry";
+import { withTelemetryActionSource } from "@/helpers/TelemetryAction";
+import { installRouteTelemetry } from "@/helpers/RouteTelemetry";
 import Hotkeys from "@/helpers/Hotkeys";
+import PlayerKeyboard from "@/helpers/PlayerKeyboard";
+import { HOTKEY } from "@/constants/HotkeyCombos";
+import { clearDatabaseCache } from "@/helpers/DatabaseCache";
 import { useShell } from "@/composables/useShell";
 import { BROADCAST_TYPE } from "@helpers/BroadcastTypes";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -86,6 +94,8 @@ import { FONT, resolveDefaultFont } from "@/config/Fonts";
 import { startThemeSync } from "@/composables/useAppTheme";
 import { BootOrchestrator } from "@/bootstrap/BootOrchestrator";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
+import drawModule from "@/modules/draw/state";
+import { createDrawProjection } from "@/modules/draw/projection";
 import { handleProjectionStateRequest } from "@/helpers/ProjectionStateRequests";
 import { listenForVideoStateRequests } from "@/helpers/VideoStateRequest";
 import { BiblePresentationAuthority } from "@/presentation/BiblePresentationState";
@@ -131,6 +141,23 @@ const isAuxiliaryRenderer = AUXILIARY_ROUTE_PREFIXES.some((prefix) => {
   const route = initialRoutePath();
   return route === prefix || route.startsWith(`${prefix}/`);
 });
+
+/**
+ * Controlador de projeção do Sorteio. Só a janela principal abre/fecha a
+ * janela (ou a camada da Projeção de Fundo); nas auxiliares ele fica nulo.
+ */
+const drawProjection = !isAuxiliaryRenderer ? createDrawProjection() : null;
+
+/**
+ * Acrescenta ao estado do Sorteio se a projeção está no ar. O estado do
+ * módulo é síncrono; a janela/camada é consultada aqui antes de responder ao
+ * controle remoto.
+ */
+async function withDrawProjection(state) {
+  if (!drawProjection) return { ...state, projecting: false };
+  await drawProjection.refresh();
+  return { ...state, projecting: drawProjection.aberto.value === true };
+}
 
 // The primary shell owns Bible ordering for both Web/PWA and Electron. A
 // projection opened later asks this authority for the current snapshot.
@@ -460,52 +487,7 @@ app.use(createPinia());
 app.use(router);
 app.use(VueFullscreen);
 app.directive("requires-network", requiresNetwork);
-const _routeStartedAt = new Map();
-router.beforeEach((to) => {
-  const key = to.fullPath;
-  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
-  const timeout = setTimeout(() => {
-    if (!_routeStartedAt.has(key)) return;
-    Telemetry.log("warn", "route transition timeout", {
-      to: to.name || to.path,
-      timeout_ms: 10000,
-    });
-    Telemetry.track("route_transition_timeout", { to: to.name || to.path, timeout_ms: 10000 });
-  }, 10000);
-  _routeStartedAt.set(key, { startedAt, timeout });
-  Telemetry.track("route_transition_started", { to: to.name || to.path });
-});
-router.afterEach((to, from) => {
-  Telemetry.track("route_changed", {
-    to: to.name || to.path,
-    from: from.name || from.path,
-  });
-  const entry = _routeStartedAt.get(to.fullPath);
-  if (!entry) return;
-  clearTimeout(entry.timeout);
-  const durationMs = Math.max(
-    0,
-    Math.round(
-      (typeof performance !== "undefined" ? performance.now() : Date.now()) - entry.startedAt
-    )
-  );
-  Telemetry.track("route_transition_completed", {
-    to: to.name || to.path,
-    from: from.name || from.path,
-    duration_ms: durationMs,
-  });
-  Telemetry.histogram("louvorja.route.transition.duration", durationMs, {
-    route: String(to.name || to.path),
-  });
-  _routeStartedAt.delete(to.fullPath);
-});
-router.onError((error, to, from) => {
-  Telemetry.captureException(error, {
-    source: "router",
-    to: to?.fullPath || to?.path,
-    from: from?.fullPath || from?.path,
-  });
-});
+installRouteTelemetry(router);
 
 // Em modo desktop (Electron), desregistra qualquer Service Worker que
 // tenha sido registrado em sessões anteriores (ex.: usuário rodou em
@@ -628,41 +610,6 @@ if (import.meta.env.DEV) {
 // Helpers para obter o módulo ativo e a referência ao shell
 // ---------------------------------------------------------------------------
 
-/** Retorna o id do módulo visível mais recente (exceto media/lyric/album). */
-function _getActiveModuleId() {
-  const modules = AppData.get("modules") || {};
-  const skip = new Set(["media", "lyric", "album"]);
-  // Percorre as chaves em ordem reversa de inserção (último aberto)
-  const ids = Object.keys(modules).reverse();
-  for (const id of ids) {
-    if (skip.has(id)) continue;
-    if (modules[id]?.show === true) return id;
-  }
-  return null;
-}
-
-/** Retorna a lista de módulos embedded abertos (excluindo popups e mídia). */
-function _getOpenEmbeddedModules() {
-  const modules = AppData.get("modules") || {};
-  const skip = new Set(["media", "lyric", "album"]);
-  return Object.values(modules)
-    .filter((m) => m && m.show === true && !skip.has(m.id) && m.popup !== true)
-    .sort((a, b) => a.order - b.order);
-}
-
-/** Alterna para o próximo módulo aberto (direction: 1 = próximo, -1 = anterior). */
-function _cycleModule(direction) {
-  const openModules = _getOpenEmbeddedModules();
-  if (openModules.length < 2) return;
-  const activeId = AppData.get("active_module");
-  const currentIndex = openModules.findIndex((m) => m.id === activeId);
-  if (currentIndex === -1) {
-    Modules.open(openModules[0].id);
-    return;
-  }
-  const nextIndex = (currentIndex + direction + openModules.length) % openModules.length;
-  Modules.open(openModules[nextIndex].id);
-}
 function _mediaIsActive() {
   return AppData.get("modules.media.show", false) || AppData.get("modules.media.minimized", false);
 }
@@ -709,19 +656,6 @@ function _bootStage(stage, properties = {}) {
 
 // Sem escrita na pasta de dados (macOS negou Documentos, antivírus bloqueou), o
 // main abre na pasta do programa. Calado, o app parecia ter perdido tudo.
-async function warnDataDirFallback(i18n) {
-  const issue = await Promise.resolve(Platform.storage?.dataDirIssue?.()).catch(() => null);
-  if (!issue) return;
-  Telemetry.track("storage_data_dir_fallback", { reason: issue.reason });
-  $snackbar.warning(
-    i18n.global.t("options.storage.folder_fallback_notice", { dir: issue.wanted }),
-    {
-      timeout: 15000,
-      key: "data-dir-fallback",
-    }
-  );
-}
-
 $storage.hydrate().then(async () => {
   _bootStage("storage_hydrated");
   // As três etapas abaixo não dependem uma da outra (cada uma é uma
@@ -774,11 +708,26 @@ $storage.hydrate().then(async () => {
       : Promise.resolve();
 
   await Promise.all([userDataReady, protocolReady, downloadReady]);
+
+  // Estado de sessão do Sorteio não sobrevive ao fechamento do app: reabrir
+  // sempre começa com o sorteio parado. Só a janela principal grava, para não
+  // sobrescrever o estado a partir de uma projeção auxiliar.
+  if (!isAuxiliaryRenderer) {
+    UserData.set(KEYS.MODULES.DRAW.NAMES_RUNNING, false);
+  }
+
   _bootStage("remote_config_ready");
 
-  // D6 — Atalhos globais pertencem à janela principal. Registrar o mesmo
-  // conjunto em cada projeção só cria trabalho e pode disputar o registro IPC.
-  if (!isAuxiliaryRenderer) Shortcuts.init();
+  // Atalhos globais e controles nativos de mídia pertencem à janela principal,
+  // que controla a reprodução e aplica o fade também às teclas multimídia.
+  if (!isAuxiliaryRenderer) {
+    Shortcuts.init();
+    PlayerMediaSession.init();
+    app.onUnmount(() => {
+      Shortcuts.destroy();
+      PlayerMediaSession.destroy();
+    });
+  }
 
   // D5 — Conectar eventos do servidor HTTP às ações do app.
   if (Platform.isDesktop && !isAuxiliaryRenderer) {
@@ -1575,6 +1524,33 @@ $storage.hydrate().then(async () => {
 
     Platform.onHttpEvent(async (eventType, data) => {
       const action = data?.action;
+      // Keep only command intent, never arbitrary HTTP payloads or user content.
+      if (
+        (["http:song-slides", "http:media-library"].includes(eventType) &&
+          [
+            "next",
+            "previous",
+            "close",
+            "go-to-slide",
+            "play",
+            "pause",
+            "seek",
+            "stop",
+            "liturgy-execute",
+            "bible-verse",
+            "bible-next",
+            "bible-prev",
+            "bible-close",
+          ].includes(action)) ||
+        eventType === "http:volume"
+      ) {
+        Telemetry.breadcrumb("remote_command_received", {
+          action_source: "remote",
+          channel: eventType,
+          action: typeof action === "string" && /^[a-z-]{1,40}$/.test(action) ? action : "unknown",
+          ...(Number.isFinite(data?.index) ? { requested_index: data.index } : {}),
+        });
+      }
       const bibleRequest =
         eventType === "http:song-slides" &&
         ["bible-verse", "bible-next", "bible-prev", "bible-close"].includes(action);
@@ -1584,11 +1560,11 @@ $storage.hydrate().then(async () => {
           switch (action) {
             case "next":
               if (!acceptsRemoteMusicCommand(action, data)) break;
-              Media.nextSlide();
+              withTelemetryActionSource("remote", () => Media.nextSlide());
               break;
             case "previous":
               if (!acceptsRemoteMusicCommand(action, data)) break;
-              Media.prevSlide();
+              withTelemetryActionSource("remote", () => Media.prevSlide());
               break;
             case "close":
               if (!acceptsRemoteMusicCommand(action, data)) break;
@@ -1604,7 +1580,7 @@ $storage.hydrate().then(async () => {
                 data.index < 0
               )
                 break;
-              Media.goToSlide(data.index);
+              withTelemetryActionSource("remote", () => Media.goToSlide(data.index));
               break;
             case "playing-check": {
               // Consulta de estado (aba Slides do app remoto e pull-to-refresh).
@@ -1892,6 +1868,19 @@ $storage.hydrate().then(async () => {
                     );
                     break;
                   }
+                  case "projecao-de-fundo": {
+                    const projectionRefId = litItem.ref_id || "";
+                    if (projectionRefId) {
+                      const projectionRec = await $idb.get(
+                        DB_TABLE.BACKGROUND_PROJECTION_LIBRARY,
+                        projectionRefId
+                      );
+                      if (projectionRec) {
+                        projected = await activateBackgroundProjection(projectionRec);
+                      }
+                    }
+                    break;
+                  }
                   case "som-de-fundo": {
                     const bgRefId = litItem.ref_id || "";
                     if (bgRefId) {
@@ -1927,8 +1916,7 @@ $storage.hydrate().then(async () => {
                   }
                   case "anuncios": {
                     const announcementToken = beginAnnouncementIntent();
-                    const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
-                    const sorted = allAnn.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+                    const sorted = await loadAnnouncements();
                     overlayContext.availableAnnouncementIds = sorted.map((a) => String(a.id));
                     const selected = Array.isArray(litItem.anuncios_ids)
                       ? sorted.filter((a) => litItem.anuncios_ids.includes(String(a.id)))
@@ -2088,8 +2076,7 @@ $storage.hydrate().then(async () => {
               });
               break;
             case "announcements-list": {
-              const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
-              const sorted = allAnn.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+              const sorted = await loadAnnouncements();
               const simplified = sorted.map((a) => ({
                 id: String(a.id),
                 nome: a.nome,
@@ -2106,8 +2093,7 @@ $storage.hydrate().then(async () => {
             case "announcements-project": {
               const announcementToken = beginAnnouncementIntent();
               const ids = data.ids || [];
-              const allAnn = await $idb.getAll(DB_TABLE.ANNOUNCEMENTS);
-              const sorted = allAnn.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+              const sorted = await loadAnnouncements();
               const clickedId = ids.length ? ids[0] : null;
               const startIdx = clickedId
                 ? Math.max(
@@ -2353,7 +2339,7 @@ $storage.hydrate().then(async () => {
             // YouTube) devolveria 51.5 — o validador exige inteiro e a rota
             // responderia 502 mesmo com o volume já aplicado.
             next = Math.round(next);
-            Media.setVolume(next);
+            withTelemetryActionSource("remote", () => Media.setVolume(next));
             useBackgroundSound().setVolume(next);
             const requestId = data?.requestId;
             if (requestId && Platform.httpServer?.respond) {
@@ -2369,7 +2355,7 @@ $storage.hydrate().then(async () => {
           break;
         }
         case "http:drawing-number":
-          Broadcast.send(BROADCAST_TYPE.DRAWING_NUMBER, { number: data.number });
+          Broadcast.send(BROADCAST_TYPE.DRAWING_TEXT, { text: String(data.number) });
           break;
         case "http:libras-bundle": {
           // Handler para bundles de animação VLibras.
@@ -2398,8 +2384,83 @@ $storage.hydrate().then(async () => {
           break;
         }
         case "http:drawing-name":
-          Broadcast.send(BROADCAST_TYPE.DRAWING_NAME, { name: data.name });
+          Broadcast.send(BROADCAST_TYPE.DRAWING_TEXT, { text: String(data.name) });
           break;
+        case "http:draw": {
+          const requestId = data?.requestId;
+          if (!requestId || !Platform.httpServer?.respond) break;
+          try {
+            drawModule.ensureDrawLoaded();
+            const action = data?.action;
+            let state;
+            if (action === "draw") {
+              void drawModule.draw();
+              state = drawModule.snapshot();
+            } else if (action === "reset") {
+              drawModule.reset();
+              state = drawModule.snapshot();
+            } else if (action === "set-mode") {
+              if (data.mode !== "number" && data.mode !== "names") throw new Error("mode inválido");
+              if (!drawModule.setMode(data.mode)) throw new Error("sorteio em andamento");
+              state = drawModule.snapshot();
+            } else if (action === "set-range") {
+              if (!Number.isInteger(data.min) || !Number.isInteger(data.max)) {
+                throw new Error("intervalo inválido");
+              }
+              if (!drawModule.setRange(data.min, data.max))
+                throw new Error("intervalo inválido ou sorteio em andamento");
+              state = drawModule.snapshot();
+            } else if (action === "add-name") {
+              if (typeof data.name !== "string") throw new Error("nome inválido");
+              if (!drawModule.addName(data.name))
+                throw new Error("nome inválido ou sorteio em andamento");
+              state = drawModule.snapshot();
+            } else if (action === "remove-name") {
+              const removed = Number.isInteger(data.index)
+                ? drawModule.removeNameAt(data.index)
+                : drawModule.removeName(data.name);
+              if (!removed) throw new Error("nome não encontrado ou sorteio em andamento");
+              state = drawModule.snapshot();
+            } else if (action === "rename-name") {
+              if (!Number.isInteger(data.index) || typeof data.name !== "string") {
+                throw new Error("nome inválido");
+              }
+              if (!drawModule.renameNameAt(data.index, data.name)) throw new Error("nome inválido");
+              state = drawModule.snapshot();
+            } else if (action === "replace-names") {
+              if (!Array.isArray(data.names)) throw new Error("nomes inválidos");
+              if (!drawModule.replaceNames(data.names)) throw new Error("sorteio em andamento");
+              state = drawModule.snapshot();
+            } else if (action === "set-running") {
+              if (typeof data.running !== "boolean") throw new Error("running inválido");
+              drawModule.setRunning(data.running);
+              state = drawModule.snapshot();
+            } else if (action === "set-projection") {
+              if (!drawProjection) throw new Error("projeção indisponível");
+              if (typeof data.active !== "boolean") throw new Error("active inválido");
+              // `useScreenProjection` decide entre janela e camada da Projeção
+              // de Fundo; sem refresh antes, o flag da camada pode estar velho.
+              await drawProjection.refresh();
+              if (data.active) await drawProjection.abrir();
+              else await drawProjection.fechar();
+              state = drawModule.snapshot();
+            } else if (action === "state") {
+              state = drawModule.snapshot();
+            } else {
+              throw new Error("action inválida");
+            }
+            state = await withDrawProjection(state);
+            const sent = Platform.httpServer.respond(requestId, { status: "ok", state });
+            if (!sent) console.warn("[http:draw] resposta descartada pelo preload", requestId);
+          } catch (error) {
+            console.warn("[http:draw] falha:", error?.message || error);
+            Platform.httpServer.respond(requestId, {
+              status: "error",
+              error: error?.message || "falha no sorteio",
+            });
+          }
+          break;
+        }
         case "http:projections-close": {
           Media.close(true);
           Broadcast.send(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, { action: "stop" });
@@ -2411,7 +2472,6 @@ $storage.hydrate().then(async () => {
           const moduleIds = [
             ModuleEnum.COUNTER,
             ModuleEnum.DRAW,
-            ModuleEnum.NAME_DRAW,
             ModuleEnum.MESSAGE_BOARD,
             ModuleEnum.STOPWATCH,
             ModuleEnum.TIMER,
@@ -2444,7 +2504,7 @@ $storage.hydrate().then(async () => {
       // Para módulos com LScreenBtn, REQUEST_MODULE_STATE espera um
       // module id; sem janela de projeção pedindo, reemitimos para os
       // ids conhecidos que têm captura.
-      const moduleIds = ["counter", "draw", "name_draw", "message_board", "stopwatch", "timer"];
+      const moduleIds = ["counter", "draw", "message_board", "stopwatch", "timer"];
       for (const id of moduleIds) {
         Broadcast.send(BROADCAST_TYPE.REQUEST_MODULE_STATE, { module: id });
       }
@@ -2498,7 +2558,15 @@ $storage.hydrate().then(async () => {
     app.mount("#app");
     window.__ljPwaRecovery?.markMounted();
     _bootStage("mounted");
-    if (!isAuxiliaryRenderer) void warnDataDirFallback(i18n);
+    if (!isAuxiliaryRenderer) {
+      const t = (key, values) => i18n.global.t(key, values ?? {});
+      void import("@/helpers/StorageRecovery").then(
+        async ({ warnDataDirFallback, offerOlderVersionData }) => {
+          await warnDataDirFallback(t);
+          await offerOlderVersionData(t, i18n.global.locale.value === "es" ? "es" : "pt-BR");
+        }
+      );
+    }
 
     // Estado atual, não a ação de alternar: sem isto, saber "quantos usuários
     // usam Libras" dependia de esperar alguém tocar no interruptor depois do
@@ -2610,6 +2678,7 @@ $storage.hydrate().then(async () => {
         { capture: true }
       );
       Hotkeys.init();
+      PlayerKeyboard.init();
     }
 
     // No navegador/PWA a tela do tablet apagaria no meio de um slide parado; o
@@ -2700,7 +2769,7 @@ $storage.hydrate().then(async () => {
 
     // F1: abre cheatsheet de atalhos
     Hotkeys.register(
-      "F1",
+      HOTKEY.HOTKEYS,
       () => {
         _shell().openHotkeysCheatsheet();
       },
@@ -2708,48 +2777,25 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.f1",
         group: "general",
-        label: "F1",
       }
     );
 
-    // F5 / F9: refresh — recarrega dados do módulo ativo
-    const _refreshHandler = () => {
-      // Emite evento via broadcast para que o módulo ativo possa ouvir
-      Broadcast.send(BROADCAST_TYPE.MODULE_REFRESH, {});
-    };
-    Hotkeys.register("F5", _refreshHandler, {
-      context: "global",
-      description: "hotkeys.f5",
-      group: "general",
-      label: "F5",
-    });
-    Hotkeys.register("F9", _refreshHandler, {
-      context: "global",
-      description: "hotkeys.f5",
-      group: "general",
-      label: "F9",
-    });
-
-    // Ctrl+K / Cmd+K: Command Palette
-    const _openPalette = () => {
-      _shell().openCommandPalette();
-    };
-    Hotkeys.register("Ctrl+k", _openPalette, {
-      context: "global",
-      description: "hotkeys.ctrl_k",
-      group: "general",
-      label: "Ctrl+K",
-    });
-    Hotkeys.register("Meta+k", _openPalette, {
-      context: "global",
-      description: "hotkeys.ctrl_k",
-      group: "general",
-      label: "Cmd+K",
-    });
+    // ⌘K / Ctrl+K: Command Palette
+    Hotkeys.register(
+      HOTKEY.COMMAND_PALETTE,
+      () => {
+        _shell().openCommandPalette();
+      },
+      {
+        context: "global",
+        description: "hotkeys.ctrl_k",
+        group: "general",
+      }
+    );
 
     // Ctrl+Space: Quick Search
     Hotkeys.register(
-      "Ctrl+Space",
+      HOTKEY.QUICK_SEARCH,
       () => {
         _shell().openCommandPalette();
       },
@@ -2757,13 +2803,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_space",
         group: "general",
-        label: "Ctrl+Space",
       }
     );
 
-    // Ctrl+B: Bible Spotlight
+    // ⌘B / Ctrl+B: Bible Spotlight
     Hotkeys.register(
-      "Ctrl+b",
+      HOTKEY.BIBLE_SEARCH,
       () => {
         _shell().openBibleSearch();
       },
@@ -2771,13 +2816,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_b",
         group: "bible",
-        label: "Ctrl+B",
       }
     );
 
     // Ctrl+M: Music Spotlight
     Hotkeys.register(
-      "Ctrl+m",
+      HOTKEY.MUSIC_SEARCH,
       () => {
         _shell().openMusicSearch();
       },
@@ -2785,13 +2829,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_m",
         group: "media",
-        label: "Ctrl+M",
       }
     );
 
-    // Ctrl+I: Chat toggle
+    // ⌘I / Ctrl+I: Chat toggle
     Hotkeys.register(
-      "Ctrl+i",
+      HOTKEY.CHAT,
       () => {
         window.dispatchEvent(new CustomEvent("louvorja:toggle-chat"));
       },
@@ -2799,35 +2842,6 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_i",
         group: "general",
-        label: "Ctrl+I",
-      }
-    );
-    Hotkeys.register(
-      "Meta+i",
-      () => {
-        window.dispatchEvent(new CustomEvent("louvorja:toggle-chat"));
-      },
-      {
-        context: "global",
-        description: "hotkeys.ctrl_i",
-        group: "general",
-        label: "Cmd+I",
-      }
-    );
-
-    // Ctrl+F: foca campo de busca do módulo ativo via broadcast
-    Hotkeys.register(
-      "Ctrl+f",
-      () => {
-        Broadcast.send(BROADCAST_TYPE.MODULE_FOCUS_SEARCH, {});
-        // No browser este atalho abre busca nativa; não há como prevenir completamente.
-        // preventDefault já está definido no Hotkeys — no Electron funciona; no web pode falhar.
-      },
-      {
-        context: "global",
-        description: "hotkeys.ctrl_f",
-        group: "general",
-        label: "Ctrl+F",
       }
     );
 
@@ -2852,7 +2866,6 @@ $storage.hydrate().then(async () => {
           const moduleIds = [
             ModuleEnum.COUNTER,
             ModuleEnum.DRAW,
-            ModuleEnum.NAME_DRAW,
             ModuleEnum.MESSAGE_BOARD,
             ModuleEnum.STOPWATCH,
             ModuleEnum.TIMER,
@@ -2931,45 +2944,52 @@ $storage.hydrate().then(async () => {
       },
       {
         context: "global",
+        // Escape é uma saída global: precisa valer também com o foco num
+        // campo de busca (ex.: módulo Músicas), onde o Hotkeys ignora os
+        // demais atalhos. Com texto no campo, o primeiro Esc só limpa o campo:
+        // quem limpa a busca não pode apagar o telão junto.
+        allowInForm: () => !document.activeElement?.value,
         description: "hotkeys.esc",
         group: "general",
-        label: "Esc",
       }
     );
 
     // Ctrl+W: fecha módulo ativo (o browser pode fechar a aba — preventDefault tenta evitar)
     Hotkeys.register(
-      "Ctrl+w",
-      () => {
-        const id = _getActiveModuleId();
-        if (id) Modules.close(id);
+      HOTKEY.CLOSE_MODULE,
+      (e) => {
+        // Segurar a tecla não pode ir fechando abas até derrubar a janela.
+        if (e?.repeat) return;
+        // Sem aba e nada no ar, a janela: o mesmo que o botão de fechar (com
+        // projeção aberta, ela só sai da frente).
+        if (!Modules.closeActiveTab()) void Platform.api?.window?.close?.();
       },
       {
         context: "global",
         description: "hotkeys.ctrl_w",
         group: "general",
-        label: "Ctrl+W",
+        // O cursor quase sempre está na busca: fora dela a tecla seguiria para o
+        // menu nativo, que fecha a janela de uma vez.
+        allowInForm: true,
       }
     );
 
-    // Ctrl+Shift+F2: limpa cache do DB e recarrega dados
+    // ⇧⌘F2 / Ctrl+Shift+F2: limpa o cache do banco (o mesmo botão de Atualizações)
     Hotkeys.register(
-      "Ctrl+Shift+F2",
+      HOTKEY.CLEAR_CACHE,
       () => {
-        $storage.removeAll("db", "session");
-        Broadcast.send(BROADCAST_TYPE.MODULE_REFRESH, { clearCache: true });
+        void clearDatabaseCache();
       },
       {
         context: "global",
         description: "hotkeys.ctrl_shift_f2",
         group: "system",
-        label: "Ctrl+Shift+F2",
       }
     );
 
     // Ctrl+Alt+D: alterna o modo desenvolvedor
     Hotkeys.register(
-      "Ctrl+Alt+d",
+      HOTKEY.DEV_MODE,
       () => {
         Dev.toggle();
       },
@@ -2977,13 +2997,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_alt_d",
         group: "system",
-        label: "Ctrl+Alt+D",
       }
     );
 
-    // Ctrl+O: ativar/desativar overlay
+    // ⌘O / Ctrl+O: ativar/desativar overlay
     Hotkeys.register(
-      "Ctrl+o",
+      HOTKEY.OVERLAY,
       () => {
         Broadcast.send(BROADCAST_TYPE.MODULE_RIBBON_ACTION, {
           module: ModuleEnum.OVERLAY,
@@ -2994,13 +3013,12 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_o",
         group: "general",
-        label: "Ctrl+O",
       }
     );
 
-    // Ctrl+P: iniciar/parar projeção de fundo
+    // ⌘P / Ctrl+P: iniciar/parar projeção de fundo
     Hotkeys.register(
-      "Ctrl+p",
+      HOTKEY.BACKGROUND_PROJECTION,
       () => {
         Broadcast.send(BROADCAST_TYPE.MODULE_RIBBON_ACTION, {
           module: ModuleEnum.BACKGROUND_PROJECTION,
@@ -3011,37 +3029,24 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_p",
         group: "general",
-        label: "Ctrl+P",
       }
     );
 
-    // Ctrl+Tab: próximo módulo aberto
-    Hotkeys.register(
-      "Ctrl+Tab",
-      () => {
-        _cycleModule(1);
-      },
-      {
-        context: "global",
-        description: "hotkeys.ctrl_tab",
-        group: "general",
-        label: "Ctrl+Tab",
-      }
-    );
-
-    // Shift+Ctrl+Tab: módulo anterior
-    Hotkeys.register(
-      "Shift+Ctrl+Tab",
-      () => {
-        _cycleModule(-1);
-      },
-      {
-        context: "global",
-        description: "hotkeys.shift_ctrl_tab",
-        group: "general",
-        label: "Shift+Ctrl+Tab",
-      }
-    );
+    // Ctrl+Tab / Ctrl+Shift+Tab: próxima / anterior aba, na ordem da barra. Vale no
+    // campo de texto: a aba que chega põe o cursor na busca, e o Ctrl+Tab seguinte
+    // não pode parar ali.
+    Hotkeys.register(HOTKEY.NEXT_MODULE, () => Modules.cycleTab(1), {
+      context: "global",
+      description: "hotkeys.ctrl_tab",
+      group: "general",
+      allowInForm: true,
+    });
+    Hotkeys.register(HOTKEY.PREV_MODULE, () => Modules.cycleTab(-1), {
+      context: "global",
+      description: "hotkeys.shift_ctrl_tab",
+      group: "general",
+      allowInForm: true,
+    });
 
     // --- Navegação de slides (contexto: media ativa) ---
 
@@ -3053,7 +3058,12 @@ $storage.hydrate().then(async () => {
          * mostrando um PDF projetado fora da playlist (aba Canva), e esse caso
          * não liga `modules.media.show` — sem a extensão as setas morriam em
          * silêncio enquanto a música não estivesse aberta.
+         *
+         * Tecla de verdade fora do player é da tela: rola a lista, anda na
+         * Bíblia. Ver PlayerKeyboard. `qualquerFoco` é para a tecla Pause, que
+         * ninguém aperta por engano.
          */
+        if (!opts.qualquerFoco && !PlayerKeyboard.hasKeys(e)) return;
         if (_mediaIsActive() || (opts.arquivo === true && _fileProjectionIsActive())) {
           // preventDefault bloqueia ação default do browser (back/forward, scroll).
           // stopImmediatePropagation impede que a trava de foco do diálogo veja
@@ -3067,43 +3077,43 @@ $storage.hydrate().then(async () => {
       };
 
     Hotkeys.register(
-      "Ctrl+ArrowUp",
+      HOTKEY.PREV_SLIDE,
       _ifMedia(() => Media.prevSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_up",
         group: "navigation",
-        label: "Ctrl+↑",
+        preventDefault: false,
       }
     );
     Hotkeys.register(
-      "Ctrl+ArrowDown",
+      HOTKEY.NEXT_SLIDE,
       _ifMedia(() => Media.nextSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_down",
         group: "navigation",
-        label: "Ctrl+↓",
+        preventDefault: false,
       }
     );
     Hotkeys.register(
-      "Ctrl+PageUp",
+      HOTKEY.PREV_SLIDE_PAGE,
       _ifMedia(() => Media.prevSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_pageup",
         group: "navigation",
-        label: "Ctrl+PageUp",
+        preventDefault: false,
       }
     );
     Hotkeys.register(
-      "Ctrl+PageDown",
+      HOTKEY.NEXT_SLIDE_PAGE,
       _ifMedia(() => Media.nextSlide(), { arquivo: true }),
       {
         context: "media",
         description: "hotkeys.ctrl_pagedown",
         group: "navigation",
-        label: "Ctrl+PageDown",
+        preventDefault: false,
       }
     );
     Hotkeys.register(
@@ -3113,7 +3123,7 @@ $storage.hydrate().then(async () => {
         context: "media",
         description: "hotkeys.home",
         group: "navigation",
-        label: "Home",
+        preventDefault: false,
       }
     );
     Hotkeys.register(
@@ -3123,71 +3133,70 @@ $storage.hydrate().then(async () => {
         context: "media",
         description: "hotkeys.end",
         group: "navigation",
-        label: "End",
+        preventDefault: false,
       }
     );
 
-    // Setas puras ← / → / ↑ / ↓ navegam slides quando media está ativa
-    // (replica FormKeyUp Delphi: setas funcionam em qualquer janela com fMusica visível).
+    // Setas puras ← / → / ↑ / ↓ navegam slides quando o player tem o teclado.
     // PageUp/PageDown também navegam slides puros.
     /* Arrows + PageUp/PageDown: valem também com um arquivo no telão. */
     const _prevSlide = _ifMedia(() => Media.prevSlide(), { arquivo: true });
     const _nextSlide = _ifMedia(() => Media.nextSlide(), { arquivo: true });
-    // preventDefault: false aqui é importante — Hotkeys.js só executa o handler
-    // (não chama preventDefault automático). _ifMedia decide: se media está
-    // ativa, chama preventDefault + stopImmediatePropagation; senão, libera
-    // o evento para o browser/inputs.
-    // allowInForm: true replica o FormKeyUp Delphi — setas navegam slides em
-    // qualquer janela com a música aberta, mesmo com foco em um campo.
+    // preventDefault: false em toda tecla que passa por _ifMedia — Hotkeys.js só
+    // executa o handler (não chama preventDefault automático). _ifMedia decide:
+    // se media está ativa, chama preventDefault + stopImmediatePropagation;
+    // senão, libera o evento para o browser/inputs (PageUp rola a lista,
+    // Ctrl+← pula palavra no campo).
+    // No campo de texto as setas são do cursor; só o controle remoto, que manda
+    // evento sintético, passa o slide com o cursor num campo do desktop.
+    const _remoteInForm = (e) => !e.isTrusted;
     Hotkeys.register("ArrowLeft", _prevSlide, {
       context: "media",
       description: "hotkeys.prev_slide",
       group: "navigation",
-      label: "←",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("ArrowRight", _nextSlide, {
       context: "media",
       description: "hotkeys.next_slide",
       group: "navigation",
-      label: "→",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("ArrowUp", _prevSlide, {
       context: "media",
       description: "hotkeys.prev_slide",
       group: "navigation",
-      label: "↑",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("ArrowDown", _nextSlide, {
       context: "media",
       description: "hotkeys.next_slide",
       group: "navigation",
-      label: "↓",
       preventDefault: false,
-      allowInForm: true,
+      allowInForm: _remoteInForm,
     });
     Hotkeys.register("PageUp", _prevSlide, {
       context: "media",
       description: "hotkeys.prev_slide",
       group: "navigation",
-      label: "PageUp",
+      preventDefault: false,
     });
     Hotkeys.register("PageDown", _nextSlide, {
       context: "media",
       description: "hotkeys.next_slide",
       group: "navigation",
-      label: "PageDown",
+      preventDefault: false,
     });
 
-    // Ctrl+← / Ctrl+→: música anterior / próxima
-    // Media.js não tem next()/prev() para álbum — emite broadcast para o módulo ouvir
+    // ⌘← / ⌘→ (Ctrl fora do Mac): música anterior / próxima
+    // Media.js não tem next()/prev() para álbum — emite broadcast para o módulo ouvir.
+    // No campo de texto são do cursor (início/fim da linha no Mac, palavra fora dele);
+    // só o controle remoto troca a música dali.
     Hotkeys.register(
-      "Ctrl+ArrowLeft",
+      HOTKEY.PREV_MUSIC,
       _ifMedia(() => {
         Broadcast.send(BROADCAST_TYPE.MEDIA_PREV_MUSIC, {});
       }),
@@ -3195,12 +3204,12 @@ $storage.hydrate().then(async () => {
         context: "media",
         description: "hotkeys.ctrl_left",
         group: "navigation",
-        label: "Ctrl+←",
-        allowInForm: true,
+        preventDefault: false,
+        allowInForm: _remoteInForm,
       }
     );
     Hotkeys.register(
-      "Ctrl+ArrowRight",
+      HOTKEY.NEXT_MUSIC,
       _ifMedia(() => {
         Broadcast.send(BROADCAST_TYPE.MEDIA_NEXT_MUSIC, {});
       }),
@@ -3208,53 +3217,60 @@ $storage.hydrate().then(async () => {
         context: "media",
         description: "hotkeys.ctrl_right",
         group: "navigation",
-        label: "Ctrl+→",
-        allowInForm: true,
+        preventDefault: false,
+        allowInForm: _remoteInForm,
       }
     );
 
     // Space / Pause: toggle play/pause (só quando media ativa)
-    const _togglePlayPause = _ifMedia(() => {
+    const _playPause = () => {
       const isPaused = AppData.get("modules.media.config.is_paused", true);
       // Apenas faz sentido quando há áudio carregado
       const hasAudio = AppData.get("modules.media.config.audio", "") !== "";
       if (!hasAudio) return;
       if (isPaused) Media.play();
       else Media.pause();
-    });
-    Hotkeys.register("Space", _togglePlayPause, {
+    };
+    Hotkeys.register("Space", _ifMedia(_playPause), {
       context: "media",
       description: "hotkeys.space",
       group: "media",
-      label: "Space",
+      preventDefault: false,
     });
-    Hotkeys.register("Pause", _togglePlayPause, {
+    Hotkeys.register("Pause", _ifMedia(_playPause, { qualquerFoco: true }), {
       context: "media",
+      preventDefault: false,
       allowInForm: true,
       description: "hotkeys.pause",
       group: "media",
-      label: "Pause",
+    });
+    // As mesmas teclas com o foco na projeção ou no retorno. Sem áudio ("Sem
+    // áudio"), o espaço lá continua passando o slide, como sempre passou.
+    Broadcast.listen((msg) => {
+      if (msg?.type !== BROADCAST_TYPE.MEDIA_PLAY_PAUSE || !_mediaIsActive()) return;
+      if (AppData.get("modules.media.config.audio", "") !== "") _playPause();
+      else if (msg.payload?.key === "space") Media.nextSlide();
     });
 
     // --- Liturgia ---
 
-    // Ctrl+N: novo item (liturgia ativa)
+    // ⌘N / Ctrl+N: novo item (liturgia ativa) — o mesmo pedido do "Adicionar Item" da ribbon
     Hotkeys.register(
-      "Ctrl+n",
+      HOTKEY.LITURGY_NEW_ITEM,
       () => {
-        Broadcast.send(BROADCAST_TYPE.LITURGY_NEW_ITEM, {});
+        if (AppData.get("active_module") !== ModuleEnum.LITURGY) return;
+        Broadcast.send(BROADCAST_TYPE.LITURGY_RIBBON_ACTION, { action: "add" });
       },
       {
         context: "global",
         description: "hotkeys.ctrl_n",
         group: "liturgy",
-        label: "Ctrl+N",
       }
     );
 
-    // Ctrl+Shift+N: nova anotação na liturgia
+    // ⇧⌘N / Ctrl+Shift+N: nova anotação na liturgia
     Hotkeys.register(
-      "Ctrl+Shift+n",
+      HOTKEY.LITURGY_NEW_ANNOTATION,
       () => {
         Modules.open("liturgy");
         Broadcast.send(BROADCAST_TYPE.LITURGY_NEW_ANNOTATION, {});
@@ -3263,7 +3279,6 @@ $storage.hydrate().then(async () => {
         context: "global",
         description: "hotkeys.ctrl_shift_n",
         group: "liturgy",
-        label: "Ctrl+Shift+N",
       }
     );
   });

@@ -274,6 +274,7 @@ import { localeTag } from "@/helpers/DateTime";
 import Platform from "@/helpers/Platform";
 import $alert from "@/helpers/Alert";
 import $database from "@/helpers/Database";
+import { clearDatabaseCache } from "@/helpers/DatabaseCache";
 import BundleInstaller from "@/helpers/BundleInstaller";
 import { failureDetails } from "@/helpers/ReliabilityDiagnostics";
 import $userdata from "@/helpers/UserData";
@@ -669,8 +670,7 @@ function formatLastCheck(iso: string): string {
 }
 
 async function clearDbCache(): Promise<void> {
-  // O sessionStorage guarda o rascunho do editor de slides, não o banco.
-  await $database.invalidateAll(); // memória + IndexedDB + cópia do service worker
+  if (!(await clearDatabaseCache({ notify: false }))) return;
   dbCacheCleared.value = true;
   setTimeout(() => {
     dbCacheCleared.value = false;

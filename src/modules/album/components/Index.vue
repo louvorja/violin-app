@@ -6,6 +6,7 @@
     allow-global-hotkeys
     size="lg"
     @update:model-value="onDialogChange"
+    @open-auto-focus="focusTracks"
   >
     <div class="album-detail">
       <div class="album-summary">
@@ -16,34 +17,36 @@
         <div class="album-summary__copy">
           <h2 class="album-summary__name">{{ albumName }}</h2>
           <p v-if="!loading" class="album-summary__count">{{ trackCountLabel }}</p>
+          <div v-if="!loading && tracks.length" class="album-summary__actions">
+            <LjButton size="sm" :icon="ICONS.FORMAT.LIST_NUMBERED" @click="playAll">
+              {{ $t("ribbon.btn.play_all") }}
+            </LjButton>
+            <LjTooltip v-if="albumDownloaded === false" :text="t('download_hint')">
+              <LjButton size="sm" :icon="ICONS.ACTIONS.DOWNLOAD" @click="goDownload">
+                {{ t("download") }}
+              </LjButton>
+            </LjTooltip>
+            <LjTooltip v-else-if="albumDownloaded" :text="t('downloaded_hint')">
+              <span class="album-downloaded" tabindex="0">
+                <LjIcon :icon="ICONS.UI.CHECK" :size="14" class="album-downloaded__icon" />
+                {{ t("downloaded") }}
+              </span>
+            </LjTooltip>
+          </div>
         </div>
-      </div>
-
-      <div
-        v-if="!loading && tracks.length && canDownload && albumDownloaded !== null"
-        class="album-download"
-      >
-        <template v-if="albumDownloaded">
-          <LjIcon :icon="ICONS.UI.CHECK" :size="16" class="album-download__icon" />
-          <p class="album-download__hint">{{ t("downloaded_hint") }}</p>
-        </template>
-        <template v-else>
-          <p class="album-download__hint">{{ t("download_hint") }}</p>
-          <LjButton size="sm" :icon="ICONS.ACTIONS.DOWNLOAD" @click="goDownload">
-            {{ t("download") }}
-          </LjButton>
-        </template>
       </div>
 
       <LjProgress v-if="loading" indeterminate :label="t('loading')" />
       <LjEmpty v-else-if="!tracks.length" :icon="ICONS.MUSIC.NOTE" :title="t('empty')" />
       <LjTable
         v-else
+        ref="tracksTable"
         sticky
         hover
         class="album-tracks"
         max-height="min(52vh, 520px)"
         :aria-label="t('tracks_region')"
+        @keydown="onTracksKey"
       >
         <colgroup>
           <col class="album-col-track" />
@@ -62,7 +65,13 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in tracks" :key="item.id_music" class="lj-music-row">
+          <tr
+            v-for="(item, index) in tracks"
+            :key="item.id_music"
+            class="lj-music-row"
+            :class="{ 'lj-music-row--active': index === nav.index.value }"
+            @mousemove="nav.setActive(index)"
+          >
             <td class="album-track-number">{{ item.track ?? "" }}</td>
             <td>
               <span class="album-track-name">{{ item.name }}</span>
@@ -91,14 +100,25 @@ import { computed, ref, watch } from "vue";
 import { module as manifest } from "../manifest";
 import { useModule } from "@/composables/useModule";
 import { useAlbum } from "@/composables/useAlbum";
-import { LjButton, LjDialog, LjEmpty, LjIcon, LjProgress, LjTable } from "@/components/ui";
+import {
+  LjButton,
+  LjDialog,
+  LjEmpty,
+  LjIcon,
+  LjProgress,
+  LjTable,
+  LjTooltip,
+} from "@/components/ui";
 import Platform from "@/helpers/Platform";
 import { requestAlbumDownload } from "@/helpers/SyncIntent";
 import { useSyncManager } from "@/composables/useSyncManager";
 import { ICONS } from "@/config/Icons";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
 import { useDisabledAlbums } from "@/composables/useMusicCatalog";
+import { useListNavigation } from "@/composables/useListNavigation";
+import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
 import { isAlbumEnabled } from "@root/config/musicCatalog.mjs";
+import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
 
 const { module, t, $path, $datetime } = useModule(manifest);
 const { loading, close: closeAlbum } = useAlbum();
@@ -118,6 +138,52 @@ const tracks = computed(() =>
       )
     : []
 );
+/*
+ * Escolher pelo teclado, como na busca rápida: o álbum abre com a primeira
+ * faixa destacada e o foco na lista; ↑/↓ trocam a faixa, Enter toca o cantado
+ * e Shift+Enter o playback.
+ */
+const tracksTable = ref(null);
+const tracksEl = computed(() => tracksTable.value?.$el ?? null);
+const nav = useListNavigation({
+  items: () => tracks.value,
+  container: tracksEl,
+  activeSelector: ".lj-music-row--active",
+});
+watch(tracks, () => nav.reset());
+
+function focusTracks(event) {
+  // O mesmo álbum de novo vem do cache sem mudar `tracks`: o reset fica aqui.
+  nav.reset();
+  // Álbum vazio: o diálogo foca o próprio contêiner, como antes.
+  if (!tracksEl.value) return;
+  event.preventDefault();
+  tracksEl.value.focus({ preventScroll: true });
+}
+
+function onTracksKey(event) {
+  // Foco num botão da linha: a tecla é dele (o ↓ do ⋮ abre o menu).
+  if (event.target !== event.currentTarget) return;
+  if (nav.handleArrow(event) || !isQuickPlayEnter(event)) return;
+  event.preventDefault();
+  quickPlay(nav.active.value, event.shiftKey);
+}
+
+const playlistPlayback = usePlaylistPlayback();
+
+/** O CD inteiro, na ordem das faixas, pela mesma fila das playlists. */
+function playAll() {
+  playlistPlayback.playSequence(
+    albumName.value,
+    tracks.value.map((item) => ({
+      id_music: Number(item.id_music),
+      name: item.name,
+      duration: item.duration,
+      has_instrumental_music: !!item.has_instrumental_music,
+    }))
+  );
+}
+
 const trackCountLabel = computed(
   () => `${tracks.value.length} ${t(tracks.value.length === 1 ? "track_one" : "track_many")}`
 );
@@ -211,6 +277,26 @@ watch(disabledAlbums, (disabled) => {
   min-width: 0;
 }
 
+.album-summary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lj-space-4);
+  margin-top: var(--lj-space-4);
+}
+
+.album-downloaded {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
+}
+
+.album-downloaded__icon {
+  color: var(--lj-success);
+}
+
 .album-summary__name {
   margin: 0;
   color: var(--lj-text);
@@ -224,32 +310,6 @@ watch(disabledAlbums, (disabled) => {
   margin: var(--lj-space-3) 0 0;
   color: var(--lj-text-muted);
   font-size: var(--lj-text-base);
-}
-
-.album-download {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--lj-space-4);
-  /* Altura do botão: baixado ou não, a tabela começa no mesmo ponto. */
-  min-height: calc(var(--lj-ui-h-sm) + 2 * var(--lj-space-4) + 2px);
-  margin-bottom: var(--lj-space-6);
-  padding: var(--lj-space-4) var(--lj-space-5);
-  border: 1px solid var(--lj-surface-border);
-  border-radius: var(--lj-radius-md);
-  background: var(--lj-surface-bg-soft);
-}
-
-.album-download__icon {
-  flex: 0 0 auto;
-  color: var(--lj-success);
-}
-
-.album-download__hint {
-  flex: 1 1 200px;
-  margin: 0;
-  color: var(--lj-text-muted);
-  font-size: var(--lj-text-sm);
 }
 
 .album-tracks {

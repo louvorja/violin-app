@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Hotkeys from "../Hotkeys";
 
 /**
@@ -48,6 +48,64 @@ describe("Hotkeys — KeyboardEvent sintético (POST /api/keyboard)", () => {
     Hotkeys.unregister("Ctrl+O", handler);
   });
 
+  it("no macOS aceita Cmd como alias de Ctrl, mantendo Ctrl funcionando", () => {
+    vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
+    let fired = 0;
+    const handler = () => {
+      fired += 1;
+    };
+    Hotkeys.register("Mod+Shift+N", handler, { preventDefault: false });
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "n",
+        metaKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    expect(fired).toBe(1);
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "n",
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    expect(fired).toBe(2);
+
+    Hotkeys.unregister("Mod+Shift+N", handler);
+    vi.restoreAllMocks();
+  });
+
+  it("no macOS o Ctrl explícito não responde ao Cmd: ⌘M minimiza e ⌘W fecha a janela", () => {
+    vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
+    let fired = 0;
+    const handler = () => fired++;
+    Hotkeys.register("Ctrl+m", handler, { preventDefault: false });
+
+    const cmd = new KeyboardEvent("keydown", {
+      key: "m",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(cmd);
+    expect(fired).toBe(0);
+    expect(cmd.defaultPrevented).toBe(false);
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "m", ctrlKey: true, bubbles: true, cancelable: true })
+    );
+    expect(fired).toBe(1);
+
+    Hotkeys.unregister("Ctrl+m", handler);
+    vi.restoreAllMocks();
+  });
+
   it("dispara Space enviado como 'Space' (app) igual ao ' ' real", () => {
     let fired = 0;
     const handler = () => {
@@ -61,6 +119,83 @@ describe("Hotkeys — KeyboardEvent sintético (POST /api/keyboard)", () => {
 
     expect(fired).toBe(1);
     Hotkeys.unregister("Space", handler);
+  });
+
+  it("Escape com allowInForm dispara mesmo com um campo de busca focado", () => {
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+
+    let fired = 0;
+    const handler = () => {
+      fired += 1;
+    };
+    Hotkeys.register("Escape", handler, { allowInForm: true });
+
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+    );
+
+    expect(fired).toBe(1);
+    Hotkeys.unregister("Escape", handler);
+    input.remove();
+  });
+
+  it("allowInForm como função decide pelo campo focado e não cancela a tecla recusada", () => {
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+
+    let fired = 0;
+    const handler = () => {
+      fired += 1;
+    };
+    Hotkeys.register("Escape", handler, { allowInForm: () => !document.activeElement?.value });
+    const press = () => {
+      const event = new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      });
+      input.dispatchEvent(event);
+      return event;
+    };
+
+    input.value = "santo";
+    expect(press().defaultPrevented).toBe(false);
+    expect(fired).toBe(0);
+
+    input.value = "";
+    expect(press().defaultPrevented).toBe(true);
+    expect(fired).toBe(1);
+    Hotkeys.unregister("Escape", handler);
+    input.remove();
+  });
+
+  it("com `when` falso o atalho é pulado sem cancelar, e a tecla segue para o anterior", () => {
+    const fired = [];
+    const tela = () => fired.push("tela");
+    const player = () => fired.push("player");
+    let playerTemTeclado = false;
+    Hotkeys.register("ArrowRight", tela, { preventDefault: false });
+    Hotkeys.register("ArrowRight", player, { when: () => playerTemTeclado });
+    const press = () => {
+      const event = new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        bubbles: true,
+        cancelable: true,
+      });
+      window.dispatchEvent(event);
+      return event;
+    };
+
+    expect(press().defaultPrevented).toBe(false);
+    playerTemTeclado = true;
+    expect(press().defaultPrevented).toBe(true);
+    expect(fired).toEqual(["tela", "player"]);
+
+    Hotkeys.unregister("ArrowRight", tela);
+    Hotkeys.unregister("ArrowRight", player);
   });
 
   it("preserva Space para ativar o botão focado", () => {
@@ -117,5 +252,133 @@ describe("Hotkeys — KeyboardEvent sintético (POST /api/keyboard)", () => {
     Hotkeys.unregister("Ctrl+K", handler);
     menu.remove();
     layer.remove();
+  });
+
+  it("no diálogo de módulo o Esc é dele: o atalho global não roda nem cancela a tecla", () => {
+    const layer = document.createElement("div");
+    layer.className = "lj-dialog--module";
+    layer.setAttribute("data-dismissable-layer", "");
+    const list = document.createElement("div");
+    list.tabIndex = 0;
+    layer.append(list);
+    document.body.append(layer);
+
+    let fired = 0;
+    const handler = () => fired++;
+    Hotkeys.register("Escape", handler);
+    list.focus();
+    const esc = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    window.dispatchEvent(esc);
+    expect(fired).toBe(0);
+    expect(esc.defaultPrevented).toBe(false);
+
+    layer.remove();
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+    );
+    expect(fired).toBe(1);
+    Hotkeys.unregister("Escape", handler);
+  });
+});
+
+describe("Hotkeys — Command no Mac", () => {
+  const press = (init, target = window) => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(event);
+    return event;
+  };
+  const setPlatform = (value) =>
+    Object.defineProperty(navigator, "platform", { value, configurable: true });
+
+  beforeEach(() => Hotkeys.init());
+  afterEach(() => {
+    Hotkeys.destroy();
+    delete navigator.platform;
+    delete window.louvorjaApi;
+  });
+
+  it("fora do Mac, Mod é o Ctrl e o Windows/Command não dispara", () => {
+    setPlatform("Win32");
+    let fired = 0;
+    const handler = () => fired++;
+    Hotkeys.register("Mod+b", handler, { description: "biblia" });
+
+    press({ key: "b", metaKey: true });
+    expect(fired).toBe(0);
+    press({ key: "b", ctrlKey: true });
+    expect(fired).toBe(1);
+    expect(Hotkeys.list().find((e) => e.description === "biblia").parts).toEqual(["Ctrl", "B"]);
+    expect(Hotkeys.formatShortcut("Mod+Shift+n")).toBe("Ctrl+Shift+N");
+
+    Hotkeys.unregister("Mod+b", handler);
+  });
+
+  it("no Mac, Mod é o Command; o Ctrl do controle remoto segue valendo sem aparecer na lista", () => {
+    setPlatform("MacIntel");
+    window.louvorjaApi = {};
+    let fired = 0;
+    const handler = () => fired++;
+    Hotkeys.register("Mod+b", handler, { description: "biblia" });
+
+    press({ key: "b", metaKey: true });
+    press({ key: "b", ctrlKey: true });
+    expect(fired).toBe(2);
+    const rows = Hotkeys.list().filter((e) => e.description === "biblia");
+    expect(rows.map((e) => e.parts)).toEqual([["⌘", "B"]]);
+
+    Hotkeys.unregister("Mod+b", handler);
+    press({ key: "b", metaKey: true });
+    press({ key: "b", ctrlKey: true });
+    expect(fired).toBe(2);
+  });
+
+  it("no Mac escreve como o sistema: ⇧⌘N, ⌃M e ⌘↑", () => {
+    setPlatform("MacIntel");
+    window.louvorjaApi = {};
+    expect(Hotkeys.formatShortcut("Mod+Shift+n")).toBe("⇧⌘N");
+    expect(Hotkeys.formatShortcut("Ctrl+m")).toBe("⌃M");
+    expect(Hotkeys.formatShortcut("Mod+ArrowUp")).toBe("⌘↑");
+    expect(Hotkeys.formatShortcut("Ctrl+Alt+d")).toBe("⌃⌥D");
+  });
+
+  it("no navegador do Mac, ⌘N fica com o Chrome: a interface mostra o Ctrl", () => {
+    setPlatform("MacIntel");
+    expect(Hotkeys.formatShortcut("Mod+n")).toBe("⌃N");
+    expect(Hotkeys.formatShortcut("Mod+b")).toBe("⌘B");
+  });
+
+  it("com Option o Mac troca a letra pelo símbolo: vale a tecla física", () => {
+    setPlatform("MacIntel");
+    let fired = 0;
+    const handler = () => fired++;
+    Hotkeys.register("Ctrl+Alt+d", handler);
+
+    press({ key: "∂", code: "KeyD", ctrlKey: true, altKey: true });
+    expect(fired).toBe(1);
+
+    Hotkeys.unregister("Ctrl+Alt+d", handler);
+  });
+
+  it("⌘← no campo é início da linha; o Ctrl+← do controle remoto ainda troca a música", () => {
+    setPlatform("MacIntel");
+    window.louvorjaApi = {};
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+    let fired = 0;
+    const handler = () => fired++;
+    Hotkeys.register("Mod+ArrowLeft", handler, {
+      preventDefault: false,
+      allowInForm: (e) => !e.metaKey,
+    });
+
+    const native = press({ key: "ArrowLeft", metaKey: true }, input);
+    expect(native.defaultPrevented).toBe(false);
+    expect(fired).toBe(0);
+    press({ key: "ArrowLeft", ctrlKey: true }, input);
+    expect(fired).toBe(1);
+
+    Hotkeys.unregister("Mod+ArrowLeft", handler);
+    input.remove();
   });
 });

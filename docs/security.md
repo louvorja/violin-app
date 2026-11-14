@@ -139,13 +139,14 @@ a mesma session padrão aplica a política automaticamente.
 
 ### Vídeos online: binários baixados em tempo de execução
 
-O download de vídeos do YouTube (`electron/main/onlineVideo/`) executa dois binários que
-**não** vão no instalador e são baixados para `<dados>/bin/` no primeiro uso:
+O download de vídeos do YouTube (`electron/main/onlineVideo/`) executa binários que
+**não** vão no instalador e são baixados para `<dados>/bin/` em segundo plano:
 
 | Binário  | Origem                                             | Verificação                                                                                   |
 | -------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `yt-dlp` | `github.com/yt-dlp/yt-dlp/releases/latest`         | SHA-256 do `SHA2-256SUMS` da mesma release; roda `--version` antes de instalar                |
+| `yt-dlp` | `github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest` (zip em pasta; arquivo único como reserva) | SHA-256 do `SHA2-256SUMS` da mesma release; extração sem `..`, sem link simbólico e com CRC; roda `--version` antes de se tornar o atual |
 | `ffmpeg` | `github.com/eugeneware/ffmpeg-static` (tag fixa)   | SHA-256 do `.gz` **fixado no código** (`tools.js`); roda `-version` antes de instalar         |
+| `bgutil-pot` + plugin | `github.com/jim60105/bgutil-ytdlp-pot-provider-rs` (tag `v0.8.1`) | SHA-256 do binário e do zip do plugin fixados no código; roda `--version`; extração sem `..` |
 
 - O renderer só pede `onlineVideo:ensure(id, { maxHeight, priority, keep })` e
   `onlineVideo:stream(id, { maxHeight, keep })` (mais `keep(id)`, `cancel(id)`, `remove(id)`,
@@ -156,10 +157,10 @@ O download de vídeos do YouTube (`electron/main/onlineVideo/`) executa dois bin
   `true` (qualquer outro valor vira `false`). Nada disso leva texto do renderer a um comando.
 - `<id>.keep` é uma marca vazia ao lado do vídeo, criada só depois de o arquivo existir e só
   com um ID válido: não há caminho, nome nem conteúdo que o renderer escolha.
-- Abrir "Vídeos On-line" ou "Meus Vídeos Online" instala os dois binários **antes** de o operador
-  tocar qualquer coisa (`onlineVideo:prepare`, uma vez por sessão, ~100 MB na primeira vez), para
-  o primeiro vídeo não esperar. É o mesmo download, com as mesmas verificações, só que disparado
-  pela intenção de usar o módulo, e não pelo primeiro clique em tocar.
+- Os binários são instalados **antes** de o operador tocar qualquer coisa: 3 minutos depois de
+  abrir o app (com a opção "Baixar" ligada, sem projeção aberta; ~100 MB uma vez) e ao abrir
+  "Vídeos On-line" ou "Meus Vídeos Online" (`onlineVideo:prepare`). É o mesmo download, com as
+  mesmas verificações; uma pré-instalação que falhou só se repete no dia seguinte.
 - O arquivo baixado é servido em `louvorja://onlinevideo/<id>.mp4`. O handler só aceita o
   mesmo formato de ID (não há como sair da pasta do cache) e atende `Range`.
 - O vídeo que ainda baixa é servido em `louvorja://onlinestream/<id>/video|audio` (tocar, o botão
@@ -169,13 +170,24 @@ O download de vídeos do YouTube (`electron/main/onlineVideo/`) executa dois bin
   hosts `*.googlevideo.com` (`runner.streamUrl`, conferido de novo ao abrir a sessão),
   baixa com `Range` — sem seguir redirecionamentos — e grava em `<dados>/Videos/.stream/<id>/`,
   com nomes fixos. Nenhuma janela abre conexão própria com o YouTube nesse caminho.
-- O yt-dlp é o único binário atualizado sem lançar uma versão do app, e só depois de uma falha
-  que uma versão nova resolve (no máximo uma vez por hora). Trocar o ffmpeg exige trocar o
-  hash fixado em `tools.js`, portanto um release.
+- O yt-dlp é o único binário atualizado sem lançar uma versão do app: depois de uma falha que
+  uma versão nova resolve (no máximo uma vez por hora) e numa checagem diária em segundo plano
+  (só para quem usou vídeo on-line no último mês e com a versão instalada há uma semana). A
+  checagem lê só o `SHA2-256SUMS` e baixa apenas se o SHA-256 mudou. Cada versão fica em
+  `bin/ytdlp/<sha256[0:16]>/` e só vira a atual (em `tools.json`) depois de executar; as
+  anteriores são apagadas na abertura seguinte. Trocar o ffmpeg exige trocar o hash fixado
+  em `tools.js`, portanto um release.
 - Os hosts alcançados (`github.com`, `objects.githubusercontent.com` e o YouTube) são acessados
   pelo processo principal e pelo yt-dlp, não pelo renderer: a CSP não ganha domínio novo.
 - Um binário que baixou certo mas não executa (antivírus, arquitetura errada) é apagado e
   reinstalado uma vez; se continuar falhando, o app cai no player do YouTube.
+- O **provedor de PO token** é opcional e baixado no primeiro uso. Ele roda em modo CLI
+  (`bgutil-pot --content-binding <videoId>`), iniciado pelo plugin dentro do processo do
+  yt-dlp, sem servidor HTTP/porta. O yt-dlp recebe `--plugin-dirs` e
+  `--extractor-args youtubepot-bgutilcli:cli_path=...`; o binário e o plugin são GPL-3.0,
+  sem modificações, com versão/SHA fixos. Se ele faltar/falhar, o yt-dlp/ffmpeg continuam
+  funcionando e o vídeo cai no player do YouTube. Os cabeçalhos do yt-dlp (incluindo o PO
+  token, quando vier) são repassados às requisições das trilhas; logs não incluem URLs.
 
 ---
 

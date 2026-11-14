@@ -61,6 +61,8 @@ export function canLinkOverlay(item: LiturgyItem, context: OverlayLinkContext = 
       return !!projectedFileKind(context.scheduledPath, "", context.systemMediaPlayer);
     case LiturgyItemTypeEnum.VIDEO_ONLINE:
       return !!youtubeVideoId(item.url);
+    case LiturgyItemTypeEnum.BG_PROJECTION:
+      return !!item.ref_id;
     case LiturgyItemTypeEnum.ANUNCIOS: {
       const available = context.availableAnnouncementIds;
       if (available) {

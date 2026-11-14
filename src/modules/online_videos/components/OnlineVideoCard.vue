@@ -28,6 +28,12 @@
       <div v-if="variant === 'video'" class="ov-card-play">
         <LjIcon :icon="ICONS.PLAYER.PLAY" size="28" color="#fff" />
       </div>
+      <span v-if="canDownload" class="ov-card-download-badge">
+        <OnlineVideoDownloadBadge :video-id="videoId" compact />
+      </span>
+      <div v-if="canDownload" class="ov-card-download">
+        <OnlineVideoDownload :video-id="videoId" :name="entity.title" :show-status="false" />
+      </div>
     </div>
     <div class="ov-card-body">
       <div class="ov-card-title">{{ entity.title }}</div>
@@ -38,6 +44,9 @@
 
 <script setup lang="ts">
 import { LjIcon } from "@/components/ui";
+import OnlineVideoDownload from "@/components/OnlineVideoDownload.vue";
+import OnlineVideoDownloadBadge from "@/components/OnlineVideoDownloadBadge.vue";
+import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
 import { ICONS } from "@/config/Icons";
 /**
  * OnlineVideoCard — card de exibição do módulo Vídeos On-line.
@@ -138,6 +147,13 @@ const cardStyle = computed(() => {
 const fallbackIcon = computed(() =>
   props.variant === "playlist" ? ICONS.MEDIA.PLAYLIST : ICONS.MEDIA.YOUTUBE
 );
+
+/** Só o card de vídeo tem download; canal/playlist são agrupamentos. */
+const videoId = computed(() =>
+  props.variant === "video" && "video_id" in props.entity ? props.entity.video_id : null
+);
+const downloads = useOnlineVideoDownloads();
+const canDownload = computed(() => downloads.available && !!videoId.value);
 
 // ─── Cadeia de thumbnails ────────────────────────────────────────────
 
@@ -291,6 +307,24 @@ function onThumbLoad(e: Event): void {
   opacity: 0;
   transition: opacity var(--lj-transition-normal);
   background: rgba(0, 0, 0, 0.35);
+}
+.ov-card-download-badge {
+  position: absolute;
+  background-color: rgb(255 255 255 / 0.91);
+  border-radius: 5px;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  max-width: calc(100% - 12px);
+}
+.ov-card-download {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 2;
+  display: flex;
+  border-radius: 50%;
+  background: rgb(220 220 220 / 0.78);
 }
 .ov-card:hover .ov-card-play {
   opacity: 1;

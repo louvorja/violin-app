@@ -107,7 +107,6 @@ export function useClicker(actions: {
           context: "live",
           description,
           group: "presentation",
-          label: combo,
           preventDefault,
         });
       else Hotkeys.unregister(combo, handler);

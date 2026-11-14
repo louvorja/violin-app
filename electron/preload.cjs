@@ -32,7 +32,7 @@ const HTTP_RENDERER_RESPONSE_CHANNEL = "http:renderer-response";
  * pessoais. O `preloadIpcContract.spec` cobre a lista de prefixos justamente
  * para o próximo esquecimento falhar no teste e não em produção.
  */
-const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos|custom-music|music-album|background-sound|volume|media-library|presenter):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos|custom-music|music-album|background-sound|volume|media-library|draw|presenter):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 contextBridge.exposeInMainWorld("louvorjaApi", {
   /** Resolve o caminho real de um File arrastado/selecionado (Electron 32+). */
@@ -183,8 +183,8 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
   },
 
   jsonCache: {
-    /** Limpa todo o cache JSON em userData/json_db/ */
-    clear: () => ipcRenderer.invoke("jsonCache:clear"),
+    /** Expira os JSONs do banco (todos, ou as chaves pedidas) sem apagar a reserva offline. */
+    expire: (files) => ipcRenderer.invoke("jsonCache:expire", files),
     /** Retorna o caminho do diretório de cache (debug / módulo update) */
     dir: () => ipcRenderer.invoke("jsonCache:dir"),
   },
@@ -295,6 +295,19 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       ipcRenderer.on("onlineVideo:progress", handler);
       return () => ipcRenderer.off("onlineVideo:progress", handler);
     },
+  },
+
+  // -------------------------------------------------------------------------
+  // Quadros de áudio que o Chromium recusa, trocados por silêncio na entrega
+  // -------------------------------------------------------------------------
+
+  audioRepair: {
+    /** Começa a conferência de um `louvorja://local/…` e diz se cabe a esta janela varrer. */
+    begin: (url) => ipcRenderer.invoke("audioRepair:begin", url),
+    /** Bytes dos quadros `[from, from + count)` da varredura `token`. */
+    read: (token, from, count) => ipcRenderer.invoke("audioRepair:read", token, from, count),
+    /** `{ upto, bad, done }` ou `{ abort: true }`. */
+    report: (token, result) => ipcRenderer.invoke("audioRepair:report", token, result),
   },
 
   // -------------------------------------------------------------------------
@@ -495,7 +508,6 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     /** Pasta de dados pedida e motivo, quando o app teve de abrir em outra. */
     dataDirIssue: () => ipcRenderer.invoke("storage:dataDirIssue"),
     /** Limpa cache de JSON (banco). */
-    clearJson: () => ipcRenderer.invoke("storage:clearJson"),
     /** Limpa toda a mídia local (mp3, imagens). */
     clearFiles: () => ipcRenderer.invoke("storage:clearFiles"),
     /** Remove arquivos JSON do cache por prefixo. */
@@ -506,15 +518,23 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     /** Compara servidor vs local — retorna { missing, damaged, extra }. */
     verify: (remoteFiles) => ipcRenderer.invoke("storage:verify", remoteFiles),
     /** Abre a pasta de mídia no explorer do SO. */
-    openDir: () => ipcRenderer.invoke("storage:openDir"),
+    openDir: (kind) => ipcRenderer.invoke("storage:openDir", kind),
     /** Mostra dialog de seleção de pasta. */
     chooseDir: () => ipcRenderer.invoke("storage:chooseDir"),
     /** Mostra dialog de seleção de arquivo único. Retorna o caminho completo ou null. */
     chooseFile: (kind) => ipcRenderer.invoke("storage:chooseFile", kind),
     /** Mostra dialog de seleção de imagem com filtro de tipos. Retorna o caminho completo ou null. */
     chooseImage: () => ipcRenderer.invoke("storage:chooseImage"),
-    /** Define nova pasta de mídia (com opção de mover conteúdo). */
-    setDataDir: (newDir, opts) => ipcRenderer.invoke("storage:setDataDir", newDir, opts),
+    /** Perfil privado e pastas independentes do acervo e dos vídeos. */
+    locations: () => ipcRenderer.invoke("storage:locations"),
+    configureLocations: (locations) => ipcRenderer.invoke("storage:configureLocations", locations),
+    completeSetup: () => ipcRenderer.invoke("storage:completeSetup"),
+    privatePathMappings: () => ipcRenderer.invoke("storage:privatePathMappings"),
+    restart: () => ipcRenderer.invoke("storage:restart"),
+    /** "reset" (começar do zero) ou "reimport" (trazer de volta a versão anterior); reinicia o app. */
+    recover: (action, options) => ipcRenderer.invoke("storage:recover", action, options),
+    olderVersion: () => ipcRenderer.invoke("storage:olderVersion"),
+    keepCurrentVersion: () => ipcRenderer.invoke("storage:keepCurrentVersion"),
     /** Auto-limpeza FIFO ao ultrapassar maxBytes. */
     enforceQuota: (maxBytes) => ipcRenderer.invoke("storage:enforceQuota", maxBytes),
     /** Lista arquivos de um diretório local (para auto-populate). */
@@ -815,7 +835,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
    * Eventos: "http:song-slides", "http:open-song", "http:drawing-number",
    * "http:drawing-name", "http:libras-bundle", "http:projections-close",
    * "http:online-videos", "http:custom-music", "http:music-album", "http:background-sound",
-   * "http:volume", "http:media-library", "http:presenter"
+   * "http:volume", "http:media-library", "http:draw", "http:presenter"
    * Retorna função de cleanup que remove todos os listeners.
    *
    * @param {(eventType: string, data: object) => void} cb
@@ -835,6 +855,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       "http:background-sound",
       "http:volume",
       "http:media-library",
+      "http:draw",
       "http:presenter",
     ];
     const handlers = events.map((evt) => {

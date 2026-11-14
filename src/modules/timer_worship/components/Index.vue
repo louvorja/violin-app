@@ -4,24 +4,47 @@
     :manifest="manifest"
     :style="{ minWidth: '320px' }"
     @close="close()"
+    @show="onModuleShow"
   >
     <div class="mod-shell">
       <ModuleFormatDrawer v-model="show_format" :module-id="'timer_worship'" :manifest="manifest" />
-      <div ref="container" class="tw-root" :style="rootStyle">
-        <img v-if="bgImage" :src="bgImage" class="tw-bg-img" :style="imageStyle" alt="" />
-
-        <!-- Display -->
+      <div class="timer-layout">
         <div
-          class="tw-display"
-          :class="{
-            'tw-warning': mode === 'down' && alertActive && seconds > 0,
-            'tw-critical': mode === 'down' && alertActive && seconds <= 10 && seconds > 0,
-            'tw-done': mode === 'down' && seconds <= 0 && alarmed,
-          }"
-          :style="[textStyle, alertActive ? alertStyle : null]"
+          ref="container"
+          class="tw-root"
+          :style="rootStyle"
+          data-testid="timer-worship-stage"
+          :data-alert="alertLevel || 'none'"
         >
-          {{ projecao }}
+          <ModuleBackgroundMedia
+            v-if="bgImage"
+            :src="bgImage"
+            class="tw-bg-img"
+            :style="imageStyle"
+          />
+
+          <!-- Display -->
+          <div
+            class="tw-display"
+            :class="{
+              'tw-warning': mode === 'down' && alertActive && seconds > 0,
+              'tw-critical': mode === 'down' && alertActive && seconds <= 10 && seconds > 0,
+              'tw-done': mode === 'down' && seconds <= 0 && alarmed && !overtime,
+            }"
+            :style="[textStyle, displayColorStyle]"
+            data-testid="timer-worship-display"
+          >
+            {{ projecao }}
+          </div>
+          <ModuleAlertFrame :level="flashBorders ? alertLevel : ''" :color="displayColor" />
         </div>
+        <ModuleTimerDock
+          :mode="mode"
+          :warning-seconds="showAlert ? alertSeconds : 0"
+          :labels="dockLabels"
+          @update:mode="mode = $event"
+          @update:warning-seconds="setWarning"
+        />
       </div>
     </div>
 
@@ -33,7 +56,10 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
+import ModuleAlertFrame from "@/components/ModuleAlertFrame.vue";
+import ModuleTimerDock from "@/components/ModuleTimerDock.vue";
 import TimerEndActionDialogs from "@/components/TimerEndActionDialogs.vue";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -45,13 +71,15 @@ import Media from "@/composables/useMedia";
 import { SABBATH_SCHOOL_SOUNDS } from "@/config/SabbathSchool";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { ModuleEnum } from "@/enums/ModuleEnum";
+import { formatTimerSeconds, timerProjectionText } from "@/helpers/TimerText";
+import { secondsUntilTarget } from "@/helpers/TimerTarget";
+import { worshipShowsTarget, worshipTargetTime } from "../projectionText";
 
 type TimerMode = "up" | "down";
 
 const { show_format } = useModuleFormat(ModuleEnum.TIMER_WORSHIP, manifest);
-const { rootStyle, textStyle, alertStyle, bgImage, imageStyle, container } = useModuleBodyStyle(
-  ModuleEnum.TIMER_WORSHIP
-);
+const { rootStyle, textStyle, alertStyle, warningStyle, bgImage, imageStyle, container } =
+  useModuleBodyStyle(ModuleEnum.TIMER_WORSHIP);
 const endAction = useTimerEndAction(ModuleEnum.TIMER_WORSHIP, KEYS.MODULES.TIMER_WORSHIP);
 
 const moduleContainer = ref<{ tm(key: string): string } | null>(null);
@@ -65,19 +93,14 @@ const mode = computed<TimerMode>({
 const running = ref<boolean>(false);
 const seconds = ref<number>(0);
 const targetTime = computed<string>({
-  get: () => {
-    const v = $userdata.get<string>(KEYS.MODULES.TIMER_WORSHIP.LAST_TARGET_TIME, "");
-    return typeof v === "string" && /^\d{2}:\d{2}$/.test(v) ? v : getCurrentTimeValue();
-  },
+  get: () => worshipTargetTime(),
   set: (v: string) => $userdata.set(KEYS.MODULES.TIMER_WORSHIP.LAST_TARGET_TIME, v),
 });
 const durationSeconds = ref<number>(0);
 const startedAt = ref<number | null>(null);
 const alarmed = ref<boolean>(false);
 
-const showTargetTime = computed<boolean>(
-  () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.SHOW_TARGET_TIME, true) ?? true
-);
+const showTargetTime = computed<boolean>(() => worshipShowsTarget());
 
 const showAlert = computed<boolean>(
   () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.SHOW_ALERT, true) ?? true
@@ -90,6 +113,7 @@ const alertSeconds = computed<number>(() =>
 const alertActive = computed<boolean>(
   () =>
     mode.value === "down" &&
+    startedAt.value !== null &&
     showAlert.value &&
     seconds.value <= alertSeconds.value &&
     (seconds.value > 0 || alarmed.value)
@@ -99,18 +123,59 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let fiveMinFired = false;
 let oneMinFired = false;
 
-const display = computed<string>(() => {
-  const abs = Math.abs(seconds.value);
-  const h = Math.floor(abs / 3600);
-  const m = Math.floor((abs % 3600) / 60);
-  const s = abs % 60;
-  const sign = seconds.value < 0 ? "-" : "";
-  return `${sign}${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+/*
+ * Cor do número (e da moldura): "Cor do aviso" nos segundos de destaque,
+ * "Cor do alerta" só depois do horário — as duas da Formatação. Antes, o destaque já pintava de vermelho
+ * enquanto a moldura ficava amarela.
+ */
+const displayColor = computed<string | undefined>(() => {
+  // Passou do horário: vermelho mesmo com o aviso em "Não".
+  if (mode.value === "down" && seconds.value <= 0 && alarmed.value && startedAt.value !== null) {
+    return alertStyle.value.color;
+  }
+  return alertActive.value ? warningStyle.value.color : undefined;
+});
+const displayColorStyle = computed(() =>
+  displayColor.value ? { color: displayColor.value } : null
+);
+
+function setWarning(value: number): void {
+  // "Não" desliga o destaque; os outros botões ligam e definem os segundos.
+  $userdata.set(KEYS.MODULES.TIMER_WORSHIP.SHOW_ALERT, value > 0);
+  if (value > 0) $userdata.set(KEYS.MODULES.TIMER_WORSHIP.ALERT_SECONDS, value);
+}
+
+const dockLabels = computed(() => ({
+  mode: tm("ribbon.mode"),
+  up: tm("mode.up"),
+  down: tm("mode.down"),
+  warning: tm("ribbon.warning"),
+  warnings: ["off", "m1", "m2", "m5", "m10"].map((k) => tm(`warning.${k}`)),
+}));
+
+const overtime = computed<boolean>(
+  () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.COUNT_OVERTIME, true) !== false
+);
+const flashBorders = computed<boolean>(
+  () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.FLASH_BORDERS, true) !== false
+);
+
+/*
+ * Aviso de tempo para a moldura (tela e telão): amarelo nos segundos de
+ * destaque, vermelho depois do zero. Só com a contagem iniciada — parado,
+ * mesmo perto do horário, nada pisca no telão.
+ */
+const alertLevel = computed<"" | "warning" | "danger">(() => {
+  if (mode.value !== "down" || startedAt.value === null) return "";
+  if (seconds.value <= 0) return alarmed.value ? "danger" : "";
+  return alertActive.value ? "warning" : "";
 });
 
-const projecao = computed<string>(() => {
-  return showTargetTime.value ? `${display.value}\n${targetTime.value}` : display.value;
-});
+const display = computed<string>(() => formatTimerSeconds(seconds.value));
+
+const projecao = computed<string>(() =>
+  timerProjectionText(display.value, showTargetTime.value, targetTime.value)
+);
 
 // Defaults sonoros — setIfNull garante que existam antes do primeiro uso
 $userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.SOUND_START, true);
@@ -119,7 +184,11 @@ $userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.SOUND_ONE_MIN, true);
 $userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.END_ACTION, MediaEnum.NONE);
 
 const selectedSound = computed<string>(
-  () => $userdata.get(KEYS.MODULES.TIMER_WORSHIP.SELECTED_SOUND) as string
+  () =>
+    $userdata.get(
+      KEYS.MODULES.TIMER_WORSHIP.SELECTED_SOUND,
+      SABBATH_SCHOOL_SOUNDS.OPENING.id
+    ) as string
 );
 
 const projection = useModuleProjection(ModuleEnum.TIMER_WORSHIP, {
@@ -201,37 +270,28 @@ function setTimeFromPayload(payload: unknown): void {
   reset();
 }
 
+const projectionActive = ref(true);
+
+function emitProjection(): void {
+  projection.emit({
+    text: projectionActive.value ? projecao.value : "",
+    active: projectionActive.value,
+    color: projectionActive.value ? displayColor.value : undefined,
+    alert:
+      projectionActive.value && flashBorders.value && alertLevel.value
+        ? alertLevel.value
+        : undefined,
+  });
+}
+
 watch(
-  [projecao, alertActive],
-  () => {
-    projection.emit({
-      text: projecao.value,
-      active: true,
-      color: alertActive.value ? alertStyle.value.color : undefined,
-    });
-  },
+  [projecao, alertActive, alertLevel, flashBorders, displayColor, projectionActive],
+  emitProjection,
   { immediate: true }
 );
 
-function getCurrentTimeValue(): string {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-}
-
-function getTargetDate(): Date {
-  const [hours, minutes] = targetTime.value.split(":").map(Number);
-  const target = new Date();
-  target.setHours(hours || 0, minutes || 0, 0, 0);
-  return target;
-}
-
 function getDurationUntilTarget(): number {
-  const now = new Date();
-  const target = getTargetDate();
-  if (target.getTime() <= now.getTime()) {
-    target.setDate(target.getDate() + 1);
-  }
-  return Math.max(0, Math.ceil((target.getTime() - now.getTime()) / 1000));
+  return Math.max(0, secondsUntilTarget(targetTime.value));
 }
 
 function updateFromTargetTime(): void {
@@ -255,12 +315,16 @@ function updateRunningTime(): void {
     return;
   }
 
-  seconds.value = Math.max(durationSeconds.value - elapsedSeconds, 0);
+  const left = durationSeconds.value - elapsedSeconds;
+  seconds.value = overtime.value ? left : Math.max(left, 0);
 
-  if (seconds.value <= 0 && !alarmed.value) {
-    alarmed.value = true;
-    pause();
-    endAction.triggerTimerEndAction();
+  if (left <= 0) {
+    if (!alarmed.value) {
+      alarmed.value = true;
+      // Com tempo excedido a contagem segue (-00:00:01…); sem ele, para no zero.
+      if (!overtime.value) pause();
+      endAction.triggerTimerEndAction();
+    }
     return;
   }
 
@@ -289,6 +353,17 @@ function updateRunningTime(): void {
   }
 }
 
+/*
+ * Desligar o excedido no meio dele precisa parar a contagem: `alarmed` já é
+ * true, então o tick não pausa sozinho e o botão ficaria em "Pausar" com o
+ * display congelado em 00:00:00.
+ */
+watch(overtime, (on) => {
+  if (on || mode.value !== "down" || !alarmed.value || seconds.value > 0) return;
+  seconds.value = 0;
+  if (running.value) pause();
+});
+
 function toggle(): void {
   if (running.value) {
     pause();
@@ -298,16 +373,29 @@ function toggle(): void {
 }
 
 function start(): void {
-  alarmed.value = false;
-  fiveMinFired = false;
-  oneMinFired = false;
-  durationSeconds.value = getDurationUntilTarget();
+  /*
+   * Retomar depois de pausar no tempo excedido segue contando o excedido sem
+   * disparar de novo o bipe e a ação "Ao terminar".
+   */
+  const resumingOvertime = alarmed.value && overtime.value && mode.value === "down";
+  alarmed.value = resumingOvertime;
+  fiveMinFired = resumingOvertime;
+  oneMinFired = resumingOvertime;
+  const until = secondsUntilTarget(targetTime.value);
+  // Regressivo aceita horário já passado: começa direto no excedido (ou no zero).
+  durationSeconds.value =
+    mode.value === "down"
+      ? overtime.value
+        ? until
+        : Math.max(0, until)
+      : getDurationUntilTarget();
   startedAt.value = Date.now();
   seconds.value = mode.value === "down" ? durationSeconds.value : 0;
   running.value = true;
   $userdata.set(KEYS.MODULES.TIMER_WORSHIP.RUNNING, true);
 
-  if ($userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.SOUND_START)) playSoundStart();
+  if (!resumingOvertime && $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.SOUND_START))
+    playSoundStart();
 
   timer = setInterval(updateRunningTime, 1000);
 }
@@ -330,11 +418,34 @@ function reset(): void {
   updateFromTargetTime();
 }
 
+// Fechar zera a contagem e tira o módulo do telão. O horário continua salvo,
+// então reabrir e iniciar retoma do ponto certo.
 function close(): void {
-  pause();
+  if (!projectionActive.value && !running.value) return;
+  projectionActive.value = false;
+  reset();
+  emitProjection();
 }
 
+/*
+ * O X da aba fecha por Modules.close(); o ModuleContainer traduz a mudança de
+ * visibilidade no evento `show`, sem o módulo precisar ler AppData.
+ */
+function onModuleShow(visible: boolean): void {
+  if (!visible) {
+    close();
+    return;
+  }
+  projectionActive.value = true;
+  emitProjection();
+}
+
+// Fechar o app com a contagem rodando deixava a chave em "true", e o botão da
+// ribbon abria em "Pausar" sem nada contando.
+$userdata.set(KEYS.MODULES.TIMER_WORSHIP.RUNNING, false);
+
 onBeforeUnmount(() => {
+  projection.emit({ active: false, text: "" });
   if (timer !== null) clearInterval(timer);
 });
 </script>
@@ -345,8 +456,16 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
+.timer-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
 .tw-root {
   position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;

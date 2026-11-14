@@ -21,7 +21,9 @@ describe("fetchWithTimeout", () => {
     relatos = [];
     timings = [];
     setNetworkReporter((ok, source) => relatos.push([ok, source]));
-    setNetworkTimingReporter((timing) => timings.push(timing as unknown as Record<string, unknown>));
+    setNetworkTimingReporter((timing) =>
+      timings.push(timing as unknown as Record<string, unknown>)
+    );
   });
 
   afterEach(() => {
@@ -48,18 +50,19 @@ describe("fetchWithTimeout", () => {
   });
 
   it("desiste quando a resposta não chega no prazo", async () => {
-    vi.stubGlobal("fetch", (_url: string, init: RequestInit) =>
-      new Promise((_resolve, reject) => {
-        (init.signal as AbortSignal).addEventListener("abort", () =>
-          reject(new DOMException("Timeout", "TimeoutError"))
-        );
-      })
+    vi.stubGlobal(
+      "fetch",
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          (init.signal as AbortSignal).addEventListener("abort", () =>
+            reject(new DOMException("Timeout", "TimeoutError"))
+          );
+        })
     );
 
-    await expect(
-      fetchWithTimeout("https://exemplo.test/lento", { timeout: 30 })
-    ).rejects.toThrow();
+    await expect(fetchWithTimeout("https://exemplo.test/lento", { timeout: 30 })).rejects.toThrow();
     expect(relatos).toContainEqual([false, "fetch"]);
+    expect(timings[0]).toMatchObject({ outcome: "network_error", failure_kind: "timeout" });
   });
 
   it("qualquer resposta HTTP conta como rede viva, inclusive erro do servidor", () => {
@@ -79,6 +82,44 @@ describe("fetchWithTimeout", () => {
     expect(JSON.stringify(timings)).not.toContain("token");
   });
 
+  it("correlaciona tentativas sem encaminhar diagnóstico à rede e rejeita URLs como identificadores", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response("", { status: 404 }));
+    vi.stubGlobal("fetch", fetch);
+    await fetchWithTimeout("https://example.test/private", {
+      method: "POST",
+      source: "libras",
+      diagnostic: {
+        endpoint: "libras.bundle",
+        operationId: "op1",
+        requestId: "req1",
+        attempt: 2,
+        fallback: "normalized",
+      },
+    });
+    expect(fetch.mock.calls[0][1]).not.toHaveProperty("diagnostic");
+    expect(timings[0]).toMatchObject({
+      endpoint: "libras.bundle",
+      operation_id: "op1",
+      request_id: "req1",
+      attempt: 2,
+      fallback: "normalized",
+      method: "POST",
+      failure_kind: "http",
+    });
+    await fetchWithTimeout("https://example.test/private", {
+      source: "libras",
+      diagnostic: {
+        endpoint: "https://private.test/secret",
+        operationId: "token=secret",
+        attempt: -1,
+      },
+    });
+    expect(timings[1]).toMatchObject({ endpoint: "libras" });
+    expect(timings[1].operation_id).toBeUndefined();
+    expect(timings[1].attempt).toBeUndefined();
+    expect(JSON.stringify(timings)).not.toContain("secret");
+  });
+
   it("falha em arquivo local não vira falha de internet", async () => {
     // No desktop quase tudo passa por `louvorja://`. Contar isso como rede fora
     // acendia o aviso de "sem conexão" com a internet perfeita.
@@ -91,12 +132,14 @@ describe("fetchWithTimeout", () => {
 
   it("cancelamento nosso não é falha de rede", async () => {
     const externo = new AbortController();
-    vi.stubGlobal("fetch", (_url: string, init: RequestInit) =>
-      new Promise((_resolve, reject) => {
-        (init.signal as AbortSignal).addEventListener("abort", () =>
-          reject(new DOMException("Aborted", "AbortError"))
-        );
-      })
+    vi.stubGlobal(
+      "fetch",
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          (init.signal as AbortSignal).addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError"))
+          );
+        })
     );
 
     const p = fetchWithTimeout("https://exemplo.test/x", { signal: externo.signal });

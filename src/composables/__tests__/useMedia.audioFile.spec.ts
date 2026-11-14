@@ -41,7 +41,6 @@ const h = vi.hoisted(() => ({
     advanceTime: vi.fn(),
     fadeIn: vi.fn(),
     fadeOut: vi.fn(),
-    toggleVolume: vi.fn(),
     cleanup: vi.fn(),
     getElement: () => ({ currentTime: 0, paused: true, addEventListener: () => {} }),
     onTimeUpdate: (cb: (_ct: number, _d: number) => void) => {

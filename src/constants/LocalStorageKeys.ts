@@ -5,6 +5,7 @@
 export const KEYS_LS = {
   PWA_RECOVERY_STATE: "lj:pwa-recovery-state",
   WEB_STORAGE_AUDIT: "lj:web-storage-audit",
+  TELEMETRY_BOOT_STATE: "lj:telemetry-boot-state",
   LIBRAS: {
     AVATAR: "libras_avatar",
     ENABLED: "libras_enabled",

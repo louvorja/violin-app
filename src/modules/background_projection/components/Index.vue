@@ -21,31 +21,45 @@
 
       <!-- Category chips -->
       <div v-if="categories.length || uncategorizedCount > 0" class="bg-category-chips">
-        <button
+        <CategoryChip
           v-for="cat in categories"
           :key="cat.id"
-          type="button"
-          class="bg-chip"
-          :class="{ 'bg-chip--on': selectedCategoryIds.has(cat.id) }"
-          :style="{ '--bg-chip-color': cat.color }"
-          :aria-pressed="selectedCategoryIds.has(cat.id)"
-          @click="toggleCategoryChip(cat.id)"
-        >
-          <LjIcon v-if="cat.iconType === 'icon'" :icon="cat.icon" :size="14" />
-          <img v-else-if="cat.iconType === 'image'" :src="cat.icon" class="bg-chip__img" alt="" />
-          {{ cat.name }}
-        </button>
+          :category-id="cat.id"
+          :name="cat.name"
+          :icon="cat.icon"
+          :icon-type="cat.iconType"
+          :color="cat.color"
+          :count="files.filter((f) => f.categoryId === cat.id).length"
+          :active="selectedCategoryIds.has(cat.id)"
+          :drop-target="dropTargetId === cat.id"
+          :add-item-label="t('ribbon.btn.add_item')"
+          :edit-label="t('shell.category.edit_category')"
+          @select="onCategoryChipClick(cat.id)"
+          @add="addItemsToCategory(cat.id)"
+          @edit="editCategoryFromChip(cat.id)"
+          @dragover="onCategoryDragOver($event, cat.id)"
+          @dragleave="onCategoryDragLeave($event, cat.id)"
+          @drop="onCategoryDrop($event, cat.id)"
+        />
         <!-- Virtual: arquivos sem categoria -->
-        <button
-          v-if="uncategorizedCount > 0"
-          type="button"
-          class="bg-chip bg-chip--uncategorized"
-          :class="{ 'bg-chip--on': selectedCategoryIds.has(UNCATEGORIZED_ID) }"
-          :aria-pressed="selectedCategoryIds.has(UNCATEGORIZED_ID)"
-          @click="toggleCategoryChip(UNCATEGORIZED_ID)"
-        >
-          {{ tm("uncategorized") }} ({{ uncategorizedCount }})
-        </button>
+        <CategoryChip
+          v-if="categories.length > 0 || uncategorizedCount > 0"
+          category-id=""
+          :name="tm('uncategorized')"
+          :icon="ICONS.MEDIA.IMAGE_MULTIPLE"
+          icon-type="icon"
+          color="var(--lj-gray-500)"
+          :count="uncategorizedCount"
+          :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
+          :drop-target="dropTargetId === UNCATEGORIZED_ID"
+          :editable="false"
+          :add-item-label="t('ribbon.btn.add_item')"
+          @select="onCategoryChipClick(UNCATEGORIZED_ID)"
+          @add="addItemsToCategory(UNCATEGORIZED_ID)"
+          @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
+          @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
+          @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
+        />
       </div>
 
       <LjDivider />
@@ -56,20 +70,29 @@
           v-for="file in filteredFiles"
           :key="file.id"
           class="bg-grid-item"
+          :style="{ '--card-category-color': getCategoryColor(file.categoryId) }"
+          draggable="true"
           @mouseenter="onHoverStart(file)"
           @mouseleave="onHoverEnd"
+          @dragstart="onCardDragStart($event, file)"
+          @dragend="onCardDragEnd"
+          @touchstart.passive="onCardTouchStart($event, file)"
+          @contextmenu.prevent
         >
           <button
             type="button"
             class="bg-grid-thumb"
+            draggable="true"
             :class="{
               'bg-grid-thumb--selected': selectedId === file.id,
               'bg-grid-thumb--playing': selectedId === file.id && isPlaying,
             }"
             :title="file.name"
-            @click="playFile(file)"
+            @click="onCardClick(file)"
+            @dragstart.stop="onCardDragStart($event, file)"
+            @dragend="onCardDragEnd"
           >
-            <img v-if="file.thumb" :src="file.thumb" class="bg-grid-img" alt="" />
+            <img v-if="file.thumb" :src="file.thumb" class="bg-grid-img" alt="" draggable="false" />
             <video
               v-else-if="hoverFile?.id === file.id && file.type === 'video' && file.path"
               ref="hoverVideoRef"
@@ -77,6 +100,7 @@
               class="bg-grid-img"
               muted
               autoplay
+              draggable="false"
             />
             <span v-else class="bg-grid-icon">
               <LjIcon
@@ -84,6 +108,15 @@
                 :size="32"
               />
             </span>
+            <CategoryItemIcon
+              v-if="getCategory(file.categoryId)"
+              placement="top-left"
+              translucent
+              :icon="getCategory(file.categoryId)?.icon || ''"
+              :icon-type="getCategory(file.categoryId)?.iconType || 'icon'"
+              :color="getCategory(file.categoryId)?.color || 'var(--lj-gray-500)'"
+              :label="getCategory(file.categoryId)?.name || ''"
+            />
             <span class="bg-grid-badge">{{ fileBadge(file) }}</span>
             <span v-if="selectedId === file.id && !isPlaying" class="bg-grid-check">
               <LjIcon :icon="ICONS.UI.CHECK_CIRCLE" :size="22" class="bg-grid-check__icon" />
@@ -93,7 +126,7 @@
             </span>
           </button>
           <div class="bg-grid-name">{{ file.name }}</div>
-          <div class="bg-grid-actions">
+          <div class="bg-grid-actions" data-no-category-drag @dragstart.stop.prevent>
             <LjButton
               size="sm"
               variant="ghost"
@@ -152,11 +185,10 @@
 
       <!-- Category Manager -->
       <CategoryManagerDialog
+        ref="categoryManagerRef"
         v-model="showManageDialog"
         :categories="categories"
         :saving="saving"
-        :icon-options="iconOptions"
-        :color-presets="colorPresets"
         :module-id="'background_projection'"
         @save="handleSaveCategory"
         @delete="handleDeleteCategory"
@@ -204,6 +236,8 @@
         class="bg-file-input"
         @change="onFilesSelected"
       />
+
+      <CategoryDragGhost :ghost="touchGhost" :compact="dropTargetId !== null" />
     </div>
   </ModuleContainer>
 </template>
@@ -226,6 +260,7 @@ import {
 import type { LjTab } from "@/components/ui";
 import $broadcast from "@/helpers/Broadcast";
 import Alert from "@/helpers/Alert";
+import $snackbar from "@/helpers/Snackbar";
 import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
 import { localPathOf } from "@/helpers/FilePath";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -234,6 +269,7 @@ import {
   closeBackgroundProjectionWindows,
   openBackgroundProjectionWindows,
 } from "@/helpers/ProjectionWindows";
+import { activateBackgroundProjection } from "@/helpers/BackgroundProjectionPlayback";
 import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
 import { ICONS } from "@/config/Icons";
@@ -247,6 +283,11 @@ import { IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { ensureRenderableImage, isHeic } from "@/helpers/ImageConvert";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { nextBackgroundEpoch } from "@/presentation/BackgroundPresentationState";
+import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
+import { useCategoryDrag } from "@/composables/useCategoryDrag";
+import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
+import CategoryChip from "@/components/CategoryChip.vue";
+import CategoryItemIcon from "@/components/CategoryItemIcon.vue";
 
 interface BgFile {
   id: string;
@@ -307,11 +348,14 @@ async function deleteCategoryById(id: string): Promise<void> {
   await $idb.del(STORE_CATEGORIES, id);
 }
 
-const moduleContainer = ref<{ tm(key: string, named?: Record<string, unknown>): string } | null>(
-  null
-);
+const moduleContainer = ref<{
+  tm(_key: string, _named?: Record<string, unknown>): string;
+  t?(_key: string, _named?: Record<string, unknown>): string;
+} | null>(null);
 const tm = (key: string, named?: Record<string, unknown>): string =>
   moduleContainer.value?.tm(key, named as any) || key;
+const t = (key: string, named?: Record<string, unknown>): string =>
+  moduleContainer.value?.t?.(key, named as any) || key;
 
 type LibraryFilter = "all" | "image" | "video";
 
@@ -346,6 +390,9 @@ const uncategorizedCount = computed(() => {
   return files.value.filter((f) => !f.categoryId || !ids.has(f.categoryId)).length;
 });
 const showManageDialog = ref(false);
+const categoryManagerRef = ref<{
+  openEditCategory: (_category: BgCategory) => void;
+} | null>(null);
 const showCategorySelect = ref(false);
 const saving = ref(false);
 const pendingFiles = ref<File[]>([]);
@@ -489,26 +536,6 @@ const filteredFiles = computed(() => {
   return list;
 });
 
-const colorPresets = [
-  "#4CAF50",
-  "#2196F3",
-  "#9C27B0",
-  "#FF9800",
-  "#F44336",
-  "#00BCD4",
-  "#3F51B5",
-  "#E91E63",
-  "#8BC34A",
-  "#FF5722",
-  "#607D8B",
-  "#795548",
-  "#9E9E9E",
-  "#CDDC39",
-  "#03A9F4",
-];
-
-const iconOptions = Object.entries(ICONS.CATEGORY).map(([, value]) => ({ value }));
-
 function selectFile(file: BgFile): void {
   if (selectedId.value === file.id) return;
   selectedId.value = file.id;
@@ -525,13 +552,81 @@ function getCategoryName(id: string): string {
   return categories.value.find((c) => c.id === id)?.name || "";
 }
 
+function getCategory(id: string) {
+  return categories.value.find((c) => c.id === id) || null;
+}
+
+function getCategoryColor(id: string): string {
+  return categories.value.find((c) => c.id === id)?.color || "transparent";
+}
+
+async function moveFileToCategory(file: BgFile, categoryId: string): Promise<void> {
+  if (file.categoryId === categoryId) return;
+  if (categoryId && !categories.value.some((category) => category.id === categoryId)) return;
+
+  const previous = file.categoryId;
+  file.categoryId = categoryId;
+  try {
+    await saveFile(file);
+  } catch (error) {
+    file.categoryId = previous;
+    throw error;
+  }
+
+  const categoryName = categoryId ? getCategoryName(categoryId) : tm("uncategorized");
+  $snackbar.show(t("moved_to_category", { category: categoryName }));
+}
+
+const {
+  draggingId,
+  dropTargetId,
+  touchGhost,
+  shouldSuppressClick,
+  shouldSuppressCategoryClick,
+  onCardDragStart,
+  onCardDragEnd,
+  onCategoryDragOver,
+  onCategoryDragLeave,
+  onCategoryDrop,
+  onCardTouchStart,
+} = useCategoryDrag<BgFile>({
+  source: "background_projection",
+  findItem: (id) => files.value.find((file) => file.id === id) || null,
+  canDrop: (file, categoryId) =>
+    file.categoryId !== categoryId &&
+    (!categoryId || categories.value.some((category) => category.id === categoryId)),
+  assign: moveFileToCategory,
+});
+
+function onCardClick(file: BgFile): void {
+  if (shouldSuppressClick(file.id)) return;
+  void playFile(file);
+}
+
+function onCategoryChipClick(categoryId: string): void {
+  if (shouldSuppressCategoryClick(categoryId)) return;
+  toggleCategoryChip(categoryId);
+}
+
+function addItemsToCategory(categoryId: string): void {
+  pendingDropFiles.value = [];
+  selectCategoryForImport(categoryId);
+}
+
+function editCategoryFromChip(categoryId: string): void {
+  const category = categories.value.find((item) => item.id === categoryId);
+  if (!category) return;
+  showManageDialog.value = true;
+  categoryManagerRef.value?.openEditCategory(category);
+}
+
 async function handleSaveCategory(cat: BgCategory): Promise<void> {
   saving.value = true;
   try {
     const isNew = !categories.value.some((c) => c.id === cat.id);
     await saveCategory(cat);
     categories.value = await loadCategories();
-    // Editar preserva o filtro; criar foca só na nova categoria.
+    // Criar só acrescenta a nova ao filtro; editar preserva o filtro atual.
     selectedCategoryIds.value = nextCategorySelection(selectedCategoryIds.value, cat.id, isNew);
   } finally {
     saving.value = false;
@@ -723,16 +818,19 @@ async function onFilesSelected(e: Event): Promise<void> {
 const isDragOver = ref(false);
 let dragCounter = 0;
 
-function onDragEnter(): void {
+function onDragEnter(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = true;
   dragCounter++;
 }
 
-function onDragOver(): void {
+function onDragOver(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = true;
 }
 
-function onDragLeave(): void {
+function onDragLeave(e: DragEvent): void {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   dragCounter--;
   if (dragCounter <= 0) {
     isDragOver.value = false;
@@ -741,6 +839,7 @@ function onDragLeave(): void {
 }
 
 async function onDrop(e: DragEvent): Promise<void> {
+  if (hasMediaCategoryDrag(e.dataTransfer) || draggingId.value !== null) return;
   isDragOver.value = false;
   dragCounter = 0;
   const droppedFiles = e.dataTransfer?.files;
@@ -776,23 +875,7 @@ function getSelectedFile(): BgFile | null {
 
 async function playFile(file: BgFile): Promise<void> {
   selectedId.value = file.id;
-  const url = resolvePath(file.path);
-  const payload = {
-    active: true,
-    epoch: nextBackgroundEpoch(),
-    url,
-    type: file.type,
-    title: file.name,
-  };
-
-  localStorage.setItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION, JSON.stringify(payload));
-
-  if (!isPlaying.value) {
-    isPlaying.value = true;
-    await openBackgroundProjectionWindows();
-  }
-
-  $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, payload);
+  await activateBackgroundProjection(file);
 }
 
 async function togglePlay(): Promise<void> {
@@ -920,55 +1003,14 @@ onMounted(async () => {
 }
 
 /* ── Chips de categoria ──
-   A cor vem do banco (category.color) e entra por variável inline, para que
-   traço, texto e preenchimento do estado ligado saiam todos dela. Sem cor
-   definida, o chip cai no acento do sistema. */
+   O desenho é o CategoryChip compartilhado; aqui fica só o espaçamento da
+   faixa que agrupa os chips. */
 .bg-category-chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--lj-space-3);
   padding: var(--lj-space-4) var(--lj-space-6);
   flex-shrink: 0;
-}
-.bg-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--lj-space-2);
-  height: var(--lj-ui-h-sm);
-  padding-inline: var(--lj-ui-px-sm);
-  border: 1px solid var(--bg-chip-color, var(--lj-ui-accent));
-  border-radius: var(--lj-ui-radius);
-  background: transparent;
-  color: var(--bg-chip-color, var(--lj-ui-accent-text));
-  font-family: inherit;
-  font-size: var(--lj-ui-font-sm);
-  font-weight: var(--lj-weight-medium);
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  outline: none;
-  transition:
-    background var(--lj-transition-fast),
-    color var(--lj-transition-fast);
-}
-.bg-chip:hover {
-  background: color-mix(in srgb, var(--bg-chip-color, var(--lj-ui-accent)) 15%, transparent);
-}
-.bg-chip:focus-visible {
-  box-shadow: var(--lj-ui-focus);
-}
-.bg-chip--on {
-  background: var(--bg-chip-color, var(--lj-ui-accent));
-  color: var(--lj-white);
-}
-/* O chip virtual não tem categoria no banco, então não tem cor própria. */
-.bg-chip--uncategorized {
-  --bg-chip-color: var(--lj-gray-500);
-}
-.bg-chip__img {
-  width: 14px;
-  height: 14px;
-  object-fit: contain;
 }
 
 /* ── Grade da biblioteca ── */
@@ -986,11 +1028,22 @@ onMounted(async () => {
   align-content: start;
 }
 .bg-grid-item {
-  cursor: pointer;
+  position: relative;
+  cursor: grab;
   overflow: hidden;
-  background: var(--lj-surface-bg-soft);
+  background: color-mix(
+    in srgb,
+    var(--card-category-color, transparent) 14%,
+    var(--lj-surface-bg-soft)
+  );
   border-radius: var(--lj-radius-lg);
+  transition:
+    opacity var(--lj-transition-fast),
+    transform var(--lj-transition-fast);
+  -webkit-touch-callout: none;
+  user-select: none;
 }
+
 .bg-grid-item:hover .bg-grid-thumb {
   border-color: var(--lj-ui-accent);
 }
@@ -1070,7 +1123,7 @@ onMounted(async () => {
 }
 .bg-grid-check {
   position: absolute;
-  top: var(--lj-space-2);
+  bottom: var(--lj-space-2);
   left: var(--lj-space-2);
   display: none;
   filter: drop-shadow(0 1px 3px var(--lj-black-alpha-40));
@@ -1201,11 +1254,6 @@ onMounted(async () => {
     padding-inline: var(--lj-space-4);
     overflow-x: auto;
     scrollbar-width: thin;
-  }
-
-  .bg-chip {
-    flex: 0 0 auto;
-    min-height: 44px;
   }
 
   .bg-grid {

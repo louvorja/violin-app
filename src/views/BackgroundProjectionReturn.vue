@@ -298,7 +298,7 @@ function applyFileActivation(payload: unknown): void {
   pdfRenderQueue.invalidate();
   _destroyYoutube();
   if (pdfDoc) {
-    void (pdfDoc as unknown as { destroy: () => Promise<void> }).destroy().catch(() => {});
+    void pdfDoc.loadingTask.destroy().catch(() => {});
     pdfDoc = null;
   }
   fileState.active = true;
@@ -333,7 +333,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
     pdfRenderQueue.invalidate();
     _destroyYoutube();
     if (pdfDoc) {
-      void (pdfDoc as unknown as { destroy: () => Promise<void> }).destroy().catch(() => {});
+      void pdfDoc.loadingTask.destroy().catch(() => {});
       pdfDoc = null;
     }
     fileState.active = false;
@@ -361,7 +361,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
   _destroyYoutube();
   if (pdfDoc) {
     try {
-      (pdfDoc as any).destroy();
+      void pdfDoc.loadingTask.destroy().catch(() => {});
     } catch {
       /* ignore */
     }
@@ -609,7 +609,7 @@ async function loadPdf(url: string, pageNum: number, expectedPlaybackId?: string
       fileState.playback_id !== expectedPlaybackId ||
       !fileState.active
     ) {
-      await (doc as unknown as { destroy: () => Promise<void> }).destroy();
+      await doc.loadingTask.destroy();
       return;
     }
     pdfDoc = doc;
@@ -682,9 +682,11 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  ++pdfLoadGeneration;
+  fileState.active = false;
   pdfRenderQueue.invalidate();
   if (pdfDoc) {
-    void (pdfDoc as unknown as { destroy: () => Promise<void> }).destroy().catch(() => {});
+    void pdfDoc.loadingTask.destroy().catch(() => {});
     pdfDoc = null;
   }
   _destroyYoutube();

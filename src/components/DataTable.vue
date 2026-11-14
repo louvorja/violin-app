@@ -155,6 +155,9 @@ const all_data = ref([]);
 const filter_data = ref([]);
 const is_fuzzy = ref(false);
 const data = ref([]);
+// Muda a cada refiltragem (busca, filtro, letra), não ao paginar: quem destaca
+// uma linha pelo teclado recomeça daqui.
+let revision = 0;
 const limit = ref(0);
 const error = ref(null);
 const last_filter = ref({});
@@ -361,6 +364,7 @@ watch(data, () => {
     count: data.value.length,
     data: data.value,
     is_fuzzy: is_fuzzy.value,
+    revision,
   });
 });
 
@@ -499,6 +503,7 @@ function filterData() {
   };
 
   try {
+    revision++;
     limit.value = 0;
     _rafCycles = 0;
     const value = appliedSearch();
@@ -692,18 +697,28 @@ function compareFilterData() {
 }
 
 /**
- * O resultado da busca AGORA, sem esperar o debounce de digitação: quem digita
- * "12" e tecla Enter na hora não pode receber a lista ainda sem filtro (o
- * primeiro dela é o hino 1). Sem busca aplicada — campo vazio ou abaixo do
- * mínimo de letras — a lista é o acervo inteiro, e o Enter não tem o que tocar.
+ * Aplica AGORA a busca que espera o debounce de digitação: quem digita "12" e
+ * tecla Enter (ou ↓) na hora não pode agir sobre a lista ainda sem filtro, cujo
+ * primeiro é o hino 1. As linhas novas chegam a quem usa no próximo tick.
  */
-function currentResults() {
-  if (!fileData || appliedSearch() === "" || searchableKeys().length === 0) return [];
+function flush() {
   debouncedFilterData.flush();
-  return filter_data.value;
 }
 
-defineExpose({ currentResults });
+/**
+ * A lista é resultado de busca. Sem busca aplicada — campo vazio ou abaixo do
+ * mínimo de letras — ela é o acervo inteiro, e o Enter não tem o que tocar.
+ */
+function searching() {
+  return Boolean(fileData) && appliedSearch() !== "" && searchableKeys().length > 0;
+}
+
+/** Todas as linhas na ordem da tabela, sem a busca e sem a paginação da tela. */
+function allRows() {
+  return all_data.value;
+}
+
+defineExpose({ flush, searching, allRows });
 </script>
 
 <style>

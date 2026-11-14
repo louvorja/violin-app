@@ -80,6 +80,7 @@ export function itemAssumePalco(item: LiturgyItem | null | undefined, modo?: str
     case LiturgyItemTypeEnum.ITENS_AGENDADOS:
     case LiturgyItemTypeEnum.MEDIA_LIBRARY:
     case LiturgyItemTypeEnum.VIDEO_ONLINE:
+    case LiturgyItemTypeEnum.BG_PROJECTION:
     case LiturgyItemTypeEnum.SITE:
     case LiturgyItemTypeEnum.ANUNCIOS:
       return true;

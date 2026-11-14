@@ -6,6 +6,26 @@ export interface ModuleValue {
   active?: boolean;
   color?: string;
   extra?: string;
+  mode?: "number" | "names";
+  wheel?: ModuleWheelState;
+  /**
+   * Aviso de tempo do Cronômetro: a projeção pulsa uma borda amarela
+   * ("warning") ou vermelha ("danger"). Ausente = sem borda.
+   */
+  alert?: "warning" | "danger";
+}
+
+export interface ModuleWheelState {
+  run_id: string;
+  mode: "number" | "names";
+  target: string;
+  duration: number;
+  settled?: boolean;
+  /** Quando false, o sorteio assenta direto no alvo, sem bumerangue. */
+  random_finish?: boolean;
+  min?: number;
+  max?: number;
+  items?: string[];
 }
 
 export interface ModulePresentationPacket extends ModuleValue {
@@ -19,10 +39,12 @@ const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const counter = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const integer = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value);
 
 export function readModuleValue(value: unknown): ModuleValue | null {
-  if (!record(value) || typeof value.module !== "string" ||
-      !/^[a-z0-9_]{1,64}$/.test(value.module)) return null;
+  if (!record(value) || typeof value.module !== "string" || !/^[a-z0-9_]{1,64}$/.test(value.module))
+    return null;
   const result: ModuleValue = { module: value.module };
   for (const key of ["text", "color", "extra"] as const) {
     const field = value[key];
@@ -33,8 +55,11 @@ export function readModuleValue(value: unknown): ModuleValue | null {
   if (value.reference !== undefined) {
     if (typeof value.reference === "string" && value.reference.length <= 4_096) {
       result.reference = value.reference;
-    } else if (Array.isArray(value.reference) && value.reference.length <= 1_000 &&
-        value.reference.every((item) => typeof item === "string" && item.length <= 256)) {
+    } else if (
+      Array.isArray(value.reference) &&
+      value.reference.length <= 1_000 &&
+      value.reference.every((item) => typeof item === "string" && item.length <= 256)
+    ) {
       result.reference = [...value.reference];
     } else return null;
   }
@@ -42,22 +67,90 @@ export function readModuleValue(value: unknown): ModuleValue | null {
     if (typeof value.active !== "boolean") return null;
     result.active = value.active;
   }
+  if (value.mode !== undefined) {
+    if (value.mode !== "number" && value.mode !== "names") return null;
+    result.mode = value.mode;
+  }
+  if (value.wheel !== undefined) {
+    if (!record(value.wheel)) return null;
+    const wheel = value.wheel;
+    if (typeof wheel.run_id !== "string" || !wheel.run_id || wheel.run_id.length > 128) return null;
+    if (wheel.mode !== "number" && wheel.mode !== "names") return null;
+    if (typeof wheel.target !== "string" || !wheel.target || wheel.target.length > 256) return null;
+    if (
+      typeof wheel.duration !== "number" ||
+      !Number.isFinite(wheel.duration) ||
+      wheel.duration < 100 ||
+      wheel.duration > 60_000
+    )
+      return null;
+    if (wheel.min !== undefined && !integer(wheel.min)) return null;
+    if (wheel.max !== undefined && !integer(wheel.max)) return null;
+    if (wheel.random_finish !== undefined && typeof wheel.random_finish !== "boolean") return null;
+    if (wheel.items !== undefined) {
+      if (
+        !Array.isArray(wheel.items) ||
+        wheel.items.length > 1_000 ||
+        !wheel.items.every((item) => typeof item === "string" && item.length <= 256)
+      )
+        return null;
+      result.wheel = {
+        run_id: wheel.run_id,
+        mode: wheel.mode,
+        target: wheel.target,
+        duration: wheel.duration,
+        ...(wheel.settled !== undefined ? { settled: wheel.settled as boolean } : {}),
+        ...(wheel.random_finish !== undefined
+          ? { random_finish: wheel.random_finish as boolean }
+          : {}),
+        ...(wheel.min !== undefined ? { min: wheel.min } : {}),
+        ...(wheel.max !== undefined ? { max: wheel.max } : {}),
+        items: [...wheel.items],
+      };
+    } else {
+      result.wheel = {
+        run_id: wheel.run_id,
+        mode: wheel.mode,
+        target: wheel.target,
+        duration: wheel.duration,
+        ...(wheel.settled !== undefined ? { settled: wheel.settled as boolean } : {}),
+        ...(wheel.random_finish !== undefined
+          ? { random_finish: wheel.random_finish as boolean }
+          : {}),
+        ...(wheel.min !== undefined ? { min: wheel.min } : {}),
+        ...(wheel.max !== undefined ? { max: wheel.max } : {}),
+      };
+    }
+  }
+  if (value.alert !== undefined) {
+    if (value.alert !== "warning" && value.alert !== "danger") return null;
+    result.alert = value.alert;
+  }
   return result;
 }
 
 export function readModulePresentationPacket(value: unknown): ModulePresentationPacket | null {
-  if (!record(value) || value.module_schema !== 1 ||
-      typeof value.module_session !== "string" || !value.module_session ||
-      value.module_session.length > 128 || !counter(value.module_epoch) ||
-      !counter(value.module_revision) || value.module_revision === 0) return null;
+  if (
+    !record(value) ||
+    value.module_schema !== 1 ||
+    typeof value.module_session !== "string" ||
+    !value.module_session ||
+    value.module_session.length > 128 ||
+    !counter(value.module_epoch) ||
+    !counter(value.module_revision) ||
+    value.module_revision === 0
+  )
+    return null;
   const state = readModuleValue(value);
-  return state ? {
-    ...state,
-    module_schema: 1,
-    module_session: value.module_session,
-    module_epoch: value.module_epoch,
-    module_revision: value.module_revision,
-  } : null;
+  return state
+    ? {
+        ...state,
+        module_schema: 1,
+        module_session: value.module_session,
+        module_epoch: value.module_epoch,
+        module_revision: value.module_revision,
+      }
+    : null;
 }
 
 export class ModulePresentationAuthority {
@@ -65,7 +158,10 @@ export class ModulePresentationAuthority {
   readonly epoch: number;
   private revisions = new Map<string, number>();
 
-  constructor(now = Date.now(), id: string = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)) {
+  constructor(
+    now = Date.now(),
+    id: string = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
+  ) {
     this.epoch = now;
     this.session = `${now.toString(36)}-${id}`;
   }
@@ -94,12 +190,19 @@ export class ModulePresentationGate {
     const last = this.last.get(packet.module);
     if (last) {
       if (packet.module_epoch < last.module_epoch) return null;
-      if (packet.module_epoch === last.module_epoch && packet.module_session !== last.module_session &&
-          packet.module_session < last.module_session) return null;
+      if (
+        packet.module_epoch === last.module_epoch &&
+        packet.module_session !== last.module_session &&
+        packet.module_session < last.module_session
+      )
+        return null;
       if (packet.module_session === last.module_session) {
         if (packet.module_revision < last.module_revision) return null;
-        if (packet.module_revision === last.module_revision &&
-            JSON.stringify(packet) !== JSON.stringify(last)) return null;
+        if (
+          packet.module_revision === last.module_revision &&
+          JSON.stringify(packet) !== JSON.stringify(last)
+        )
+          return null;
       }
     }
     this.last.set(packet.module, packet);

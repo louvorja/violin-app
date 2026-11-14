@@ -6,11 +6,11 @@ export function horarioDoTitulo(value: unknown): string {
 
   const horarios = new Set<string>();
   let anteriorEraHorario = false;
-  const tokens = value.matchAll(
-    /(?<![\p{L}\p{N}/:.])(\d{1,2})(?::(\d{2})|h(\d{2})?)(?![\p{L}\p{N}:])/giu
-  );
+  const tokens = value.matchAll(/(\d{1,2})(?::(\d{2})|h(\d{2})?)(?![\p{L}\p{N}:])/giu);
   for (const token of tokens) {
     const antes = value.slice(0, token.index);
+    // Safari anterior ao 16.4 não compila lookbehind. Verifica o prefixo separado.
+    if (/[\p{L}\p{N}/:.]$/u.test(antes)) continue;
     // Expressões de duração não são compromissos no relógio da liturgia.
     if (/(?:\b(?:dura[çc][ãa]o|durante|por|ap[óo]s|em)|\bdaqui\s+a)\s*:?\s*$/iu.test(antes)) {
       anteriorEraHorario = false;
