@@ -11,30 +11,23 @@
       <LjCheckbox
         :model-value="options.media && counts.media > 0"
         :disabled="!counts.media"
-        @update:model-value="options.media = $event"
         data-testid="liturgy-export-media"
         :label="`${t('library.export_opt_media')} (${counts.media})`"
+        @update:model-value="options.media = $event"
       />
       <LjCheckbox
         :model-value="options.backgroundSound && counts.backgroundSound > 0"
         :disabled="!counts.backgroundSound"
-        @update:model-value="options.backgroundSound = $event"
         data-testid="liturgy-export-bg-sound"
         :label="`${t('library.export_opt_bg_sound')} (${counts.backgroundSound})`"
+        @update:model-value="options.backgroundSound = $event"
       />
       <LjCheckbox
         :model-value="options.backgroundProjection && counts.backgroundProjection > 0"
         :disabled="!counts.backgroundProjection"
-        @update:model-value="options.backgroundProjection = $event"
         data-testid="liturgy-export-bg-projection"
         :label="`${t('library.export_opt_bg_projection')} (${counts.backgroundProjection})`"
-      />
-      <LjCheckbox
-        :model-value="options.backgroundProjectionAll && counts.backgroundProjectionAll > 0"
-        :disabled="!counts.backgroundProjectionAll"
-        @update:model-value="options.backgroundProjectionAll = $event"
-        data-testid="liturgy-export-bg-projection-all"
-        :label="`${t('library.export_opt_bg_projection_all')} (${counts.backgroundProjectionAll})`"
+        @update:model-value="options.backgroundProjection = $event"
       />
     </div>
 
@@ -57,9 +50,8 @@
 <script setup lang="ts">
 /**
  * Escolha do que vai no pacote ao exportar a liturgia. Os arquivos dos itens do
- * tipo arquivo vão sempre; o que é das bibliotecas, conforme as caixas. A
- * biblioteca inteira da Projeção de Fundo é uma caixa à parte e começa
- * desmarcada (costuma ser grande).
+ * tipo arquivo vão sempre; o que é das bibliotecas, conforme as caixas. Só
+ * entram os itens que a liturgia usa.
  */
 import { reactive, ref, watch } from "vue";
 import { useLiturgyI18n } from "../i18n";
@@ -97,8 +89,6 @@ function submit() {
     media: options.media && props.counts.media > 0,
     backgroundSound: options.backgroundSound && props.counts.backgroundSound > 0,
     backgroundProjection: options.backgroundProjection && props.counts.backgroundProjection > 0,
-    backgroundProjectionAll:
-      options.backgroundProjectionAll && props.counts.backgroundProjectionAll > 0,
   };
   internalShow.value = false;
   emit("confirm", chosen);

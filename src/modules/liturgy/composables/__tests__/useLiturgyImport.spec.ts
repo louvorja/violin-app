@@ -1,8 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLiturgyImport, weekEntries } from "../useLiturgyImport";
 import { useLiturgyLibrary } from "../useLiturgyLibrary";
-import { buildPackage } from "../../package/format";
+import { buildPackage, type PackageEntry } from "../../package/format";
 import type { InstallDeps } from "../../package/install";
+import { DB_TABLE } from "@/constants/DbTables";
+
+function blobStream(blob: Blob): ReadableStream<Uint8Array> {
+  if (typeof blob.stream === "function") return blob.stream() as ReadableStream<Uint8Array>;
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controller.enqueue(new Uint8Array(await blob.arrayBuffer()));
+      controller.close();
+    },
+  });
+}
 
 const success = vi.fn();
 const error = vi.fn();
@@ -52,6 +63,36 @@ vi.mock("../../i18n", () => ({
       )[key] ?? (values ? `${key} ${JSON.stringify(values)}` : key),
   }),
 }));
+
+async function pack(input: {
+  liturgy: { name: string; color?: string; items: unknown[] };
+  files: {
+    source: PackageEntry["source"];
+    sourceId: string;
+    name: string;
+    mime: string;
+    data: Blob;
+  }[];
+}): Promise<Blob> {
+  const chunks: BlobPart[] = [];
+  await buildPackage({
+    liturgy: input.liturgy as never,
+    files: input.files.map((f) => ({
+      source: f.source,
+      sourceId: f.sourceId,
+      name: f.name,
+      mime: f.mime,
+      size: f.data.size,
+      open: async () => blobStream(f.data),
+    })),
+    sink: new WritableStream<Uint8Array>({
+      write(chunk) {
+        chunks.push(chunk as BlobPart);
+      },
+    }),
+  });
+  return new Blob(chunks);
+}
 
 const JSON_LITURGY = JSON.stringify({
   name: "Culto de domingo",
@@ -632,7 +673,7 @@ describe("useLiturgyImport — pacote .llja", () => {
       onImported,
     });
 
-    const blob = await buildPackage({
+    const blob = await pack({
       liturgy: {
         name: "Culto",
         color: "#AA0000",
@@ -692,7 +733,7 @@ describe("useLiturgyImport — pacote .llja", () => {
       list: () => list(),
     } as unknown as Parameters<typeof useLiturgyImport>[0];
     const { importFile } = useLiturgyImport(library, report, { installDeps });
-    const blob = await buildPackage({
+    const blob = await pack({
       liturgy: {
         name: "Culto",
         items: [{ id: "a", tipo: "biblioteca-midia", item: "Foto", ref_id: "m1" }] as never,
@@ -770,6 +811,53 @@ describe("useLiturgyImport — várias liturgias vão para a semana", () => {
       ["Culto de sábado", 6],
       ["Sem vínculo", 1],
     ]);
+  });
+
+  it(".json da semana também limpa refs ausentes e importa YouTube", async () => {
+    const tables = new Map<string, Map<string, Record<string, unknown>>>();
+    const table = (t: string) => {
+      if (!tables.has(t)) tables.set(t, new Map());
+      return tables.get(t)!;
+    };
+    const installDeps: Partial<InstallDeps> = {
+      get: async (t, id) => table(t).get(id),
+      getAll: async (t) => [...table(t).values()],
+      put: async (t, r) => void table(t).set(String(r.id), r),
+      del: async (t, id) => void table(t).delete(id),
+    };
+    const startVideoDownload = vi.fn(() => true);
+    let n = 0;
+    save.mockImplementation(async (data: object) => ({ id: `lit-${++n}`, ...data }));
+    const library = {
+      parseImport: useLiturgyLibrary().parseImport,
+      getByName: (name: string) => getByName(name),
+      save: (data: unknown) => save(data),
+      list: () => list(),
+    } as unknown as Parameters<typeof useLiturgyImport>[0];
+    const { importFile } = useLiturgyImport(library, report, {
+      installDeps,
+      startVideoDownload,
+      onImportedWeek: vi.fn(),
+    });
+    const semana = JSON.stringify({
+      liturgies: [
+        {
+          name: "Culto",
+          items: [
+            { id: "v", tipo: "video-online", item: "Clipe", url: "https://youtu.be/DDDDDDDDDDD" },
+            { id: "m", tipo: "biblioteca-midia", item: "Foto", ref_id: "sumiu" },
+          ],
+        },
+      ],
+    });
+    const done = importFile(file("semana.json", semana));
+    await vi.advanceTimersByTimeAsync(500);
+    await done;
+
+    expect(table(DB_TABLE.CUSTOM_ONLINE_VIDEOS).size).toBe(1);
+    expect(startVideoDownload).toHaveBeenCalledWith("DDDDDDDDDDD", "Clipe");
+    const savedItems = (save.mock.calls[0][0] as { items: Record<string, unknown>[] }).items;
+    expect(savedItems[1].ref_id).toBeUndefined();
   });
 });
 

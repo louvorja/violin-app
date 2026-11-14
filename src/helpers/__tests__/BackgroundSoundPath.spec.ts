@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({
-  platform: { isDesktop: true },
-  local: vi.fn((p: string) => `louvorja://local/${p}`),
-}));
+const h = vi.hoisted(() => {
+  const platform = { isDesktop: true };
+  return {
+    platform,
+    local: vi.fn((p: string) => `louvorja://local/${p}`),
+    media: vi.fn((p: string) =>
+      p.startsWith("louvorja://") ? p : platform.isDesktop ? `louvorja://local/${p}` : p
+    ),
+  };
+});
 
 vi.mock("@/helpers/Platform", () => ({ default: h.platform }));
-vi.mock("@/helpers/Path", () => ({ default: { local: h.local } }));
+vi.mock("@/helpers/Path", () => ({ default: { local: h.local, media: h.media } }));
 
 import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
 
@@ -65,12 +71,12 @@ describe("resolveBackgroundSoundPath", () => {
     expect(createObjectURL).not.toHaveBeenCalled();
   });
 
-  it("path de disco vira URL do protocolo via Path.local (só no desktop)", () => {
+  it("path de disco vira URL do protocolo via Path.media", () => {
     h.platform.isDesktop = true;
     expect(resolveBackgroundSoundPath({ path: "C:/acervo/som.mp3" })).toBe(
       "louvorja://local/C:/acervo/som.mp3"
     );
-    expect(h.local).toHaveBeenCalledWith("C:/acervo/som.mp3");
+    expect(h.media).toHaveBeenCalledWith("C:/acervo/som.mp3");
 
     h.platform.isDesktop = false;
     expect(resolveBackgroundSoundPath({ path: "/var/som.mp3" })).toBe("/var/som.mp3");

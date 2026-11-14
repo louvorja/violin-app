@@ -201,7 +201,7 @@ import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
 import { useLiturgyImport, type WeekEntry } from "../composables/useLiturgyImport";
 import { countExportFiles, useLiturgyExport } from "../composables/useLiturgyExport";
 import { DEFAULT_EXPORT_OPTIONS, type ExportCounts, type ExportOptions } from "../package/collect";
-import { pendingLiturgyFiles, takeLiturgyImport } from "../openRequests";
+import { pendingLiturgyFiles, returnLiturgyImport, takeLiturgyImport } from "../openRequests";
 import { useLiturgyAutoLoad } from "../composables/useLiturgyAutoLoad";
 import Telemetry from "@/helpers/Telemetry";
 
@@ -425,6 +425,7 @@ function reportLiturgyError(
 
 const {
   busy: importing,
+  importing: importLock,
   doImport,
   importFile,
 } = useLiturgyImport(liturgyLibrary, reportLiturgyError, {
@@ -480,28 +481,52 @@ function offerOpenImported(item: LiturgyLibraryItem) {
   );
 }
 
-// Duplo clique num .llja (ou arrastar para a janela): a shell enfileira, a tela importa.
-// Um de cada vez: tirar da fila também muda a fila, e o watch dispararia de novo
-// no meio de um import — o segundo seria recusado pela trava e o arquivo, perdido.
-let drainingImports = false;
-watch(
-  pendingLiturgyFiles,
-  async () => {
-    if (drainingImports) return;
-    drainingImports = true;
-    try {
-      let file = takeLiturgyImport();
-      while (file) {
-        await importFile(file);
-        file = takeLiturgyImport();
-      }
-    } finally {
-      drainingImports = false;
-    }
-  },
-  { immediate: true }
-);
 const { busy: exporting, exportLiturgy } = useLiturgyExport(reportLiturgyError);
+
+// Duplo clique num .llja (ou arrastar para a janela): a shell enfileira, a tela importa.
+// Um de cada vez. Se a importação não puder rodar agora, o arquivo volta para a
+// frente da fila em vez de ser perdido.
+let drainingImports = false;
+
+async function drainPendingImports(): Promise<void> {
+  if (drainingImports || importing.value || exporting.value || importLock.value) return;
+  drainingImports = true;
+  let queueFailed = false;
+  try {
+    while (true) {
+      if (importing.value || exporting.value || importLock.value) break;
+      const file = takeLiturgyImport();
+      if (!file) break;
+      let consumed = false;
+      try {
+        consumed = await importFile(file);
+      } catch (error) {
+        queueFailed = true;
+        reportLiturgyError(error, "import_queue");
+      }
+      if (!consumed) {
+        returnLiturgyImport(file);
+        break;
+      }
+    }
+  } finally {
+    drainingImports = false;
+  }
+  if (
+    !queueFailed &&
+    !importing.value &&
+    !exporting.value &&
+    !importLock.value &&
+    pendingLiturgyFiles.value.length
+  ) {
+    void drainPendingImports();
+  }
+}
+
+watch(pendingLiturgyFiles, () => void drainPendingImports(), { immediate: true });
+watch([importing, exporting, importLock], () => {
+  if (!importing.value && !exporting.value && !importLock.value) void drainPendingImports();
+});
 
 watch(
   [items, () => $liturgy.getCurrentLiturgyId()],
@@ -642,6 +667,7 @@ function handleRibbonAction(action: string) {
       void doExport();
       break;
     case "import":
+      if (exporting.value || importLock.value) break;
       doImport();
       break;
     case "manage":
@@ -687,7 +713,6 @@ const exportCounts = ref<ExportCounts>({
   media: 0,
   backgroundSound: 0,
   backgroundProjection: 0,
-  backgroundProjectionAll: 0,
 });
 let pendingExport: { name: string; color?: string; items: LiturgyItem[] } | null = null;
 
@@ -698,7 +723,7 @@ let pendingExport: { name: string; color?: string; items: LiturgyItem[] } | null
  * o que das bibliotecas vai junto.
  */
 async function doExport() {
-  if (exporting.value) return;
+  if (exporting.value || importing.value || importLock.value) return;
   const items = safeItems.value;
   if (!items.length) {
     await exportLiturgy({ name: "", items }, DEFAULT_EXPORT_OPTIONS);

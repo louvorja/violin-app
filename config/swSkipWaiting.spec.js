@@ -30,6 +30,7 @@ describe("SW atende o pedido da página para ativar a versão nova", () => {
 
   it("o sw.js gerado importa o arquivo", () => {
     const config = readFileSync(resolve(__dirname, "../vite.config.js"), "utf8");
-    expect(config).toMatch(/importScripts:\s*\["sw-skip-waiting\.js"\]/);
+    expect(config).toMatch(/importScripts:\s*\[[^\]]*"sw-skip-waiting\.js"[^\]]*\]/);
+    expect(config).toMatch(/importScripts:\s*\[[^\]]*"opfs-sw\.js"[^\]]*\]/);
   });
 });

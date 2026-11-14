@@ -17,8 +17,17 @@
  * Este arquivo só monta e lê o ZIP — sem IndexedDB, sem disco. Quem junta os
  * arquivos é `collect.ts`; quem grava nas bibliotecas é `install.ts`. O
  * `.llja` do Classic (outro formato) é lido por `classic.ts`.
+ *
+ * O ZIP é montado e lido em streaming (`@zip.js/zip.js`): o pacote pode ter
+ * 5 GB no desktop sem passar pela memória. O JSZip continua nos outros fluxos
+ * (backup, bundles, `.slja` e vídeos online).
  */
 import type { LiturgyItem } from "@/types/Liturgy";
+import { maxPackageBytes, MAX_PACKAGE_FILES } from "@/helpers/StorageLimits";
+import { loadZipJs } from "@/helpers/Zip";
+import { safeFileName } from "@/helpers/FileName";
+
+export { loadZipJs, safeFileName };
 
 export const PACKAGE_EXT = "llja";
 export const PACKAGE_FORMAT = "louvorja-liturgy-package";
@@ -28,10 +37,10 @@ export const MANIFEST_PATH = "manifest.json";
 export const LITURGY_PATH = "liturgy.json";
 const FILES_ROOT = "files/";
 
-/** Acima disso o pacote é recusado (JSZip monta tudo na memória). */
-export const MAX_PACKAGE_BYTES = 2 * 1024 ** 3;
-/** Teto de arquivos num pacote: liturgia nenhuma chega perto disso. */
-export const MAX_PACKAGE_FILES = 2000;
+/** Manifesto/JSON de liturgia não precisa ser maior que isto. */
+export const MAX_MANIFEST_BYTES = 64 * 1024 ** 2;
+
+export { MAX_PACKAGE_FILES };
 
 export const FILE_SOURCES = [
   "liturgy",
@@ -41,15 +50,20 @@ export const FILE_SOURCES = [
 ] as const;
 export type FileSource = (typeof FILE_SOURCES)[number];
 
-/** Um arquivo a pôr no pacote, ou lido dele. */
-export interface PackageFile {
+/**
+ * Um arquivo a pôr no pacote, ou lido dele. Os bytes só são abertos quando
+ * alguém chama `open()` — a coleta não carrega nada.
+ */
+export interface PackageEntry {
   source: FileSource;
   /** Id do registro na origem (ou do item, para arquivo da liturgia sem registro). */
   sourceId: string;
   /** Nome original, com extensão. */
   name: string;
   mime: string;
-  data: Blob;
+  size: number;
+  /** `null` quando o arquivo sumiu entre a coleta e a leitura. */
+  open: () => Promise<ReadableStream<Uint8Array> | null>;
 }
 
 export interface ManifestFile {
@@ -74,24 +88,6 @@ export interface PackageLiturgy {
   name: string;
   color?: string;
   items: LiturgyItem[];
-}
-
-export async function loadJsZip() {
-  const mod = (await import("jszip")) as unknown as { default?: { default?: unknown } };
-  return (mod.default?.default ?? mod.default ?? mod) as typeof import("jszip");
-}
-
-/** Nome de arquivo aceito em Windows, macOS e Linux, sem perder acentos. */
-export function safeFileName(name: string, fallback = "arquivo"): string {
-  const cleaned = String(name || "")
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_")
-    .replace(/\s+/g, " ")
-    .trim()
-    // Windows não aceita nome terminado em ponto ou espaço.
-    .replace(/[. ]+$/, "")
-    .slice(0, 180);
-  return cleaned || fallback;
 }
 
 /** O arquivo começa com a assinatura de ZIP (`PK\x03\x04`)? */
@@ -119,69 +115,102 @@ export function safeZipPath(path: string, root: string): string | null {
   return p;
 }
 
-function zipPathFor(file: PackageFile): string {
+function zipPathFor(file: PackageEntry): string {
   return `${FILES_ROOT}${file.source}/${safeFileName(file.sourceId, "item")}/${safeFileName(file.name)}`;
 }
 
 /**
- * Monta o pacote. Cada arquivo entra uma vez por (`source`, `sourceId`); os
- * binários vão sem compressão (imagem e vídeo já vêm comprimidos) e os JSONs,
- * comprimidos.
+ * Monta o pacote direto no `sink` (arquivo no disco ou writable do navegador).
+ * Cada arquivo entra uma vez por (`source`, `sourceId`); os binários vão sem
+ * compressão (imagem e vídeo já vêm comprimidos) e os JSONs, comprimidos.
  */
 export async function buildPackage(input: {
   liturgy: PackageLiturgy;
-  files: PackageFile[];
+  files: PackageEntry[];
   appVersion?: string;
-}): Promise<Blob> {
-  const JSZip = await loadJsZip();
-  const zip = new JSZip();
+  sink: WritableStream<Uint8Array>;
+}): Promise<{ fileCount: number; totalBytes: number }> {
+  const { ZipWriter, TextReader } = await loadZipJs();
+  const writer = new ZipWriter(input.sink, { level: 0 });
   const seen = new Set<string>();
-  const files: ManifestFile[] = [];
+  const manifestFiles: ManifestFile[] = [];
+  let totalBytes = 0;
+
   for (const file of input.files) {
     const key = `${file.source}\u0000${file.sourceId}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    const stream = await file.open();
+    if (!stream) continue;
     const zipPath = zipPathFor(file);
-    zip.file(zipPath, file.data, { binary: true, compression: "STORE" });
-    files.push({
+    const reader = { readable: stream, size: file.size };
+    await writer.add(zipPath, reader, { level: 0 });
+    manifestFiles.push({
       zipPath,
       source: file.source,
       sourceId: file.sourceId,
       name: file.name,
       mime: file.mime || "application/octet-stream",
-      size: file.data.size,
+      size: file.size,
     });
+    totalBytes += file.size;
   }
+
   const manifest: PackageManifest = {
     format: PACKAGE_FORMAT,
     version: PACKAGE_VERSION,
     exportedAt: new Date().toISOString(),
     appVersion: input.appVersion || "",
     liturgy: LITURGY_PATH,
-    files,
+    files: manifestFiles,
   };
   const liturgy: PackageLiturgy = {
     name: input.liturgy.name,
     ...(input.liturgy.color ? { color: input.liturgy.color } : {}),
     items: input.liturgy.items,
   };
-  zip.file(LITURGY_PATH, JSON.stringify(liturgy, null, 2), { compression: "DEFLATE" });
-  zip.file(MANIFEST_PATH, JSON.stringify(manifest, null, 2), { compression: "DEFLATE" });
-  return zip.generateAsync({ type: "blob", mimeType: PACKAGE_MIME });
+  await writer.add(LITURGY_PATH, new TextReader(JSON.stringify(liturgy, null, 2)), {
+    level: 6,
+  });
+  await writer.add(MANIFEST_PATH, new TextReader(JSON.stringify(manifest, null, 2)), {
+    level: 6,
+  });
+  await writer.close();
+
+  return { fileCount: manifestFiles.length, totalBytes };
 }
 
 export type ReadError = "not_zip" | "not_liturgy" | "unsupported_version" | "too_large" | "invalid";
 
+/** Pacote aberto: os bytes de cada entrada ainda estão no ZIP. */
+export interface PackageReader {
+  manifest: PackageManifest;
+  liturgyJson: string;
+  files: PackageEntry[];
+  close: () => Promise<void>;
+}
+
 export type ReadPackageResult =
-  | { ok: true; manifest: PackageManifest; liturgyJson: string; files: PackageFile[] }
+  | { ok: true; reader: PackageReader }
   | { ok: false; error: ReadError };
 
-type ZipEntry = import("jszip").JSZipObject & { _data?: { uncompressedSize?: number } };
+/** Entrada do zip.js com os campos que interessam aqui. */
+type ZipEntry = import("@zip.js/zip.js").FileEntry;
 
-/** Tamanho descompactado que o ZIP declara, sem descompactar. */
-function declaredSize(entry: ZipEntry): number {
-  const size = entry._data?.uncompressedSize;
-  return typeof size === "number" && size >= 0 ? size : 0;
+function entrySize(entry: ZipEntry): number {
+  return typeof entry.uncompressedSize === "number" && entry.uncompressedSize >= 0
+    ? entry.uncompressedSize
+    : 0;
+}
+
+export function openZipEntry(entry: ZipEntry): () => Promise<ReadableStream<Uint8Array>> {
+  return async () => {
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    void entry.getData(writable).catch((error: unknown) => {
+      void writable.abort(error).catch(() => {});
+    });
+    return readable;
+  };
 }
 
 /**
@@ -189,77 +218,116 @@ function declaredSize(entry: ZipEntry): number {
  * que `classic.ts` lê). Só são lidos os caminhos que o manifesto lista, dentro
  * de `files/`, e nada é gravado em disco.
  */
-export async function readPackage(blob: Blob): Promise<ReadPackageResult | null> {
-  if (!(await isZip(blob))) return { ok: false, error: "not_zip" };
-  const JSZip = await loadJsZip();
-  let zip: import("jszip");
+export async function readPackage(file: Blob): Promise<ReadPackageResult | null> {
+  if (!Number.isFinite(file.size) || file.size <= 0) return { ok: false, error: "not_zip" };
+  if (file.size > maxPackageBytes()) return { ok: false, error: "too_large" };
+  if (!(await isZip(file))) return { ok: false, error: "not_zip" };
+
+  const { ZipReader, BlobReader, TextWriter } = await loadZipJs();
+  const reader = new ZipReader(new BlobReader(file));
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    await reader.close().catch(() => {});
+  };
+
   try {
-    zip = await JSZip.loadAsync(blob);
+    const entries = await reader.getEntries();
+    const byPath = new Map<string, ZipEntry>();
+    let total = 0;
+    for (const entry of entries) {
+      if (entry.directory) continue;
+      total += entrySize(entry);
+      byPath.set(normalizeZipPath(entry.filename).toLowerCase(), entry);
+    }
+    const manifestEntry = byPath.get(MANIFEST_PATH);
+    if (!manifestEntry) {
+      await close();
+      return null;
+    }
+    if (entries.length > MAX_PACKAGE_FILES + 2 || total > maxPackageBytes()) {
+      await close();
+      return { ok: false, error: "too_large" };
+    }
+    if (entrySize(manifestEntry) > 16 * 1024 ** 2) {
+      await close();
+      return { ok: false, error: "invalid" };
+    }
+
+    let manifest: PackageManifest;
+    try {
+      const text = await manifestEntry.getData(new TextWriter());
+      manifest = JSON.parse(String(text).replace(/^\uFEFF/, ""));
+    } catch {
+      await close();
+      return { ok: false, error: "invalid" };
+    }
+    if (!manifest || manifest.format !== PACKAGE_FORMAT) {
+      await close();
+      return { ok: false, error: "not_liturgy" };
+    }
+    if (Number(manifest.version) !== PACKAGE_VERSION) {
+      await close();
+      return { ok: false, error: "unsupported_version" };
+    }
+
+    const liturgyPath = safeZipPath(String(manifest.liturgy || LITURGY_PATH), "");
+    const liturgyEntry = liturgyPath ? byPath.get(liturgyPath.toLowerCase()) : undefined;
+    if (!liturgyEntry || entrySize(liturgyEntry) > MAX_MANIFEST_BYTES) {
+      await close();
+      return { ok: false, error: "invalid" };
+    }
+    const liturgyJson = String(await liturgyEntry.getData(new TextWriter())).replace(/^\uFEFF/, "");
+    if (liturgyJson.length > MAX_MANIFEST_BYTES) {
+      await close();
+      return { ok: false, error: "invalid" };
+    }
+
+    const listed = Array.isArray(manifest.files) ? manifest.files : [];
+    if (listed.length > MAX_PACKAGE_FILES) {
+      await close();
+      return { ok: false, error: "too_large" };
+    }
+    const files: PackageEntry[] = [];
+    let read = 0;
+    for (const f of listed) {
+      if (
+        !f ||
+        !FILE_SOURCES.includes(f.source) ||
+        typeof f.sourceId !== "string" ||
+        !f.sourceId ||
+        typeof f.zipPath !== "string"
+      )
+        continue;
+      const path = safeZipPath(f.zipPath, FILES_ROOT);
+      const entry = path ? byPath.get(path.toLowerCase()) : undefined;
+      if (!path || !entry || entry.encrypted || entrySize(entry) <= 0) continue;
+      read += entrySize(entry);
+      if (read > maxPackageBytes()) {
+        await close();
+        return { ok: false, error: "too_large" };
+      }
+      const name = safeFileName(
+        typeof f.name === "string" && f.name ? f.name : path.split("/").pop() || ""
+      );
+      const mime = typeof f.mime === "string" && f.mime.length <= 128 ? f.mime : "";
+      files.push({
+        source: f.source,
+        sourceId: f.sourceId,
+        name,
+        mime,
+        size: entrySize(entry),
+        open: openZipEntry(entry),
+      });
+    }
+
+    return {
+      ok: true,
+      reader: { manifest, liturgyJson, files, close },
+    };
   } catch {
+    await close();
     return { ok: false, error: "not_zip" };
   }
-  const entries = new Map<string, ZipEntry>();
-  let total = 0;
-  let count = 0;
-  zip.forEach((path, entry) => {
-    if (entry.dir) return;
-    count += 1;
-    total += declaredSize(entry as ZipEntry);
-    entries.set(normalizeZipPath(path).toLowerCase(), entry as ZipEntry);
-  });
-  const manifestEntry = entries.get(MANIFEST_PATH);
-  if (!manifestEntry) return null;
-  if (count > MAX_PACKAGE_FILES + 2 || total > MAX_PACKAGE_BYTES)
-    return { ok: false, error: "too_large" };
-
-  let manifest: PackageManifest;
-  try {
-    // Manifesto e liturgia são pequenos; um JSON enorme é pacote adulterado.
-    if (declaredSize(manifestEntry) > 16 * 1024 ** 2) return { ok: false, error: "invalid" };
-    manifest = JSON.parse((await manifestEntry.async("string")).replace(/^\uFEFF/, ""));
-  } catch {
-    return { ok: false, error: "invalid" };
-  }
-  if (!manifest || manifest.format !== PACKAGE_FORMAT) return { ok: false, error: "not_liturgy" };
-  if (Number(manifest.version) !== PACKAGE_VERSION)
-    return { ok: false, error: "unsupported_version" };
-
-  const liturgyPath = safeZipPath(String(manifest.liturgy || LITURGY_PATH), "");
-  const liturgyEntry = liturgyPath ? entries.get(liturgyPath.toLowerCase()) : undefined;
-  if (!liturgyEntry || declaredSize(liturgyEntry) > 64 * 1024 ** 2)
-    return { ok: false, error: "invalid" };
-  const liturgyJson = (await liturgyEntry.async("string")).replace(/^\uFEFF/, "");
-
-  const files: PackageFile[] = [];
-  const listed = Array.isArray(manifest.files) ? manifest.files : [];
-  if (listed.length > MAX_PACKAGE_FILES) return { ok: false, error: "too_large" };
-  let read = 0;
-  for (const f of listed) {
-    if (
-      !f ||
-      !FILE_SOURCES.includes(f.source) ||
-      typeof f.sourceId !== "string" ||
-      !f.sourceId ||
-      typeof f.zipPath !== "string"
-    )
-      continue;
-    const path = safeZipPath(f.zipPath, FILES_ROOT);
-    const entry = path ? entries.get(path.toLowerCase()) : undefined;
-    if (!path || !entry) continue;
-    read += declaredSize(entry);
-    if (read > MAX_PACKAGE_BYTES) return { ok: false, error: "too_large" };
-    const data = await entry.async("blob");
-    const name = safeFileName(
-      typeof f.name === "string" && f.name ? f.name : path.split("/").pop() || ""
-    );
-    const mime = typeof f.mime === "string" && f.mime.length <= 128 ? f.mime : "";
-    files.push({
-      source: f.source,
-      sourceId: f.sourceId,
-      name,
-      mime,
-      data: mime ? new Blob([data], { type: mime }) : data,
-    });
-  }
-  return { ok: true, manifest, liturgyJson, files };
 }

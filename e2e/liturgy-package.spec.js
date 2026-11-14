@@ -54,7 +54,7 @@ async function rows(page, table) {
               name: r.name,
               type: r.type,
               categoryId: r.categoryId,
-              bytes: r.data ? r.data.byteLength : 0,
+              bytes: r.data?.size ?? r.data?.byteLength ?? r.size ?? 0,
             }))
           );
         request.onerror = () => reject(request.error);
@@ -341,7 +341,7 @@ test(".ja com várias liturgias: cada uma vai para o seu dia da semana", async (
   await expect(list).not.toContainText("Abertura de domingo");
 });
 
-test("Projeção de Fundo usada vai no pacote; a biblioteca inteira só quando marcada", async ({
+test("Projeção de Fundo usada vai no pacote; o resto da biblioteca fica de fora", async ({
   browser,
 }) => {
   test.setTimeout(90_000);
@@ -376,7 +376,7 @@ test("Projeção de Fundo usada vai no pacote; a biblioteca inteira só quando m
   await pageA.getByRole("button", { name: /Exportar Liturgia$/ }).click();
   const dialog = pageA.getByTestId("liturgy-export-dialog");
   await expect(dialog).toContainText("Projeção de Fundo usada (1)");
-  await expect(dialog).toContainText("Projeção de Fundo (biblioteca inteira) (2)");
+  await expect(dialog).not.toContainText("biblioteca inteira");
   await pageA.getByTestId("liturgy-export-confirm").click();
   const path = test.info().outputPath("fundo.llja");
   await (await download).saveAs(path);
@@ -390,7 +390,7 @@ test("Projeção de Fundo usada vai no pacote; a biblioteca inteira só quando m
   await ask.getByRole("button", { name: "Sim", exact: true }).click();
   await expect(pageB.locator(".liturgy-page")).toContainText("Fundo");
 
-  // Só o fundo usado veio (a biblioteca inteira começa desmarcada), e o item aponta para ele.
+  // Só o fundo usado veio; o outro registro da biblioteca não entra.
   const records = await rows(pageB, "background_projection.library");
   expect(records.map((r) => r.name)).toEqual(["fundo do culto.png"]);
   const ref = await pageB.evaluate(async () => {

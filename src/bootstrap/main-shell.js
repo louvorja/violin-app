@@ -901,7 +901,7 @@ $storage.hydrate().then(async () => {
         return "";
       }
       if (/^(http|https|data):/i.test(raw)) return raw;
-      return Platform.isDesktop ? Path.local(raw) : Path.file(raw);
+      return Path.media(raw);
     }
 
     /**
@@ -928,7 +928,7 @@ $storage.hydrate().then(async () => {
         return thumb.slice(0, 4096);
       const path = typeof item?.path === "string" ? item.path : "";
       if (item?.type === "image" && path && !/^(blob|data):/i.test(path) && Platform.isDesktop) {
-        return Path.local(path).slice(0, 4096);
+        return Path.media(path).slice(0, 4096);
       }
       // Thumb em dataURL/blob fica de fora: estouraria o orçamento do payload —
       // o card remoto mostra o ícone do tipo.
@@ -1579,8 +1579,7 @@ $storage.hydrate().then(async () => {
                 if (typeof p !== "string" || !p) return "";
                 if (/^(blob|data):/i.test(p)) return p;
                 if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(p)) return p;
-                if (Platform.isDesktop) return Path.local(p);
-                return Path.file(p);
+                return Path.media(p);
               }
 
               async function openWithSystemPlayer(filePath, kind) {
@@ -1847,8 +1846,8 @@ $storage.hydrate().then(async () => {
                           bgUrl = URL.createObjectURL(new Blob([bgRec.data], { type: bgRec.mime }));
                         } else if (/^(https?|blob|data|louvorja):/i.test(bgUrl)) {
                           // passa direto
-                        } else if (Platform.isDesktop) {
-                          bgUrl = Path.local(bgUrl);
+                        } else {
+                          bgUrl = Path.media(bgUrl);
                         }
                         const bg = useBackgroundSound();
                         bg.playFile({
@@ -2693,15 +2692,18 @@ $storage.hydrate().then(async () => {
     // isso; lá o caminho é o botão de Importar/Exportar.
     if (!Platform.isDesktop && "launchQueue" in window) {
       window.launchQueue.setConsumer(async (params) => {
-        const handle = params.files?.[params.files.length - 1];
-        if (!handle) return;
-        try {
-          const file = await handle.getFile();
-          if (LLJA_RE.test(file.name)) openLiturgyPackage(file);
-          else void openSlja(file, { origin: "system" });
-        } catch (e) {
-          console.warn("[launchQueue] não foi possível ler o arquivo:", e);
+        const handles = params.files ?? [];
+        let lastSlja = null;
+        for (const handle of handles) {
+          try {
+            const file = await handle.getFile();
+            if (LLJA_RE.test(file.name)) openLiturgyPackage(file);
+            else lastSlja = file;
+          } catch (e) {
+            console.warn("[launchQueue] não foi possível ler o arquivo:", e);
+          }
         }
+        if (lastSlja) void openSlja(lastSlja, { origin: "system" });
       });
     }
 

@@ -282,20 +282,27 @@
     "export_opt_media": "Biblioteca de Mídia usada na liturgia",
     "export_opt_bg_sound": "Som de Fundo usado na liturgia",
     "export_opt_bg_projection": "Projeção de Fundo usada",
-    "export_opt_bg_projection_all": "Projeção de Fundo (biblioteca inteira)",
     "export_confirm": "Exportar",
-    "export_too_large": "O arquivo passaria de 2 GB. Desmarque alguma biblioteca ou tire vídeos grandes da liturgia e tente de novo.",
+    "export_too_large": "O pacote passaria de 5 GB. Desmarque alguma biblioteca ou tire vídeos grandes da liturgia e tente de novo.",
+    "export_too_large_desktop": "O pacote passaria de 5 GB. Desmarque alguma biblioteca ou tire vídeos grandes da liturgia e tente de novo.",
+    "export_too_large_web": "No navegador o pacote é limitado a 500 MB. Desmarque alguma biblioteca ou use o aplicativo desktop para pacotes maiores.",
+    "export_too_many_files": "O pacote passaria de 2000 arquivos. Desmarque alguma biblioteca ou divida a liturgia.",
     "imported_category": "Importados",
     "import_partial": "Liturgia importada, mas estes itens ficaram sem o arquivo. Escolha de novo no item:",
     "import_unsupported": "Estes arquivos vieram junto, mas o app ainda não guarda esse tipo (PowerPoint, por exemplo), então o item ficou sem ele:",
-    "import_too_large": "O arquivo da liturgia é grande demais (mais de 2 GB).",
+    "import_too_large": "O arquivo da liturgia é grande demais (mais de 5 GB).",
+    "import_too_large_desktop": "O arquivo da liturgia é grande demais (mais de 5 GB).",
+    "import_too_large_web": "No navegador o pacote é limitado a 500 MB. Abra este pacote no aplicativo desktop.",
+    "import_video_not_started": "O vídeo \"{name}\" entrou na lista, mas o download automático não foi iniciado.",
     "import_unsupported_version": "Este arquivo foi feito numa versão mais nova do LouvorJA. Atualize o app para abrir."
   },
   "alerts": {
     "file_choose_again_web": "Este arquivo está vinculado a uma pasta do computador. Edite o item da liturgia e use Escolher arquivo para abri-lo neste navegador.",
     "media_not_found": "Item não encontrado na biblioteca. Ele pode ter sido removido.",
     "file_unsupported": "Escolha uma imagem, vídeo, áudio, PDF ou apresentação .slja.",
-    "file_import_failed": "Não foi possível guardar o arquivo neste aparelho. Verifique o espaço disponível e tente novamente."
+    "file_import_failed": "Não foi possível guardar o arquivo neste aparelho. Verifique o espaço disponível e tente novamente.",
+    "file_too_large": "Este arquivo passa do limite de armazenamento deste aparelho.",
+    "file_storage_full": "Não há espaço suficiente neste aparelho para guardar o arquivo."
   },
   "library_search": {
     "title_media": "Biblioteca de Mídia",

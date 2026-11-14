@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { pointsIntoPackage, readClassicPackage } from "../package/classic";
 
+function blobStream(blob: Blob): ReadableStream<Uint8Array> {
+  if (typeof blob.stream === "function") return blob.stream() as ReadableStream<Uint8Array>;
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controller.enqueue(new Uint8Array(await blob.arrayBuffer()));
+      controller.close();
+    },
+  });
+}
+
 async function zipOf(files: Record<string, string>): Promise<Blob> {
   const zip = new JSZip();
   for (const [path, content] of Object.entries(files)) zip.file(path, content);
@@ -40,7 +50,9 @@ describe(".llja do Classic", () => {
       sourceId: "item_1_avulso",
       name: "Hino.MP3",
     });
-    expect(await pack!.files[0].data.text()).toBe("AUDIO");
+    const stream = await pack!.files[0].open();
+    expect(stream && (await new Response(stream).text())).toBe("AUDIO");
+    await pack!.close();
   });
 
   it("aceita o nome antigo liturgia.lja", async () => {
@@ -48,6 +60,7 @@ describe(".llja do Classic", () => {
       await zipOf({ "liturgia.lja": JSON.stringify({ name: "x", items: [] }) })
     );
     expect(pack).not.toBeNull();
+    await pack?.close();
   });
 
   it("schema de versão que não conhece é recusado", async () => {
@@ -71,6 +84,7 @@ describe(".llja do Classic", () => {
     });
     const pack = await readClassicPackage(blob);
     expect(pack!.files).toHaveLength(0);
+    await pack?.close();
   });
 
   it("não é ZIP, ou ZIP sem liturgia.json: não é do Classic", async () => {

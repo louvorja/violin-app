@@ -1,18 +1,39 @@
 import { describe, expect, it, vi } from "vitest";
 import { installPackage, IMPORTED_CATEGORY_ID, type InstallDeps } from "../package/install";
-import type { PackageFile } from "../package/format";
+import type { PackageEntry } from "../package/format";
 import { DB_TABLE } from "@/constants/DbTables";
 import type { LiturgyItem } from "@/types/Liturgy";
+
+function blobStream(blob: Blob): ReadableStream<Uint8Array> {
+  if (typeof blob.stream === "function") return blob.stream() as ReadableStream<Uint8Array>;
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controller.enqueue(new Uint8Array(await blob.arrayBuffer()));
+      controller.close();
+    },
+  });
+}
 
 const item = (p: Omit<Partial<LiturgyItem>, "tipo"> & { tipo?: string }): LiturgyItem =>
   ({ id: "x", tipo: "anotacao", dir_info: "E", ...p }) as LiturgyItem;
 
 const file = (
-  source: PackageFile["source"],
+  source: PackageEntry["source"],
   sourceId: string,
   name: string,
-  content = "BYTES"
-): PackageFile => ({ source, sourceId, name, mime: "", data: new Blob([content]) });
+  content = "BYTES",
+  mime = ""
+): PackageEntry => {
+  const blob = new Blob([content]);
+  return {
+    source,
+    sourceId,
+    name,
+    mime,
+    size: blob.size,
+    open: async () => blobStream(blob),
+  };
+};
 
 /** IndexedDB de mentira, por tabela. */
 function fakeDeps(initial: Record<string, Record<string, unknown>[]> = {}) {
@@ -25,22 +46,35 @@ function fakeDeps(initial: Record<string, Record<string, unknown>[]> = {}) {
   };
   let n = 0;
   const liturgyFiles = new Map<string, string>();
+  const storedPaths = new Set<string>();
   const deps: InstallDeps = {
     get: async (t, id) => tableOf(t).get(id),
     getAll: async (t) => [...tableOf(t).values()],
     put: async (t, r) => void tableOf(t).set(String(r.id), r),
     del: async (t, id) => void tableOf(t).delete(id),
-    storeLiturgyFile: vi.fn(async (f: File) => {
+    storeLiturgyFile: vi.fn(async (input) => {
       const id = `lf-${++n}`;
-      liturgyFiles.set(id, f.name);
-      return { dir: f.name, ref_id: id };
+      liturgyFiles.set(id, input.name);
+      const path = `liturgy-files/${id}/${input.name}`;
+      storedPaths.add(path);
+      return { dir: input.name, path };
     }),
     removeLiturgyFile: vi.fn(async (id: string) => void liturgyFiles.delete(id)),
+    storeLibraryFile: vi.fn(async (input) => {
+      const stream = await input.open();
+      const text = stream ? await new Response(stream).text() : "";
+      const path = `${input.source === "background-sound" ? "background-sound" : input.source === "background-projection" ? "background-projection" : "media-library"}/${input.recordId}/${input.name}`;
+      storedPaths.add(path);
+      return { mode: "path" as const, path, name: input.name, size: text.length, sha256: text };
+    }),
+    removeStoredFile: vi.fn(async (value: unknown) => {
+      if (typeof value === "string") storedPaths.delete(value);
+    }),
     importedCategoryName: "Importados",
     newId: () => `id-${++n}`,
     now: () => 1_700_000_000_000,
   };
-  return { deps, db, tableOf, liturgyFiles };
+  return { deps, db, tableOf, liturgyFiles, storedPaths };
 }
 
 describe("installPackage", () => {
@@ -63,7 +97,8 @@ describe("installPackage", () => {
       type: "image",
       categoryId: IMPORTED_CATEGORY_ID,
     });
-    expect(String(media[0].path)).toMatch(/^blob:/);
+    expect(String(media[0].path)).toMatch(/^media-library\//);
+    expect(media[0].data).toBeUndefined();
     expect(r.items[0]).toMatchObject({
       tipo: "biblioteca-midia",
       ref_id: media[0].id,
@@ -73,9 +108,9 @@ describe("installPackage", () => {
     expect(r.items[1].ref_id).toBe(media[0].id);
     expect(r.items[2]).toMatchObject({
       tipo: "arquivo",
-      ref_id: [...liturgyFiles.keys()][0],
-      dir: "hino.slja",
+      dir: expect.stringMatching(/^liturgy-files\/lf-\d+\/hino\.slja$/),
     });
+    expect(r.items[2].ref_id).toBeUndefined();
     expect([...liturgyFiles.values()]).toEqual(["hino.slja"]);
     expect(r.stored).toBe(2);
     // Categoria "Importados" criada uma vez.
@@ -115,11 +150,12 @@ describe("installPackage", () => {
     const sound = [...tableOf(DB_TABLE.BACKGROUND_SOUND_LIBRARY).values()][0];
     expect(sound).toMatchObject({ name: "chuva", fileName: "chuva.mp3" });
     expect(r.items[0].ref_id).toBe(sound.id);
-    expect([...tableOf(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY).values()]).toHaveLength(1);
-    expect(r.unsupported).toEqual(["texto.txt"]);
+    // A projeção que nenhum item usa não entra mais.
+    expect([...tableOf(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY).values()]).toHaveLength(0);
+    expect(r.unsupported).toEqual([]);
   });
 
-  it("item Projeção de Fundo aponta para o registro novo; a sobra entra uma vez", async () => {
+  it("item Projeção de Fundo aponta para o registro novo; a sobra fica de fora", async () => {
     const { deps, tableOf } = fakeDeps();
     const r = await installPackage(
       [item({ id: "f", tipo: "projecao-de-fundo", item: "Fundo", ref_id: "p-old" })],
@@ -130,10 +166,9 @@ describe("installPackage", () => {
       deps
     );
     const records = [...tableOf(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY).values()];
-    expect(records).toHaveLength(2);
-    const used = records.find((x) => x.name === "fundo.jpg" || x.fileName === "fundo.jpg");
-    expect(used).toBeTruthy();
-    expect(r.items[0].ref_id).toBe(used!.id);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ name: "fundo.jpg" });
+    expect(r.items[0].ref_id).toBe(records[0].id);
     expect(r.unsupported).toEqual([]);
   });
 
@@ -150,8 +185,39 @@ describe("installPackage", () => {
     );
     expect(r.items[0].ref_id).toBe("local");
     expect(r.items[1].ref_id).toBeUndefined();
-    expect(r.items[2].dir_info).toBe("E");
+    expect(r.items[2]).toMatchObject({ dir_info: "E", dir: "" });
+    expect(r.items[2].ref_id).toBeUndefined();
     expect(r.missing).toEqual(["De lá", "Classic"]);
+  });
+
+  it("arquivo não suportado e arquivo local ausente ficam editáveis, sem caminho antigo", async () => {
+    const { deps } = fakeDeps();
+    const r = await installPackage(
+      [
+        item({ id: "p", tipo: "arquivo", item: "PowerPoint", dir: "C:\\slides.pptx" }),
+        item({ id: "l", tipo: "arquivo", item: "Local", dir: "D:\\video.mp4" }),
+      ],
+      [file("liturgy", "p", "slides.pptx"), file("liturgy", "outro", "outro.jpg")],
+      deps
+    );
+    expect(r.items[0]).toMatchObject({ tipo: "arquivo", dir: "", dir_info: "E" });
+    expect(r.items[0].ref_id).toBeUndefined();
+    expect(r.items[1]).toMatchObject({ tipo: "arquivo", dir: "", dir_info: "E" });
+    expect(r.items[1].ref_id).toBeUndefined();
+    expect(r.unsupported).toEqual(["slides.pptx"]);
+    expect(r.missing).toEqual(["Local"]);
+  });
+
+  it("MIME que não combina com a extensão não entra na biblioteca", async () => {
+    const { deps, tableOf } = fakeDeps();
+    const r = await installPackage(
+      [item({ id: "m", tipo: "biblioteca-midia", item: "Falsa imagem", ref_id: "old" })],
+      [{ ...file("media", "old", "falsa.png"), mime: "text/html" }],
+      deps
+    );
+    expect(tableOf(DB_TABLE.MEDIA_LIBRARY).size).toBe(0);
+    expect(r.items[0].ref_id).toBeUndefined();
+    expect(r.unsupported).toEqual(["falsa.png"]);
   });
 
   it("YouTube entra na lista de Vídeos Online sem duplicar", async () => {
@@ -199,13 +265,39 @@ describe("installPackage", () => {
     const second = await installPackage(items, files, deps);
     expect(tableOf(DB_TABLE.MEDIA_LIBRARY).size).toBe(1);
     expect(second.items[0].ref_id).toBe(first.items[0].ref_id);
-    // Arquivo diferente com o mesmo nome entra como novo.
-    await installPackage(items, [file("media", "old", "video.mp4", "OUTRO CONTEÚDO")], deps);
+    // Arquivo diferente com o mesmo nome E o mesmo tamanho entra como novo.
+    // (Sem comparar bytes, o dedupe antigo reutilizaria o primeiro.)
+    await installPackage(items, [file("media", "old", "video.mp4", "OUTRO")], deps);
     expect(tableOf(DB_TABLE.MEDIA_LIBRARY).size).toBe(2);
   });
 
+  it("falha no meio de installPackage desfaz o que já foi criado", async () => {
+    const { deps, tableOf } = fakeDeps();
+    let puts = 0;
+    const originalPut = deps.put;
+    deps.put = async (table, record) => {
+      puts += 1;
+      if (puts === 3) throw new Error("quota cheia");
+      return originalPut(table, record);
+    };
+
+    await expect(
+      installPackage(
+        [
+          item({ id: "a", tipo: "biblioteca-midia", ref_id: "a-old" }),
+          item({ id: "b", tipo: "biblioteca-midia", ref_id: "b-old" }),
+        ],
+        [file("media", "a-old", "a.jpg"), file("media", "b-old", "b.jpg")],
+        deps
+      )
+    ).rejects.toThrow("quota cheia");
+
+    expect(tableOf(DB_TABLE.MEDIA_LIBRARY).size).toBe(0);
+    expect(tableOf(DB_TABLE.MEDIA_LIBRARY_CATEGORY).size).toBe(0);
+  });
+
   it("rollback apaga tudo o que a importação criou", async () => {
-    const { deps, tableOf, liturgyFiles } = fakeDeps();
+    const { deps, tableOf, storedPaths } = fakeDeps();
     const r = await installPackage(
       [
         item({ id: "a", tipo: "arquivo", ref_id: "r1" }),
@@ -221,6 +313,6 @@ describe("installPackage", () => {
     expect(tableOf(DB_TABLE.MEDIA_LIBRARY_CATEGORY).size).toBe(0);
     expect(tableOf(DB_TABLE.CUSTOM_ONLINE_VIDEOS).size).toBe(0);
     expect(tableOf(DB_TABLE.CUSTOM_ONLINE_VIDEOS_CATEGORIES).size).toBe(0);
-    expect(liturgyFiles.size).toBe(0);
+    expect(storedPaths.size).toBe(0);
   });
 });

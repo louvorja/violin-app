@@ -103,9 +103,22 @@ No desktop, o perfil privado do usuário fica separado do acervo e dos vídeos c
 - **Acervo (`paths.mediaDir()` / `paths.filesDir()`):** pasta configurável independente. Padrões compartilhados: `%PUBLIC%/Documents/LouvorJA Violin/Acervo` (Windows), `/Users/Shared/LouvorJA Violin/Acervo` (macOS) e `/var/lib/louvorja-violin/acervo` (Linux), sem fallback silencioso para `Documentos` particulares.
 - **Vídeos (`paths.videosDir()`):** pasta configurável independente, por padrão `<pasta de vídeos do sistema>/LouvorJA Violin`.
 
-A pasta base de `<appData>/LouvorJA Violin` guarda `storage-layout.json` e o lock de instância única. Ao alterar as pastas de acervo ou vídeos em Armazenamento, a cópia verificada é aplicada no próximo boot preservando a origem; o `storageAccess` limita a um escritor por pasta e desativa a limpeza automática do acervo compartilhado. Quem migrava de versão antiga mantém acervo e vídeos em `<dados>/files` e `<dados>/Videos` apenas quando escolhidos explicitamente, enquanto dados pessoais (incluindo cache do Canva e anexos privados da liturgia) permanecem no perfil privado. Se a pasta configurada estiver indisponível ou a cópia falhar, o app abre em perfil provisório (`<appData>/LouvorJA Violin/fallback`) com aviso, sem publicar nada sobre a origem.
+As bibliotecas do app guardam os arquivos em pastas próprias do acervo, uma
+subpasta por registro: `files/media-library/<id>/`, `files/background-projection/<id>/`,
+`files/background-sound/<id>/` e `files/liturgy-files/<id>/` (esta última só para
+pacote importado). O IndexedDB guarda metadados e o caminho **relativo** — assim
+mover o acervo não quebra referência. No navegador os bytes vão para o OPFS
+(5 GB quando OPFS + Service Worker estão ativos) ou, sem eles, para o
+IndexedDB como `Blob` (500 MB). As pastas ficam fora de `musics/images/covers`,
+então não entram em "Limpar mídia" nem na limpeza automática. A tela de
+Armazenamento tem **Arquivos sem registro → Limpar** para remover cópias
+antigas; a restauração de backup também limpa o que não ficou referenciado.
 
-O cache de export do Canva (`canva/`, no perfil privado) tem contagem própria na tela de Armazenamento, sobrevive ao "Limpar mídia" e fica fora do limite de espaço e da remoção de arquivos não referenciados — apagá-lo por idade forçaria uma reexportação, que gasta a cota do Canva. Ele só sai pelos selos da aba Canva ou pelo botão "Limpar exportações do Canva".
+O cache de export do Canva (`files/canva/`) vive dentro do acervo, mas não é tratado como
+ele: tem contagem própria na tela de Armazenamento, sobrevive ao "Limpar mídia" e fica
+fora do limite de espaço e da remoção de arquivos não referenciados — apagá-lo por idade
+forçaria uma reexportação, que gasta a cota do Canva. Ele só sai pelos selos da aba Canva
+ou pelo botão "Limpar exportações do Canva".
 
 ## 🧠 Stack
 
@@ -3385,13 +3398,16 @@ files/
   liturgy/<ref-ou-item>/<nome>               arquivos dos itens do tipo arquivo (sempre)
   media/<id>/<nome>                          Biblioteca de Mídia usada (opção, marcada)
   background-sound/<id>/<nome>               Som de Fundo usado (opção, marcada)
-  background-projection/<id>/<nome>          Projeção de Fundo usada (opção, marcada); a biblioteca inteira é outra opção, desmarcada
+  background-projection/<id>/<nome>          Projeção de Fundo usada (opção, marcada)
 ```
 
 Cada entrada de `files[]` diz a origem (`source`) e o registro de origem
 (`sourceId`); os itens continuam com o `ref_id` antigo e a importação troca pelo
-novo. Binários vão sem compressão, JSONs comprimidos; acima de 2 GB a exportação
-é recusada (o JSZip monta tudo na memória).
+novo. Binários vão sem compressão, JSONs comprimidos. O ZIP é montado e lido em
+streaming com `@zip.js/zip.js` (ZIP64 acima de 4 GB), então o limite é de
+produto, não de memória: 5 GB por pacote no desktop e 500 MB no navegador, com
+2000 arquivos no máximo. A importação confere o MIME compatível com a extensão
+e conta os bytes reais de cada entrada (zip bomb).
 
 | Parte                                                       | Arquivo                                  |
 | ----------------------------------------------------------- | ---------------------------------------- |
@@ -3403,9 +3419,37 @@ novo. Binários vão sem compressão, JSONs comprimidos; acima de 2 GB a exporta
 Na importação, imagem/vídeo/áudio/PDF de item de arquivo vira **um** registro na
 Biblioteca de Mídia e o item passa a ser da biblioteca; `.slja` continua item de
 arquivo (`liturgy.files`). Tudo entra na categoria "Importados" (id fixo
-`importados`, reaproveitada; importar o mesmo pacote de novo não duplica).
+`importados`, reaproveitada; importar o mesmo pacote de novo não duplica os
+arquivos das bibliotecas, comparando o conteúdo). No desktop o arquivo é copiado
+para o acervo e o registro guarda só o caminho relativo; no navegador os bytes
+ficam no IndexedDB como `Blob`.
 Referência que não veio e não existe aqui é limpa e avisada. Links do YouTube
 entram em Vídeos Online sem duplicar e o download respeita a opção automática.
 A liturgia é gravada por último; se falhar, o que entrou nas bibliotecas é
 apagado. A importação aceita ainda o `.json` antigo, o `.json` da semana e o
 `.ja` do Classic. `.llja` é registrado no sistema (duplo clique, arrastar).
+
+### Bibliotecas no navegador: OPFS
+
+Quando o navegador tem **OPFS** (Origin Private File System) e o Service Worker
+está controlando a página, os bytes das bibliotecas web saem do IndexedDB e vão
+para `louvorja/<pasta>/<id>/<arquivo>` no OPFS. O registro guarda metadados +
+`path: "opfs:..."`, como o desktop guarda o caminho relativo do acervo. O limite
+de produto passa a ser 5 GB (efetivo pela cota do navegador). Sem OPFS ou sem
+Service Worker, o app mantém o modelo anterior (Blob no IndexedDB, 500 MB).
+
+O Service Worker (`public/opfs-sw.js`) serve `<base>__opfs/<pasta>/<id>/<arquivo>`
+com `Range`, `Content-Length` e MIME por extensão; é o que permite `<video>`
+fazer seek e PDF paginar sem `objectURL`. `Path.media()` reconhece `opfs:`.
+
+A migração dos Blobs antigos é automática depois do Service Worker assumir:
+copia para o OPFS, confere o tamanho, troca o registro e apaga `data`. O
+progresso aparece em **Processos em segundo plano**, com botão de cancelar;
+cancelar preserva o que já foi migrado e a próxima abertura continua. Falhas
+deixam o registro antigo e são tentadas de novo.
+
+O backup usa streaming (`zip.js`) e inclui os arquivos OPFS em `opfs/<caminho>`
+além das tabelas. A importação grava os arquivos em staging, preserva o antigo
+em rollback, troca no fim e limpa o que não tem mais registro. Se falhar, devolve
+tabelas e arquivos antigos. Backups v1/v2 continuam aceitos pelo caminho antigo
+(JSZip).

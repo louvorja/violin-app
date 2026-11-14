@@ -11,6 +11,16 @@ import {
 import { DB_TABLE } from "@/constants/DbTables";
 import type { LiturgyItem } from "@/types/Liturgy";
 
+function blobStream(blob: Blob): ReadableStream<Uint8Array> {
+  if (typeof blob.stream === "function") return blob.stream() as ReadableStream<Uint8Array>;
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controller.enqueue(new Uint8Array(await blob.arrayBuffer()));
+      controller.close();
+    },
+  });
+}
+
 const item = (p: Omit<Partial<LiturgyItem>, "tipo"> & { tipo?: string }): LiturgyItem =>
   ({ id: "x", tipo: "anotacao", ...p }) as LiturgyItem;
 
@@ -18,12 +28,22 @@ function deps(tables: Record<string, LibraryRecord[]>, disk: Record<string, stri
   const reads: string[] = [];
   const d: CollectDeps = {
     get: async (table, id) => tables[table]?.find((r) => r.id === id),
-    getAll: async (table) => tables[table] || [],
     readLiturgyFile: async (id) =>
-      id === "lit-1" ? { name: "hino.slja", data: new Blob(["SLJA"]) } : null,
+      id === "lit-1"
+        ? {
+            name: "hino.slja",
+            mime: "",
+            size: 4,
+            open: async () => blobStream(new Blob(["SLJA"])),
+          }
+        : null,
     readLocal: async (path) => {
       reads.push(path);
-      return disk[path] ? new Blob([disk[path]], { type: "video/mp4" }) : null;
+      if (!disk[path]) return null;
+      return {
+        size: disk[path].length,
+        open: async () => blobStream(new Blob([disk[path]])),
+      };
     },
   };
   return { d, reads };
@@ -92,14 +112,13 @@ describe("nameWithExtension", () => {
 });
 
 describe("contagem da janela de exportação", () => {
-  it("conta cada origem uma vez, a Projeção de Fundo usada e a biblioteca inteira", async () => {
+  it("conta cada origem uma vez, só com o que a liturgia usa", async () => {
     const { d } = deps(tables);
-    expect(await countExport(liturgy, d.getAll)).toEqual({
+    expect(await countExport(liturgy)).toEqual({
       liturgy: 2,
       media: 3,
       backgroundSound: 1,
       backgroundProjection: 1,
-      backgroundProjectionAll: 2,
     });
   });
 });
@@ -133,7 +152,6 @@ describe("collectFiles", () => {
         media: false,
         backgroundSound: false,
         backgroundProjection: false,
-        backgroundProjectionAll: false,
       },
       d
     );
@@ -143,26 +161,5 @@ describe("collectFiles", () => {
     );
     // Arquivo do disco que não deu para ler vai para os ausentes.
     expect(r.missing).toEqual(["Vídeo do disco"]);
-  });
-
-  it("Projeção de Fundo inteira, quando marcada; registro sem bytes fica de fora", async () => {
-    const { d } = deps(tables);
-    const r = await collectFiles(
-      [],
-      { ...DEFAULT_EXPORT_OPTIONS, backgroundProjectionAll: true },
-      d
-    );
-    expect(r.files.map((f) => `${f.source}:${f.sourceId}`)).toEqual(["background-projection:p1"]);
-  });
-
-  it("biblioteca inteira marcada leva a usada junto, uma vez só", async () => {
-    const { d } = deps(tables);
-    const r = await collectFiles(
-      [item({ id: "f", tipo: "projecao-de-fundo", item: "Fundo", ref_id: "p1" })],
-      { ...DEFAULT_EXPORT_OPTIONS, backgroundProjection: false, backgroundProjectionAll: true },
-      d
-    );
-    expect(r.files.map((f) => `${f.source}:${f.sourceId}`)).toEqual(["background-projection:p1"]);
-    expect(r.localOnly).toEqual([]);
   });
 });

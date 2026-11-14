@@ -34,6 +34,7 @@ import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { localFileStatus, type LocalFileStatus } from "@/helpers/LocalFileStatus";
+import { isManagedLibraryPath, libraryFileInfo } from "@/helpers/LibraryFiles";
 import { mediaSourceDetails } from "@/helpers/MediaDiagnostics";
 import Telemetry from "@/helpers/Telemetry";
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
@@ -310,6 +311,9 @@ export function useLiturgyExecution() {
    */
   async function openWithSystemPlayer(dir: string, kind: string): Promise<boolean> {
     if (!Platform.isDesktop || !dir || /^(blob|data):/i.test(dir)) return false;
+    // Caminho relativo do acervo: o SO não sabe resolvê-lo; o player interno sabe.
+    if (!/^([A-Za-z]:[\\/]|\\\\|\/)/.test(dir) && !/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir))
+      return false;
     const api = Platform.api as LouvorjaApi | null;
     if (!api?.shell?.openPath) return false;
     try {
@@ -505,7 +509,7 @@ export function useLiturgyExecution() {
   /** Converte o registro em uma URL tocável na janela atual. */
   function resolvePlayableSoundUrl(rec: {
     path: string;
-    data?: ArrayBuffer;
+    data?: Blob | ArrayBuffer;
     mime?: string;
   }): string {
     const p = rec.path || "";
@@ -517,9 +521,8 @@ export function useLiturgyExecution() {
     }
     // URLs completas passam direto.
     if (/^(https?|blob|data|louvorja):/i.test(p)) return p;
-    // Caminho absoluto no desktop → protocolo local.
-    if (Platform.isDesktop) return $path.local(p);
-    return p;
+    // Caminho do acervo (relativo) ou absoluto → protocolo do Path.
+    return $path.media(p);
   }
 
   /**
@@ -595,8 +598,7 @@ export function useLiturgyExecution() {
     // blob:/data: usam UM único barra após o esquema — passam direto.
     if (/^(blob|data):/i.test(dir)) return dir;
     if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir)) return dir;
-    if (Platform.isDesktop) return $path.local(dir);
-    return $path.file(dir);
+    return $path.media(dir);
   }
 
   /**
@@ -606,8 +608,13 @@ export function useLiturgyExecution() {
    * URLs remotas/blob seguem o fluxo normal (a falha ali é de rede/formato).
    */
   async function _localFileStatus(dir: string): Promise<LocalFileStatus> {
-    if (!dir || !Platform.isDesktop) return "ok";
+    if (!dir) return "ok";
     if (/^(blob|data):/i.test(dir)) return "ok";
+    if (isManagedLibraryPath(dir)) {
+      const info = await libraryFileInfo(dir).catch(() => null);
+      return info && !info.exists ? "not_found" : "ok";
+    }
+    if (!Platform.isDesktop) return "ok";
     const hasProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir);
     if (hasProtocol && !/^louvorja:\/\/local\//i.test(dir)) return "ok";
     const isLocalPath =

@@ -27,3 +27,8 @@ export function takeLiturgyImport(): File | undefined {
   pendingLiturgyFiles.value = rest;
   return next;
 }
+
+/** Devolve um arquivo que não pôde ser importado agora para a frente da fila. */
+export function returnLiturgyImport(file: File): void {
+  pendingLiturgyFiles.value = [file, ...pendingLiturgyFiles.value];
+}

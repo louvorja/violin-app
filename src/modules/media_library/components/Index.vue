@@ -422,6 +422,14 @@ import {
   fileProjectionPageFor,
   newFileProjectionId,
 } from "@/helpers/FileProjectionPage";
+import {
+  storeLibraryPath,
+  storeLibraryStream,
+  removeLibraryFile,
+  isManagedLibraryPath,
+} from "@/helpers/LibraryFiles";
+import { blobOf, byteSize } from "@/helpers/Bytes";
+import { mimeForName } from "@/helpers/Mime";
 
 const { width: viewportWidth } = useViewport();
 const mobileLayout = computed(() => !Platform.isDesktop && viewportWidth.value <= 1000);
@@ -438,8 +446,10 @@ interface MediaFile {
   type: "image" | "video" | "pdf" | "audio";
   thumb?: string;
   addedAt: number;
-  data?: ArrayBuffer;
+  data?: Blob | ArrayBuffer;
   mime?: string;
+  size?: number;
+  sha256?: string;
   categoryId?: string;
 }
 
@@ -481,7 +491,7 @@ async function loadLibrary(): Promise<MediaFile[]> {
 
 async function saveFile(file: MediaFile): Promise<void> {
   const plain = { ...file };
-  if (plain.data && plain.data.byteLength === 0) {
+  if (plain.data && byteSize(plain.data) === 0) {
     delete plain.data;
   }
   await $idb.put(STORE_LIBRARY, plain);
@@ -742,17 +752,13 @@ function revokeObjectUrl(id: string): void {
   }
 }
 
-function createObjectUrl(id: string, data: ArrayBuffer, mime: string): string {
+function createObjectUrl(id: string, data: Blob | ArrayBuffer, mime: string): string {
   revokeObjectUrl(id);
-  const blob = new Blob([data], { type: mime });
+  const blob = blobOf(data, mime);
+  if (!blob) return "";
   const url = URL.createObjectURL(blob);
   createdObjectUrls.set(id, url);
   return url;
-}
-
-async function readFileData(file: File): Promise<{ data: ArrayBuffer; mime: string }> {
-  const data = await file.arrayBuffer();
-  return { data, mime: file.type || "application/octet-stream" };
 }
 
 /* ------------------------------------------------------------------ */
@@ -951,57 +957,106 @@ async function onDrop(e: DragEvent): Promise<void> {
   showCategorySelect.value = true;
 }
 
+function newMediaId(): string {
+  return "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+}
+
+/**
+ * Grava o arquivo no acervo (desktop) ou no IndexedDB (web) e cria o registro.
+ *
+ * Desktop: copia para `<acervo>/media-library/<id>/` e guarda o caminho
+ * relativo; nenhum byte vai para o banco. Web: grava no OPFS quando disponível
+ * (5 GB) ou no IndexedDB como `Blob` (500 MB).
+ */
+async function saveImportedFile(input: {
+  name: string;
+  type: MediaFile["type"];
+  categoryId: string;
+  sourcePath?: string;
+  blob?: Blob;
+}): Promise<MediaFile> {
+  const id = newMediaId();
+  let name = input.name;
+  let sourcePath = input.sourcePath;
+  let blob = input.blob;
+
+  // HEIC no desktop: o Chromium não decodifica, então converte antes de copiar.
+  if (sourcePath && isHeic(name)) {
+    const response = await fetchWithTimeout($path.media(sourcePath), {
+      timeout: NET_TIMEOUT.MEDIA,
+      source: "file",
+    });
+    const raw = await response.blob();
+    const converted = await ensureRenderableImage(name, new File([raw], name, { type: raw.type }));
+    name = converted.name;
+    blob = converted.blob;
+    sourcePath = undefined;
+  }
+
+  const stored =
+    sourcePath && !isHeic(name)
+      ? await storeLibraryPath("media", id, sourcePath)
+      : await (async () => {
+          if (!blob) throw new Error("missing_file");
+          return storeLibraryStream({
+            kind: "media",
+            recordId: id,
+            name,
+            size: blob.size,
+            open: async () => blob.stream() as ReadableStream<Uint8Array>,
+          });
+        })();
+
+  const path = stored.mode === "path" ? stored.path : URL.createObjectURL(stored.data);
+  const file: MediaFile = {
+    id,
+    name,
+    path,
+    type: input.type,
+    addedAt: Date.now(),
+    size: stored.size,
+    mime: blob?.type || mimeForName(name),
+    ...(stored.mode === "blob" ? { data: stored.data } : {}),
+    ...(stored.mode === "path" && stored.sha256 ? { sha256: stored.sha256 } : {}),
+    categoryId: input.categoryId,
+  };
+  if (input.type === "image") {
+    file.thumb = stored.mode === "path" ? $path.media(path) : path;
+  }
+  if (stored.mode === "blob") createdObjectUrls.set(id, path);
+  try {
+    await saveFile(file);
+  } catch (error) {
+    if (stored.mode === "path") await removeLibraryFile(stored.path);
+    else revokeObjectUrl(id);
+    throw error;
+  }
+  files.value.unshift(file);
+  if (input.type === "video") generateAndStoreThumb(file);
+  return file;
+}
+
 /** Importa um arquivo arrastado (com caminho no desktop ou blob na web). */
 async function importDroppedEntry(f: File, categoryId: string): Promise<void> {
   const filePath = localPathOf(f);
   const tipoDoDrop = tipoDoArquivo(f.name, (f as File).type);
   if (!tipoDoDrop) return;
-  /* Com caminho no disco, o registro guarda só o caminho; os bytes ficam onde
-   * já estavam. HEIC é a exceção: não decodifica no Chromium e precisa ser
-   * convertido antes de virar arquivo autocontido. */
   if (filePath && !isHeic(f.name, (f as File).type)) {
-    const file: MediaFile = {
-      id: "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+    await saveImportedFile({
       name: f.name,
-      path: filePath,
       type: tipoDoDrop,
-      addedAt: Date.now(),
       categoryId,
-    };
-    if (tipoDoDrop === "image") file.thumb = buildThumbPath(filePath);
-    await saveFile(file);
-    files.value.unshift(file);
-    if (tipoDoDrop === "video") generateAndStoreThumb(file);
+      sourcePath: filePath,
+    });
     return;
   }
-  {
-    // Sem caminho (web) ou HEIC/HEIF: armazena autocontido. Só IMAGEM passa
-    // pela conversão; áudio e vídeo vão como vieram, senão o conversor tentaria
-    // decodificar um mp3 como imagem.
-    const { blob, name } =
-      tipoDoDrop === "image"
-        ? await ensureRenderableImage(f.name, f)
-        : { blob: f as Blob, name: f.name };
-    const fileType = tipoDoDrop;
-    const fileId = "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
-    const path = URL.createObjectURL(blob);
-    const { data, mime } = await readFileData(new File([blob], name, { type: blob.type }));
-    const file: MediaFile = {
-      id: fileId,
-      name,
-      path,
-      type: fileType,
-      addedAt: Date.now(),
-      data,
-      mime,
-      categoryId,
-    };
-    if (fileType === "image") file.thumb = path;
-    createdObjectUrls.set(fileId, path);
-    await saveFile(file);
-    files.value.unshift(file);
-    if (fileType === "video") generateAndStoreThumb(file);
-  }
+  // Sem caminho (web) ou HEIC/HEIF: só IMAGEM passa pela conversão; áudio e
+  // vídeo vão como vieram, senão o conversor tentaria decodificar um mp3.
+  const { blob, name } =
+    tipoDoDrop === "image"
+      ? await ensureRenderableImage(f.name, f)
+      : { blob: f as Blob, name: f.name };
+  await saveImportedFile({ name, type: tipoDoDrop, categoryId, blob });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1037,6 +1092,7 @@ async function removeFile(file: MediaFile): Promise<void> {
     savePlaylist();
   }
   await deleteFile(file.id);
+  if (isManagedLibraryPath(file.path)) await removeLibraryFile(file.path);
   files.value = files.value.filter((f) => f.id !== file.id);
 }
 
@@ -1116,7 +1172,7 @@ const podeVoltar = computed(() => {
 
 function buildThumbPath(filePath: string): string | undefined {
   if (Platform.isDesktop) {
-    return $path.local(filePath);
+    return $path.media(filePath);
   }
   return undefined;
 }
@@ -1174,18 +1230,11 @@ async function doAddFiles(categoryId: string): Promise<void> {
         noteUnsupported();
         continue;
       }
-      const file: MediaFile = {
-        id: "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
-        name,
-        path: rawPath,
-        type: fileType,
-        addedAt: Date.now(),
-        categoryId,
-      };
-      if (fileType === "image") file.thumb = buildThumbPath(rawPath);
-      await saveFile(file);
-      files.value.unshift(file);
-      if (fileType === "video") generateAndStoreThumb(file);
+      try {
+        await saveImportedFile({ name, type: fileType, categoryId, sourcePath: rawPath });
+      } catch (error) {
+        if (!reportLocalFileFailure(error, [name])) console.error("[media] import falhou:", error);
+      }
     }
   } else {
     fileInput.value?.click();
@@ -1226,44 +1275,24 @@ async function onFilesSelected(e: Event): Promise<void> {
         continue;
       }
       if (filePath && !isHeic(f.name, (f as File).type)) {
-        const file: MediaFile = {
-          id: "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+        await saveImportedFile({
           name: f.name,
-          path: filePath,
           type: fileType,
-          addedAt: Date.now(),
           categoryId: pendingCategoryId ?? UNCATEGORIZED_ID,
-        };
-        if (fileType === "image") file.thumb = buildThumbPath(filePath);
-        await saveFile(file);
-        files.value.unshift(file);
-        if (fileType === "video") generateAndStoreThumb(file);
+          sourcePath: filePath,
+        });
       } else {
-        // Sem caminho (web/drag-drop) ou HEIC/HEIF: armazena autocontido. Só
-        // IMAGEM é convertida (o Chromium não decodifica HEIC); áudio e vídeo
-        // vão como vieram.
+        // Sem caminho (web/drag-drop) ou HEIC/HEIF: só IMAGEM é convertida.
         const { blob, name } =
           fileType === "image"
             ? await ensureRenderableImage(f.name, f)
             : { blob: f as Blob, name: f.name };
-        const fileId = "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
-        const path = URL.createObjectURL(blob);
-        const { data, mime } = await readFileData(new File([blob], name, { type: blob.type }));
-        const file: MediaFile = {
-          id: fileId,
+        await saveImportedFile({
           name,
-          path,
           type: fileType,
-          addedAt: Date.now(),
-          data,
-          mime,
           categoryId: pendingCategoryId ?? UNCATEGORIZED_ID,
-        };
-        if (fileType === "image") file.thumb = path;
-        createdObjectUrls.set(fileId, path);
-        await saveFile(file);
-        files.value.unshift(file);
-        if (fileType === "video") generateAndStoreThumb(file);
+          blob,
+        });
       }
     } catch (error) {
       if (!reportLocalFileFailure(error, [f.name])) throw error;
@@ -1349,10 +1378,7 @@ function clearPlaylist(): void {
 /* ------------------------------------------------------------------ */
 
 function resolvePath(raw: string): string {
-  if (raw.startsWith("http") || raw.startsWith("blob:") || raw.startsWith("louvorja://"))
-    return raw;
-  if (Platform.isDesktop) return $path.local(raw);
-  return raw;
+  return $path.media(raw);
 }
 
 // Cache de objectURLs de HEIC já convertidos para projeção (por item.id).
@@ -1806,7 +1832,11 @@ onMounted(async () => {
      * Para imagem a troca de um data URL antigo pelo caminho `louvorja://`
      * continua: é o que impede de embutir a imagem inteira no banco.
      */
-    if (Platform.isDesktop && f.type === "image" && f.path.startsWith("/")) {
+    if (
+      Platform.isDesktop &&
+      f.type === "image" &&
+      (f.path.startsWith("/") || isManagedLibraryPath(f.path))
+    ) {
       if (!f.thumb || !f.thumb.startsWith("louvorja://")) {
         f.thumb = buildThumbPath(f.path);
       }

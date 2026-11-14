@@ -330,7 +330,7 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
   // isso a janela de retorno recebe uma URL blob morta e fica preta.
   if (p.libRef?.id && p.url?.startsWith("blob:")) {
     try {
-      const rec = await $idb.get<{ data?: ArrayBuffer; mime?: string; name?: string }>(
+      const rec = await $idb.get<{ data?: Blob | ArrayBuffer; mime?: string; name?: string }>(
         p.libRef.table || DB_TABLE.MEDIA_LIBRARY,
         p.libRef.id
       );

@@ -83,8 +83,11 @@ export interface MediaFile {
   name: string;
   fileName: string;
   path: string;
-  data?: ArrayBuffer;
+  /** Blob (novo) ou ArrayBuffer (legado). */
+  data?: Blob | ArrayBuffer;
   mime?: string;
+  size?: number;
+  sha256?: string;
 }
 
 export interface YouTubeControlPayload {

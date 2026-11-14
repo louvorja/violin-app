@@ -69,6 +69,12 @@ const libraries = [
   { name: "idb", version: "8.0", license: "ISC", url: "https://github.com/jakearchibald/idb" },
   { name: "JSZip", version: "3.10", license: "MIT / GPL-3.0", url: "https://stuk.github.io/jszip" },
   {
+    name: "@zip.js/zip.js",
+    version: "2.25",
+    license: "BSD-3-Clause",
+    url: "https://github.com/gildas-lormeau/zip.js",
+  },
+  {
     name: "PDF.js",
     version: "6.1",
     license: "Apache-2.0",

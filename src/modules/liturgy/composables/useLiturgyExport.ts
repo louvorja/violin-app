@@ -1,11 +1,12 @@
 import { useLiturgyI18n } from "../i18n";
-import { buildPackage, MAX_PACKAGE_BYTES, PACKAGE_EXT, safeFileName } from "../package/format";
+import { buildPackage, MAX_PACKAGE_FILES, PACKAGE_EXT, safeFileName } from "../package/format";
 import {
   collectFiles,
   countExport,
   type CollectDeps,
   type ExportCounts,
   type ExportOptions,
+  type LocalFile,
 } from "../package/collect";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { useBusy } from "@/composables/useBusy";
@@ -16,41 +17,46 @@ import Platform from "@/helpers/Platform";
 import $alert, { escapeHtml } from "@/helpers/Alert";
 import $snackbar from "@/helpers/Snackbar";
 import Telemetry from "@/helpers/Telemetry";
+import { assertWebQuota, maxPackageBytes, usesLargeFileLimit } from "@/helpers/StorageLimits";
+import { libraryFileInfo, openOpfsLibraryFile } from "@/helpers/LibraryFiles";
+import { createExportSink } from "@/helpers/ExportSink";
 import type { LiturgyItem } from "@/types/Liturgy";
 
 type Report = (_error: unknown, _operation: string, _properties?: Record<string, unknown>) => void;
 
-/** Arquivo do disco (desktop) ou já em `louvorja://`. No navegador não há disco. */
-async function readLocal(path: string): Promise<Blob | null> {
+/**
+ * Arquivo do disco (desktop) ou já em `louvorja://`. O stream só é aberto
+ * quando a exportação chega nele — nada de carregar 5 GB na memória.
+ */
+async function readLocal(path: string): Promise<LocalFile | null> {
   if (!path) return null;
-  const isAppUrl = /^louvorja:\/\//i.test(path);
-  if (!isAppUrl && !Platform.isDesktop) return null;
-  const url = isAppUrl ? path : $path.local(path);
+  const opfs = await openOpfsLibraryFile(path);
+  if (opfs) return opfs;
+  if (!Platform.isDesktop) return null;
+  const url = $path.media(path);
   const response = await fetchWithTimeout(url, { timeout: NET_TIMEOUT.MEDIA, source: "file" });
-  return response.ok ? response.blob() : null;
+  if (!response.ok || !response.body) return null;
+  let size = Number(response.headers.get("content-length")) || 0;
+  if (!size) {
+    // Caminho do acervo: o helper sabe o tamanho sem abrir o arquivo.
+    const info = await libraryFileInfo(path).catch(() => null);
+    size = info?.size || 0;
+  }
+  return {
+    size,
+    open: async () => response.body as ReadableStream<Uint8Array>,
+  };
 }
 
 const collectDeps: CollectDeps = {
   get: (table, id) => $idb.get(table, id),
-  getAll: (table) => $idb.getAll(table),
   readLiturgyFile,
   readLocal,
 };
 
 /** Quantos arquivos cada opção da janela de exportação leva. */
-export function countExportFiles(items: LiturgyItem[]): Promise<ExportCounts> {
-  return countExport(items, collectDeps.getAll);
-}
-
-function download(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  a.rel = "noopener";
-  a.click();
-  // Revogar no mesmo passo do clique cancela o download em alguns Chromium.
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+export function countExportFiles(items: LiturgyItem[]): ExportCounts {
+  return countExport(items);
 }
 
 /** Até três nomes, e "+N" — a lista inteira não cabe num aviso. Já escapado. */
@@ -81,14 +87,26 @@ export function useLiturgyExport(report: Report) {
     const result = await run(async () => {
       try {
         const collected = await collectFiles(input.items, options, collectDeps);
-        const size = collected.files.reduce((total, f) => total + f.data.size, 0);
-        if (size > MAX_PACKAGE_BYTES) return { tooLarge: true as const };
-        const blob = await buildPackage({
-          liturgy: input,
-          files: collected.files,
-          appVersion: import.meta.env.VITE_APP_VERSION || "",
-        });
-        return { blob, ...collected };
+        if (collected.files.length > MAX_PACKAGE_FILES) return { tooMany: true as const };
+        const size = collected.files.reduce((total, f) => total + f.size, 0);
+        if (size > maxPackageBytes()) return { tooLarge: true as const };
+        if (!Platform.isDesktop) await assertWebQuota(size);
+        const fileName = `${safeFileName(input.name, "Liturgia")}.${PACKAGE_EXT}`;
+        const sink = await createExportSink(fileName);
+        if (!sink) return { canceled: true as const };
+        try {
+          const built = await buildPackage({
+            liturgy: input,
+            files: collected.files,
+            appVersion: import.meta.env.VITE_APP_VERSION || "",
+            sink: sink.stream,
+          });
+          await sink.commit();
+          return { ...collected, ...built, fileName };
+        } catch (error) {
+          await sink.abort().catch(() => {});
+          throw error;
+        }
       } catch (error) {
         report(error, "export", { format: PACKAGE_EXT });
         console.error("[Liturgia] export falhou:", error);
@@ -99,12 +117,29 @@ export function useLiturgyExport(report: Report) {
       $snackbar.error(t("library.export_error"));
       return;
     }
+    if ("canceled" in result) return;
+    if ("tooMany" in result) {
+      $alert.error({ text: escapeHtml(t("library.export_too_many_files")), translate: false });
+      Telemetry.track("liturgy_operation_blocked", {
+        operation: "export",
+        reason: "too_many_files",
+      });
+      return;
+    }
     if ("tooLarge" in result) {
-      $alert.error({ text: escapeHtml(t("library.export_too_large")), translate: false });
+      $alert.error({
+        text: escapeHtml(
+          t(
+            usesLargeFileLimit()
+              ? "library.export_too_large_desktop"
+              : "library.export_too_large_web"
+          )
+        ),
+        translate: false,
+      });
       Telemetry.track("liturgy_operation_blocked", { operation: "export", reason: "too_large" });
       return;
     }
-    download(result.blob, `${safeFileName(input.name, "Liturgia")}.${PACKAGE_EXT}`);
     Telemetry.track("liturgy_export_completed", {
       format: PACKAGE_EXT,
       item_count: input.items.length,
@@ -114,7 +149,6 @@ export function useLiturgyExport(report: Report) {
       with_media: options.media,
       with_background_sound: options.backgroundSound,
       with_background_projection: options.backgroundProjection,
-      with_background_projection_all: options.backgroundProjectionAll,
     });
 
     const warnings: string[] = [];

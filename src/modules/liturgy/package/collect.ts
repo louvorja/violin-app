@@ -1,15 +1,18 @@
 /**
  * Junta, para a exportação, os arquivos que a liturgia usa: os dos itens do
  * tipo arquivo (sempre) e, conforme as opções, os da Biblioteca de Mídia, do
- * Som de Fundo e a biblioteca inteira da Projeção de Fundo.
+ * Som de Fundo e da Projeção de Fundo usados pela liturgia.
  *
- * O acesso ao IndexedDB e ao disco entra por `deps`, para os testes não
- * precisarem de nenhum dos dois.
+ * A coleta não lê bytes: devolve `PackageEntry` com tamanho e um `open()` que
+ * só então abre o stream. O acesso ao IndexedDB e ao disco entra por `deps`,
+ * para os testes não precisarem de nenhum dos dois.
  */
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { DB_TABLE } from "@/constants/DbTables";
 import type { LiturgyItem } from "@/types/Liturgy";
-import type { FileSource, PackageFile } from "./format";
+import { blobOf } from "@/helpers/Bytes";
+import { extensionForMime } from "@/helpers/Mime";
+import type { FileSource, PackageEntry } from "./format";
 
 export interface ExportOptions {
   /** Arquivos da Biblioteca de Mídia que a liturgia usa. */
@@ -18,15 +21,12 @@ export interface ExportOptions {
   backgroundSound: boolean;
   /** Imagens e vídeos da Projeção de Fundo que a liturgia usa. */
   backgroundProjection: boolean;
-  /** A biblioteca inteira da Projeção de Fundo, além do que a liturgia usa. */
-  backgroundProjectionAll: boolean;
 }
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   media: true,
   backgroundSound: true,
   backgroundProjection: true,
-  backgroundProjectionAll: false,
 };
 
 export interface ExportCounts {
@@ -34,7 +34,6 @@ export interface ExportCounts {
   media: number;
   backgroundSound: number;
   backgroundProjection: number;
-  backgroundProjectionAll: number;
 }
 
 /** Registro de biblioteca como está no IndexedDB (os campos que interessam aqui). */
@@ -47,17 +46,27 @@ export interface LibraryRecord {
   mime?: string;
 }
 
+/** Arquivo que mora no disco, aberto sob demanda. */
+export interface LocalFile {
+  size: number;
+  open: () => Promise<ReadableStream<Uint8Array> | null>;
+}
+
 export interface CollectDeps {
   get: (_table: string, _id: string) => Promise<LibraryRecord | undefined>;
-  getAll: (_table: string) => Promise<LibraryRecord[]>;
   /** Arquivo que o item de arquivo guardou no app (`ref_id`). */
-  readLiturgyFile: (_id: string) => Promise<{ name: string; data: Blob } | null>;
+  readLiturgyFile: (_id: string) => Promise<{
+    name: string;
+    mime: string;
+    size: number;
+    open: () => Promise<ReadableStream<Uint8Array> | null>;
+  } | null>;
   /** Arquivo do disco (desktop) ou `louvorja://`; `null` se não der para ler. */
-  readLocal: (_path: string) => Promise<Blob | null>;
+  readLocal: (_path: string) => Promise<LocalFile | null>;
 }
 
 export interface CollectResult {
-  files: PackageFile[];
+  files: PackageEntry[];
   /** Itens cujo arquivo não foi achado — vão sem ele. */
   missing: string[];
   /** Itens que dependem de algo que só existe neste computador e não vai no pacote. */
@@ -116,23 +125,13 @@ function refsOf(items: LiturgyItem[], tipo: string): Set<string> {
 }
 
 /** Quantos arquivos cada opção leva — para a janela de exportação. */
-export async function countExport(
-  items: LiturgyItem[],
-  getAll: CollectDeps["getAll"]
-): Promise<ExportCounts> {
+export function countExport(items: LiturgyItem[]): ExportCounts {
   const liturgy = new Set(items.filter(carriesFile).map((i) => i.ref_id || i.id)).size;
-  let backgroundProjectionAll = 0;
-  try {
-    backgroundProjectionAll = (await getAll(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY)).length;
-  } catch {
-    backgroundProjectionAll = 0;
-  }
   return {
     liturgy,
     media: refsOf(items, LiturgyItemTypeEnum.MEDIA_LIBRARY).size,
     backgroundSound: refsOf(items, LiturgyItemTypeEnum.BG_SOUND).size,
     backgroundProjection: refsOf(items, LiturgyItemTypeEnum.BG_PROJECTION).size,
-    backgroundProjectionAll,
   };
 }
 
@@ -144,19 +143,6 @@ function baseName(path: string): string {
   }
 }
 
-const MIME_EXT: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/gif": "gif",
-  "video/mp4": "mp4",
-  "video/webm": "webm",
-  "audio/mpeg": "mp3",
-  "audio/ogg": "ogg",
-  "audio/wav": "wav",
-  "application/pdf": "pdf",
-};
-
 /**
  * Nome com extensão: o operador pode ter renomeado o item na biblioteca ("Abertura"),
  * e quem importa precisa da extensão para saber o tipo.
@@ -165,36 +151,30 @@ export function nameWithExtension(name: string, path: string, mime: string): str
   const clean = (name || "").trim();
   if (/\.[a-z\d]{2,5}$/i.test(clean)) return clean;
   const fromPath = baseName(path || "").match(/\.([a-z\d]{2,5})$/i)?.[1];
-  const ext = fromPath || MIME_EXT[(mime || "").toLowerCase()];
+  const ext = fromPath || extensionForMime(mime, "");
   const base = clean || baseName(path || "").replace(/\.[^.]*$/, "") || "arquivo";
   return ext ? `${base}.${ext}` : base;
 }
 
-/**
- * Bytes guardados no registro. O IndexedDB devolve `ArrayBuffer` (às vezes um
- * `Uint8Array`), e de outro "realm" o `instanceof` falha — daí a checagem pela
- * marca do objeto.
- */
-function storedBytes(data: unknown, mime: string): Blob | null {
-  if (!data) return null;
-  if (typeof Blob !== "undefined" && data instanceof Blob) return data.size ? data : null;
-  const tag = Object.prototype.toString.call(data);
-  if (tag === "[object ArrayBuffer]") {
-    const buffer = data as ArrayBuffer;
-    return buffer.byteLength ? new Blob([buffer], { type: mime }) : null;
-  }
-  if (ArrayBuffer.isView(data)) {
-    const view = data as ArrayBufferView;
-    return view.byteLength ? new Blob([view as BlobPart], { type: mime }) : null;
-  }
-  return null;
+/** Bytes guardados no registro, em qualquer uma das formas que o IDB devolve. */
+function storedBytes(data: unknown, mime: string): { size: number; blob: Blob } | null {
+  const blob = blobOf(data, mime);
+  return blob && blob.size ? { size: blob.size, blob } : null;
 }
 
 /** Bytes de um registro de biblioteca: guardados no IndexedDB ou no disco. */
-async function bytesOf(record: LibraryRecord, deps: CollectDeps): Promise<Blob | null> {
+async function bytesOf(
+  record: LibraryRecord,
+  deps: CollectDeps
+): Promise<{ size: number; open: () => Promise<ReadableStream<Uint8Array> | null> } | null> {
   const mime = record.mime || "";
   const stored = storedBytes(record.data, mime);
-  if (stored) return stored;
+  if (stored) {
+    return {
+      size: stored.size,
+      open: async () => stored.blob.stream() as ReadableStream<Uint8Array>,
+    };
+  }
   const path = record.path || "";
   // Blob de outra sessão sem bytes guardados, ou endereço da internet: não há o que levar.
   if (!path || /^(blob|data|https?):/i.test(path)) return null;
@@ -205,29 +185,31 @@ async function fromLibrary(
   source: FileSource,
   record: LibraryRecord,
   deps: CollectDeps
-): Promise<PackageFile | null> {
+): Promise<PackageEntry | null> {
   const data = await bytesOf(record, deps).catch(() => null);
   if (!data || !data.size) return null;
-  const mime = record.mime || data.type || "";
+  const mime = record.mime || "";
   return {
     source,
     sourceId: record.id,
     name: nameWithExtension(record.fileName || record.name || "", record.path || "", mime),
     mime,
-    data,
+    size: data.size,
+    open: data.open,
   };
 }
 
-async function fromLiturgyItem(item: LiturgyItem, deps: CollectDeps): Promise<PackageFile | null> {
+async function fromLiturgyItem(item: LiturgyItem, deps: CollectDeps): Promise<PackageEntry | null> {
   if (item.ref_id) {
     const stored = await deps.readLiturgyFile(item.ref_id).catch(() => null);
-    if (!stored || !stored.data.size) return null;
+    if (!stored || !stored.size) return null;
     return {
       source: "liturgy",
       sourceId: item.ref_id,
-      name: nameWithExtension(stored.name, item.dir || "", stored.data.type),
-      mime: stored.data.type || "",
-      data: stored.data,
+      name: nameWithExtension(stored.name, item.dir || "", stored.mime),
+      mime: stored.mime || "",
+      size: stored.size,
+      open: stored.open,
     };
   }
   const dir = item.dir || "";
@@ -236,9 +218,10 @@ async function fromLiturgyItem(item: LiturgyItem, deps: CollectDeps): Promise<Pa
   return {
     source: "liturgy",
     sourceId: item.id,
-    name: nameWithExtension(baseName(dir), dir, data.type),
-    mime: data.type || "",
-    data,
+    name: nameWithExtension(baseName(dir), dir, ""),
+    mime: "",
+    size: data.size,
+    open: data.open,
   };
 }
 
@@ -247,13 +230,13 @@ export async function collectFiles(
   options: ExportOptions,
   deps: CollectDeps
 ): Promise<CollectResult> {
-  const files: PackageFile[] = [];
+  const files: PackageEntry[] = [];
   const missing: string[] = [];
   const localOnly: string[] = [];
   const done = new Map<string, boolean>();
 
   /** Lê cada origem uma vez, mesmo com vários itens apontando para ela. */
-  async function once(key: string, load: () => Promise<PackageFile | null>): Promise<boolean> {
+  async function once(key: string, load: () => Promise<PackageEntry | null>): Promise<boolean> {
     if (done.has(key)) return done.get(key) as boolean;
     const file = await load().catch(() => null);
     if (file) files.push(file);
@@ -272,11 +255,7 @@ export async function collectFiles(
       case LiturgyItemTypeEnum.BG_SOUND:
       case LiturgyItemTypeEnum.BG_PROJECTION: {
         const lib = LIBRARY_OF[item.tipo];
-        // Com a biblioteca inteira marcada, a usada vai junto mesmo desmarcada.
-        const chosen =
-          options[lib.option] ||
-          (lib.source === "background-projection" && options.backgroundProjectionAll);
-        if (!chosen) {
+        if (!options[lib.option]) {
           localOnly.push(displayName(item));
           break;
         }
@@ -301,16 +280,6 @@ export async function collectFiles(
       case LiturgyItemTypeEnum.OVERLAY:
         localOnly.push(displayName(item));
         break;
-    }
-  }
-
-  if (options.backgroundProjectionAll) {
-    const all = await deps.getAll(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY).catch(() => []);
-    for (const record of all) {
-      if (!record?.id) continue;
-      await once(`background-projection:${record.id}`, () =>
-        fromLibrary("background-projection", record, deps)
-      );
     }
   }
 
