@@ -71,6 +71,60 @@ export function managedLibraryRel(value: unknown): string | null {
   return tail ? tail[1] : null;
 }
 
+/**
+ * Extrai o caminho relativo apenas de referências locais de biblioteca
+ * (`<kind>/<id>/<nome>`, `opfs:...`, `louvorja://files/...` ou `/__opfs/...`),
+ * ignorando URLs HTTP/HTTPS externas.
+ */
+export function extractManagedLibraryRel(value: unknown): string | null {
+  if (typeof value !== "string" || !value || value.includes("\0")) return null;
+  const trimmed = value.trim();
+  if (/^(https?|blob|data):/i.test(trimmed)) return null;
+
+  let candidate = trimmed;
+  if (candidate.startsWith("opfs:")) {
+    candidate = candidate.slice(5);
+  } else if (/^louvorja:\/\/files\//i.test(candidate)) {
+    const pathPart = candidate.slice("louvorja://files/".length).split(/[?#]/)[0];
+    try {
+      candidate = decodeURIComponent(pathPart);
+    } catch {
+      candidate = pathPart;
+    }
+  } else {
+    const opfsMarker = candidate.match(/(?:^|\/)__opfs\/([^?#]+)/);
+    if (opfsMarker) {
+      try {
+        candidate = decodeURIComponent(opfsMarker[1]);
+      } catch {
+        candidate = opfsMarker[1];
+      }
+    }
+  }
+  const normalized = candidate.replace(/\\/g, "/").replace(/^\/+/, "");
+  return MANAGED_RE.test(normalized) && isOpfsRel(normalized) ? normalized : null;
+}
+
+/** Percorre registros de tabela e lista caminhos relativos das bibliotecas. */
+export function collectManagedLibraryRels(rows: unknown[]): string[] {
+  const out = new Set<string>();
+  const walk = (value: unknown): void => {
+    if (typeof value === "string") {
+      const rel = extractManagedLibraryRel(value);
+      if (rel) out.add(rel);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item);
+      return;
+    }
+    for (const item of Object.values(value as Record<string, unknown>)) walk(item);
+  };
+  for (const row of rows) walk(row);
+  return [...out];
+}
+
 function api() {
   return Platform.api as LouvorjaApi | null;
 }
@@ -216,6 +270,48 @@ export async function openOpfsLibraryFile(
     size: file.size,
     open: async () => file.stream() as ReadableStream<Uint8Array>,
   };
+}
+
+const READ_CHUNK_BYTES = 2 * 1024 * 1024;
+
+/** Stream de um arquivo físico do acervo desktop via IPC sem carregar na RAM. */
+export async function openDesktopLibraryFile(
+  rel: string
+): Promise<{ size: number; mime: string; open: () => Promise<ReadableStream<Uint8Array>> } | null> {
+  const desktop = api()?.libraryFiles;
+  if (!Platform.isDesktop || !desktop?.openRead || !isOpfsRel(rel)) return null;
+  const opened = await desktop.openRead(rel).catch(() => null);
+  if (!opened) return null;
+  let closed = false;
+  const closeOnce = () => {
+    if (closed) return;
+    closed = true;
+    void desktop.closeRead(opened.token).catch(() => {});
+  };
+  const open = async (): Promise<ReadableStream<Uint8Array>> => {
+    let streamOpened = false;
+    return new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (!streamOpened) streamOpened = true;
+        try {
+          const chunk = await desktop.readChunk(opened.token, READ_CHUNK_BYTES);
+          if (!chunk || chunk.byteLength === 0) {
+            closeOnce();
+            controller.close();
+            return;
+          }
+          controller.enqueue(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk));
+        } catch (error) {
+          closeOnce();
+          controller.error(error);
+        }
+      },
+      cancel() {
+        closeOnce();
+      },
+    });
+  };
+  return { size: opened.size, mime: mimeForName(rel), open };
 }
 
 /**

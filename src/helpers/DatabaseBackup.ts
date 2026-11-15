@@ -9,24 +9,40 @@ import {
 import { loadZipJs } from "@/helpers/Zip";
 import { createExportSink } from "@/helpers/ExportSink";
 import {
+  collectManagedLibraryRels,
+  extractManagedLibraryRel,
+  isManagedLibraryPath,
+  openDesktopLibraryFile,
+} from "@/helpers/LibraryFiles";
+import {
   copyOpfsFile,
   isOpfsRel,
   isOpfsSupported,
   listOpfs,
+  listOpfsStagingTokens,
   opfsInfo,
+  opfsPathOf,
+  opfsUrl,
+  pruneOpfsStaging,
   readOpfsFile,
+  readOpfsText,
   relOf,
   removeOpfs,
   removeStaging,
+  stagingJournalRel,
   stagingRel,
   writeOpfsStream,
+  writeOpfsText,
 } from "@/helpers/OpfsStore";
+import Path from "@/helpers/Path";
 import { mimeForName } from "@/helpers/Mime";
 import { assertWebQuota } from "@/helpers/StorageLimits";
 import Platform from "@/helpers/Platform";
 
 const EXPORT_FORMAT = "louvorja-violin-db";
 const EXPORT_VERSION = 3;
+const BACKUP_LOCK_KEY = "lj:opfs-backup-restore";
+const BACKUP_COMMIT_MARKER_ID = "__backup_commit__";
 
 const BACKUP_TABLES = Array.from(new Set(Object.values(DB_TABLE)));
 
@@ -35,7 +51,7 @@ interface BackupManifestTable {
   rows: number;
 }
 
-interface BackupManifestOpfs {
+interface BackupManifestFile {
   path: string;
   zipPath: string;
   size: number;
@@ -48,8 +64,17 @@ interface BackupManifest {
   db_name: string;
   exported_at: string;
   app_version: string;
+  platform?: "desktop" | "web";
   tables: BackupManifestTable[];
-  opfs?: BackupManifestOpfs[];
+  opfs?: BackupManifestFile[];
+  library?: BackupManifestFile[];
+}
+
+interface OpfsRestoreJournal {
+  token: string;
+  status: "committing-files" | "committing-db" | "committed";
+  hasLibraryFiles: boolean;
+  files: Array<{ rel: string; existed: boolean }>;
 }
 
 export interface BackupExportResult {
@@ -131,6 +156,65 @@ function collectOpfsPaths(rows: unknown[]): string[] {
   return [...out];
 }
 
+function adaptStringForTarget(value: string, target: "desktop" | "web"): string {
+  const rel = extractManagedLibraryRel(value);
+  if (!rel) return value;
+  const trimmed = value.trim();
+  if (target === "desktop") {
+    if (trimmed.startsWith("opfs:")) return rel;
+    if (/(?:^|\/)__opfs\//.test(trimmed)) return Path.media(rel);
+    return value;
+  }
+  if (/^louvorja:\/\/files\//i.test(trimmed)) return opfsUrl(rel);
+  if (!trimmed.startsWith("opfs:") && isManagedLibraryPath(trimmed)) return opfsPathOf(rel);
+  return value;
+}
+
+function adaptValueForTarget(value: unknown, target: "desktop" | "web"): unknown {
+  if (typeof value === "string") return adaptStringForTarget(value, target);
+  if (!value || typeof value !== "object") return value;
+  if (value instanceof Blob || value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => adaptValueForTarget(item, target));
+  }
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = adaptValueForTarget(v, target);
+  }
+  return out;
+}
+
+function adaptRowsForTargetPlatform(
+  data: Map<string, Array<Record<string, unknown>>>,
+  target: "desktop" | "web" | null
+): void {
+  if (!target) return;
+  for (const [table, rows] of data) {
+    data.set(
+      table,
+      rows
+        .filter((row) => !(table === DB_TABLE.CACHE && row.id === BACKUP_COMMIT_MARKER_ID))
+        .map((row) => adaptValueForTarget(row, target) as Record<string, unknown>)
+    );
+  }
+}
+
+async function withBackupLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks =
+    typeof navigator !== "undefined"
+      ? (navigator as Navigator & { locks?: LockManager }).locks
+      : undefined;
+  if (!locks?.request) return fn();
+  return locks.request(BACKUP_LOCK_KEY, { ifAvailable: true }, async (lock) => {
+    if (!lock) {
+      throw new Error("Já existe uma restauração de backup em andamento em outra aba.");
+    }
+    return fn();
+  });
+}
+
 /** Estimativa do ZIP: metadados + binários + arquivos OPFS (sem lê-los). */
 async function estimateBackupBytes(
   rowsByTable: Map<string, Array<Record<string, unknown>>>
@@ -185,7 +269,13 @@ async function exportStreaming(
       total: totalSteps,
       detail: table,
     });
-    rowsByTable.set(table, await $idb.getAll<Record<string, unknown>>(table));
+    const rows = await $idb.getAll<Record<string, unknown>>(table);
+    rowsByTable.set(
+      table,
+      table === DB_TABLE.CACHE
+        ? rows.filter((row) => row.id !== BACKUP_COMMIT_MARKER_ID)
+        : rows
+    );
   }
   if (!Platform.isDesktop) {
     const estimated = await estimateBackupBytes(rowsByTable);
@@ -197,8 +287,9 @@ async function exportStreaming(
   const { ZipWriter, TextReader, BlobReader, Uint8ArrayReader } = await loadZipJs();
   const writer = new ZipWriter(sink.stream, { level: 0 });
   const manifestTables: BackupManifestTable[] = [];
-  const opfsFiles: BackupManifestOpfs[] = [];
-  const seenOpfs = new Set<string>();
+  const opfsFiles: BackupManifestFile[] = [];
+  const libraryFiles: BackupManifestFile[] = [];
+  const seenFiles = new Set<string>();
   let totalRows = 0;
   let binaryId = 0;
 
@@ -227,19 +318,42 @@ async function exportStreaming(
       }
       await writer.add(tableFileName(table), new TextReader(json), { level: 6 });
 
-      for (const rel of collectOpfsPaths(rows)) {
-        if (seenOpfs.has(rel) || !isOpfsRel(rel)) continue;
-        seenOpfs.add(rel);
-        const file = await readOpfsFile(rel);
-        if (!file) continue;
-        const zipPath = `opfs/${rel}`;
-        await writer.add(zipPath, new BlobReader(file), { level: 0 });
-        opfsFiles.push({
-          path: rel,
-          zipPath,
-          size: file.size,
-          mime: file.type || mimeForName(rel),
-        });
+      if (Platform.isDesktop) {
+        for (const rel of collectManagedLibraryRels(rows)) {
+          if (seenFiles.has(rel)) continue;
+          seenFiles.add(rel);
+          const source = await openDesktopLibraryFile(rel);
+          if (!source) continue;
+          const stream = await source.open().catch(() => null);
+          if (!stream) continue;
+          const zipPath = `library/${rel}`;
+          await writer.add(
+            zipPath,
+            { readable: stream, size: source.size },
+            { level: 0 }
+          );
+          libraryFiles.push({
+            path: rel,
+            zipPath,
+            size: source.size,
+            mime: source.mime || mimeForName(rel),
+          });
+        }
+      } else {
+        for (const rel of collectOpfsPaths(rows)) {
+          if (seenFiles.has(rel) || !isOpfsRel(rel)) continue;
+          seenFiles.add(rel);
+          const file = await readOpfsFile(rel);
+          if (!file) continue;
+          const zipPath = `opfs/${rel}`;
+          await writer.add(zipPath, new BlobReader(file), { level: 0 });
+          opfsFiles.push({
+            path: rel,
+            zipPath,
+            size: file.size,
+            mime: file.type || mimeForName(rel),
+          });
+        }
       }
     }
 
@@ -249,8 +363,10 @@ async function exportStreaming(
       db_name: DB_NAME,
       exported_at: new Date().toISOString(),
       app_version: import.meta.env.VITE_APP_VERSION || "",
+      platform: Platform.isDesktop ? "desktop" : "web",
       tables: manifestTables,
       opfs: opfsFiles,
+      ...(libraryFiles.length ? { library: libraryFiles } : {}),
     };
 
     await writer.add(manifestFileName(), new TextReader(JSON.stringify(manifest, null, 2)), {
@@ -282,6 +398,45 @@ async function restoreTables(previous: Map<string, Array<Record<string, unknown>
   for (const table of BACKUP_TABLES) await $idb.clear(table);
   for (const [table, rows] of previous) {
     for (const row of rows) await $idb.put(table, row as { id: string });
+  }
+}
+
+async function commitDatabaseTables(
+  data: Map<string, Array<Record<string, unknown>>>,
+  commitMarker?: { table: string; row: { id: string; token: string } }
+): Promise<Map<string, Array<Record<string, unknown>>> | null> {
+  const idbWithBatch = $idb as typeof $idb & {
+    replaceAllTables?: (
+      _data: ReadonlyMap<string, ReadonlyArray<{ id: string }>>,
+      _clearTables: readonly string[],
+      _commitMarker?: { table: string; row: { id: string } }
+    ) => Promise<void>;
+  };
+
+  if (typeof idbWithBatch.replaceAllTables === "function") {
+    await idbWithBatch.replaceAllTables(
+      data as unknown as ReadonlyMap<string, ReadonlyArray<{ id: string }>>,
+      BACKUP_TABLES,
+      commitMarker
+    );
+    return null;
+  }
+
+  const previous = await snapshotTables();
+  try {
+    for (const table of BACKUP_TABLES) await $idb.clear(table);
+    for (const [table, rows] of data) {
+      for (const row of rows) await $idb.put(table, row as { id: string });
+    }
+    if (commitMarker) {
+      await $idb.put(commitMarker.table, commitMarker.row);
+    }
+    return previous;
+  } catch (error) {
+    await restoreTables(previous).catch((restoreError) => {
+      console.error("[Backup] rollback do banco falhou:", restoreError);
+    });
+    throw error;
   }
 }
 
@@ -318,31 +473,13 @@ async function importLegacy(
     totalRows += rows.length;
   }
 
-  const previous = await snapshotTables();
-  try {
-    onProgress?.({
-      phase: "import",
-      current: tableNames.length + 1,
-      total: tableNames.length + 2,
-      detail: "clearing",
-    });
-    for (const table of BACKUP_TABLES) await $idb.clear(table);
-
-    onProgress?.({
-      phase: "import",
-      current: tableNames.length + 2,
-      total: tableNames.length + 2,
-      detail: "writing",
-    });
-    for (const [table, rows] of data) {
-      for (const row of rows) await $idb.put(table, row as { id: string });
-    }
-  } catch (error) {
-    await restoreTables(previous).catch((restoreError) => {
-      console.error("[Backup] rollback do banco falhou:", restoreError);
-    });
-    throw error;
-  }
+  onProgress?.({
+    phase: "import",
+    current: tableNames.length + 1,
+    total: tableNames.length + 2,
+    detail: "writing",
+  });
+  await commitDatabaseTables(data);
 
   return { tables: data.size, rows: totalRows };
 }
@@ -357,7 +494,7 @@ async function cleanupOpfsOrphans(
   for (const rows of data.values()) {
     for (const rel of collectOpfsPaths(rows)) known.add(rel);
   }
-  // Backup de desktop/IDB não referencia OPFS; não apagar o acervo OPFS local.
+  // Backup sem OPFS não deve apagar um acervo OPFS pré-existente sem solicitação.
   if (!known.size && !force) return 0;
   let removed = 0;
   for (const entry of await listOpfs()) {
@@ -367,6 +504,156 @@ async function cleanupOpfsOrphans(
   return removed;
 }
 
+function entryReadableStream(entry: import("@zip.js/zip.js").FileEntry): ReadableStream<Uint8Array> {
+  const stream = new TransformStream<Uint8Array, Uint8Array>();
+  void entry.getData(stream.writable).catch((error: unknown) => {
+    void stream.writable.abort(error).catch(() => {});
+  });
+  return stream.readable;
+}
+
+async function writeStreamToDesktopStaging(
+  restoreToken: string,
+  rel: string,
+  size: number,
+  stream: ReadableStream<Uint8Array>
+): Promise<void> {
+  const desktop = (Platform.api as LouvorjaApi | null)?.libraryFiles;
+  if (!desktop?.stageBegin) {
+    throw new Error("API desktop indisponível para restaurar arquivos da biblioteca.");
+  }
+  const { token } = await desktop.stageBegin({ restoreToken, rel, size });
+  const reader = stream.getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.byteLength) continue;
+      await desktop.write(token, value);
+    }
+    await desktop.end(token);
+  } catch (error) {
+    await desktop.abort(token).catch(() => {});
+    await reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+async function rollbackOpfsJournal(journal: OpfsRestoreJournal): Promise<void> {
+  for (const item of [...journal.files].reverse()) {
+    try {
+      if (item.existed) {
+        const rbRel = stagingRel(journal.token, "rollback", item.rel);
+        if ((await opfsInfo(rbRel)).exists) {
+          await copyOpfsFile(rbRel, item.rel);
+        }
+      } else {
+        await removeOpfs(item.rel);
+      }
+    } catch (error) {
+      console.error("[Backup] rollback do arquivo OPFS falhou:", item.rel, error);
+    }
+  }
+}
+
+async function clearBackupCommitMarker(expectedToken?: string): Promise<void> {
+  try {
+    const idb = $idb as typeof $idb & {
+      get?: <T>(_table: string, _id: string) => Promise<T | undefined>;
+      del?: (_table: string, _id: string) => Promise<void>;
+    };
+    if (typeof idb.del !== "function") return;
+    if (expectedToken && typeof idb.get === "function") {
+      const current = await idb
+        .get<{ id: string; token?: string }>(DB_TABLE.CACHE, BACKUP_COMMIT_MARKER_ID)
+        .catch(() => undefined);
+      if (current && current.token !== expectedToken) return;
+    }
+    await idb.del(DB_TABLE.CACHE, BACKUP_COMMIT_MARKER_ID);
+  } catch {
+    /* melhor esforço após commit */
+  }
+}
+
+/**
+ * Recupera ou limpa uma restauração web interrompida no boot, respeitando o
+ * bloqueio entre abas para nunca apagar staging de uma restauração ativa.
+ */
+export async function recoverPendingBackupRestore(): Promise<void> {
+  if (Platform.isDesktop || !isOpfsSupported()) return;
+  await withBackupLock(async () => {
+    const tokens = await listOpfsStagingTokens();
+    const idb = $idb as typeof $idb & {
+      get?: <T>(_table: string, _id: string) => Promise<T | undefined>;
+    };
+    const commitMarker =
+      typeof idb.get === "function"
+        ? await idb
+            .get<{ id: string; token?: string }>(DB_TABLE.CACHE, BACKUP_COMMIT_MARKER_ID)
+            .catch(() => undefined)
+        : undefined;
+
+    for (const token of tokens) {
+      const raw = await readOpfsText(stagingJournalRel(token)).catch(() => null);
+      if (!raw) {
+        await removeStaging(token).catch(() => {});
+        continue;
+      }
+      let journal: OpfsRestoreJournal | null = null;
+      try {
+        journal = JSON.parse(raw) as OpfsRestoreJournal;
+      } catch {
+        journal = null;
+      }
+      if (!journal || journal.token !== token) {
+        await removeStaging(token).catch(() => {});
+        continue;
+      }
+      const dbCommitted =
+        journal.status === "committed" ||
+        (commitMarker?.token !== undefined && commitMarker.token === token);
+      if (!dbCommitted && journal.status !== "committing-files" && journal.status !== "committing-db") {
+        await removeStaging(token).catch(() => {});
+        continue;
+      }
+      if (!dbCommitted) {
+        await rollbackOpfsJournal(journal);
+      } else {
+        await clearBackupCommitMarker(token);
+      }
+      await removeStaging(token).catch(() => {});
+    }
+    await pruneOpfsStaging().catch(() => false);
+  }).catch(() => {});
+}
+
+function collectIncomingManifestFiles(manifest: BackupManifest): BackupManifestFile[] {
+  const seen = new Set<string>();
+  const out: BackupManifestFile[] = [];
+  for (const list of [manifest.opfs, manifest.library]) {
+    if (!Array.isArray(list)) continue;
+    for (const item of list) {
+      if (
+        !item ||
+        typeof item.path !== "string" ||
+        !isManagedLibraryPath(item.path) ||
+        !isOpfsRel(item.path) ||
+        item.path.startsWith("liturgy-temp/") ||
+        typeof item.zipPath !== "string"
+      ) {
+        continue;
+      }
+      const normalizedRel = item.path.replace(/\\/g, "/");
+      if (seen.has(normalizedRel)) continue;
+      seen.add(normalizedRel);
+      out.push({ ...item, path: normalizedRel });
+    }
+  }
+  return out;
+}
+
 async function importStreaming(
   entries: import("@zip.js/zip.js").Entry[],
   manifest: BackupManifest,
@@ -374,15 +661,22 @@ async function importStreaming(
 ): Promise<BackupImportResult> {
   const { TextWriter, Uint8ArrayWriter } = await loadZipJs();
   const token = crypto.randomUUID();
-  const staged: { rel: string; stagedRel: string; size: number }[] = [];
-  const committed: { rel: string; existed: boolean }[] = [];
-  let previous: Map<string, Array<Record<string, unknown>>> | null = null;
+  const stagedOpfs: { rel: string; stagedRel: string; size: number }[] = [];
+  const committedOpfs: { rel: string; existed: boolean }[] = [];
+  const stagedDesktopRels: string[] = [];
+  let desktopCommitted: Array<{ rel: string; existed: boolean }> = [];
+  let previousFallback: Map<string, Array<Record<string, unknown>>> | null = null;
+  let opfsJournal: OpfsRestoreJournal | null = null;
+  let dbCommitted = false;
 
   try {
     const byPath = new Map(
       entries
         .filter((entry) => !entry.directory)
-        .map((entry) => [entry.filename.replace(/\\/g, "/").toLowerCase(), entry])
+        .map((entry) => [
+          entry.filename.replace(/\\/g, "/").toLowerCase(),
+          entry as import("@zip.js/zip.js").FileEntry,
+        ])
     );
 
     const tables = Array.isArray(manifest.tables) ? manifest.tables : [];
@@ -391,38 +685,24 @@ async function importStreaming(
       .filter((name): name is string => typeof name === "string" && BACKUP_TABLES.includes(name));
     if (tableNames.length === 0) throw new Error("Arquivo de backup sem tabelas");
 
-    const opfsFiles = Array.isArray(manifest.opfs) ? manifest.opfs : [];
-    if (opfsFiles.length && (Platform.isDesktop || !isOpfsSupported())) {
+    const incomingFiles = collectIncomingManifestFiles(manifest);
+    if (incomingFiles.length && !Platform.isDesktop && !isOpfsSupported()) {
       throw new Error(
-        "Este backup foi feito no navegador e contém arquivos OPFS; importe-o no navegador."
+        "Este navegador não suporta OPFS para restaurar arquivos da biblioteca; use um navegador compatível ou o aplicativo desktop."
       );
     }
 
-    const total = opfsFiles.length * 2 + tableNames.length + 4;
+    const total = incomingFiles.length * 2 + tableNames.length + 4;
     let step = 0;
 
-    // 1) Tudo vai para staging; nada do destino é tocado ainda.
-    for (const item of opfsFiles) {
-      if (
-        !item ||
-        !isOpfsRel(item.path) ||
-        item.path.startsWith("liturgy-temp/") ||
-        typeof item.zipPath !== "string"
-      )
-        continue;
-      const entry = byPath.get(item.zipPath.toLowerCase());
-      if (!entry) throw new Error(`Arquivo OPFS ausente no backup: ${item.zipPath}`);
-      step += 1;
-      onProgress?.({ phase: "import", current: step, total, detail: item.path });
-      const stagedRel = stagingRel(token, "restore", item.path);
-      const stream = new TransformStream<Uint8Array, Uint8Array>();
-      void entry.getData(stream.writable).catch((error: unknown) => {
-        void stream.writable.abort(error).catch(() => {});
-      });
-      await writeOpfsStream(stagedRel, stream.readable, item.size);
-      staged.push({ rel: item.path, stagedRel, size: item.size });
+    // Confere todas as entradas antes de gravar qualquer arquivo.
+    for (const item of incomingFiles) {
+      if (!byPath.has(item.zipPath.toLowerCase())) {
+        throw new Error(`Arquivo da biblioteca ausente no backup: ${item.zipPath}`);
+      }
     }
 
+    // Decodifica e valida todas as tabelas antes de tocar no destino.
     const data = new Map<string, Array<Record<string, unknown>>>();
     let totalRows = 0;
     const readBinary = async (path: string): Promise<ArrayBuffer | null> => {
@@ -444,62 +724,131 @@ async function importStreaming(
       totalRows += rows.length;
     }
 
-    previous = await snapshotTables();
+    const targetPlatform = Platform.isDesktop
+      ? "desktop"
+      : isOpfsSupported()
+        ? "web"
+        : null;
+    adaptRowsForTargetPlatform(data, targetPlatform);
 
-    // 2) Commit: preserva o antigo em rollback e só então troca.
-    for (const item of staged) {
+    // 1) Tudo vai primeiro para staging; nada do destino foi alterado ainda.
+    for (const item of incomingFiles) {
+      const entry = byPath.get(item.zipPath.toLowerCase())!;
       step += 1;
-      onProgress?.({ phase: "import", current: step, total, detail: item.rel });
-      const existed = (await opfsInfo(item.rel)).exists;
-      if (existed) await copyOpfsFile(item.rel, stagingRel(token, "rollback", item.rel));
-      committed.push({ rel: item.rel, existed });
-      await copyOpfsFile(item.stagedRel, item.rel);
+      onProgress?.({ phase: "import", current: step, total, detail: item.path });
+      if (Platform.isDesktop) {
+        await writeStreamToDesktopStaging(token, item.path, item.size, entryReadableStream(entry));
+        stagedDesktopRels.push(item.path);
+      } else {
+        const stagedRelPath = stagingRel(token, "restore", item.path);
+        await writeOpfsStream(stagedRelPath, entryReadableStream(entry), item.size);
+        stagedOpfs.push({ rel: item.path, stagedRel: stagedRelPath, size: item.size });
+      }
     }
 
-    step += 1;
-    onProgress?.({ phase: "import", current: step, total, detail: "clearing" });
-    for (const table of BACKUP_TABLES) await $idb.clear(table);
+    // 2) Commit dos arquivos preservando cópia/rename para rollback.
+    if (Platform.isDesktop) {
+      if (stagedDesktopRels.length) {
+        const desktop = (Platform.api as LouvorjaApi | null)?.libraryFiles;
+        const result = await desktop!.commitRestore(token, stagedDesktopRels);
+        desktopCommitted = result.committed;
+      }
+    } else if (stagedOpfs.length) {
+      const planned: Array<{ rel: string; existed: boolean }> = [];
+      for (const item of stagedOpfs) {
+        planned.push({ rel: item.rel, existed: (await opfsInfo(item.rel)).exists });
+      }
+      opfsJournal = {
+        token,
+        status: "committing-files",
+        hasLibraryFiles: true,
+        files: planned,
+      };
+      await writeOpfsText(stagingJournalRel(token), JSON.stringify(opfsJournal));
 
+      for (let i = 0; i < stagedOpfs.length; i++) {
+        const item = stagedOpfs[i];
+        const { existed } = planned[i];
+        step += 1;
+        onProgress?.({ phase: "import", current: step, total, detail: item.rel });
+        if (existed) await copyOpfsFile(item.rel, stagingRel(token, "rollback", item.rel));
+        committedOpfs.push({ rel: item.rel, existed });
+        await copyOpfsFile(item.stagedRel, item.rel);
+      }
+
+      opfsJournal = { ...opfsJournal, status: "committing-db" };
+      await writeOpfsText(stagingJournalRel(token), JSON.stringify(opfsJournal));
+    }
+
+    // 3) Commit atômico do IndexedDB com marcador da transação.
     step += 1;
     onProgress?.({ phase: "import", current: step, total, detail: "writing" });
-    for (const [table, rows] of data) {
-      for (const row of rows) await $idb.put(table, row as { id: string });
-    }
+    const marker =
+      !Platform.isDesktop && opfsJournal
+        ? { table: DB_TABLE.CACHE, row: { id: BACKUP_COMMIT_MARKER_ID, token } }
+        : undefined;
+    previousFallback = await commitDatabaseTables(data, marker);
+    dbCommitted = true;
 
-    // 3) Sucesso: descarta o staging e remove arquivos sem registro novo.
-    await removeStaging(token).catch(() => {});
-    step += 1;
-    onProgress?.({ phase: "import", current: step, total, detail: "cleaning" });
-    await cleanupOpfsOrphans(data, opfsFiles.length > 0).catch((error) => {
-      console.warn("[Backup] limpeza de OPFS falhou:", error);
-    });
+    // 4) Limpeza pós-commit.
+    if (Platform.isDesktop) {
+      await (Platform.api as LouvorjaApi | null)?.libraryFiles
+        ?.cleanupRestore(token)
+        .catch(() => {});
+    } else {
+      if (opfsJournal) {
+        await writeOpfsText(
+          stagingJournalRel(token),
+          JSON.stringify({ ...opfsJournal, status: "committed" })
+        ).catch(() => {});
+      }
+      await removeStaging(token).catch(() => {});
+      await clearBackupCommitMarker(token);
+      step += 1;
+      onProgress?.({ phase: "import", current: step, total, detail: "cleaning" });
+      await cleanupOpfsOrphans(data, incomingFiles.length > 0).catch((error) => {
+        console.warn("[Backup] limpeza de OPFS falhou:", error);
+      });
+    }
     onProgress?.({ phase: "import", current: total, total, detail: "done" });
 
     return { tables: data.size, rows: totalRows };
   } catch (error) {
-    // Desfaz os arquivos já trocados: antigos voltam do rollback; novos somem.
-    for (const item of committed.reverse()) {
-      try {
-        if (item.existed) {
-          await copyOpfsFile(stagingRel(token, "rollback", item.rel), item.rel);
+    if (!dbCommitted) {
+      if (Platform.isDesktop) {
+        const desktop = (Platform.api as LouvorjaApi | null)?.libraryFiles;
+        if (desktopCommitted.length) {
+          await desktop?.rollbackRestore(token, desktopCommitted).catch(() => {});
         } else {
-          await removeOpfs(item.rel);
+          await desktop?.cleanupRestore(token).catch(() => {});
         }
-      } catch (restoreError) {
-        console.error("[Backup] rollback do arquivo OPFS falhou:", item.rel, restoreError);
+      } else {
+        for (const item of committedOpfs.reverse()) {
+          try {
+            if (item.existed) {
+              await copyOpfsFile(stagingRel(token, "rollback", item.rel), item.rel);
+            } else {
+              await removeOpfs(item.rel);
+            }
+          } catch (restoreError) {
+            console.error("[Backup] rollback do arquivo OPFS falhou:", item.rel, restoreError);
+          }
+        }
+        await removeStaging(token).catch(() => {});
       }
-    }
-    await removeStaging(token).catch(() => {});
-    if (previous) {
-      await restoreTables(previous).catch((restoreError) => {
-        console.error("[Backup] rollback do banco falhou:", restoreError);
-      });
+      if (previousFallback) {
+        await restoreTables(previousFallback).catch((restoreError) => {
+          console.error("[Backup] rollback do banco falhou:", restoreError);
+        });
+      }
     }
     throw error;
   }
 }
 
 export default {
+  recoverPendingBackupRestore,
+
   async exportAll(onProgress?: (_progress: BackupProgress) => void): Promise<BackupExportResult> {
     return exportStreaming(onProgress);
   },
@@ -508,34 +857,36 @@ export default {
     file: File,
     onProgress?: (_progress: BackupProgress) => void
   ): Promise<BackupImportResult> {
-    onProgress?.({ phase: "import", current: 0, total: 4, detail: "loading" });
+    return withBackupLock(async () => {
+      onProgress?.({ phase: "import", current: 0, total: 4, detail: "loading" });
 
-    const { ZipReader, BlobReader, TextWriter } = await loadZipJs();
-    const reader = new ZipReader(new BlobReader(file));
-    try {
-      const entries = await reader.getEntries();
-      const manifestEntry = entries.find(
-        (entry) => !entry.directory && entry.filename.toLowerCase() === manifestFileName()
-      ) as import("@zip.js/zip.js").FileEntry | undefined;
-      if (!manifestEntry) throw new Error("Backup sem manifest.json");
-      const manifest = JSON.parse(
-        String(await manifestEntry.getData(new TextWriter()))
-      ) as Partial<BackupManifest> | null;
-      if (
-        !manifest ||
-        manifest.format !== EXPORT_FORMAT ||
-        ![1, 2, EXPORT_VERSION].includes(manifest.version ?? 0)
-      ) {
-        throw new Error("Arquivo de backup incompatível");
+      const { ZipReader, BlobReader, TextWriter } = await loadZipJs();
+      const reader = new ZipReader(new BlobReader(file));
+      try {
+        const entries = await reader.getEntries();
+        const manifestEntry = entries.find(
+          (entry) => !entry.directory && entry.filename.toLowerCase() === manifestFileName()
+        ) as import("@zip.js/zip.js").FileEntry | undefined;
+        if (!manifestEntry) throw new Error("Backup sem manifest.json");
+        const manifest = JSON.parse(
+          String(await manifestEntry.getData(new TextWriter()))
+        ) as Partial<BackupManifest> | null;
+        if (
+          !manifest ||
+          manifest.format !== EXPORT_FORMAT ||
+          ![1, 2, EXPORT_VERSION].includes(manifest.version ?? 0)
+        ) {
+          throw new Error("Arquivo de backup incompatível");
+        }
+        if (Number(manifest.version) === EXPORT_VERSION) {
+          return await importStreaming(entries, manifest as BackupManifest, onProgress);
+        }
+        // Formato antigo: o JSZip lê o arquivo inteiro; o reader do zip.js não
+        // participa dessa etapa e pode ser fechado no finally.
+        return await importLegacy(file, manifest, onProgress);
+      } finally {
+        await reader.close().catch(() => {});
       }
-      if (Number(manifest.version) === EXPORT_VERSION) {
-        return await importStreaming(entries, manifest as BackupManifest, onProgress);
-      }
-      // Formato antigo: o JSZip lê o arquivo inteiro; o reader do zip.js não
-      // participa dessa etapa e pode ser fechado no finally.
-      return await importLegacy(file, manifest, onProgress);
-    } finally {
-      await reader.close().catch(() => {});
-    }
+    });
   },
 };

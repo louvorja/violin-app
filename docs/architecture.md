@@ -114,9 +114,11 @@ então não entram em "Limpar mídia" nem na limpeza automática. A tela de
 Armazenamento tem **Arquivos sem registro → Limpar** para remover cópias
 antigas; a restauração de backup também limpa o que não ficou referenciado.
 
-O cache de export do Canva (`files/canva/`) vive dentro do acervo, mas não é tratado como
-ele: tem contagem própria na tela de Armazenamento, sobrevive ao "Limpar mídia" e fica
-fora do limite de espaço e da remoção de arquivos não referenciados — apagá-lo por idade
+O cache de export do Canva (`<perfil>/canva/`, obtido por `paths.canvaDir()`) fica no
+perfil privado da conta (migrado de endereços antigos `<dados>/canva` e
+`<dados>/files/canva` pelo `storageLayout.js`), nunca no acervo compartilhado: tem
+contagem própria na tela de Armazenamento, sobrevive ao "Limpar mídia" e fica fora do
+limite de espaço e da remoção de arquivos não referenciados — apagá-lo por idade
 forçaria uma reexportação, que gasta a cota do Canva. Ele só sai pelos selos da aba Canva
 ou pelo botão "Limpar exportações do Canva".
 
@@ -2764,7 +2766,7 @@ zero só faz o pdf.js reclamar.
 
 #### Selo de cache na lista
 
-O arquivo já fica guardado em `<dados>/files/canva/<designId>.<ext>` + `.json` — o que
+O arquivo já fica guardado em `<perfil>/canva/<designId>.<ext>` + `.json` (`paths.canvaDir()`) — o que
 faltava era o operador VER isso e conseguir apagar.
 
 - **`canva:cachedPdfs`** devolve `designId → updated_at` de tudo que tem
@@ -2781,7 +2783,7 @@ faltava era o operador VER isso e conseguir apagar.
 - **Exclusão**: `canva:clearCachedPdf` → `yesno` → apaga `.pdf` + `.json`. O id
   é validado **na fronteira** (IPC) e **de novo** no `limparCachePdf`, porque
   ele vira caminho de arquivo; `nomeSeguro` neutraliza `..` e `/`, então o alvo
-  sempre cai em `<dados>/files/canva`.
+  sempre cai em `<perfil>/canva` (`paths.canvaDir()`).
 
 ### Conteúdo e projeção (modo "site")
 

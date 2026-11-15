@@ -7,8 +7,6 @@ import path from "node:path";
 const require = createRequire(import.meta.url);
 const Module = require("node:module");
 const fs = require("fs-extra");
-const paths = require("../paths.js");
-const storageAccess = require("../storageAccess.js");
 
 const electronMock = {
   app: { getPath: () => os.tmpdir() },
@@ -16,7 +14,18 @@ const electronMock = {
   BrowserWindow: { fromWebContents: () => null },
 };
 
-const libraryFiles = require("../libraryFiles.js");
+const originalModuleLoad = Module._load;
+Module._load = function (request, ...args) {
+  return request === "electron" ? electronMock : originalModuleLoad.call(this, request, ...args);
+};
+let paths, storageAccess, libraryFiles;
+try {
+  paths = require("../paths.js");
+  storageAccess = require("../storageAccess.js");
+  libraryFiles = require("../libraryFiles.js");
+} finally {
+  Module._load = originalModuleLoad;
+}
 
 let root;
 let handlers;
@@ -160,4 +169,88 @@ describe("libraryFiles", () => {
     expect(done.path).toBe(target);
     expect(fs.readFileSync(target)).toEqual(Buffer.from([80, 75]));
   });
+
+  it("openRead/readChunk/closeRead lê arquivo gerenciado em streaming e recusa caminho fora do acervo", async () => {
+    const rel = "media-library/vid1/cena.mp4";
+    fs.outputFileSync(path.join(paths.filesDir(), rel), Buffer.from([10, 20, 30, 40, 50]));
+
+    const opened = await call("libraryFiles:openRead", rel);
+    expect(opened).toMatchObject({ size: 5 });
+
+    const c1 = await call("libraryFiles:readChunk", opened.token, 3);
+    const c2 = await call("libraryFiles:readChunk", opened.token, 3);
+    const eof = await call("libraryFiles:readChunk", opened.token, 3);
+    expect(Buffer.from(c1)).toEqual(Buffer.from([10, 20, 30]));
+    expect(Buffer.from(c2)).toEqual(Buffer.from([40, 50]));
+    expect(eof).toBeNull();
+    expect(await call("libraryFiles:closeRead", opened.token)).toEqual({ ok: true });
+
+    expect(await call("libraryFiles:openRead", "media-library/missing/x.mp4")).toBeNull();
+    await expect(call("libraryFiles:openRead", "../fora.mp4")).rejects.toThrow("fora das pastas");
+  });
+
+  it("stageBegin/commitRestore/rollbackRestore publica restauração com rollback e cleanup", async () => {
+    const existingRel = "background-projection/bg1/antigo.mp4";
+    const addedRel = "media-library/m2/novo.jpg";
+    fs.outputFileSync(path.join(paths.filesDir(), existingRel), "CONTEUDO-ANTIGO");
+
+    const restoreToken = "550e8400-e29b-41d4-a716-446655440000";
+    const s1 = await call("libraryFiles:stageBegin", {
+      restoreToken,
+      rel: existingRel,
+      size: 12,
+    });
+    await call("libraryFiles:write", s1.token, new TextEncoder().encode("CONTEUDO-NEW"));
+    await call("libraryFiles:end", s1.token);
+
+    const s2 = await call("libraryFiles:stageBegin", {
+      restoreToken,
+      rel: addedRel,
+      size: 4,
+    });
+    await call("libraryFiles:write", s2.token, new Uint8Array([1, 2, 3, 4]));
+    await call("libraryFiles:end", s2.token);
+
+    const { committed } = await call("libraryFiles:commitRestore", restoreToken, [
+      existingRel,
+      addedRel,
+    ]);
+    expect(committed).toEqual([
+      { rel: existingRel, existed: true },
+      { rel: addedRel, existed: false },
+    ]);
+    expect(fs.readFileSync(path.join(paths.filesDir(), existingRel), "utf8")).toBe("CONTEUDO-NEW");
+    expect(fs.readFileSync(path.join(paths.filesDir(), addedRel))).toEqual(Buffer.from([1, 2, 3, 4]));
+
+    await call("libraryFiles:rollbackRestore", restoreToken, committed);
+    expect(fs.readFileSync(path.join(paths.filesDir(), existingRel), "utf8")).toBe("CONTEUDO-ANTIGO");
+    expect(fs.existsSync(path.join(paths.filesDir(), addedRel))).toBe(false);
+
+    await call("libraryFiles:cleanupRestore", restoreToken);
+    expect(fs.existsSync(path.join(paths.filesDir(), ".restore-staging", restoreToken))).toBe(false);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "publica liturgy-files e arquivos da biblioteca legíveis (0644/0777) quando o acervo é compartilhado (#17)",
+    async () => {
+      const prevUmask = process.umask(0o077);
+      try {
+        vi.spyOn(storageAccess, "status").mockReturnValue({ media: { shared: true } });
+        const source = path.join(root, "anexo.pdf");
+        fs.writeFileSync(source, "%PDF-1.4");
+        const stored = await call("libraryFiles:storePath", {
+          kind: "liturgy-files",
+          recordId: "lit_1",
+          sourcePath: source,
+        });
+        const targetAbs = path.join(paths.filesDir(), stored.path);
+        const dirMode = fs.statSync(path.dirname(targetAbs)).mode & 0o777;
+        const fileMode = fs.statSync(targetAbs).mode & 0o777;
+        expect(dirMode).toBe(0o777);
+        expect(fileMode).toBe(0o644);
+      } finally {
+        process.umask(prevUmask);
+      }
+    }
+  );
 });

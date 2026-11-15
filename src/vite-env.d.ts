@@ -313,6 +313,23 @@ declare global {
       write: (token: string, chunk: Uint8Array) => Promise<{ written: number }>;
       end: (token: string) => Promise<StoredLibraryFile>;
       abort: (token: string) => Promise<{ ok: boolean }>;
+      openRead: (rel: string) => Promise<{ token: string; size: number; mtimeMs: number } | null>;
+      readChunk: (token: string, length?: number) => Promise<Uint8Array | null>;
+      closeRead: (token: string) => Promise<{ ok: boolean }>;
+      stageBegin: (input: {
+        restoreToken: string;
+        rel: string;
+        size: number;
+      }) => Promise<LibraryFileWriteSession>;
+      commitRestore: (
+        restoreToken: string,
+        rels: string[]
+      ) => Promise<{ committed: Array<{ rel: string; existed: boolean }> }>;
+      rollbackRestore: (
+        restoreToken: string,
+        committed: Array<{ rel: string; existed: boolean }>
+      ) => Promise<{ ok: boolean }>;
+      cleanupRestore: (restoreToken: string) => Promise<{ ok: boolean }>;
       remove: (rel: string) => Promise<{ removed: boolean }>;
       info: (rel: string) => Promise<{ exists: boolean; size: number; mtimeMs?: number }>;
       freeSpace: () => Promise<{ bytes: number | null }>;

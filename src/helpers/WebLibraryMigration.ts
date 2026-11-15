@@ -24,13 +24,13 @@ import {
   isOpfsSupported,
   opfsActive,
   opfsInfo,
-  pruneOpfsStaging,
   opfsPathOf,
   pruneOpfsTemp,
   removeOpfs,
   safeStorageName,
   writeOpfsStream,
 } from "@/helpers/OpfsStore";
+import { recoverPendingBackupRestore } from "@/helpers/DatabaseBackup";
 
 const FLAG_KEY = "lj:web-library-opfs-v1";
 const LOCK_KEY = "lj:opfs-migration";
@@ -183,9 +183,9 @@ function mark(flag: string): void {
  */
 export function scheduleWebLibraryMigration(): void {
   if (!isOpfsSupported()) return;
-  // Temporários de exportação e staging de restauração de uma sessão encerrada.
+  // Temporários de exportação e recuperação/limpeza de staging de backup.
   void pruneOpfsTemp().catch(() => {});
-  void pruneOpfsStaging().catch(() => {});
+  void recoverPendingBackupRestore().catch(() => {});
   if (once(FLAG_KEY)) return;
 
   const run = () => {

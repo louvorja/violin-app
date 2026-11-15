@@ -508,6 +508,16 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     write: (token, chunk) => ipcRenderer.invoke("libraryFiles:write", token, chunk),
     end: (token) => ipcRenderer.invoke("libraryFiles:end", token),
     abort: (token) => ipcRenderer.invoke("libraryFiles:abort", token),
+    openRead: (rel) => ipcRenderer.invoke("libraryFiles:openRead", rel),
+    readChunk: (token, length) => ipcRenderer.invoke("libraryFiles:readChunk", token, length),
+    closeRead: (token) => ipcRenderer.invoke("libraryFiles:closeRead", token),
+    stageBegin: (input) => ipcRenderer.invoke("libraryFiles:stageBegin", input),
+    commitRestore: (restoreToken, rels) =>
+      ipcRenderer.invoke("libraryFiles:commitRestore", restoreToken, rels),
+    rollbackRestore: (restoreToken, committed) =>
+      ipcRenderer.invoke("libraryFiles:rollbackRestore", restoreToken, committed),
+    cleanupRestore: (restoreToken) =>
+      ipcRenderer.invoke("libraryFiles:cleanupRestore", restoreToken),
     remove: (rel) => ipcRenderer.invoke("libraryFiles:remove", rel),
     info: (rel) => ipcRenderer.invoke("libraryFiles:info", rel),
     freeSpace: () => ipcRenderer.invoke("libraryFiles:freeSpace"),

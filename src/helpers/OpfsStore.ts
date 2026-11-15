@@ -23,6 +23,7 @@ const REL_RE =
 const TEMP_RE = /^liturgy-temp\/[A-Za-z0-9-]+\.(llja|zip)$/;
 const STAGING_RE =
   /^\.staging\/[A-Za-z0-9-]+\/(restore|rollback)\/(media-library|background-projection|background-sound|liturgy-files)\/[A-Za-z0-9][A-Za-z0-9_-]{0,63}\/[^/\\]+$/;
+const STAGING_JOURNAL_RE = /^\.staging\/[A-Za-z0-9-]+\/journal\.json$/;
 
 type DirHandle = FileSystemDirectoryHandle & {
   entries?: () => AsyncIterableIterator<[string, FileSystemHandle]>;
@@ -89,14 +90,24 @@ function isStagingRel(value: unknown): value is string {
   return typeof value === "string" && STAGING_RE.test(value);
 }
 
+function isStagingJournalRel(value: unknown): value is string {
+  return typeof value === "string" && STAGING_JOURNAL_RE.test(value);
+}
+
 function isWritableRel(value: unknown): value is string {
-  return isOpfsRel(value) || isStagingRel(value);
+  return isOpfsRel(value) || isStagingRel(value) || isStagingJournalRel(value);
 }
 
 /** Caminho de staging interno de uma restauração de backup. */
 export function stagingRel(token: string, phase: "restore" | "rollback", rel: string): string {
   if (!isOpfsRel(rel)) throw new Error("opfs_path_invalid");
   return `.staging/${token}/${phase}/${rel}`;
+}
+
+/** Caminho do journal de restauração em `.staging/<token>/journal.json`. */
+export function stagingJournalRel(token: string): string {
+  if (!/^[A-Za-z0-9-]+$/.test(token)) throw new Error("opfs_token_invalid");
+  return `.staging/${token}/journal.json`;
 }
 
 /** URL síncrona servida pelo Service Worker. */
@@ -236,6 +247,43 @@ export async function removeStaging(token: string): Promise<void> {
     await (staging as FileSystemDirectoryHandle).removeEntry(token, { recursive: true });
   } catch (error) {
     if ((error as { name?: string })?.name !== "NotFoundError") throw error;
+  }
+}
+
+/** Grava texto (UTF-8) em um caminho gravável do OPFS. */
+export async function writeOpfsText(rel: string, content: string): Promise<void> {
+  const bytes = new TextEncoder().encode(content);
+  const { target: writable } = await openWritable(rel);
+  try {
+    await writable.write(bytes as unknown as BufferSource);
+    await writable.close();
+  } catch (error) {
+    await writable.abort(error).catch(() => {});
+    await removeOpfs(rel, true).catch(() => {});
+    throw error;
+  }
+}
+
+/** Lê texto (UTF-8) de um caminho do OPFS, retornando `null` se não existir. */
+export async function readOpfsText(rel: string): Promise<string | null> {
+  const file = await readOpfsFile(rel);
+  return file ? file.text() : null;
+}
+
+/** Lista tokens existentes dentro de `.staging/`. */
+export async function listOpfsStagingTokens(): Promise<string[]> {
+  if (!isOpfsSupported()) return [];
+  try {
+    const base = await root();
+    const staging = (await base.getDirectoryHandle(".staging", { create: false })) as DirHandle;
+    if (!staging.entries) return [];
+    const tokens: string[] = [];
+    for await (const [name, handle] of staging.entries()) {
+      if (handle.kind === "directory" && /^[A-Za-z0-9-]+$/.test(name)) tokens.push(name);
+    }
+    return tokens;
+  } catch {
+    return [];
   }
 }
 

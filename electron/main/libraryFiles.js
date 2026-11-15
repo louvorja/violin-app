@@ -38,6 +38,7 @@ const { Transform } = require("node:stream");
 const { pipeline, finished } = require("node:stream/promises");
 const paths = require("./paths.js");
 const storageAccess = require("./storageAccess.js");
+const { ensureCollectionSubdirectory, setNewCollectionFileMode } = require("./sharedCollectionDirs.js");
 
 const IMAGE_EXT = ["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif"];
 const AUDIO_EXT = ["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus"];
@@ -52,6 +53,7 @@ const MAX_NAME = 180;
 /** Orçamento de caminho no Windows (260 - margem para o perfil e o `.part`). */
 const MAX_PATH_BUDGET = 220;
 const RECORD_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+const STAGE_TOKEN_RE = /^[A-Za-z0-9-]{8,64}$/;
 
 const KINDS = {
   media: {
@@ -172,6 +174,68 @@ function _absForRel(rel) {
   return abs;
 }
 
+function _isSharedCollection() {
+  return storageAccess.status?.().media?.shared === true;
+}
+
+async function _ensureTargetDir(absDir, shared = _isSharedCollection()) {
+  if (shared) {
+    await ensureCollectionSubdirectory(paths.filesDir(), absDir, { shared: true });
+    return;
+  }
+  await fs.ensureDir(absDir);
+}
+
+async function _preparePublishedFile(file, shared = _isSharedCollection()) {
+  if (shared) {
+    await setNewCollectionFileMode(file, { shared: true });
+  }
+}
+
+function _stagingDir(restoreToken) {
+  if (typeof restoreToken !== "string" || !STAGE_TOKEN_RE.test(restoreToken)) {
+    throw new Error("Token de restauração inválido");
+  }
+  const dir = path.resolve(paths.filesDir(), ".staging", restoreToken);
+  if (!_inside(dir, path.join(paths.filesDir(), ".staging"))) {
+    throw new Error("Pasta de staging inválida");
+  }
+  return dir;
+}
+
+function _absForStaging(restoreToken, phase, rel) {
+  if (phase !== "restore" && phase !== "rollback") throw new Error("Fase de staging inválida");
+  if (!isManagedRel(rel)) throw new Error("Caminho fora das pastas gerenciadas");
+  const root = _stagingDir(restoreToken);
+  const abs = path.resolve(root, phase, rel.replace(/\\/g, "/"));
+  if (!_inside(abs, root)) throw new Error("Caminho de staging fora do acervo");
+  return abs;
+}
+
+async function _rollbackCommitted(restoreToken, committed) {
+  const shared = _isSharedCollection();
+  for (let i = committed.length - 1; i >= 0; i--) {
+    const item = committed[i];
+    if (!item || !isManagedRel(item.rel)) continue;
+    const target = _absForRel(item.rel);
+    if (item.existed) {
+      const rollbackAbs = _absForStaging(restoreToken, "rollback", item.rel);
+      if (await fs.pathExists(rollbackAbs)) {
+        await _ensureTargetDir(path.dirname(target), shared);
+        await _preparePublishedFile(rollbackAbs, shared);
+        await fs.move(rollbackAbs, target, { overwrite: true });
+      }
+    } else {
+      await fs.unlink(target).catch(() => {});
+      const parent = path.dirname(target);
+      const kindRoot = path.join(paths.filesDir(), item.rel.replace(/\\/g, "/").split("/")[0]);
+      if (path.dirname(parent) === kindRoot) {
+        await fs.rmdir(parent).catch(() => {});
+      }
+    }
+  }
+}
+
 function _toBuffer(chunk) {
   if (Buffer.isBuffer(chunk)) return chunk;
   if (chunk instanceof ArrayBuffer) return Buffer.from(chunk);
@@ -211,6 +275,8 @@ function registerIpc(ipcMain, deps = {}) {
   const writeTokens = new Map();
   /** @type {Map<string, object>} */
   const exportTokens = new Map();
+  /** @type {Map<string, object>} */
+  const readTokens = new Map();
 
   function abortAll(tokens, senderId) {
     for (const [token, state] of tokens) {
@@ -219,6 +285,23 @@ function registerIpc(ipcMain, deps = {}) {
       if (state.stream && !state.stream.destroyed) state.stream.destroy();
       if (state.tmp) void _removeTemp(state.tmp);
     }
+  }
+
+  function closeAllReads(senderId) {
+    for (const [token, state] of readTokens) {
+      if (senderId !== undefined && state.senderId !== senderId) continue;
+      readTokens.delete(token);
+      void state.handle.close().catch(() => {});
+    }
+  }
+
+  function cleanupSender(event) {
+    const senderId = event.sender?.id ?? null;
+    _registerSenderCleanup(event, () => {
+      abortAll(writeTokens, senderId);
+      abortAll(exportTokens, senderId);
+      closeAllReads(senderId);
+    });
   }
 
   ipcMain.handle("libraryFiles:storePath", async (_event, input) => {
@@ -233,7 +316,8 @@ function registerIpc(ipcMain, deps = {}) {
 
     const rel = _relFor(kind, recordId, path.basename(sourcePath));
     const abs = _absForRel(rel);
-    await fs.ensureDir(path.dirname(abs));
+    const shared = _isSharedCollection();
+    await _ensureTargetDir(path.dirname(abs), shared);
     const tmp = `${abs}.part-${crypto.randomUUID()}`;
     const hash = _sha256();
     let copied = 0;
@@ -250,6 +334,7 @@ function registerIpc(ipcMain, deps = {}) {
         hasher,
         fs.createWriteStream(tmp, { flags: "wx", mode: 0o600, fsync: true })
       );
+      await _preparePublishedFile(tmp, shared);
       await fs.move(tmp, abs, { overwrite: true });
     } catch (error) {
       await _removeTemp(tmp);
@@ -258,13 +343,12 @@ function registerIpc(ipcMain, deps = {}) {
     return { path: rel, name: path.basename(rel), size: copied, sha256: hash.digest("hex") };
   });
 
-  ipcMain.handle("libraryFiles:begin", async (event, input) => {
-    const { kind, recordId, name, size } = input || {};
-    storageAccess.assertWritable("media");
-    _assertSize(size);
-    const rel = _relFor(kind, recordId, name);
-    const abs = _absForRel(rel);
-    await fs.ensureDir(path.dirname(abs));
+  async function openWriteSession(event, { kind = null, rel, abs, size }) {
+    if (kind) {
+      await _ensureTargetDir(path.dirname(abs));
+    } else {
+      await fs.ensureDir(path.dirname(abs));
+    }
     const token = crypto.randomUUID();
     const tmp = `${abs}.part-${token}`;
     const stream = fs.createWriteStream(tmp, { flags: "wx", mode: 0o600, fsync: true });
@@ -289,8 +373,29 @@ function registerIpc(ipcMain, deps = {}) {
       written: 0,
       size,
     });
-    _registerSenderCleanup(event, () => abortAll(writeTokens, event.sender?.id ?? null));
+    cleanupSender(event);
     return { token };
+  }
+
+  ipcMain.handle("libraryFiles:begin", async (event, input) => {
+    const { kind, recordId, name, size } = input || {};
+    storageAccess.assertWritable("media");
+    _assertSize(size);
+    const rel = _relFor(kind, recordId, name);
+    const abs = _absForRel(rel);
+    return openWriteSession(event, { kind, rel, abs, size });
+  });
+
+  ipcMain.handle("libraryFiles:stageBegin", async (event, input) => {
+    const { restoreToken, rel, size } = input || {};
+    storageAccess.assertWritable("media");
+    if (!Number.isSafeInteger(size) || size < 0 || size > MAX_BYTES) {
+      throw new Error("Tamanho de arquivo inválido");
+    }
+    _absForRel(rel);
+    const normalizedRel = rel.replace(/\\/g, "/");
+    const abs = _absForStaging(restoreToken, "restore", normalizedRel);
+    return openWriteSession(event, { rel: normalizedRel, abs, size });
   });
 
   ipcMain.handle("libraryFiles:write", async (event, token, chunk) => {
@@ -327,6 +432,9 @@ function registerIpc(ipcMain, deps = {}) {
     try {
       state.stream.end();
       await finished(state.stream);
+      if (state.kind) {
+        await _preparePublishedFile(state.tmp);
+      }
       await fs.move(state.tmp, state.abs, { overwrite: true });
     } catch (error) {
       await _removeTemp(state.tmp);
@@ -484,8 +592,121 @@ function registerIpc(ipcMain, deps = {}) {
       stream,
       written: 0,
     });
-    _registerSenderCleanup(event, () => abortAll(exportTokens, event.sender?.id ?? null));
+    cleanupSender(event);
     return { token };
+  });
+
+  ipcMain.handle("libraryFiles:openRead", async (event, rel) => {
+    const abs = _absForRel(rel);
+    let stat;
+    try {
+      stat = await fs.lstat(abs);
+    } catch (error) {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    }
+    if (stat.isSymbolicLink() || !stat.isFile()) throw new Error("Caminho inválido");
+    const handle = await fs.promises.open(abs, "r");
+    const token = crypto.randomUUID();
+    readTokens.set(token, {
+      senderId: event.sender?.id ?? null,
+      handle,
+      size: stat.size,
+      offset: 0,
+    });
+    cleanupSender(event);
+    return { token, size: stat.size, mtimeMs: stat.mtimeMs };
+  });
+
+  ipcMain.handle("libraryFiles:readChunk", async (event, token, length) => {
+    const state = readTokens.get(token);
+    if (!state || state.senderId !== (event.sender?.id ?? null)) {
+      throw new Error("Sessão de leitura inválida");
+    }
+    const requested = Math.trunc(Number(length) || 2 * 1024 * 1024);
+    const size = Math.min(MAX_CHUNK_BYTES, Math.max(1, requested));
+    const buf = Buffer.allocUnsafe(size);
+    try {
+      const { bytesRead } = await state.handle.read(buf, 0, size, state.offset);
+      state.offset += bytesRead;
+      if (bytesRead === 0) {
+        readTokens.delete(token);
+        await state.handle.close().catch(() => {});
+        return null;
+      }
+      return new Uint8Array(buf.buffer, buf.byteOffset, bytesRead);
+    } catch (error) {
+      readTokens.delete(token);
+      await state.handle.close().catch(() => {});
+      throw error;
+    }
+  });
+
+  ipcMain.handle("libraryFiles:closeRead", async (event, token) => {
+    const state = readTokens.get(token);
+    if (!state || state.senderId !== (event.sender?.id ?? null)) return { ok: true };
+    readTokens.delete(token);
+    await state.handle.close().catch(() => {});
+    return { ok: true };
+  });
+
+  ipcMain.handle("libraryFiles:commitRestore", async (_event, restoreToken, rels) => {
+    storageAccess.assertWritable("media");
+    _stagingDir(restoreToken);
+    const list = Array.isArray(rels) ? rels : [];
+    const committed = [];
+    try {
+      for (const rel of list) {
+        if (!isManagedRel(rel)) throw new Error("Caminho inválido na restauração");
+        const stagedAbs = _absForStaging(restoreToken, "restore", rel);
+        let stagedStat;
+        try {
+          stagedStat = await fs.lstat(stagedAbs);
+        } catch (error) {
+          if (error.code === "ENOENT") continue;
+          throw error;
+        }
+        if (stagedStat.isSymbolicLink() || !stagedStat.isFile()) {
+          throw new Error("Arquivo de staging inválido");
+        }
+        const targetAbs = _absForRel(rel);
+        const rollbackAbs = _absForStaging(restoreToken, "rollback", rel);
+        let existed = false;
+        try {
+          const targetStat = await fs.lstat(targetAbs);
+          if (targetStat.isSymbolicLink() || !targetStat.isFile()) {
+            throw new Error("Destino inválido na restauração");
+          }
+          existed = true;
+          await fs.ensureDir(path.dirname(rollbackAbs));
+          await fs.move(targetAbs, rollbackAbs, { overwrite: true });
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+        }
+        committed.push({ rel: rel.replace(/\\/g, "/"), existed });
+        const shared = _isSharedCollection();
+        await _ensureTargetDir(path.dirname(targetAbs), shared);
+        await _preparePublishedFile(stagedAbs, shared);
+        await fs.move(stagedAbs, targetAbs, { overwrite: true });
+      }
+    } catch (error) {
+      await _rollbackCommitted(restoreToken, committed).catch(() => {});
+      throw error;
+    }
+    return { committed };
+  });
+
+  ipcMain.handle("libraryFiles:rollbackRestore", async (_event, restoreToken, committed) => {
+    storageAccess.assertWritable("media");
+    const list = Array.isArray(committed) ? committed : [];
+    await _rollbackCommitted(restoreToken, list);
+    await fs.remove(_stagingDir(restoreToken)).catch(() => {});
+    return { ok: true };
+  });
+
+  ipcMain.handle("libraryFiles:cleanupRestore", async (_event, restoreToken) => {
+    await fs.remove(_stagingDir(restoreToken)).catch(() => {});
+    return { ok: true };
   });
 
   ipcMain.handle("libraryExport:write", async (event, token, chunk) => {

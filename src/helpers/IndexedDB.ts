@@ -284,6 +284,53 @@ export default {
   },
 
   /**
+   * Substitui o conteúdo das tabelas informadas dentro de uma única transação
+   * `readwrite`. Se a aba fechar ou ocorrer erro antes de `tx.done`, o engine
+   * do IndexedDB desfaz toda a operação automaticamente.
+   */
+  async replaceAllTables(
+    data: ReadonlyMap<string, ReadonlyArray<{ id: string }>>,
+    clearTables: readonly string[],
+    commitMarker?: { table: string; row: { id: string } }
+  ): Promise<void> {
+    const stores = [
+      ...new Set([
+        ...clearTables,
+        ...data.keys(),
+        ...(commitMarker ? [commitMarker.table] : []),
+      ]),
+    ];
+    const tx = (await getDb()).transaction(stores, "readwrite");
+    try {
+      for (const table of clearTables) {
+        await tx.objectStore(table).clear();
+      }
+      for (const [table, rows] of data) {
+        const store = tx.objectStore(table);
+        for (const row of rows) {
+          await store.put(row);
+        }
+      }
+      if (commitMarker) {
+        await tx.objectStore(commitMarker.table).put(commitMarker.row);
+      }
+      await tx.done;
+    } catch (error) {
+      try {
+        tx.abort();
+      } catch {
+        /* A transação pode já ter sido abortada pelo IDB. */
+      }
+      try {
+        await tx.done;
+      } catch {
+        /* Preserva o erro original. */
+      }
+      throw error;
+    }
+  },
+
+  /**
    * === Métodos para Tabela Settings
    */
 
