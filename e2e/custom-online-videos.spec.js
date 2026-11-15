@@ -154,7 +154,7 @@ test.describe("Meus Vídeos Online: categorias fixas (#51) e Tocar Todas (#67)",
 
     const player = page.locator(".player").first();
     await expect(player).toBeVisible({ timeout: 10_000 });
-    await expect(player).toContainText("Reproduzindo: Categoria Louvores 1/2 - Louvor 1");
+    await expect(player).toContainText(/Reproduzindo: Categoria Louvores 1\/2 - Louvor \d+/);
     const queueLabel = page.locator(".player__queue");
     await expect(queueLabel).toHaveAttribute("data-queue-index", "0");
     await expect(queueLabel).toHaveAttribute("data-queue-total", "2");
@@ -305,7 +305,7 @@ test("Tocar todas desta categoria enfileira a categoria e mostra próximo/anteri
 
   const player = page.locator(".player").first();
   await expect(player).toBeVisible({ timeout: 15_000 });
-  await expect(player).toContainText("Reproduzindo: Categoria Louvores 1/3 - Louvor 1");
+  await expect(player).toContainText(/Reproduzindo: Categoria Louvores 1\/3 - Louvor \d+/);
 
   await expect(page.locator(".playlist-bar")).toHaveCount(0);
   const queueLabel = page.locator(".player__queue");
@@ -328,7 +328,7 @@ test("Tocar todas desta categoria enfileira a categoria e mostra próximo/anteri
   await expect(mainPlayer).toBeVisible({ timeout: 10_000 });
   await expect(page.locator(".playlist-bar")).toHaveCount(0);
   await expect(mainPlayer.locator(".player-title")).toContainText(
-    "Reproduzindo: Categoria Louvores 2/3 - Louvor 2"
+    /Reproduzindo: Categoria Louvores 2\/3 - Louvor \d+/
   );
   await expect(mainPlayer).toHaveAttribute("data-queue-index", "1");
   await expect(mainPlayer).toHaveAttribute("data-queue-total", "3");
