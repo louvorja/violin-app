@@ -106,7 +106,7 @@ test.describe("Editor de Slides & fluxo .slja (#59, #61, #62)", () => {
     zip.file("audio/CantadoAntigo.mp3", minimalMp3(0x33));
     const buffer = Buffer.from(await zip.generateAsync({ type: "uint8array" }));
 
-    await page.locator('input[type="file"][accept=".slja,.lja"]').setInputFiles({
+    await page.locator('input[type="file"][accept=".slja,.lja,.zip"]').setInputFiles({
       name: "Legado Dual.slja",
       mimeType: "application/zip",
       buffer,

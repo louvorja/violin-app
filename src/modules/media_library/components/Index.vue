@@ -1043,6 +1043,11 @@ async function saveImportedFile(input: {
     throw error;
   }
   files.value.unshift(file);
+  // Sem filtro ativo, o arquivo recém-importado precisa aparecer; escolher a
+  // categoria dele evita que a grade fique vazia com a seleção vazia.
+  if (selectedCategoryIds.value.size === 0) {
+    selectedCategoryIds.value = new Set([input.categoryId || UNCATEGORIZED_ID]);
+  }
   if (input.type === "video") generateAndStoreThumb(file);
   return file;
 }
