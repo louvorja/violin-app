@@ -203,7 +203,14 @@
       </div>
     </div>
 
-    <input ref="fileSlja" type="file" accept=".slja,.lja" multiple hidden @change="onImportSlja" />
+    <input
+      ref="fileSlja"
+      type="file"
+      accept=".slja,.lja,.zip"
+      multiple
+      hidden
+      @change="onImportSlja"
+    />
     <SljaPackagePrompts ref="sljaPrompts" />
     <LjToast
       v-model="importStatus.show"

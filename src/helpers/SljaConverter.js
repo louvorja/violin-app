@@ -329,7 +329,7 @@ function resolveSongName(data = {}, fileName = "") {
 
   return String(fileName || "")
     .trim()
-    .replace(/\.(slja|lja)$/i, "");
+    .replace(/\.(slja|lja)(\.zip)?$/i, "");
 }
 
 /**
@@ -492,19 +492,9 @@ async function loadSlja(file) {
   const urlMusica = normRef(geral.url_musica);
   const urlPlayback = normRef(geral.url_playback);
 
-  const playbackEntry = urlPlayback
-    ? audioEntries.find(
-        (e) => e.norm === urlPlayback || e.norm.endsWith(`/${urlPlayback.replace(/^audio\//, "")}`)
-      ) || null
-    : null;
+  const playbackEntry = urlPlayback ? matchAudioEntry(audioEntries, urlPlayback, null) : null;
   const primaryEntry =
-    (urlMusica
-      ? audioEntries.find(
-          (e) =>
-            e !== playbackEntry &&
-            (e.norm === urlMusica || e.norm.endsWith(`/${urlMusica.replace(/^audio\//, "")}`))
-        )
-      : null) ||
+    (urlMusica ? matchAudioEntry(audioEntries, urlMusica, playbackEntry) : null) ||
     audioEntries.find((e) => e !== playbackEntry) ||
     null;
 
@@ -526,6 +516,82 @@ async function loadSlja(file) {
     images,
     loose: false,
   };
+}
+
+/**
+ * Saneia nome de arquivo de áudio dentro do `.slja` (ZIP + INI `slides.lja`)
+ * para ser válido no Windows/POSIX e representável em CP1252 sem virar `?`.
+ */
+function sanitizeZipAudioName(rawName, fallback = "audio.mp3") {
+  const leaf = String(rawName || "")
+    .replace(/\\/g, "/")
+    .replace(/^audio\//i, "")
+    .split("/")
+    .pop();
+  let out = "";
+  for (const ch of String(leaf || "")) {
+    const code = ch.codePointAt(0);
+    if (
+      code <= 0x1f ||
+      ch === "\\" ||
+      ch === "/" ||
+      ch === ":" ||
+      ch === "*" ||
+      ch === "?" ||
+      ch === '"' ||
+      ch === "<" ||
+      ch === ">" ||
+      ch === "|"
+    ) {
+      out += "_";
+      continue;
+    }
+    if (cp1252Byte(code) >= 0) {
+      out += ch;
+      continue;
+    }
+    const folded = ch
+      .normalize("NFD")
+      .replace(/\p{M}+/gu, "")
+      .replace(/[^\x20-\x7e\xa0-\xff]/g, "_");
+    out += folded || "_";
+  }
+  const cleaned = out
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[. ]+$/, "");
+  return cleaned || fallback;
+}
+
+function matchAudioEntry(audioEntries, targetNorm, excludeEntry) {
+  const leafTarget = targetNorm.replace(/^audio\//, "");
+  const exact = audioEntries.find(
+    (e) => e !== excludeEntry && (e.norm === targetNorm || e.norm.endsWith(`/${leafTarget}`))
+  );
+  if (exact) return exact;
+  // Recupera pacotes em que `|` ou caractere não-CP1252 virou `?` no `slides.lja`.
+  if (leafTarget.includes("?")) {
+    const pattern = new RegExp(
+      `^${leafTarget
+        .split("?")
+        .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+        .join(".+")}$`,
+      "i"
+    );
+    const fuzzy = audioEntries.find(
+      (e) => e !== excludeEntry && pattern.test(e.norm.replace(/^audio\//, ""))
+    );
+    if (fuzzy) return fuzzy;
+  }
+  const safeTarget = sanitizeZipAudioName(leafTarget, "").toLowerCase();
+  if (safeTarget) {
+    return (
+      audioEntries.find(
+        (e) => e !== excludeEntry && sanitizeZipAudioName(e.name, "").toLowerCase() === safeTarget
+      ) || null
+    );
+  }
+  return null;
 }
 
 /**
@@ -558,13 +624,13 @@ async function writeSlja({
 
   let audioPath = "";
   if (audio) {
-    audioPath = `audio/${audioName.replace(/^audio\//, "")}`;
+    audioPath = `audio/${sanitizeZipAudioName(audioName, "audio.mp3")}`;
     zip.file(audioPath, audio);
   }
 
   let playbackPath = "";
   if (playbackAudio) {
-    const cleanPb = playbackAudioName.replace(/^audio\//, "");
+    const cleanPb = sanitizeZipAudioName(playbackAudioName, "playback.mp3");
     const candidate = `audio/${cleanPb}`;
     playbackPath = candidate === audioPath ? `audio/pb-${cleanPb}` : candidate;
     zip.file(playbackPath, playbackAudio);
@@ -597,7 +663,11 @@ async function writeSlja({
     }
   }
 
-  return zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+  return zip.generateAsync({
+    type: "blob",
+    mimeType: "application/x-louvorja-slja",
+    compression: "DEFLATE",
+  });
 }
 
 export default {

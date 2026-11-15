@@ -468,4 +468,47 @@ describe("SljaConverter — precisão sub-segundo (#61)", () => {
     expect(loaded.slides[1].tempo_seconds).toBe(10.25);
     expect(loaded.slides[1].tempo_seconds_pb).toBe(12.5);
   });
+
+  it("saneia | e caracteres fora do CP1252 no nome do áudio sem virar ? e exporta com MIME .slja (#62)", async () => {
+    const sungAudio = new Blob([new Uint8Array([0xff, 0xfb, 0x90, 0x00, 1])]);
+    const blob = await SljaConverter.writeSlja({
+      nome: "Especial",
+      audio: sungAudio,
+      audioName: "Louvor | Ao Vivo 🎵.mp3",
+      slides: [{ tipo: "CAPA", letra: "Especial", tempo_seconds: 0 }],
+    });
+
+    expect(blob.type).toBe("application/x-louvorja-slja");
+
+    const loaded = await SljaConverter.loadSlja(blob);
+    expect(loaded.audio).not.toBeNull();
+    expect(loaded.audioName).not.toContain("|");
+    expect(loaded.audioName).not.toContain("?");
+    expect(loaded.meta.url_musica).toBe(`audio/${loaded.audioName}`);
+  });
+
+  it("localiza faixa no ZIP quando slides.lja legado contém ? no lugar de | ou emoji (#62)", async () => {
+    const zip = new JSZip();
+    zip.file(
+      "slides.lja",
+      SljaConverter.encodeCp1252(
+        [
+          "[Geral]",
+          "slides=1",
+          "audio=1",
+          "url_musica=audio/Hino ? 1.mp3",
+          "",
+          "[Slide:1]",
+          "tipo=CAPA",
+          "letra=Oi",
+        ].join("\r\n")
+      )
+    );
+    zip.file("audio/Hino | 1.mp3", new Uint8Array([0xff, 0xfb, 0x90, 0x00, 9]));
+    const brokenBlob = await zip.generateAsync({ type: "blob" });
+
+    const loaded = await SljaConverter.loadSlja(brokenBlob);
+    expect(loaded.audio).not.toBeNull();
+    expect(loaded.audioName).toBe("Hino | 1.mp3");
+  });
 });

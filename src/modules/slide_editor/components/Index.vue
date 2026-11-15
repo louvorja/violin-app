@@ -463,7 +463,7 @@
       </aside>
     </div>
 
-    <input ref="fileSlja" type="file" accept=".slja,.lja" hidden @change="onLoadSlja" />
+    <input ref="fileSlja" type="file" accept=".slja,.lja,.zip" hidden @change="onLoadSlja" />
     <input ref="fileTxt" type="file" accept=".txt" hidden @change="onImportTxt" />
     <input ref="fileAudio" type="file" accept="audio/*" hidden @change="onPickAudio" />
     <input ref="fileImage" type="file" accept="image/*,.heic,.heif" hidden @change="onPickImage" />

@@ -665,6 +665,7 @@ const EDITOR_ACTIONS = new Set<string>([
   "editor_last",
   "editor_audio_track",
   "editor_audio_attach",
+  "editor_audio_convert",
   "editor_audio_remove",
   "editor_play_pause",
   "editor_record_advance",
@@ -1203,9 +1204,11 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
 .ribbon-slider-value {
   font-size: var(--lj-text-sm);
   font-weight: var(--lj-weight-medium);
+  font-variant-numeric: tabular-nums;
   color: var(--lj-text);
   white-space: nowrap;
-  min-width: 32px;
+  width: 7ch;
+  flex-shrink: 0;
   text-align: right;
 }
 

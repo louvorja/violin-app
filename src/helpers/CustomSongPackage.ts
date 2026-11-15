@@ -105,7 +105,7 @@ const SESSION: MediaStore = {
 function fileStem(fileName: string): string {
   return String(fileName || "")
     .trim()
-    .replace(/\.(slja|lja)$/i, "")
+    .replace(/\.(slja|lja)(\.zip)?$/i, "")
     .trim();
 }
 
