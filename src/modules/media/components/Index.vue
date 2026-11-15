@@ -45,6 +45,7 @@
       <div class="media-preview-col">
         <Fullscreen
           v-if="!isYouTube"
+          ref="fullscreenStage"
           v-model="fullscreen"
           class="media-preview"
           :class="{ 'media-preview--page-fullscreen': pageOnlyFullscreen }"
@@ -56,11 +57,11 @@
               ref="videoPreview"
               class="media-video-preview"
               :src="config?.video_src || config?.audio || ''"
-              autoplay
               muted
               playsinline
               @error="onVideoPreviewError"
               @loadedmetadata="syncVideoPreview"
+              @canplay="syncVideoPreview"
             />
             <div v-if="videoPreviewFailed" class="media-video-error">
               <span>{{ $t("projection.video_unavailable") }}</span>
@@ -143,7 +144,7 @@ import LSlide from "@/components/Slide.vue";
 import LPlayer from "@/components/Player.vue";
 import LFullscreenPlayer from "@/components/FullscreenPlayer.vue";
 import YouTubeStage from "./YouTubeStage.vue";
-import { fullscreenApiAvailable } from "@/helpers/Fullscreen";
+import { fullscreenApiAvailable, watchDeferredFullscreenRequest } from "@/helpers/Fullscreen";
 import { LjButton, LjChip, LjPopover, LjProgress, LjSwitch, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import Modules from "@/helpers/Modules";
@@ -213,7 +214,7 @@ function syncVideoPreview() {
       /* ainda sem metadata */
     }
   }
-  if (source.paused) {
+  if (source.paused || playback.isPaused.value) {
     if (!video.paused) video.pause();
   } else if (video.paused) {
     video.play().catch(() => {});
@@ -243,7 +244,6 @@ watch(
     const video = videoPreview.value;
     if (video) {
       video.load();
-      video.play().catch(() => {});
       syncVideoPreview();
     }
     updateVideoSyncTimer();
@@ -251,10 +251,12 @@ watch(
   { immediate: true }
 );
 
+const fullscreenStage = ref(null);
 const fullscreen = computed({
   get: () => module_.value.config?.fullscreen,
   set: (value) => Media.fullscreen(value),
 });
+watchDeferredFullscreenRequest(fullscreen, fullscreenStage, () => Media.fullscreen(false));
 
 const fade_audio = computed({
   get: () => UserData.get("modules.media.fade_audio"),

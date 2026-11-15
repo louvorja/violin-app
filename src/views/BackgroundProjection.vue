@@ -20,15 +20,30 @@
         :style="{ '--fade-ms': fadeDurationMs + 'ms' }"
       >
         <img v-if="fileState.type === 'image'" :src="fileState.url" class="layer-file" alt="" />
-        <video
-          v-else-if="fileState.type === 'video'"
-          ref="projVideoRef"
-          :src="fileState.url"
-          class="layer-file"
-          autoplay
-          muted
-          loop
-        ></video>
+        <template v-else-if="fileState.type === 'video'">
+          <video
+            v-show="!videoFailed"
+            ref="projVideoRef"
+            :src="fileState.url"
+            class="layer-file"
+            muted
+            playsinline
+            preload="auto"
+            @loadedmetadata="onVideoReady"
+            @canplay="onVideoReady"
+            @seeked="onVideoSeeked"
+            @playing="onVideoPlaying"
+            @waiting="onVideoBuffering"
+            @stalled="onVideoBuffering"
+            @error="onVideoError"
+          ></video>
+          <div v-if="videoFailed" class="layer-file video-unavailable">
+            <span class="video-unavailable__title">{{ $t("projection.video_unavailable") }}</span>
+            <span v-if="videoFailure" class="video-unavailable__hint">
+              {{ $t(VIDEO_FAILURE_HINT[videoFailure]) }}
+            </span>
+          </div>
+        </template>
         <template v-else-if="fileState.type === 'youtube'">
           <div v-show="!ytFailed" ref="ytContainer" class="layer-file"></div>
           <div v-if="ytFailed" class="layer-file video-unavailable">
@@ -215,7 +230,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { reactive, ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { estiloDeFundo } from "@/helpers/BackgroundStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
@@ -238,12 +253,19 @@ import ModuleProjectionLayer from "@/components/ModuleProjectionLayer.vue";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { KEYS } from "@/constants/UserDataKeys";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
-import type { YTAPI, YTPlayer, VideoMediaState } from "@/types/Media";
+import type { YTAPI, YTPlayer, VideoMediaState, FileProjectionState } from "@/types/Media";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
 import {
   FileProjectionActivationGate,
   readFileActivation,
 } from "@/presentation/FileProjectionActivation";
+import { VIDEO_FAILURE_HINT } from "@/helpers/LocalFileStatus";
+import { mediaSourceDetails } from "@/helpers/MediaDiagnostics";
+import {
+  needsProjectedSourceResolution,
+  resolveProjectedFileSource,
+} from "@/helpers/ProjectedFileSource";
+import { useProjectedVideoSync } from "@/composables/useProjectedVideoSync";
 import {
   BackgroundPresentationGate,
   readStoredBackgroundState,
@@ -347,6 +369,33 @@ const fileState = reactive<{ active: boolean; type: string; url: string; playbac
   url: "",
 });
 const projVideoRef = ref<HTMLVideoElement | null>(null);
+let fileActivationGeneration = 0;
+let activeResolvedBlobUrl: string | null = null;
+const {
+  videoFailed,
+  videoFailure,
+  beginPlayback: beginVideoPlayback,
+  clearPlayback: clearVideoPlayback,
+  prepareVideo: prepareProjVideo,
+  requestVideoState: requestProjVideoState,
+  onVideoReady,
+  onVideoSeeked,
+  onVideoPlaying,
+  onVideoBuffering,
+  onVideoError,
+  handleVideoState,
+  dispose: disposeVideoSync,
+} = useProjectedVideoSync({
+  videoRef: projVideoRef,
+  isVideoActive: () => fileState.active && fileState.type === "video",
+  getPlaybackId: () => fileState.playback_id,
+  getSourceUrl: () => fileState.url,
+  windowRole: "background_projection",
+  firstFrameRole: "projection",
+  telemetryPrefix: "background_projection_video",
+  logLabel: "background projection video",
+  logPrefix: "[BackgroundProjection]",
+});
 const ytContainer = ref<HTMLDivElement | null>(null);
 let ytPlayer: YTPlayer | null = null;
 
@@ -593,9 +642,33 @@ useBroadcastListener(BROADCAST_TYPE.BACKGROUND_PROJECTION, (payload: unknown) =>
   activateBg(payload);
 });
 
+function commitFileActivation(
+  p: FileProjectionState,
+  diagnostics: Record<string, unknown>,
+  resolvedBlobUrl: string | null
+): void {
+  if (activeResolvedBlobUrl && activeResolvedBlobUrl !== resolvedBlobUrl) {
+    URL.revokeObjectURL(activeResolvedBlobUrl);
+  }
+  activeResolvedBlobUrl = resolvedBlobUrl;
+  const previousPlaybackId = fileState.playback_id;
+  fileState.active = true;
+  fileState.type = p.type;
+  fileState.url = p.url;
+  fileState.playback_id = p.playback_id;
+  youtubeStateGate.begin(p.playback_id);
+  beginVideoPlayback(p.playback_id, previousPlaybackId, p.type === "video", diagnostics);
+  Telemetry.setRuntimeContext?.({ playback_id: p.playback_id ?? null });
+  reloadWallpaper();
+  if (p.type === "video") nextTick(() => prepareProjVideo());
+  if (p.type === "pdf") nextTick(() => loadPdf(p.url, p.page || 1, p.playback_id));
+  if (p.type === "youtube") nextTick(() => _initYoutube());
+}
+
 function applyFileActivation(payload: unknown): void {
   const p = activationGate.accept(payload);
   if (!p) return;
+  const generation = ++fileActivationGeneration;
   ++pdfLoadGeneration;
   pdfRenderQueue.invalidate();
   _destroyYoutube();
@@ -603,15 +676,36 @@ function applyFileActivation(payload: unknown): void {
     void pdfDoc.loadingTask.destroy().catch(() => {});
     pdfDoc = null;
   }
-  fileState.active = true;
-  fileState.type = p.type;
-  fileState.url = p.url;
-  fileState.playback_id = p.playback_id;
-  youtubeStateGate.begin(p.playback_id);
-  reloadWallpaper();
-  if (p.type === "pdf") nextTick(() => loadPdf(p.url, p.page || 1, p.playback_id));
-  if (p.type === "youtube") nextTick(() => _initYoutube());
+  if (!needsProjectedSourceResolution(p)) {
+    const diagnostics = {
+      requested_source: {
+        ...mediaSourceDetails(p.url),
+        blob_mime: "unknown",
+        codec: "unknown",
+      },
+      blob_resolution: p.url?.startsWith("blob:") ? "no_library_reference" : "not_requested",
+    };
+    commitFileActivation(p, diagnostics, null);
+    return;
+  }
+  void resolveProjectedFileSource(p).then((resolved) => {
+    if (generation !== fileActivationGeneration) {
+      if (resolved.resolvedBlobUrl) URL.revokeObjectURL(resolved.resolvedBlobUrl);
+      return;
+    }
+    commitFileActivation(resolved.payload, resolved.diagnostics, resolved.resolvedBlobUrl);
+  });
 }
+
+watch(
+  () => [fileState.active, fileState.type, fileState.url, fileState.playback_id],
+  async ([active, type]) => {
+    if (active && type === "video") {
+      await nextTick();
+      prepareProjVideo();
+    }
+  }
+);
 
 function readPendingFile(): void {
   try {
@@ -631,13 +725,12 @@ function readPendingFile(): void {
 useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
   if ((payload as { action?: string } | null)?.action === "clear") {
     activationGate.retire();
+    ++fileActivationGeneration;
     ++pdfLoadGeneration;
     pdfRenderQueue.invalidate();
     _destroyYoutube();
-    if (pdfDoc) {
-      void pdfDoc.loadingTask.destroy().catch(() => {});
-      pdfDoc = null;
-    }
+    clearVideoPlayback();
+    youtubeStateGate.clear();
     fileState.active = false;
     reloadWallpaper();
     return;
@@ -658,6 +751,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload: unknown) => 
 
 useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
   activationGate.retire();
+  ++fileActivationGeneration;
   ++pdfLoadGeneration;
   pdfRenderQueue.invalidate();
   _destroyYoutube();
@@ -670,9 +764,12 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
     pdfDoc = null;
   }
   fileState.active = false;
+  clearVideoPlayback();
   youtubeStateGate.clear();
   fileState.type = "";
   fileState.url = "";
+  fileState.playback_id = undefined;
+  Telemetry.setRuntimeContext?.({ playback_id: null, presentation_revision: null });
   try {
     localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
   } catch {
@@ -699,7 +796,12 @@ useBroadcastListener(BROADCAST_TYPE.YOUTUBE_CONTROL, (payload: unknown) => {
 });
 
 useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
-  if (!fileState.active || fileState.type !== "youtube" || !ytPlayer) return;
+  if (!fileState.active) return;
+  if (fileState.type === "video") {
+    handleVideoState(payload);
+    return;
+  }
+  if (fileState.type !== "youtube" || !ytPlayer) return;
   const data = payload as VideoMediaState;
   if (!youtubeStateGate.accepts(data)) return;
   if (ytSyncFallbackTimer) clearTimeout(ytSyncFallbackTimer);
@@ -990,6 +1092,10 @@ onMounted(async () => {
   document.body.style.overflow = "hidden";
   document.body.style.background = "#000";
   window.addEventListener("keydown", onKey);
+  window.addEventListener("focus", requestProjVideoState);
+  window.addEventListener("pageshow", requestProjVideoState);
+  document.addEventListener("visibilitychange", requestProjVideoState);
+  document.addEventListener("resume", requestProjVideoState);
   const requestBibleState = () => {
     if (!bibleActive.value) $broadcast.send(BROADCAST_TYPE.REQUEST_BIBLE_STATE);
   };
@@ -1004,12 +1110,19 @@ onBeforeUnmount(() => {
   ++pdfLoadGeneration;
   fileState.active = false;
   pdfRenderQueue.invalidate();
+  disposeVideoSync();
+  if (activeResolvedBlobUrl) URL.revokeObjectURL(activeResolvedBlobUrl);
   if (pdfDoc) {
     void pdfDoc.loadingTask.destroy().catch(() => {});
     pdfDoc = null;
   }
   _destroyYoutube();
   if (wpBlobUrl) URL.revokeObjectURL(wpBlobUrl);
+  window.removeEventListener("keydown", onKey);
+  window.removeEventListener("focus", requestProjVideoState);
+  window.removeEventListener("pageshow", requestProjVideoState);
+  document.removeEventListener("visibilitychange", requestProjVideoState);
+  document.removeEventListener("resume", requestProjVideoState);
 });
 </script>
 

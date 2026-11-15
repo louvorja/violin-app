@@ -309,7 +309,10 @@ function _broadcastVideoState(currentTime?: number, isPaused?: boolean): void {
   const el = _audio.getElement();
   const position =
     currentTime ?? (Number.isFinite(el.currentTime) ? el.currentTime : _audio.currentTime.value);
-  const paused = isPaused ?? el.paused;
+  // Enquanto o áudio ainda faz buffer inicial (antes do play() resolver),
+  // `el.paused` já é false mas `_audio.isPaused.value` segue true: mantenha o
+  // vídeo pausado até a trilha começar de fato.
+  const paused = isPaused ?? (el.paused || _audio.isPaused.value);
   const sampledAt = Date.now();
   const snapshot = createVideoPlaybackSnapshot(
     {
@@ -2447,7 +2450,12 @@ const _self = {
     $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, projection);
     if (projection.type === "video" && videoAudioUrl) {
       await this.openAudio(
-        { url: videoAudioUrl, title: projection.title || "", mediaType: "video" },
+        {
+          url: videoAudioUrl,
+          title: projection.title || "",
+          mediaType: "video",
+          playbackId: projection.playback_id,
+        },
         true
       );
     }
@@ -2631,7 +2639,7 @@ const _self = {
       ]);
       if (stageEpoch !== _stageEpoch) return;
     }
-    const playback_id = _newPlaybackId();
+    const playback_id = params.playbackId || _newPlaybackId();
     const audioMode = params.mode || "audio";
     const playbackContext: AudioTelemetryContext = {
       playback_id,
@@ -3365,6 +3373,7 @@ const _self = {
   },
 
   fullscreen(value = true): void {
+    if (value && this.isMinimized()) this.maximize();
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.FULLSCREEN, value);
   },
 

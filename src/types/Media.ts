@@ -22,6 +22,8 @@ export interface MediaOpenParams {
   videoUrl?: string;
   /** Identificador do vídeo on-line quando reproduzido a partir de cache/stream. */
   videoId?: string;
+  /** Identidade já reservada pela projeção de arquivo para evitar reemissão dupla. */
+  playbackId?: string;
 }
 
 export interface MediaConfig {

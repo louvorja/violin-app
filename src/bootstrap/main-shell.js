@@ -1136,12 +1136,15 @@ $storage.hydrate().then(async () => {
               respond({ status: "ok" });
               break;
             }
-            await Media.projectFile({
-              url,
-              type: rec.type || "image",
-              title: clip(rec.name, 500),
-              libRef: { table: DB_TABLE.MEDIA_LIBRARY, id: String(rec.id) },
-            });
+            await Media.projectFile(
+              {
+                url,
+                type: rec.type || "image",
+                title: clip(rec.name, 500),
+                libRef: { table: DB_TABLE.MEDIA_LIBRARY, id: String(rec.id) },
+              },
+              rec.type === "video" ? url : undefined
+            );
             respond({ status: "ok" });
             break;
           }
@@ -1422,17 +1425,20 @@ $storage.hydrate().then(async () => {
                 remoteMediaPlaylistIndex = target;
                 break;
               }
-              await Media.projectFile({
-                url,
-                type: item.type || "image",
-                title: clip(item.name, 500),
-                // Canva não tem registro no IndexedDB — libRef só para os
-                // itens que vieram da biblioteca.
-                libRef:
-                  item.id && !item.canva
-                    ? { table: DB_TABLE.MEDIA_LIBRARY, id: String(item.id) }
-                    : undefined,
-              });
+              await Media.projectFile(
+                {
+                  url,
+                  type: item.type || "image",
+                  title: clip(item.name, 500),
+                  // Canva não tem registro no IndexedDB — libRef só para os
+                  // itens que vieram da biblioteca.
+                  libRef:
+                    item.id && !item.canva
+                      ? { table: DB_TABLE.MEDIA_LIBRARY, id: String(item.id) }
+                      : undefined,
+                },
+                item.type === "video" ? url : undefined
+              );
               remoteMediaPlaylistIndex = target;
             }
             break;

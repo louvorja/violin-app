@@ -566,3 +566,45 @@ it("buffering curto só registra recuperação e playing repetido não repete in
   audio.reset();
   vi.useRealTimers();
 });
+
+it("advanceTime(-10) volta ao início (0) quando currentTime é menor que 10s (#70)", () => {
+  audio.reset();
+  const el = audio.getElement();
+  Object.defineProperty(el, "duration", { configurable: true, value: 120 });
+  Object.defineProperty(el, "currentTime", {
+    configurable: true,
+    writable: true,
+    value: 4.5,
+  });
+  audio.currentTime.value = 4.5;
+  audio.duration.value = 120;
+
+  audio.advanceTime(-10);
+  expect(el.currentTime).toBe(0);
+
+  audio.reset();
+});
+
+it("music_media_ready registra elapsed_ms relativo ao início do carregamento do áudio (#16)", () => {
+  audio.reset();
+  vi.clearAllMocks();
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-15T18:00:00Z"));
+  const el = audio.getElement();
+  audio.setSrc("https://files.louvorja.com.br/musics/pt/hino.opus");
+  audio.setTelemetryContext({ playback_id: "p-ready", mode: "audio" });
+
+  vi.advanceTimersByTime(320);
+  el.dispatchEvent(new Event("canplay"));
+
+  expect(Telemetry.track).toHaveBeenCalledWith(
+    "music_media_ready",
+    expect.objectContaining({
+      playback_id: "p-ready",
+      readiness: "canplay",
+      elapsed_ms: 320,
+    })
+  );
+  audio.reset();
+  vi.useRealTimers();
+});

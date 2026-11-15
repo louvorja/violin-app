@@ -132,3 +132,15 @@ describe("Media.close — playlist (#54)", () => {
     expect(playlistClosed).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Media.fullscreen — player minimizado (#70)", () => {
+  it("maximiza o player ao pedir tela cheia enquanto minimizado", () => {
+    media.minimize();
+    expect(media.isMinimized()).toBe(true);
+
+    media.fullscreen(true);
+
+    expect(media.isMinimized()).toBe(false);
+    expect($appdata.get(KEYS.MODULES.MEDIA.CONFIG.FULLSCREEN)).toBe(true);
+  });
+});

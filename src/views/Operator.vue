@@ -22,7 +22,6 @@
           ref="videoRef"
           :src="videoUrl"
           class="op-video-media"
-          autoplay
           muted
           playsinline
           preload="auto"
@@ -243,15 +242,6 @@ function prepareVideo() {
   el.muted = true;
   el.playsInline = true;
   el.load();
-  el.play().catch((error) => {
-    console.warn("[Operator] vídeo não iniciou sozinho:", error?.name || error);
-    Telemetry.log("warn", "operator video play rejected", {
-      name: error?.name,
-      message: error?.message,
-      ready_state: el.readyState,
-      network_state: el.networkState,
-    });
-  });
 }
 
 function onVideoReady() {
@@ -268,8 +258,6 @@ function onVideoReady() {
     applyVideoState(el, latestVideoState, (error) => {
       console.warn("[Operator] vídeo não iniciou na sincronia:", error?.name || error);
     });
-  } else if (el.paused) {
-    el.play().catch(() => {});
   }
 }
 

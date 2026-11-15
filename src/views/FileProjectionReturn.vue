@@ -20,7 +20,6 @@
                 :src="fileProjection.url"
                 class="return-file-projection__media"
                 :style="{ backgroundColor: wpColor }"
-                autoplay
                 muted
                 playsinline
                 preload="auto"
@@ -91,33 +90,27 @@ import $userdata from "@/helpers/UserData";
 import { getSetting } from "@/helpers/SettingsStorage";
 import { loadPdfDocument, type PDFDocumentProxy } from "@/helpers/PdfRuntime";
 import { DEFAULT_BACKGROUND_COLOR, Settings } from "@/types/Settings";
-import { DB_TABLE, SETTINGS_TABLE } from "@/constants/DbTables";
+import { SETTINGS_TABLE } from "@/constants/DbTables";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
-import { heicToJpeg, isHeic } from "@/helpers/ImageConvert";
 import Telemetry from "@/helpers/Telemetry";
 import {
-  mediaElementDetails,
   mediaSourceDetails,
   mediaDiagnosticMessage,
   mediaDiagnosticVideoId,
-  mediaBlobDetails,
-  mediaLibraryDetails,
   mediaDiagnosticLog,
 } from "@/helpers/MediaDiagnostics";
-import {
-  reportVideoFailure,
-  VIDEO_FAILURE_HINT,
-  type VideoFailure,
-} from "@/helpers/LocalFileStatus";
+import { VIDEO_FAILURE_HINT } from "@/helpers/LocalFileStatus";
 import { normalizeYouTubeError } from "@/helpers/YouTubeError";
-import { applyVideoState } from "@/helpers/VideoSync";
-import $idb from "@/helpers/IndexedDB";
 import { VideoStateGate } from "@/helpers/VideoStateVersion";
 import { FileProjectionActivationGate } from "@/presentation/FileProjectionActivation";
-import { VideoFrameConfirmation } from "@/helpers/VideoFrameConfirmation";
-import { VideoFirstFrame } from "@/helpers/VideoFirstFrame";
 import { fileProjectionPageFor } from "@/helpers/FileProjectionPage";
 import { PdfPageRenderQueue } from "@/helpers/PdfPageRenderQueue";
+import {
+  needsProjectedSourceResolution,
+  resolveProjectedFileSource,
+  resolveProjectedFileSourceImmediate,
+} from "@/helpers/ProjectedFileSource";
+import { useProjectedVideoSync } from "@/composables/useProjectedVideoSync";
 
 function getYT(): YTAPI | null {
   return (window as unknown as { YT?: YTAPI }).YT ?? null;
@@ -146,19 +139,35 @@ const { transitionName, stageStyle } = useTransitionStage(
 );
 
 const videoRef = ref<HTMLVideoElement | null>(null);
-const videoFailed = ref(false);
-const videoFailure = ref<VideoFailure | null>(null);
 const videoStateGate = new VideoStateGate();
 const activationGate = new FileProjectionActivationGate();
-const videoFrameConfirmation = new VideoFrameConfirmation(
-  "file_projection_return_video",
-  (event, properties) => Telemetry.track(event, properties)
-);
-const videoFirstFrame = new VideoFirstFrame("return", (event, properties) =>
-  Telemetry.track(event, properties)
-);
-let latestVideoState: VideoMediaState | null = null;
 let activationGeneration = 0;
+let activeResolvedBlobUrl: string | null = null;
+const {
+  videoFailed,
+  videoFailure,
+  beginPlayback,
+  clearPlayback,
+  prepareVideo: _prepareVideo,
+  requestVideoState: _requestVideoState,
+  onVideoReady,
+  onVideoSeeked,
+  onVideoPlaying,
+  onVideoBuffering,
+  onVideoError,
+  handleVideoState,
+  dispose: disposeVideoSync,
+} = useProjectedVideoSync({
+  videoRef,
+  isVideoActive: () => fileProjection.active && fileProjection.type === "video",
+  getPlaybackId: () => fileProjection.playback_id,
+  getSourceUrl: () => fileProjection.url,
+  windowRole: "auxiliary_return",
+  firstFrameRole: "return",
+  telemetryPrefix: "file_projection_return_video",
+  logLabel: "file projection return video",
+  logPrefix: "[FileProjectionReturn]",
+});
 const ytContainer = ref<HTMLDivElement | null>(null);
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
 const ready = ref<boolean>(false);
@@ -315,75 +324,19 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
   ) {
     _destroyYoutube();
   }
-  let resolvedBlobUrl: string | null = null;
-  let sourceDiagnostics: Record<string, unknown> = {
-    requested_source: {
-      ...mediaSourceDetails(p.url),
-      ...mediaLibraryDetails(p.libRef),
-      blob_mime: "unknown",
-      codec: "unknown",
-    },
-    blob_resolution: p.url?.startsWith("blob:") ? "no_library_reference" : "not_requested",
-  };
-  // Object URLs pertencem ao renderer que os criou. Para vídeos do acervo,
-  // reconstroi o blob a partir do IndexedDB antes de montar o elemento — sem
-  // isso a janela de retorno recebe uma URL blob morta e fica preta.
-  if (p.libRef?.id && p.url?.startsWith("blob:")) {
-    try {
-      const rec = await $idb.get<{ data?: Blob | ArrayBuffer; mime?: string; name?: string }>(
-        p.libRef.table || DB_TABLE.MEDIA_LIBRARY,
-        p.libRef.id
-      );
-      sourceDiagnostics.blob_resolution = "library_record_missing";
-      if (rec?.data && rec.mime) {
-        let blob = new Blob([rec.data], { type: rec.mime });
-        if (p.type === "image" && (p.heic || isHeic(rec.name, rec.mime))) {
-          blob = await heicToJpeg(blob);
-        }
-        sourceDiagnostics = {
-          ...sourceDiagnostics,
-          blob_resolution: "resolved",
-          requested_source: {
-            ...(sourceDiagnostics.requested_source as Record<string, unknown>),
-            ...mediaBlobDetails(blob),
-          },
-        };
-        resolvedBlobUrl = URL.createObjectURL(blob);
-        p = { ...p, url: resolvedBlobUrl };
-      } else {
-        console.warn("[FileProjectionReturn] dados do acervo ausentes para blob:", p.libRef.id);
-      }
-    } catch (error) {
-      sourceDiagnostics.blob_resolution = "library_read_failed";
-      console.warn(
-        "[FileProjectionReturn] resolução do blob falhou:",
-        mediaDiagnosticMessage(error instanceof Error ? error.message : String(error))
-      );
-    }
-  }
-  if (p.type === "image" && p.heic && !resolvedBlobUrl && !p.url?.startsWith("blob:")) {
-    try {
-      const response = await fetchWithTimeout(p.url, {
-        timeout: NET_TIMEOUT.MEDIA,
-        source: "file",
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      resolvedBlobUrl = URL.createObjectURL(await heicToJpeg(await response.blob()));
-      p = { ...p, url: resolvedBlobUrl };
-    } catch (error) {
-      sourceDiagnostics.blob_resolution = "heic_conversion_failed";
-      console.warn("[FileProjectionReturn] conversão de HEIC falhou:", error);
-      p = { ...p, url: "" };
-    }
-  }
+  const resolved = needsProjectedSourceResolution(p)
+    ? await resolveProjectedFileSource(p)
+    : resolveProjectedFileSourceImmediate(p);
   if (generation !== activationGeneration) {
-    if (resolvedBlobUrl) URL.revokeObjectURL(resolvedBlobUrl);
+    if (resolved.resolvedBlobUrl) URL.revokeObjectURL(resolved.resolvedBlobUrl);
     return;
   }
-  if (p.type !== "video" || !p.playback_id || p.playback_id !== fileProjection.playback_id) {
-    latestVideoState = null;
+  if (activeResolvedBlobUrl && activeResolvedBlobUrl !== resolved.resolvedBlobUrl) {
+    URL.revokeObjectURL(activeResolvedBlobUrl);
   }
-  videoSourceDiagnostics = sourceDiagnostics;
+  activeResolvedBlobUrl = resolved.resolvedBlobUrl;
+  p = resolved.payload;
+  const previousPlaybackId = fileProjection.playback_id;
   fileProjection.active = true;
   fileProjection.type = p.type || "image";
   fileProjection.url = p.url || "";
@@ -391,183 +344,15 @@ async function _activateProjection(p: FileProjectionState): Promise<void> {
   fileProjection.playback_id = p.playback_id;
   fileProjection.backward = p.backward === true;
   videoStateGate.begin(p.playback_id);
-  videoFirstFrame.begin(p.type === "video" ? p.playback_id : null);
+  beginPlayback(p.playback_id, previousPlaybackId, p.type === "video", resolved.diagnostics);
   Telemetry.setRuntimeContext({ playback_id: p.playback_id ?? null });
   console.log("[FileProjectionReturn] Ativado:", p.type, mediaSourceDetails(p.url));
   if (p.type === "video") {
-    videoFailed.value = false;
     await nextTick();
     _prepareVideo();
   }
   if (p.type === "youtube") nextTick(() => _initYoutube());
   if (p.type === "pdf") nextTick(() => loadPdf(p.url, p.page || 1, p.playback_id));
-}
-
-/** Capture identity before play(); the element may be reused before its promise rejects. */
-function _captureVideoDiagnostics(el: HTMLVideoElement): () => Record<string, unknown> {
-  const playbackId = fileProjection.playback_id;
-  const sourceUrl = fileProjection.url;
-  const generation = activationGeneration;
-  const source = { ...videoSourceDiagnostics };
-  return () => {
-    const stale =
-      generation !== activationGeneration ||
-      playbackId !== fileProjection.playback_id ||
-      sourceUrl !== fileProjection.url;
-    return {
-      ...source,
-      playback_id: playbackId,
-      stale_context: stale,
-      ...(stale ? { snapshot_omitted: "source_replaced" } : mediaElementDetails(el)),
-    };
-  };
-}
-
-// Mesmo motivo de FileProjection.vue: ativação e watch chegam pela mesma mudança.
-const preparedVideos = new WeakMap<HTMLVideoElement, string>();
-
-function _prepareVideo(): void {
-  const el = videoRef.value;
-  if (!el || !fileProjection.active || fileProjection.type !== "video") return;
-  const prepared = `${fileProjection.playback_id ?? ""}|${fileProjection.url}`;
-  if (preparedVideos.get(el) === prepared) return;
-  preparedVideos.set(el, prepared);
-  videoFailed.value = false;
-  el.muted = true;
-  el.playsInline = true;
-  videoFirstFrame.attach(el);
-  el.load();
-  const diagnosticContext = _captureVideoDiagnostics(el);
-  el.play().catch((error) => {
-    console.warn("[FileProjectionReturn] vídeo não iniciou sozinho:", error?.name || error);
-    mediaDiagnosticLog("warn", "file projection return video play rejected", {
-      ...diagnosticContext(),
-      window_role: "auxiliary_return",
-      phase: "initial_play",
-      name: error?.name,
-      message: mediaDiagnosticMessage(error?.message),
-    });
-  });
-}
-
-function _requestVideoState(): void {
-  if (document.hidden || !fileProjection.active || fileProjection.type !== "video") return;
-  if (!fileProjection.playback_id) return;
-  if (!videoRef.value || videoRef.value.readyState < 1) return;
-  Broadcast.send(BROADCAST_TYPE.REQUEST_VIDEO_STATE, { playback_id: fileProjection.playback_id });
-}
-
-function onVideoReady(event: Event): void {
-  const el = videoRef.value;
-  if (!el) return;
-  videoFailed.value = false;
-  videoFirstFrame.mediaReady(el);
-  if (event.type === "loadedmetadata") _requestVideoState();
-  console.info("[FileProjectionReturn] vídeo pronto:", {
-    playback_id: fileProjection.playback_id,
-    duration: Number.isFinite(el.duration) ? Number(el.duration.toFixed(3)) : 0,
-    width: el.videoWidth,
-    height: el.videoHeight,
-    ready_state: el.readyState,
-  });
-  Telemetry.track("file_projection_return_video_ready", {
-    readiness: event.type,
-    playback_id: fileProjection.playback_id,
-    duration: Number.isFinite(el.duration) ? el.duration : 0,
-    width: el.videoWidth,
-    height: el.videoHeight,
-  });
-  if (latestVideoState) {
-    _applyVideoState(latestVideoState);
-  } else if (el.paused) {
-    el.play().catch(() => {});
-  }
-}
-
-function _applyVideoState(state: VideoMediaState): void {
-  const el = videoRef.value;
-  if (!el) return;
-  const diagnosticContext = _captureVideoDiagnostics(el);
-  const syncAction = applyVideoState(el, state, (error) => {
-    console.warn(
-      "[FileProjectionReturn] vídeo não iniciou na sincronia:",
-      error instanceof Error ? error.name : error
-    );
-    mediaDiagnosticLog("warn", "file projection return video sync play rejected", {
-      ...diagnosticContext(),
-      phase: "sync_play",
-      window_role: "auxiliary_return",
-      name: error instanceof Error ? error.name : undefined,
-      message: mediaDiagnosticMessage(error instanceof Error ? error.message : String(error)),
-    });
-  });
-  videoFrameConfirmation.observe(el, state, syncAction);
-}
-
-function onVideoSeeked(): void {
-  if (latestVideoState) _applyVideoState(latestVideoState);
-}
-
-function onVideoPlaying(): void {
-  const el = videoRef.value;
-  console.info("[FileProjectionReturn] vídeo reproduzindo:", {
-    playback_id: fileProjection.playback_id,
-    current_time: el && Number.isFinite(el.currentTime) ? Number(el.currentTime.toFixed(3)) : 0,
-  });
-  Telemetry.track("file_projection_return_video_playing", {
-    playback_id: fileProjection.playback_id,
-  });
-}
-
-function onVideoBuffering(event: Event): void {
-  const el = event.currentTarget as HTMLVideoElement | null;
-  console.warn("[FileProjectionReturn] vídeo aguardando dados:", {
-    playback_id: fileProjection.playback_id,
-    trigger: event.type,
-    current_time: el && Number.isFinite(el.currentTime) ? Number(el.currentTime.toFixed(3)) : 0,
-    ready_state: el?.readyState,
-    network_state: el?.networkState,
-  });
-  mediaDiagnosticLog("warn", "file projection return video buffering", {
-    playback_id: fileProjection.playback_id,
-    trigger: event.type,
-    ready_state: el?.readyState,
-  });
-}
-
-function onVideoError(event: Event): void {
-  const el = event.currentTarget as HTMLVideoElement | null;
-  videoFailed.value = true;
-  videoFailure.value = null;
-  videoFrameConfirmation.cancel();
-  videoFirstFrame.cancel();
-  const url = fileProjection.url;
-  const playbackId = fileProjection.playback_id;
-  // Aviso, não erro: a gravidade sai do motivo, decidido em reportVideoFailure.
-  console.warn("[FileProjectionReturn] vídeo local falhou:", {
-    playback_id: playbackId,
-    code: el?.error?.code,
-    message: mediaDiagnosticMessage(el?.error?.message),
-    source: mediaSourceDetails(url),
-  });
-  void reportVideoFailure({
-    el,
-    url,
-    label: "File projection return video",
-    event: "file_projection_return_video_failed",
-    operation: "file_projection_return_video",
-    details: {
-      ...mediaElementDetails(el),
-      ...videoSourceDiagnostics,
-      window_role: "auxiliary_return",
-      phase: "media_element",
-      playback_id: playbackId,
-    },
-  }).then((failure) => {
-    if (playbackId === fileProjection.playback_id && url === fileProjection.url) {
-      videoFailure.value = failure;
-    }
-  });
 }
 
 watch(
@@ -626,7 +411,7 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION, (payload: unknown) => {
     _destroyYoutube();
     fileProjection.active = false;
     videoStateGate.clear();
-    latestVideoState = null;
+    clearPlayback();
     return;
   }
   _activateProjection((payload || {}) as FileProjectionState);
@@ -673,8 +458,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
   pdfDoc = null;
   fileProjection.active = false;
   videoStateGate.clear();
-  latestVideoState = null;
-  videoFirstFrame.cancel();
+  clearPlayback();
   Telemetry.setRuntimeContext({ playback_id: null, presentation_revision: null });
   try {
     localStorage.removeItem(KEYS.PROJECTION.LJ_FILE_PROJECTION);
@@ -685,12 +469,7 @@ useBroadcastListener(BROADCAST_TYPE.MEDIA_CLOSE, () => {
 });
 
 useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
-  if (!fileProjection.active || fileProjection.type !== "video") return;
-  const data = payload as VideoMediaState;
-  if (!videoStateGate.accepts(data)) return;
-  latestVideoState = data;
-  videoFirstFrame.acceptRevision(data.revision, data.playback_id);
-  _applyVideoState(data);
+  handleVideoState(payload);
 });
 
 useBroadcastListener(BROADCAST_TYPE.VIDEO_STATE, (payload: unknown) => {
@@ -1089,8 +868,8 @@ onBeforeUnmount(() => {
   ++pdfLoadGeneration;
   fileProjection.active = false;
   pdfRenderQueue.invalidate();
-  videoFrameConfirmation.dispose();
-  videoFirstFrame.dispose();
+  disposeVideoSync();
+  if (activeResolvedBlobUrl) URL.revokeObjectURL(activeResolvedBlobUrl);
   if (wpBlobUrl) URL.revokeObjectURL(wpBlobUrl);
   if (pdfDoc) {
     try {

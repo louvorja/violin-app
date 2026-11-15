@@ -5,6 +5,7 @@
   <Teleport to="body">
     <Fullscreen
       v-if="mounted"
+      ref="fullscreenStage"
       v-model="fullscreen"
       class="media-yt-stage"
       data-theme="dark"
@@ -30,6 +31,7 @@ import Media from "@/composables/useMedia";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useYouTubeEmbed } from "@/composables/useYouTubeEmbed";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
+import { watchDeferredFullscreenRequest, type FullscreenComponentLike } from "@/helpers/Fullscreen";
 import type { VideoMediaState } from "@/types/Media";
 
 /** A prévia da janela do Mídia sobre a qual o palco se posiciona; null com a janela minimizada. */
@@ -45,10 +47,12 @@ const source = computed(() => {
   const playbackId = String(config.value?.youtube_playback_id || "");
   return url && playbackId ? { url, playbackId } : null;
 });
+const fullscreenStage = ref<FullscreenComponentLike | null>(null);
 const fullscreen = computed({
   get: () => !!config.value?.fullscreen && !!source.value,
   set: (value: boolean) => Media.fullscreen(value),
 });
+watchDeferredFullscreenRequest(fullscreen, fullscreenStage, () => Media.fullscreen(false));
 
 const now = ref(Date.now());
 const startedAt = ref(0);
