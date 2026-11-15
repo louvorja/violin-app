@@ -100,4 +100,32 @@ describe("CategoryManagerDialog — nomes duplicados", () => {
   it("a mensagem existe em pt e es", () => {
     expectKeyExists("shell.category.duplicate_name");
   });
+
+  it("abre só o formulário de edição quando chamado pelo chip", async () => {
+    const wrapper = mountUi(CategoryManagerDialog, {
+      props: {
+        modelValue: false,
+        categories: CATEGORIAS,
+        saving: false,
+        moduleId: "media_library",
+      },
+      global: {
+        stubs: {
+          LjDialog: {
+            props: ["modelValue", "title"],
+            template:
+              '<div v-if="modelValue" :data-dialog="title"><slot /><slot name="footer" /></div>',
+          },
+        },
+      },
+    });
+
+    (wrapper.vm as unknown as { openEditCategory: (_cat: Categoria) => void }).openEditCategory(
+      CATEGORIAS[0]
+    );
+    await nextTick();
+
+    expect(wrapper.find('[data-dialog="Editar categoria"]').exists()).toBe(true);
+    expect(wrapper.find('[data-dialog="Gerenciar Categorias"]').exists()).toBe(false);
+  });
 });

@@ -90,8 +90,6 @@
                 :drop-target="dropTargetId === cat.id"
                 :add-item-label="t('ribbon.btn.add_item')"
                 :edit-label="t('shell.category.edit_category')"
-                show-add
-                :add-label="tm('add_files')"
                 @select="onCategoryChipClick(cat.id)"
                 @add="onCategoryAddClick(cat.id)"
                 @edit="editCategoryFromChip(cat.id)"
@@ -111,8 +109,6 @@
                 :drop-target="dropTargetId === UNCATEGORIZED_ID"
                 :editable="false"
                 :add-item-label="t('ribbon.btn.add_item')"
-                show-add
-                :add-label="tm('add_files')"
                 @select="onCategoryChipClick(UNCATEGORIZED_ID)"
                 @add="onCategoryAddClick(UNCATEGORIZED_ID)"
                 @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
@@ -631,7 +627,8 @@ function onCategoryAddClick(categoryId: string): void {
 function editCategoryFromChip(categoryId: string): void {
   const category = categories.value.find((item) => item.id === categoryId);
   if (!category) return;
-  showManageDialog.value = true;
+  // Abre só o formulário de edição; abrir também o gerenciador deixava dois
+  // diálogos sobrepostos e o primeiro clique caía no backdrop do de baixo.
   categoryManagerRef.value?.openEditCategory(category);
 }
 

@@ -72,8 +72,6 @@
           :play-label="tm('play_category')"
           :show-play="videos.some((v) => v.categoryId === cat.id)"
           :edit-label="t('shell.category.edit_category')"
-          show-add
-          :add-label="tm('add_video')"
           @select="onCategoryChipClick(cat.id)"
           @play="playCategoryVideos(cat.id)"
           @add="onAddCategoryClick(cat.id)"
@@ -96,8 +94,6 @@
           :add-item-label="t('ribbon.btn.add_item')"
           :play-label="tm('play_category')"
           :show-play="uncategorizedCount > 0"
-          show-add
-          :add-label="tm('add_video')"
           @select="onCategoryChipClick(UNCATEGORIZED_ID)"
           @play="playCategoryVideos(UNCATEGORIZED_ID)"
           @add="onAddCategoryClick()"
@@ -604,7 +600,8 @@ function onAddCategoryClick(categoryId?: string): void {
 function editCategoryFromChip(categoryId: string): void {
   const category = categories.value.find((item) => item.id === categoryId);
   if (!category) return;
-  showManageDialog.value = true;
+  // Abre só o formulário de edição; abrir também o gerenciador deixava dois
+  // diálogos sobrepostos e o primeiro clique caía no backdrop do de baixo.
   categoryManagerRef.value?.openEditCategory(category);
 }
 

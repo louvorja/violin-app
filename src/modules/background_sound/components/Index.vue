@@ -627,7 +627,8 @@ function addItemsToCategory(categoryId: string): void {
 function editCategoryFromChip(categoryId: string): void {
   const category = categories.value.find((item) => item.id === categoryId);
   if (!category) return;
-  showManageDialog.value = true;
+  // Abre só o formulário de edição; abrir também o gerenciador deixava dois
+  // diálogos sobrepostos e o primeiro clique caía no backdrop do de baixo.
   categoryManagerRef.value?.openEditCategory(category);
 }
 
