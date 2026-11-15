@@ -184,6 +184,45 @@ describe("useSyncManager.downloadBibleVersions", () => {
     expect(chapterRequests.sort()).toEqual(["bible_1_1_2", "bible_1_1_3"]);
   });
 
+  it("interrompe após falhas consecutivas (404 em série) e marca erro sem concluir tarefa nem tempestade de GETs (#13)", async () => {
+    isInstalled.mockResolvedValue(false);
+    install.mockRejectedValue(new Error("bundle indisponível"));
+    storedIds.mockResolvedValue(new Set());
+    const manyBooks = [{ id_bible_book: 1, chapters: 40 }];
+    dbGet.mockImplementation(async (key: string) => (key === "pt_bible_book" ? manyBooks : null));
+    const sync = await mountSync();
+    const { useBackgroundTasks } = await import("@/composables/useBackgroundTasks");
+
+    const downloaded = await sync.downloadBibleVersions([1], versions, "pt");
+
+    const chapterRequests = dbGet.mock.calls.filter(([k]) => k.startsWith("bible_"));
+    // Para ao atingir 8 falhas seguidas (2 lotes de 4), sem disparar os 40 capítulos.
+    expect(chapterRequests.length).toBe(8);
+    expect(downloaded).toBe(0);
+    const task = useBackgroundTasks().tasks.value.find((t) => t.id === "sync-bible");
+    expect(task?.status).toBe("error");
+  });
+
+  it("interrompe imediatamente em HTTP 429 e não grava versão parcial como concluída (#13)", async () => {
+    isInstalled.mockResolvedValue(false);
+    install.mockRejectedValue(new Error("bundle indisponível"));
+    storedIds.mockResolvedValue(new Set());
+    const manyBooks = [{ id_bible_book: 1, chapters: 20 }];
+    dbGet.mockImplementation(async (key: string) => {
+      if (key === "pt_bible_book") return manyBooks;
+      throw new Error("HTTP 429");
+    });
+    const sync = await mountSync();
+    const { useBackgroundTasks } = await import("@/composables/useBackgroundTasks");
+
+    await sync.downloadBibleVersions([1], versions, "pt");
+
+    const chapterRequests = dbGet.mock.calls.filter(([k]) => k.startsWith("bible_"));
+    expect(chapterRequests.length).toBe(4);
+    const task = useBackgroundTasks().tasks.value.find((t) => t.id === "sync-bible");
+    expect(task?.status).toBe("error");
+  });
+
   it("não deixa a tarefa em andamento quando não há nada a baixar", async () => {
     isInstalled.mockResolvedValue(true);
     storedIds.mockResolvedValue(new Set(chapterKeys));
