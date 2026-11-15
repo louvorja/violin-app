@@ -333,3 +333,32 @@ test('timer: com o aviso em "Não", passar do horário ainda fica vermelho', asy
   await expect(page.getByTestId("timer-stage")).toHaveAttribute("data-alert", "danger");
   await expect.poll(color).toBe("rgb(231, 76, 60)");
 });
+
+for (const mod of MODULES) {
+  test(`${mod.id}: cor do relógio pinta só a hora, não o timer`, async ({ page, context }) => {
+    await openModule(page, mod);
+    const display = page.getByTestId(mod.display);
+
+    await page.evaluate(async (id) => {
+      const { default: userdata } = await import("/src/helpers/UserData.ts");
+      userdata.set(`modules.${id}.font_color`, "#FFFFFF");
+      userdata.set(`modules.${id}.clock_color_enabled`, true);
+      userdata.set(`modules.${id}.clock_color`, "#22C55E");
+    }, mod.id);
+
+    const projection = await context.newPage();
+    await projection.goto(`/projection/module?module=${mod.id}`);
+    await page.bringToFront();
+
+    const color = (locator) => locator.evaluate((el) => getComputedStyle(el).color);
+    const time = display.locator("span").first();
+    const clock = display.locator("span").nth(1);
+    const lines = projection.locator(".module-projection__line");
+
+    await expect(lines).toHaveCount(2);
+    await expect.poll(() => color(time)).toBe("rgb(255, 255, 255)");
+    await expect.poll(() => color(clock)).toBe("rgb(34, 197, 94)");
+    await expect.poll(() => color(lines.nth(0))).toBe("rgb(255, 255, 255)");
+    await expect.poll(() => color(lines.nth(1))).toBe("rgb(34, 197, 94)");
+  });
+}

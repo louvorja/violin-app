@@ -27,6 +27,12 @@ export const module: Module = {
   customization: {
     font: { type: "font", default: FONT.PROJECTION.INHERIT },
     font_color: { type: "color", default: "#FFFFFF" },
+    /*
+     * Cor do relógio separada da cor do texto: o switch evita que o campo
+     * apareça para quem nunca vai usá-lo; desligado, vale `font_color`.
+     */
+    clock_color_enabled: { type: "boolean", default: false },
+    clock_color: { type: "color", default: "#FFFFFF", showWhen: "clock_color_enabled" },
     text_background_enabled: { type: "boolean", default: false },
     text_background_color: { type: "color", default: "transparent" },
     text_padding_x: { type: "padding", default: 0 },

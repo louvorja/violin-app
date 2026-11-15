@@ -107,6 +107,8 @@
       },
       "font": "Fonte",
       "color": "Cor",
+      "clock_color_toggle": "Cor do relógio",
+      "clock_color": "Cor personalizada",
       "size": "Tamanho da fonte",
       "text_shadow": "Sombra no texto",
       "shadow_color": "Cor da sombra",

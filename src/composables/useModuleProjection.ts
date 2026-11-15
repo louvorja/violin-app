@@ -35,6 +35,8 @@ interface ProjectionPayload {
   active?: boolean;
   /** Cor de destaque do texto (ex: alerta do timer/timer_worship). */
   color?: string;
+  /** Cor da linha do relógio (segunda linha), sem pintar o timer inteiro. */
+  clockColor?: string;
   /** Tipo do sorteio no módulo draw: número ou nome. */
   mode?: "number" | "names";
   /** Roda 3D exibida apenas enquanto o sorteio está girando. */
