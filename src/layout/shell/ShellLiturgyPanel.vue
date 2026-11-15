@@ -16,7 +16,7 @@
       >
         <LjIcon :icon="effectiveCollapsed ? ICONS.UI.BACK : ICONS.UI.CHEVRON_RIGHT" size="16" />
       </button>
-      <LjIcon :icon="ICONS.LITURGY.SCRIPT" size="14" class="liturgy-header-icon" />
+      <LjIcon :icon="ICONS.MODULES.LITURGY" size="14" class="liturgy-header-icon" />
       <span class="liturgy-header-title lj-u-truncate">{{ $t("shell.liturgy_title") }}</span>
       <span v-if="!effectiveCollapsed && totals.count > 0" class="liturgy-totals">
         {{ totals.count }} · {{ totals.duration }}
