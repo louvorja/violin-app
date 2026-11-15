@@ -9,7 +9,7 @@ export interface RoleContribuitor {
 enum RoleContribuitorEnum {
   web = "Web",
   desktop = "Violin Desktop",
-  delphi = "Delphi",
+  delphi = "Classic Desktop",
   api = "API",
   mobile = "Mobile"
 }

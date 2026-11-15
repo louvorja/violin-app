@@ -19,7 +19,8 @@ const B = "00000000-0000-0000-0000-00000000000b";
 // O SW é gerado pelo Workbox, como no build de produção, sem simular sua ativação.
 async function createBuilds(root) {
   const mocks = {
-    "@/helpers/Http": "export const NET_TIMEOUT={QUICK:5000}; export const fetchWithTimeout=fetch;",
+    "@/helpers/Http":
+      "export const NET_TIMEOUT={QUICK:5000,DEFAULT:5000}; export const fetchWithTimeout=fetch;",
     "@/helpers/ReliabilityDiagnostics":
       "export const reportReliabilityEvent=()=>{}; export const reportReliabilityFailure=()=>{};",
     "@/helpers/AppData": "export default {get:()=>window.playing};",

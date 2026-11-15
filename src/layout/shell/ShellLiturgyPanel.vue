@@ -16,7 +16,11 @@
       >
         <LjIcon :icon="effectiveCollapsed ? ICONS.UI.BACK : ICONS.UI.CHEVRON_RIGHT" size="16" />
       </button>
-      <LjIcon :icon="ICONS.MODULES.LITURGY" size="14" class="liturgy-header-icon" />
+      <LjIcon
+        :icon="ICONS.MODULES.LITURGY"
+        :color="getModule(ModuleEnum.LITURGY).color"
+        size="20"
+      />
       <span class="liturgy-header-title lj-u-truncate">{{ $t("shell.liturgy_title") }}</span>
       <span v-if="!effectiveCollapsed && totals.count > 0" class="liturgy-totals">
         {{ totals.count }} · {{ totals.duration }}
@@ -115,6 +119,8 @@ import { useLiturgyExecution } from "@/modules/liturgy/composables/useLiturgyExe
 import { prepararAgenda } from "@/modules/liturgy/agenda";
 import { useViewport } from "@/composables/useViewport";
 import Platform from "@/helpers/Platform";
+import { getModule } from "@/config/modules";
+import { ModuleEnum } from "@/enums/ModuleEnum";
 
 const { t } = useI18n();
 
