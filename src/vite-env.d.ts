@@ -118,6 +118,25 @@ declare global {
     continuation?: string | null;
   }
 
+  /** Pastas gerenciadas do acervo que guardam arquivos de biblioteca. */
+  type LibraryFileKind = "media" | "background-projection" | "background-sound" | "liturgy-files";
+
+  interface StoredLibraryFile {
+    /** Caminho relativo dentro do acervo (`media-library/<id>/<nome>`). */
+    path: string;
+    name: string;
+    size: number;
+    sha256?: string;
+  }
+
+  interface LibraryFileWriteSession {
+    token: string;
+  }
+
+  interface LibraryExportSession {
+    token: string;
+  }
+
   interface LouvorjaApi {
     platform: string;
     systemMemory?: () => { total: number; free: number };
@@ -262,6 +281,8 @@ declare global {
         videosDir?: string;
         videos?: { bytes: number; count: number };
         files?: { bytes: number; count: number };
+        /** Bibliotecas do app no acervo (mídia, projeção, som, liturgia). */
+        library?: { bytes: number; count: number };
         /** Cache de export do Canva, no perfil e fora do acervo. */
         canva?: { bytes: number; count: number };
         json?: { bytes: number; count: number };
@@ -276,6 +297,38 @@ declare global {
       keepCurrentVersion: () => Promise<void>;
       clearFiles: () => Promise<void>;
       setAutoCache: (enabled: boolean) => Promise<void>;
+    };
+    libraryFiles: {
+      storePath: (input: {
+        kind: LibraryFileKind;
+        recordId: string;
+        sourcePath: string;
+      }) => Promise<StoredLibraryFile>;
+      begin: (input: {
+        kind: LibraryFileKind;
+        recordId: string;
+        name: string;
+        size: number;
+      }) => Promise<LibraryFileWriteSession>;
+      write: (token: string, chunk: Uint8Array) => Promise<{ written: number }>;
+      end: (token: string) => Promise<StoredLibraryFile>;
+      abort: (token: string) => Promise<{ ok: boolean }>;
+      remove: (rel: string) => Promise<{ removed: boolean }>;
+      info: (rel: string) => Promise<{ exists: boolean; size: number; mtimeMs?: number }>;
+      freeSpace: () => Promise<{ bytes: number | null }>;
+      prune: (
+        knownPaths: string[],
+        options?: { minAgeMs?: number }
+      ) => Promise<{ removed: number }>;
+    };
+    libraryExport: {
+      choose: (input: {
+        suggestedName: string;
+        kind?: "liturgy" | "backup";
+      }) => Promise<LibraryExportSession | null>;
+      write: (token: string, chunk: Uint8Array) => Promise<{ written: number }>;
+      end: (token: string) => Promise<{ path: string; size: number }>;
+      abort: (token: string) => Promise<{ ok: boolean }>;
     };
     shell: {
       openPath: (filePath: string) => Promise<{

@@ -1,4 +1,5 @@
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
+import { requestLiturgyImport } from "../openRequests";
 import {
   agendaParaPersistir,
   agruparPorBloco,
@@ -515,9 +516,9 @@ export function useLiturgyItems(
         }
         Object.assign(f, stored);
         selectedFile = null;
-      } catch {
+      } catch (error) {
         if (form.value === f && token === fileSaveToken) {
-          formErrors.value.dir = t("alerts.file_import_failed");
+          formErrors.value.dir = t(liturgyFileErrorKey(error));
         }
         return;
       } finally {
@@ -741,6 +742,16 @@ export function useLiturgyItems(
     openUrl(form.value.url);
   }
 
+  /** Chave de aviso para falha ao guardar o arquivo do item. */
+  function liturgyFileErrorKey(error: unknown): string {
+    if (error instanceof Error && error.message === "unsupported_file")
+      return "alerts.file_unsupported";
+    const code = (error as { code?: unknown } | null)?.code;
+    if (code === "too_large") return "alerts.file_too_large";
+    if (code === "storage_full") return "alerts.file_storage_full";
+    return "alerts.file_import_failed";
+  }
+
   /* ============== Browse file ============== */
   async function chooseFile(): Promise<void> {
     if (fileImporting.value) return;
@@ -801,6 +812,11 @@ export function useLiturgyItems(
     const files = Array.from(e.dataTransfer?.files || []);
     if (!files.length) return;
     for (const file of files) {
+      // Liturgia inteira (.llja) não vira item: entra pelo import, com as perguntas dele.
+      if (/\.llja$/i.test(file.name)) {
+        requestLiturgyImport(file);
+        continue;
+      }
       await _addDroppedFile(file, e);
     }
     items.value = [...items.value];
@@ -866,11 +882,7 @@ export function useLiturgyItems(
           stored = await importLiturgyFile(file);
         } catch (error) {
           $alert.error({
-            text: chaveLiturgia(
-              error instanceof Error && error.message === "unsupported_file"
-                ? "alerts.file_unsupported"
-                : "alerts.file_import_failed"
-            ),
+            text: chaveLiturgia(liturgyFileErrorKey(error)),
           });
           return;
         }

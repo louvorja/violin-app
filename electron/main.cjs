@@ -110,6 +110,7 @@ const { createCpuProfileCapture } = require("./main/cpuProfileCapture.js");
 const { createRuntimeIncidentJournal } = require("./main/runtimeIncidentJournal.js");
 const storageLocations = require("./main/storageLocations.js");
 const storageAccess = require("./main/storageAccess.js");
+const libraryFiles = require("./main/libraryFiles.js");
 const collectionAccounts = require("./main/collectionAccounts.js");
 const storageRecovery = require("./main/storageRecovery.js");
 const { createPresentationActivity } = require("./main/presentationActivity.js");
@@ -2613,6 +2614,13 @@ ipcMain.handle("storage:recover", (_e, action, options) => {
 });
 ipcMain.handle("storage:olderVersion", () => paths.olderVersionUsed());
 ipcMain.handle("storage:keepCurrentVersion", () => paths.acknowledgeOlderVersion());
+
+// ---------------------------------------------------------------------------
+// Arquivos das bibliotecas no acervo (Biblioteca de Mídia, projeção, som e
+// arquivos de pacote da liturgia). O banco guarda só metadados + caminho.
+// ---------------------------------------------------------------------------
+
+libraryFiles.registerIpc(ipcMain);
 
 // ---------------------------------------------------------------------------
 // Documentos do usuário (biblioteca de liturgias, playlists, coletâneas)

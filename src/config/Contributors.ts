@@ -11,6 +11,7 @@ enum RoleContribuitorEnum {
   desktop = "Violin Desktop",
   delphi = "Delphi",
   api = "API",
+  mobile = "Mobile"
 }
 
 const ROLE_CONTRIBUTOR: Record<RoleContribuitorEnum, RoleContribuitor> = {
@@ -33,6 +34,11 @@ const ROLE_CONTRIBUTOR: Record<RoleContribuitorEnum, RoleContribuitor> = {
     name: RoleContribuitorEnum.api,
     icon: ICONS.PROJETOS.API,
     color: "#43a047",
+  },
+  [RoleContribuitorEnum.mobile]: {
+    name: RoleContribuitorEnum.mobile,
+    icon: ICONS.PROJETOS.MOBILE,
+    color: "#000000",
   },
 };
 
@@ -68,6 +74,7 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
         description: [
           ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
           ROLE_CONTRIBUTOR[RoleContribuitorEnum.desktop],
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.mobile],
         ],
         website: "https://79team.com",
         github: "diego-menezes",
@@ -137,7 +144,10 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
       },
       {
         name: "Marcelo Araújo",
-        description: [ROLE_CONTRIBUTOR[RoleContribuitorEnum.web]],
+        description: [
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.desktop],
+        ],
         github: "marceloaraujo7-dev",
       },
       {

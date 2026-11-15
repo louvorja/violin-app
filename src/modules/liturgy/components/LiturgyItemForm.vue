@@ -909,7 +909,7 @@ function releaseLibraryObjectUrls(): void {
 
 function libraryThumbnail(
   raw: string | undefined,
-  data: ArrayBuffer | undefined,
+  data: Blob | ArrayBuffer | undefined,
   mime: string | undefined,
   type: string
 ): string {
@@ -922,7 +922,7 @@ function libraryThumbnail(
   }
   if (!value) return "";
   if (/^(blob|data|https?|louvorja|file):/i.test(value)) return value;
-  return Platform.isDesktop ? Path.local(value) : value;
+  return Path.media(value);
 }
 
 function mediaCategories(records: LibrarySearchCategory[]): LibrarySearchCategory[] {
@@ -944,7 +944,7 @@ async function openMediaLibrarySearch(): Promise<void> {
       type: "image" | "video" | "audio" | "pdf";
       thumb?: string;
       path?: string;
-      data?: ArrayBuffer;
+      data?: Blob | ArrayBuffer;
       mime?: string;
       categoryId?: string;
     }>(DB_TABLE.MEDIA_LIBRARY),
@@ -1003,7 +1003,7 @@ async function openProjectionSearch(): Promise<void> {
       type: "image" | "video";
       thumb?: string;
       path?: string;
-      data?: ArrayBuffer;
+      data?: Blob | ArrayBuffer;
       mime?: string;
       categoryId?: string;
     }>(DB_TABLE.BACKGROUND_PROJECTION_LIBRARY),

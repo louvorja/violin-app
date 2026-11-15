@@ -318,6 +318,7 @@ import {
   IconYoga,
   IconThumbUp,
   IconThumbDown,
+  IconDeviceMobile,
 } from "@tabler/icons-vue";
 
 /**
@@ -444,6 +445,7 @@ export const TABLER_ICONS: Record<string, FunctionalComponent<SVGAttributes>> = 
   "device-floppy": IconDeviceFloppy,
   "device-imac": IconDeviceImac,
   "device-laptop": IconDeviceLaptop,
+  "device-mobile": IconDeviceMobile,
   "device-remote": IconDeviceRemote,
   "device-speaker": IconDeviceSpeaker,
   "device-tv": IconDeviceTv,

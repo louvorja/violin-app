@@ -268,7 +268,7 @@ export default async ({ mode }) => {
           skipWaiting: true,
           clientsClaim: true,
           // O Workbox só escuta SKIP_WAITING sem `skipWaiting`; a página envia ao aplicar.
-          importScripts: ["sw-skip-waiting.js"],
+          importScripts: ["sw-skip-waiting.js", "opfs-sw.js"],
           globPatterns: ["**/*.{html,js,css,svg,png,woff,woff2}", "app-build.json"],
           // O conversor de HEIC passa dos 2MiB que o workbox aceita precachear,
           // e o build falha por isso em vez de apenas avisar. Subir o limite
@@ -287,11 +287,11 @@ export default async ({ mode }) => {
           display: "standalone",
           background_color: "#000000",
           theme_color: "#000000",
-          // Chrome/ChromeOS desktop: "Abrir com" LouvorJA para músicas .slja.
+          // Chrome/ChromeOS desktop: "Abrir com" LouvorJA para músicas .slja e liturgias .llja.
           file_handlers: [
             {
               action: process.env.VITE_BASE_URL ?? "/",
-              accept: { "application/zip": [".slja"] },
+              accept: { "application/zip": [".slja", ".llja"] },
             },
           ],
           icons: [

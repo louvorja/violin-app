@@ -85,7 +85,7 @@ vi.mock("@/helpers/ProjectionWindows", () => ({
   closeProjectionWindows: vi.fn(async () => {}),
   openProjectionWindows: vi.fn(async () => {}),
 }));
-vi.mock("@/helpers/Path", () => ({ default: { local: (p: string) => `louvorja://${p}` } }));
+vi.mock("@/helpers/Path", () => ({ default: { local: (p: string) => `louvorja://${p}`, media: (p: string) => (p.startsWith("louvorja://") ? p : `louvorja://${p}`) } }));
 vi.mock("@/helpers/LocalFailureNotice", () => ({ reportLocalFileFailure: vi.fn() }));
 vi.mock("@/helpers/FilePath", () => ({ localPathOf: (p: string) => p }));
 vi.mock("@/helpers/IndexedDB", () => ({

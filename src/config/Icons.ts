@@ -476,6 +476,7 @@ export const ICONS = {
     DESKTOP: "device-laptop",
     DELPHI: "device-imac",
     API: "api",
+    MOBILE: "device-mobile",
   },
   /**
    * Ícones SVG da pasta /assets/icons usados no componente Icon

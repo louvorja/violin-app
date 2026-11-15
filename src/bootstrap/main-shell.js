@@ -22,6 +22,7 @@ import $alert from "@helpers/Alert";
 import Platform from "@/helpers/Platform";
 import WakeLock from "@/helpers/WakeLock";
 import { installFileDrop } from "@/helpers/FileDrop";
+import { LLJA_RE, openLiturgyPackage, openLiturgyPackagePath } from "@/helpers/LiturgyFileOpen";
 import {
   auditWebStorage,
   migrateLegacyMediaKeys,
@@ -900,7 +901,7 @@ $storage.hydrate().then(async () => {
         return "";
       }
       if (/^(http|https|data):/i.test(raw)) return raw;
-      return Platform.isDesktop ? Path.local(raw) : Path.file(raw);
+      return Path.media(raw);
     }
 
     /**
@@ -927,7 +928,7 @@ $storage.hydrate().then(async () => {
         return thumb.slice(0, 4096);
       const path = typeof item?.path === "string" ? item.path : "";
       if (item?.type === "image" && path && !/^(blob|data):/i.test(path) && Platform.isDesktop) {
-        return Path.local(path).slice(0, 4096);
+        return Path.media(path).slice(0, 4096);
       }
       // Thumb em dataURL/blob fica de fora: estouraria o orçamento do payload —
       // o card remoto mostra o ícone do tipo.
@@ -1578,8 +1579,7 @@ $storage.hydrate().then(async () => {
                 if (typeof p !== "string" || !p) return "";
                 if (/^(blob|data):/i.test(p)) return p;
                 if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(p)) return p;
-                if (Platform.isDesktop) return Path.local(p);
-                return Path.file(p);
+                return Path.media(p);
               }
 
               async function openWithSystemPlayer(filePath, kind) {
@@ -1846,8 +1846,8 @@ $storage.hydrate().then(async () => {
                           bgUrl = URL.createObjectURL(new Blob([bgRec.data], { type: bgRec.mime }));
                         } else if (/^(https?|blob|data|louvorja):/i.test(bgUrl)) {
                           // passa direto
-                        } else if (Platform.isDesktop) {
-                          bgUrl = Path.local(bgUrl);
+                        } else {
+                          bgUrl = Path.media(bgUrl);
                         }
                         const bg = useBackgroundSound();
                         bg.playFile({
@@ -2670,11 +2670,17 @@ $storage.hydrate().then(async () => {
     // recebem comandos pelo BroadcastChannel.
     if (isAuxiliaryRenderer) return;
 
-    // Arquivos .slja que o sistema mandou abrir aqui (duplo clique, "Abrir
-    // com"). Cada um assume a projeção no lugar do anterior, então só o último
-    // de uma entrega em lote importa.
+    // Arquivos que o sistema mandou abrir aqui (duplo clique, "Abrir com").
+    // .llja (liturgia) vai para a Liturgia importar, um por um. .slja assume a
+    // projeção no lugar do anterior, então só o último de um lote importa.
     Platform.onOpenFiles((files) => {
-      const file = files[files.length - 1];
+      for (const file of files.filter((f) => LLJA_RE.test(f))) {
+        openLiturgyPackagePath(file).catch((e) =>
+          console.warn("[openFiles] não foi possível abrir a liturgia:", e)
+        );
+      }
+      const slja = files.filter((f) => !LLJA_RE.test(f));
+      const file = slja[slja.length - 1];
       if (file) void openSlja(Path.local(file), { origin: "system" });
     });
 
@@ -2686,13 +2692,18 @@ $storage.hydrate().then(async () => {
     // isso; lá o caminho é o botão de Importar/Exportar.
     if (!Platform.isDesktop && "launchQueue" in window) {
       window.launchQueue.setConsumer(async (params) => {
-        const handle = params.files?.[params.files.length - 1];
-        if (!handle) return;
-        try {
-          void openSlja(await handle.getFile(), { origin: "system" });
-        } catch (e) {
-          console.warn("[launchQueue] não foi possível ler o arquivo:", e);
+        const handles = params.files ?? [];
+        let lastSlja = null;
+        for (const handle of handles) {
+          try {
+            const file = await handle.getFile();
+            if (LLJA_RE.test(file.name)) openLiturgyPackage(file);
+            else lastSlja = file;
+          } catch (e) {
+            console.warn("[launchQueue] não foi possível ler o arquivo:", e);
+          }
         }
+        if (lastSlja) void openSlja(lastSlja, { origin: "system" });
       });
     }
 

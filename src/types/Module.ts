@@ -36,6 +36,11 @@ export interface CustomizationField {
   default?: string | number | boolean;
   /** Opções para campos do tipo "select" */
   options?: string[];
+  /**
+   * Chave de outro campo booleano que precisa estar ligada para este aparecer.
+   * Ex.: `clock_color` só aparece com `clock_color_enabled`.
+   */
+  showWhen?: string;
 }
 
 /**

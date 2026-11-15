@@ -288,6 +288,14 @@ import { DB_TABLE } from "@/constants/DbTables";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { MediaFile } from "@/types/Media";
+import {
+  storeLibraryPath,
+  storeLibraryStream,
+  removeLibraryFile,
+  isManagedLibraryPath,
+} from "@/helpers/LibraryFiles";
+import { blobOf, byteSize } from "@/helpers/Bytes";
+import { mimeForName } from "@/helpers/Mime";
 import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
@@ -345,10 +353,12 @@ async function saveLibraryFile(file: BgSoundFile): Promise<void> {
     fileName: String(file.fileName || file.name),
     path: String(file.path),
   };
-  if (file.data && file.data.byteLength > 0) {
+  if (file.data && byteSize(file.data) > 0) {
     plain.data = file.data;
-    plain.mime = String(file.mime || "audio/mpeg");
   }
+  if (file.mime) plain.mime = String(file.mime);
+  if (file.size) plain.size = file.size;
+  if (file.sha256) plain.sha256 = file.sha256;
   await $idb.put(STORE_LIBRARY, plain);
 }
 
@@ -673,8 +683,9 @@ async function handleDeleteCategory(id: string): Promise<void> {
   if (bg.currentFile.value && catFiles.some((f) => f.id === bg.currentFile.value?.id)) {
     bg.stop();
   }
-  // Remove todos os arquivos da categoria
+  // Remove todos os arquivos da categoria (registro e cópia no acervo)
   for (const f of catFiles) {
+    if (isManagedLibraryPath(f.path)) await removeLibraryFile(f.path);
     await deleteLibraryFile(f.id);
   }
   await deleteCategoryRecord(id);
@@ -744,11 +755,6 @@ async function onDrop(e: DragEvent): Promise<void> {
 /*  File management                                                   */
 /* ------------------------------------------------------------------ */
 
-async function readFileData(file: File): Promise<{ data: ArrayBuffer; mime: string }> {
-  const data = await file.arrayBuffer();
-  return { data, mime: file.type || "audio/mpeg" };
-}
-
 function openAddAudioMenu(): void {
   // Sem categoria é sempre uma opção — não bloqueia mais sem categorias.
   showAddAudioDialog.value = true;
@@ -773,18 +779,26 @@ async function addAudioFiles(categoryId: string): Promise<void> {
 async function addFileRecord(f: File, categoryId: string): Promise<BgSoundFile> {
   const filePath = localPathOf(f);
   const fileId = crypto.randomUUID();
+  const stored = filePath
+    ? await storeLibraryPath("background-sound", fileId, filePath)
+    : await storeLibraryStream({
+        kind: "background-sound",
+        recordId: fileId,
+        name: f.name,
+        size: f.size,
+        open: async () => f.stream() as ReadableStream<Uint8Array>,
+      });
   const bgFile: BgSoundFile = {
     id: fileId,
     name: "",
     fileName: f.name,
-    path: filePath || URL.createObjectURL(f),
+    path: stored.mode === "path" ? stored.path : URL.createObjectURL(stored.data),
     categoryId,
+    size: stored.size,
+    mime: f.type || mimeForName(f.name, "audio/mpeg"),
+    ...(stored.mode === "blob" ? { data: stored.data } : {}),
+    ...(stored.mode === "path" && stored.sha256 ? { sha256: stored.sha256 } : {}),
   };
-  if (!filePath) {
-    const { data, mime } = await readFileData(f);
-    bgFile.data = data;
-    bgFile.mime = mime;
-  }
   await saveLibraryFile(bgFile);
   return bgFile;
 }
@@ -846,6 +860,8 @@ async function removeFile(categoryId: string, file: MediaFile): Promise<void> {
 
 async function doRemove(fileId: string): Promise<void> {
   if (bg.currentFile.value?.id === fileId) bg.stop();
+  const record = libraryFiles.value.find((f) => f.id === fileId);
+  if (record && isManagedLibraryPath(record.path)) await removeLibraryFile(record.path);
   await deleteLibraryFile(fileId);
   const defaultKey = KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID;
   if (String($userdata.get(defaultKey, "")) === fileId) $userdata.set(defaultKey, "");
@@ -899,10 +915,18 @@ async function saveFileEdit(): Promise<void> {
   // fica como estava e o diálogo continua aberto para escolher outro arquivo.
   const newFile = editFileForm.value.newFile;
   const newFilePath = newFile ? localPathOf(newFile) : "";
-  let newData: { data: ArrayBuffer; mime: string } | null = null;
-  if (newFile && !newFilePath) {
+  let newStored: Awaited<ReturnType<typeof storeLibraryStream>> | null = null;
+  if (newFile) {
     try {
-      newData = await readFileData(newFile);
+      newStored = newFilePath
+        ? await storeLibraryPath("background-sound", storedFile.id, newFilePath)
+        : await storeLibraryStream({
+            kind: "background-sound",
+            recordId: storedFile.id,
+            name: newFile.name,
+            size: newFile.size,
+            open: async () => newFile.stream() as ReadableStream<Uint8Array>,
+          });
     } catch (error) {
       if (!reportLocalFileFailure(error, [newFile.name])) throw error;
       return;
@@ -912,16 +936,22 @@ async function saveFileEdit(): Promise<void> {
   storedFile.name = editFileForm.value.name.trim();
   storedFile.categoryId = editFileForm.value.categoryId;
 
-  if (newFile) {
+  if (newFile && newStored) {
+    const oldPath = storedFile.path;
     storedFile.fileName = newFile.name;
-    if (newFilePath) {
-      storedFile.path = newFilePath;
+    storedFile.path =
+      newStored.mode === "path" ? newStored.path : URL.createObjectURL(newStored.data);
+    storedFile.size = newStored.size;
+    if (newStored.mode === "blob") {
+      storedFile.data = newStored.data;
+      storedFile.mime = newFile.type || mimeForName(newFile.name, "audio/mpeg");
+    } else {
       delete storedFile.data;
-      storedFile.mime = undefined;
-    } else if (newData) {
-      storedFile.path = URL.createObjectURL(newFile);
-      storedFile.data = newData.data;
-      storedFile.mime = newData.mime;
+      storedFile.mime = newFile.type || mimeForName(newFile.name, "audio/mpeg");
+      if (newStored.sha256) storedFile.sha256 = newStored.sha256;
+    }
+    if (isManagedLibraryPath(oldPath) && oldPath !== storedFile.path) {
+      await removeLibraryFile(oldPath);
     }
   }
 
@@ -1113,7 +1143,8 @@ function rebuildAllBlobUrls(list: BgSoundFile[]): void {
       const key = "file_" + f.id;
       const old = createdObjectUrls.get(key);
       if (old) URL.revokeObjectURL(old);
-      const blob = new Blob([f.data], { type: f.mime });
+      const blob = blobOf(f.data, f.mime);
+      if (!blob) continue;
       const url = URL.createObjectURL(blob);
       createdObjectUrls.set(key, url);
       f.path = url;
@@ -1152,10 +1183,12 @@ async function migrateFromOldStructure(): Promise<void> {
         path: String(f.path),
         categoryId: String(cat.id),
       };
-      if (f.data && f.data.byteLength > 0) {
+      if (f.data && byteSize(f.data) > 0) {
         bgFile.data = f.data;
         bgFile.mime = String(f.mime || "audio/mpeg");
       }
+      if (f.size) bgFile.size = f.size;
+      if (f.sha256) bgFile.sha256 = f.sha256;
       await $idb.put(STORE_LIBRARY, bgFile as any);
     }
   }

@@ -121,6 +121,28 @@ describe("backup com mídia", () => {
     expect(h.clear).not.toHaveBeenCalled();
   });
 
+
+  it("restaura as tabelas antigas se a gravação falhar no meio da importação", async () => {
+    h.rows.set(DB_TABLE.IMAGE_LIBRARY, [{ id: "antiga", blob: new Blob(["antes"]) }]);
+    await DatabaseBackup.exportAll();
+    const idb = (await import("@/helpers/IndexedDB")).default as {
+      put: (table: string, row: { id: string }) => Promise<void>;
+    };
+    const originalPut = idb.put;
+    let failed = false;
+    vi.spyOn(idb, "put").mockImplementation(async (table, row) => {
+      if (!failed && table === DB_TABLE.IMAGE_LIBRARY) {
+        failed = true;
+        throw new Error("falha simulada");
+      }
+      return originalPut(table, row);
+    });
+    await expect(
+      DatabaseBackup.importAll(new File([exported], "backup.zip"))
+    ).rejects.toThrow("falha simulada");
+    expect(h.rows.get(DB_TABLE.IMAGE_LIBRARY)?.map((row) => row.id)).toEqual(["antiga"]);
+  });
+
   it("recusa backup sem os bytes referenciados antes de apagar dados locais", async () => {
     h.rows.set(DB_TABLE.IMAGE_LIBRARY, [{ id: "cover", blob: new Blob(["image"]) }]);
     await DatabaseBackup.exportAll();

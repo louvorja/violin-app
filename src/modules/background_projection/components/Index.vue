@@ -288,6 +288,15 @@ import { useCategoryDrag } from "@/composables/useCategoryDrag";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
 import CategoryChip from "@/components/CategoryChip.vue";
 import CategoryItemIcon from "@/components/CategoryItemIcon.vue";
+import {
+  storeLibraryPath,
+  storeLibraryStream,
+  removeLibraryFile,
+  isManagedLibraryPath,
+} from "@/helpers/LibraryFiles";
+import { blobOf, byteSize } from "@/helpers/Bytes";
+import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
+import { mimeForName } from "@/helpers/Mime";
 
 interface BgFile {
   id: string;
@@ -297,8 +306,10 @@ interface BgFile {
   categoryId: string;
   thumb?: string;
   addedAt: number;
-  data?: ArrayBuffer;
+  data?: Blob | ArrayBuffer;
   mime?: string;
+  size?: number;
+  sha256?: string;
 }
 
 interface BgCategory {
@@ -320,7 +331,7 @@ async function loadLibrary(): Promise<BgFile[]> {
 
 async function saveFile(file: BgFile): Promise<void> {
   const plain = { ...file };
-  if (plain.data && plain.data.byteLength === 0) {
+  if (plain.data && byteSize(plain.data) === 0) {
     delete plain.data;
   }
   await $idb.put(STORE_LIBRARY, plain);
@@ -417,22 +428,18 @@ function revokeObjectUrl(id: string): void {
   }
 }
 
-function createObjectUrl(id: string, data: ArrayBuffer, mime: string): string {
+function createObjectUrl(id: string, data: Blob | ArrayBuffer, mime: string): string {
   revokeObjectUrl(id);
-  const blob = new Blob([data], { type: mime });
+  const blob = blobOf(data, mime);
+  if (!blob) return "";
   const url = URL.createObjectURL(blob);
   createdObjectUrls.set(id, url);
   return url;
 }
 
-async function readFileData(file: File): Promise<{ data: ArrayBuffer; mime: string }> {
-  const data = await file.arrayBuffer();
-  return { data, mime: file.type || "application/octet-stream" };
-}
-
 function buildThumbPath(filePath: string): string | undefined {
   if (Platform.isDesktop) {
-    return $path.local(filePath);
+    return $path.media(filePath);
   }
   return undefined;
 }
@@ -482,10 +489,7 @@ function generateVideoThumbnail(videoUrl: string): Promise<string | undefined> {
 }
 
 function resolvePath(raw: string): string {
-  if (raw.startsWith("http") || raw.startsWith("blob:") || raw.startsWith("louvorja://"))
-    return raw;
-  if (Platform.isDesktop) return $path.local(raw);
-  return raw;
+  return $path.media(raw);
 }
 
 function startRename(file: BgFile): void {
@@ -511,6 +515,7 @@ async function removeFile(file: BgFile): Promise<void> {
     await stop();
   }
   await deleteFile(file.id);
+  if (isManagedLibraryPath(file.path)) await removeLibraryFile(file.path);
   files.value = files.value.filter((f) => f.id !== file.id);
 }
 
@@ -685,7 +690,11 @@ function triggerFilePick(): void {
       if (!result) return;
       const paths = Array.isArray(result) ? result : [result];
       for (const rawPath of paths) {
-        importFilePath(rawPath);
+        importFilePath(rawPath).catch((error) => {
+          if (!reportLocalFileFailure(error, [rawPath])) {
+            console.error("[background_projection] import falhou:", error);
+          }
+        });
       }
     });
   } else {
@@ -717,15 +726,29 @@ async function importFilePath(rawPath: string): Promise<void> {
   const ext = name.split(".").pop()?.toLowerCase() || "";
   const fileType = getFileType(ext);
   if (!fileType || pendingCategoryId.value == null) return;
+  // HEIC escolhido pelo diálogo do desktop: converte antes de copiar.
+  if (isHeic(name)) {
+    const response = await fetchWithTimeout($path.media(rawPath), {
+      timeout: NET_TIMEOUT.MEDIA,
+      source: "file",
+    });
+    const raw = await response.blob();
+    return importFileBlob(new File([raw], name, { type: raw.type || "image/heic" }));
+  }
+  const id = crypto.randomUUID();
+  const stored = await storeLibraryPath("background-projection", id, rawPath);
   const file: BgFile = {
-    id: crypto.randomUUID(),
+    id,
     name,
-    path: rawPath,
+    path: stored.path,
     type: fileType,
     categoryId: pendingCategoryId.value,
     addedAt: Date.now(),
+    size: stored.size,
+    mime: mimeForName(name),
+    ...(stored.sha256 ? { sha256: stored.sha256 } : {}),
   };
-  if (fileType === "image") file.thumb = buildThumbPath(rawPath);
+  if (fileType === "image") file.thumb = buildThumbPath(stored.path);
   await saveFile(file);
   files.value.unshift(file);
   // Garante que o chip "Sem categoria" fique ativo ao adicionar sem categoria.
@@ -733,7 +756,7 @@ async function importFilePath(rawPath: string): Promise<void> {
     selectedCategoryIds.value.add(UNCATEGORIZED_ID);
   }
   if (fileType === "video" && Platform.isDesktop) {
-    const url = resolvePath(rawPath);
+    const url = resolvePath(stored.path);
     generateVideoThumbnail(url).then((thumb) => {
       if (thumb) {
         file.thumb = thumb;
@@ -763,22 +786,31 @@ async function importFileBlob(f: File): Promise<void> {
       ? "video"
       : null;
   if (!fileType) return;
-  const path = URL.createObjectURL(workFile);
+  const id = crypto.randomUUID();
   // Persiste os bytes do arquivo CONVERTIDO — gravar o HEIC cru quebraria
   // thumb e projeção após reiniciar (Chromium não decodifica HEIC).
-  const { data, mime } = await readFileData(workFile);
+  const stored = await storeLibraryStream({
+    kind: "background-projection",
+    recordId: id,
+    name: workFile.name,
+    size: workFile.size,
+    open: async () => workFile.stream() as ReadableStream<Uint8Array>,
+  });
+  const path = stored.mode === "path" ? stored.path : URL.createObjectURL(stored.data);
   const file: BgFile = {
-    id: crypto.randomUUID(),
+    id,
     name: workFile.name,
     path,
     type: fileType,
     categoryId: pendingCategoryId.value,
     addedAt: Date.now(),
-    data,
-    mime,
+    size: stored.size,
+    mime: workFile.type || mimeForName(workFile.name),
+    ...(stored.mode === "blob" ? { data: stored.data } : {}),
+    ...(stored.mode === "path" && stored.sha256 ? { sha256: stored.sha256 } : {}),
   };
-  if (fileType === "image") file.thumb = path;
-  createdObjectUrls.set(file.id, path);
+  if (fileType === "image") file.thumb = stored.mode === "path" ? buildThumbPath(path) : path;
+  if (stored.mode === "blob") createdObjectUrls.set(id, path);
   await saveFile(file);
   files.value.unshift(file);
   // Garante que o chip "Sem categoria" fique ativo ao adicionar sem categoria.
@@ -959,7 +991,7 @@ onMounted(async () => {
               f.name,
               new Blob([f.data], { type: f.mime })
             );
-            f.data = await converted.blob.arrayBuffer();
+            f.data = converted.blob;
             f.mime = converted.blob.type || "image/jpeg";
             f.name = converted.name;
             await saveFile(f);
@@ -971,6 +1003,9 @@ onMounted(async () => {
         f.path = url;
         if (f.type === "image") f.thumb = url;
       }
+    }
+    if (Platform.isDesktop && f.type === "image" && !f.thumb && isManagedLibraryPath(f.path)) {
+      f.thumb = buildThumbPath(f.path);
     }
   }
 });

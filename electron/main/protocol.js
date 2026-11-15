@@ -42,6 +42,18 @@ const { ensureCollectionSubdirectory } = require("./sharedCollectionDirs.js");
 const { publishCollectionFile } = require("./collectionPublication.js");
 const audioRepair = require("./audioRepair/index.js");
 
+/**
+ * Pastas do acervo que só existem neste computador (bibliotecas do app). Um
+ * arquivo ausente nelas não tem equivalente remoto: sem esta lista, o handler
+ * tentaria baixar `media-library/...` do servidor a cada card quebrado.
+ */
+const LIBRARY_LOCAL_PREFIXES = [
+  "media-library/",
+  "background-projection/",
+  "background-sound/",
+  "liturgy-files/",
+];
+
 // ---------------------------------------------------------------------------
 // Configuração de URLs remotas
 // ---------------------------------------------------------------------------
@@ -607,6 +619,12 @@ function handle() {
         const achado = await mediaResolver.resolveRead(rawRelative);
         if (achado) {
           return await _responderArquivo(achado.path, request);
+        }
+
+        // Pasta de biblioteca do app: não existe no servidor. Responder 404 aqui
+        // evita uma requisição remota por arquivo apagado.
+        if (LIBRARY_LOCAL_PREFIXES.some((prefix) => rawRelative.startsWith(prefix))) {
+          return new Response("File not found", { status: 404 });
         }
 
         // Fallback: stream remoto. Cacheia se for request "completo" (sem Range).
