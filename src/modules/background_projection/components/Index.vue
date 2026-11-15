@@ -21,44 +21,31 @@
 
       <!-- Category chips -->
       <div v-if="categories.length || uncategorizedCount > 0" class="bg-category-chips">
-        <CategoryChip
-          v-for="cat in categories"
-          :key="cat.id"
-          :category-id="cat.id"
-          :name="cat.name"
-          :icon="cat.icon"
-          :icon-type="cat.iconType"
-          :color="cat.color"
-          :count="files.filter((f) => f.categoryId === cat.id).length"
-          :active="selectedCategoryIds.has(cat.id)"
-          :drop-target="dropTargetId === cat.id"
+        <CategoryChipsBar
+          :title="tm('categories')"
+          :categories="categories"
+          :selected-ids="selectedCategoryIds"
+          :uncategorized-label="tm('uncategorized')"
+          :uncategorized-icon="ICONS.MEDIA.IMAGE_MULTIPLE"
+          :uncategorized-color="'var(--lj-gray-500)'"
+          :uncategorized-count="uncategorizedCount"
+          :count-for="categoryCount"
+          :drop-target-id="dropTargetId"
           :add-item-label="t('ribbon.btn.add_item')"
           :edit-label="t('shell.category.edit_category')"
-          @select="onCategoryChipClick(cat.id)"
-          @add="addItemsToCategory(cat.id)"
-          @edit="editCategoryFromChip(cat.id)"
-          @dragover="onCategoryDragOver($event, cat.id)"
-          @dragleave="onCategoryDragLeave($event, cat.id)"
-          @drop="onCategoryDrop($event, cat.id)"
-        />
-        <!-- Virtual: arquivos sem categoria -->
-        <CategoryChip
-          v-if="categories.length > 0 || uncategorizedCount > 0"
-          category-id=""
-          :name="tm('uncategorized')"
-          :icon="ICONS.MEDIA.IMAGE_MULTIPLE"
-          icon-type="icon"
-          color="var(--lj-gray-500)"
-          :count="uncategorizedCount"
-          :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
-          :drop-target="dropTargetId === UNCATEGORIZED_ID"
-          :editable="false"
-          :add-item-label="t('ribbon.btn.add_item')"
-          @select="onCategoryChipClick(UNCATEGORIZED_ID)"
-          @add="addItemsToCategory(UNCATEGORIZED_ID)"
-          @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
-          @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
-          @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
+          :sort-mode="sortMode"
+          :sort-options="sortOptions"
+          :sort-label="t('components.category_bar.sort')"
+          :show-all-label="t('components.category_bar.show_all')"
+          :hide-all-label="t('components.category_bar.hide_all')"
+          @update:selected-ids="selectedCategoryIds = $event"
+          @update:sort-mode="sortMode = $event"
+          @select="onCategoryChipClick"
+          @add="addItemsToCategory"
+          @edit="editCategoryFromChip"
+          @dragover="onCategoryDragOver"
+          @dragleave="onCategoryDragLeave"
+          @drop="onCategoryDrop"
         />
       </div>
 
@@ -70,12 +57,16 @@
           v-for="file in filteredFiles"
           :key="file.id"
           class="bg-grid-item"
+          :class="{ 'lj-u-order-target': orderTargetId === file.id }"
           :style="{ '--card-category-color': getCategoryColor(file.categoryId) }"
           draggable="true"
           @mouseenter="onHoverStart(file)"
           @mouseleave="onHoverEnd"
           @dragstart="onCardDragStart($event, file)"
           @dragend="onCardDragEnd"
+          @dragover="onCardOrderDragOver($event, file.id)"
+          @dragleave="onCardOrderDragLeave($event, file.id)"
+          @drop="onCardOrderDrop($event, file.id)"
           @touchstart.passive="onCardTouchStart($event, file)"
           @contextmenu.prevent
         >
@@ -285,8 +276,11 @@ import { ModuleEnum } from "@/enums/ModuleEnum";
 import { nextBackgroundEpoch } from "@/presentation/BackgroundPresentationState";
 import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
+import { useCardReorder } from "@/composables/useCardReorder";
+import { useItemSortMode } from "@/composables/useItemSortMode";
+import { sortByMode } from "@/helpers/ItemSort";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
-import CategoryChip from "@/components/CategoryChip.vue";
+import CategoryChipsBar from "@/components/CategoryChipsBar.vue";
 import CategoryItemIcon from "@/components/CategoryItemIcon.vue";
 import {
   storeLibraryPath,
@@ -310,6 +304,8 @@ interface BgFile {
   mime?: string;
   size?: number;
   sha256?: string;
+  /** Ordem manual usada pelo seletor "Personalizada". */
+  order?: number;
 }
 
 interface BgCategory {
@@ -396,6 +392,10 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const categories = ref<BgCategory[]>([]);
 const selectedCategoryIds = ref(new Set<string>());
 
+function categoryCount(categoryId: string): number {
+  return files.value.filter((file) => (file.categoryId || "") === categoryId).length;
+}
+
 const uncategorizedCount = computed(() => {
   const ids = new Set(categories.value.map((c) => c.id));
   return files.value.filter((f) => !f.categoryId || !ids.has(f.categoryId)).length;
@@ -404,6 +404,12 @@ const showManageDialog = ref(false);
 const categoryManagerRef = ref<{
   openEditCategory: (_category: BgCategory) => void;
 } | null>(null);
+const sortMode = useItemSortMode(KEYS.MODULES.BACKGROUND_PROJECTION.SORT_MODE);
+const sortOptions = computed(() => [
+  { value: "custom" as const, label: t("components.category_bar.custom") },
+  { value: "alpha_asc" as const, label: t("components.category_bar.alpha_asc") },
+  { value: "alpha_desc" as const, label: t("components.category_bar.alpha_desc") },
+]);
 const showCategorySelect = ref(false);
 const saving = ref(false);
 const pendingFiles = ref<File[]>([]);
@@ -520,17 +526,12 @@ async function removeFile(file: BgFile): Promise<void> {
 }
 
 const filteredFiles = computed(() => {
-  let list = files.value;
-  if (selectedCategoryIds.value.size > 0) {
-    const catIds = new Set(categories.value.map((c) => c.id));
-    list = list.filter(
-      (f) =>
-        selectedCategoryIds.value.has(f.categoryId) ||
-        // Chip virtual "Sem categoria": arquivos sem categoria ou órfãos.
-        (selectedCategoryIds.value.has(UNCATEGORIZED_ID) &&
-          (!f.categoryId || !catIds.has(f.categoryId)))
-    );
-  }
+  const catIds = new Set(categories.value.map((c) => c.id));
+  let list = files.value.filter((f) => {
+    // Chip virtual "Sem categoria": arquivos sem categoria ou órfãos.
+    const categoryId = f.categoryId && catIds.has(f.categoryId) ? f.categoryId : UNCATEGORIZED_ID;
+    return selectedCategoryIds.value.has(categoryId);
+  });
   if (libraryFilter.value !== "all") {
     list = list.filter((f) => f.type === libraryFilter.value);
   }
@@ -538,7 +539,7 @@ const filteredFiles = computed(() => {
     const q = searchQuery.value.toLowerCase();
     list = list.filter((f) => f.name.toLowerCase().includes(q));
   }
-  return list;
+  return sortByMode(list, sortMode.value, (file) => file.name);
 });
 
 function selectFile(file: BgFile): void {
@@ -602,6 +603,14 @@ const {
     (!categoryId || categories.value.some((category) => category.id === categoryId)),
   assign: moveFileToCategory,
 });
+
+const { orderTargetId, onCardOrderDragOver, onCardOrderDragLeave, onCardOrderDrop } =
+  useCardReorder<BgFile>({
+    enabled: () => sortMode.value === "custom",
+    draggingId,
+    items: files,
+    save: saveFile,
+  });
 
 function onCardClick(file: BgFile): void {
   if (shouldSuppressClick(file.id)) return;

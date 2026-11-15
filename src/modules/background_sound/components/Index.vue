@@ -5,17 +5,6 @@
     :style="{ minWidth: isMobileWeb ? '0' : '500px' }"
     @close="stop"
   >
-    <!-- Header -->
-    <template #header>
-      <div class="bgs-header-actions">
-        <LjButton size="sm" variant="ghost" @click="selectAllCategoriesAndUncategorized">
-          {{ tm("show_all") }}
-        </LjButton>
-        <LjButton size="sm" variant="ghost" @click="selectedCategoryIds = new Set()">
-          {{ tm("hide_all") }}
-        </LjButton>
-      </div>
-    </template>
     <div
       class="bgm-root"
       :class="{ 'bgm-root--drag-over': isDragOver }"
@@ -26,45 +15,31 @@
     >
       <!-- Category chips -->
       <div v-if="categories.length || uncategorizedCount > 0" class="bgs-chips">
-        <span class="bgm-header-title">{{ tm("categories") }}</span>
-        <CategoryChip
-          v-for="cat in categories"
-          :key="cat.id"
-          :category-id="cat.id"
-          :name="cat.name"
-          :icon="cat.icon"
-          :icon-type="cat.iconType"
-          :color="cat.color"
-          :count="libraryFiles.filter((f) => f.categoryId === cat.id).length"
-          :active="selectedCategoryIds.has(cat.id)"
-          :drop-target="dropTargetId === cat.id"
+        <CategoryChipsBar
+          :title="tm('categories')"
+          :categories="categories"
+          :selected-ids="selectedCategoryIds"
+          :uncategorized-label="tm('uncategorized')"
+          :uncategorized-icon="ICONS.MUSIC.NOTE_OUTLINE"
+          :uncategorized-color="UNCATEGORIZED_COLOR"
+          :uncategorized-count="uncategorizedCount"
+          :count-for="categoryCount"
+          :drop-target-id="dropTargetId"
           :add-item-label="t('ribbon.btn.add_item')"
           :edit-label="t('shell.category.edit_category')"
-          @select="onCategoryChipClick(cat.id)"
-          @add="addItemsToCategory(cat.id)"
-          @edit="editCategoryFromChip(cat.id)"
-          @dragover="onCategoryDragOver($event, cat.id)"
-          @dragleave="onCategoryDragLeave($event, cat.id)"
-          @drop="onCategoryDrop($event, cat.id)"
-        />
-        <!-- Virtual: arquivos sem categoria -->
-        <CategoryChip
-          v-if="categories.length > 0 || uncategorizedCount > 0"
-          category-id=""
-          :name="tm('uncategorized')"
-          :icon="ICONS.MUSIC.NOTE_OUTLINE"
-          icon-type="icon"
-          :color="UNCATEGORIZED_COLOR"
-          :count="uncategorizedCount"
-          :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
-          :drop-target="dropTargetId === UNCATEGORIZED_ID"
-          :editable="false"
-          :add-item-label="t('ribbon.btn.add_item')"
-          @select="onCategoryChipClick(UNCATEGORIZED_ID)"
-          @add="addItemsToCategory(UNCATEGORIZED_ID)"
-          @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
-          @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
-          @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
+          :sort-mode="sortMode"
+          :sort-options="sortOptions"
+          :sort-label="t('components.category_bar.sort')"
+          :show-all-label="t('components.category_bar.show_all')"
+          :hide-all-label="t('components.category_bar.hide_all')"
+          @update:selected-ids="selectedCategoryIds = $event"
+          @update:sort-mode="sortMode = $event"
+          @select="onCategoryChipClick"
+          @add="addItemsToCategory"
+          @edit="editCategoryFromChip"
+          @dragover="onCategoryDragOver"
+          @dragleave="onCategoryDragLeave"
+          @drop="onCategoryDrop"
         />
       </div>
       <!-- Audio cards grid -->
@@ -73,11 +48,15 @@
           v-for="item in visibleFiles"
           :key="item.file.id"
           class="bgs-audio-card"
+          :class="{ 'lj-u-order-target': orderTargetId === item.file.id }"
           :style="{ '--card-color': item.color }"
           draggable="true"
           @click="onCardClick(item)"
           @dragstart="onCardDragStart($event, item.file)"
           @dragend="onCardDragEnd"
+          @dragover="onCardOrderDragOver($event, item.file.id)"
+          @dragleave="onCardOrderDragLeave($event, item.file.id)"
+          @drop="onCardOrderDrop($event, item.file.id)"
           @touchstart.passive="onCardTouchStart($event, item.file)"
           @contextmenu.prevent
         >
@@ -298,8 +277,11 @@ import { blobOf, byteSize } from "@/helpers/Bytes";
 import { mimeForName } from "@/helpers/Mime";
 import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
+import { useCardReorder } from "@/composables/useCardReorder";
+import { useItemSortMode } from "@/composables/useItemSortMode";
+import { sortByMode } from "@/helpers/ItemSort";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
-import CategoryChip from "@/components/CategoryChip.vue";
+import CategoryChipsBar from "@/components/CategoryChipsBar.vue";
 
 const { width: viewportWidth } = useViewport();
 const isMobileWeb = computed(() => viewportWidth.value > 0 && viewportWidth.value <= 700);
@@ -313,6 +295,8 @@ const STORE_LIBRARY = DB_TABLE.BACKGROUND_SOUND_LIBRARY;
 
 interface BgSoundFile extends MediaFile {
   categoryId: string;
+  /** Ordem manual usada pelo seletor "Personalizada". */
+  order?: number;
 }
 
 async function loadCategories(): Promise<CategoryFileData[]> {
@@ -359,6 +343,7 @@ async function saveLibraryFile(file: BgSoundFile): Promise<void> {
   if (file.mime) plain.mime = String(file.mime);
   if (file.size) plain.size = file.size;
   if (file.sha256) plain.sha256 = file.sha256;
+  if (file.order !== undefined) plain.order = file.order;
   await $idb.put(STORE_LIBRARY, plain);
 }
 
@@ -401,6 +386,10 @@ const UNCATEGORIZED_ID = "";
  */
 const UNCATEGORIZED_COLOR = "#607d8b";
 
+function categoryCount(categoryId: string): number {
+  return libraryFiles.value.filter((file) => (file.categoryId || "") === categoryId).length;
+}
+
 const uncategorizedCount = computed(() => {
   const ids = new Set(categories.value.map((c) => c.id));
   return libraryFiles.value.filter((f) => !f.categoryId || !ids.has(f.categoryId)).length;
@@ -415,6 +404,12 @@ const showManageDialog = ref(false);
 const categoryManagerRef = ref<{
   openEditCategory: (_category: CategoryFileData) => void;
 } | null>(null);
+const sortMode = useItemSortMode(KEYS.MODULES.BACKGROUND_SOUND.SORT_MODE);
+const sortOptions = computed(() => [
+  { value: "custom" as const, label: t("components.category_bar.custom") },
+  { value: "alpha_asc" as const, label: t("components.category_bar.alpha_asc") },
+  { value: "alpha_desc" as const, label: t("components.category_bar.alpha_desc") },
+]);
 const showAddAudioDialog = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const saving = ref(false);
@@ -524,7 +519,7 @@ const visibleFiles = computed(() => {
   const catById = new Map(categories.value.map((c) => [c.id, c]));
   const selected = selectedCategoryIds.value;
 
-  for (const f of libraryFiles.value) {
+  for (const f of sortByMode(libraryFiles.value, sortMode.value, soundDisplayName)) {
     const cat = catById.get(f.categoryId);
     // Sem categoria (ou categoria removida): aparece apenas no chip virtual.
     if (!cat) {
@@ -607,6 +602,14 @@ const {
   label: soundDisplayName,
   icon: categoryIcon,
 });
+
+const { orderTargetId, onCardOrderDragOver, onCardOrderDragLeave, onCardOrderDrop } =
+  useCardReorder<BgSoundFile>({
+    enabled: () => sortMode.value === "custom",
+    draggingId,
+    items: libraryFiles,
+    save: saveLibraryFile,
+  });
 
 function onCardClick(item: { file: BgSoundFile }): void {
   if (shouldSuppressClick(item.file.id)) return;

@@ -56,54 +56,42 @@
         class="cv-chips"
         :class="{ 'cv-chips--dragging': draggingId !== null }"
       >
-        <span class="cv-chips-title">{{ tm("categories") }}</span>
-        <CategoryChip
-          v-for="cat in categories"
-          :key="cat.id"
-          :category-id="cat.id"
-          :name="cat.name"
-          :icon="cat.icon"
-          :icon-type="cat.iconType"
-          :color="cat.color"
-          :count="videos.filter((v) => v.categoryId === cat.id).length"
-          :active="selectedCategoryIds.has(cat.id)"
-          :drop-target="dropTargetId === cat.id"
+        <CategoryChipsBar
+          :dragging="draggingId !== null"
+          :title="tm('categories')"
+          :categories="categories"
+          :selected-ids="selectedCategoryIds"
+          :uncategorized-label="tm('uncategorized')"
+          :uncategorized-icon="ICONS.MEDIA.YOUTUBE"
+          uncategorized-color="var(--lj-text-muted)"
+          :uncategorized-count="uncategorizedCount"
+          :count-for="categoryCount"
+          :drop-target-id="dropTargetId"
           :add-item-label="t('ribbon.btn.add_item')"
-          :play-label="tm('play_category')"
-          :show-play="videos.some((v) => v.categoryId === cat.id)"
           :edit-label="t('shell.category.edit_category')"
-          @select="onCategoryChipClick(cat.id)"
-          @play="playCategoryVideos(cat.id)"
-          @add="onAddCategoryClick(cat.id)"
-          @edit="editCategoryFromChip(cat.id)"
-          @dragover="onCategoryDragOver($event, cat.id)"
-          @dragleave="onCategoryDragLeave($event, cat.id)"
-          @drop="onCategoryDrop($event, cat.id)"
-        />
-        <CategoryChip
-          v-if="categories.length > 0 || uncategorizedCount > 0"
-          category-id=""
-          :name="tm('uncategorized')"
-          :icon="ICONS.MEDIA.YOUTUBE"
-          icon-type="icon"
-          color="var(--lj-text-muted)"
-          :count="uncategorizedCount"
-          :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
-          :drop-target="dropTargetId === UNCATEGORIZED_ID"
-          :editable="false"
-          :add-item-label="t('ribbon.btn.add_item')"
           :play-label="tm('play_category')"
-          :show-play="uncategorizedCount > 0"
-          @select="onCategoryChipClick(UNCATEGORIZED_ID)"
-          @play="playCategoryVideos(UNCATEGORIZED_ID)"
-          @add="onAddCategoryClick()"
-          @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
-          @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
-          @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
-        />
-        <span v-if="draggingId !== null" class="cv-chips-drag-hint">
-          {{ tm("drop_category_hint") }}
-        </span>
+          :playable="canPlayCategory"
+          :sort-mode="sortMode"
+          :sort-options="sortOptions"
+          :sort-label="t('components.category_bar.sort')"
+          :show-all-label="t('components.category_bar.show_all')"
+          :hide-all-label="t('components.category_bar.hide_all')"
+          @update:selected-ids="selectedCategoryIds = $event"
+          @update:sort-mode="sortMode = $event"
+          @select="onCategoryChipClick"
+          @add="onAddCategoryClick"
+          @edit="editCategoryFromChip"
+          @play="playCategoryVideos"
+          @dragover="onCategoryDragOver"
+          @dragleave="onCategoryDragLeave"
+          @drop="onCategoryDrop"
+        >
+          <template #hint>
+            <span v-if="draggingId !== null" class="cv-chips-drag-hint">
+              {{ tm("drop_category_hint") }}
+            </span>
+          </template>
+        </CategoryChipsBar>
       </div>
 
       <div class="cv-scroll">
@@ -128,11 +116,15 @@
               :class="{
                 'cv-list-item--active': projectingId === v.id,
                 'cv-list-item--dragging': draggingId === v.id,
+                'lj-u-order-target': orderTargetId === v.id,
               }"
               :style="{ '--card-category-color': categoryColor(v.categoryId) }"
               draggable="true"
               @dragstart="onCardDragStart($event, v)"
               @dragend="onCardDragEnd"
+              @dragover="onCardOrderDragOver($event, v.id)"
+              @dragleave="onCardOrderDragLeave($event, v.id)"
+              @drop="onCardOrderDrop($event, v.id)"
               @touchstart.passive="onCardTouchStart($event, v)"
               @contextmenu.prevent
             >
@@ -210,12 +202,16 @@
               :class="{
                 'cv-grid-card--active': projectingId === v.id,
                 'cv-grid-card--dragging': draggingId === v.id,
+                'lj-u-order-target': orderTargetId === v.id,
               }"
               :style="{ '--card-category-color': categoryColor(v.categoryId) }"
               draggable="true"
               @click="onCardClick(v)"
               @dragstart="onCardDragStart($event, v)"
               @dragend="onCardDragEnd"
+              @dragover="onCardOrderDragOver($event, v.id)"
+              @dragleave="onCardOrderDragLeave($event, v.id)"
+              @drop="onCardOrderDrop($event, v.id)"
               @touchstart="onCardTouchStart($event, v)"
               @contextmenu.prevent
             >
@@ -385,8 +381,11 @@ import { RibbonAction } from "@/types/Ribbon";
 import Media from "@/composables/useMedia";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
+import { useCardReorder } from "@/composables/useCardReorder";
+import { useItemSortMode } from "@/composables/useItemSortMode";
+import { sortByMode } from "@/helpers/ItemSort";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
-import CategoryChip from "@/components/CategoryChip.vue";
+import CategoryChipsBar from "@/components/CategoryChipsBar.vue";
 import CategoryItemIcon from "@/components/CategoryItemIcon.vue";
 
 interface VideoItem {
@@ -395,6 +394,8 @@ interface VideoItem {
   url: string;
   createdAt: string;
   categoryId?: string;
+  /** Ordem manual usada pelo seletor "Personalizada". */
+  order?: number;
 }
 
 interface ThumbnailCache {
@@ -449,11 +450,27 @@ const showManageDialog = ref<boolean>(false);
 const categoryManagerRef = ref<{
   openEditCategory: (_category: CategoryFileData) => void;
 } | null>(null);
+const sortMode = useItemSortMode(KEYS.MODULES.CUSTOM_ONLINE_VIDEOS.SORT_MODE);
+const sortOptions = computed(() => [
+  { value: "custom" as const, label: t("components.category_bar.custom") },
+  { value: "alpha_asc" as const, label: t("components.category_bar.alpha_asc") },
+  { value: "alpha_desc" as const, label: t("components.category_bar.alpha_desc") },
+]);
 
 async function loadCategories(): Promise<void> {
   categories.value = (await $idb.getAll<CategoryFileData>(STORE_CATEGORY)).sort((a, b) =>
     a.name.localeCompare(b.name)
   );
+}
+
+function categoryCount(categoryId: string): number {
+  return videos.value.filter((video) => (video.categoryId || "") === categoryId).length;
+}
+
+/** Só mostra "Reproduzir categoria" quando há vídeo naquele filtro. */
+function canPlayCategory(categoryId: string): boolean {
+  if (categoryId === UNCATEGORIZED_ID) return uncategorizedCount.value > 0;
+  return videos.value.some((video) => video.categoryId === categoryId);
 }
 
 function categoryName(categoryId?: string): string {
@@ -478,19 +495,18 @@ const uncategorizedCount = computed(() => {
 
 const filteredVideos = computed(() => {
   const q = search.value.trim().toLowerCase();
-  return videos.value.filter((v) => {
-    if (selectedCategoryIds.value.size > 0) {
-      const catMatch =
-        selectedCategoryIds.value.has(v.categoryId || UNCATEGORIZED_ID) ||
-        (uncategorizedCount.value > 0 &&
-          !v.categoryId &&
-          selectedCategoryIds.value.has(UNCATEGORIZED_ID));
-      if (!catMatch) return false;
-    }
+  const list = videos.value.filter((v) => {
+    const catMatch =
+      selectedCategoryIds.value.has(v.categoryId || UNCATEGORIZED_ID) ||
+      (uncategorizedCount.value > 0 &&
+        !v.categoryId &&
+        selectedCategoryIds.value.has(UNCATEGORIZED_ID));
+    if (!catMatch) return false;
     if (!q) return true;
     const catName = categoryName(v.categoryId).toLowerCase();
     return v.name.toLowerCase().includes(q) || catName.includes(q);
   });
+  return sortByMode(list, sortMode.value, (video) => video.name);
 });
 
 const categorySelectItems = computed(() => [
@@ -580,6 +596,14 @@ const {
   icon: () => ICONS.MEDIA.YOUTUBE,
   thumb: (video) => thumbUrls[video.id],
 });
+
+const { orderTargetId, onCardOrderDragOver, onCardOrderDragLeave, onCardOrderDrop } =
+  useCardReorder<VideoItem>({
+    enabled: () => sortMode.value === "custom",
+    draggingId,
+    items: videos,
+    save: (video) => saveVideoInternal({ ...video }),
+  });
 
 function onCardClick(video: VideoItem): void {
   if (shouldSuppressClick(video.id)) return;

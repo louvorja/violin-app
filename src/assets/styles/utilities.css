@@ -208,3 +208,9 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Card que receberá o item reordenado no modo "Personalizada". */
+.lj-u-order-target {
+  outline: 2px dashed var(--lj-ui-accent);
+  outline-offset: 2px;
+}

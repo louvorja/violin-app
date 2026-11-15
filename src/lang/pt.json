@@ -94,6 +94,15 @@
       "custom": "Personalizada",
       "hex": "HEX"
     },
+    "category_bar": {
+      "sort": "Ordenar itens",
+      "alpha_asc": "Ordem alfabética (A–Z)",
+      "alpha_desc": "Ordem alfabética (Z–A)",
+      "custom": "Personalizada",
+      "show_all": "Mostrar todas as categorias",
+      "hide_all": "Ocultar todas as categorias"
+    },
+
     "customization": {
       "title": "Formatação",
       "restore": "Restaurar",
