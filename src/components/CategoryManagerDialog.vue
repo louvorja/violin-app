@@ -165,6 +165,7 @@ import {
 import { ICONS } from "@/config/Icons";
 import { CATEGORY_COLOR_PRESETS, CATEGORY_ICON_OPTIONS } from "@/constants/CategoryOptions";
 import $alert from "@/helpers/Alert";
+import { findDuplicateCategory } from "@/helpers/CategoryName";
 import { MediaFile } from "@/types/Media";
 
 export interface CategoryFileData {
@@ -223,26 +224,13 @@ const form = ref<{
   color: props.colorPresets[0] || "#4CAF50",
 });
 
-/** Compara nomes sem caixa e sem espaços repetidos nas pontas/meio. */
-function categoryNameKey(name: string): string {
-  return name.normalize("NFC").trim().replace(/\s+/g, " ").toLocaleLowerCase();
-}
-
 /**
  * Categoria existente com o mesmo nome, ignorando a que está em edição.
  * A verificação vale para os quatro módulos que usam este diálogo.
  */
-const duplicateCategory = computed<CategoryFileData | null>(() => {
-  const key = categoryNameKey(form.value.name);
-  if (!key) return null;
-  return (
-    props.categories.find(
-      (category) =>
-        String(category.id) !== String(editingId.value ?? "") &&
-        categoryNameKey(category.name) === key
-    ) ?? null
-  );
-});
+const duplicateCategory = computed<CategoryFileData | null>(() =>
+  findDuplicateCategory(props.categories, form.value.name, editingId.value)
+);
 
 watch(showForm, (v) => {
   if (!v) editingId.value = null;
