@@ -1411,6 +1411,7 @@
       "categories": "Categorías",
       "manage_categories": "Gestionar Categorías",
       "category_name": "Nombre de la Categoría",
+      "duplicate_name": "Ya existe una categoría con ese nombre.",
       "new_category": "Nueva categoría",
       "edit_category": "Editar categoria",
       "upload_image": "Carregar imagem",
