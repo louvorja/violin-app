@@ -39,7 +39,8 @@ async function storedFiles(page) {
             request.result.map((record) => ({
               id: record.id,
               name: record.name,
-              bytes: record.data.byteLength,
+              // Web guarda Blob no IndexedDB; desktop guarda só o caminho.
+              bytes: record.size ?? record.data?.size ?? record.data?.byteLength ?? 0,
             }))
           );
         request.onerror = () => reject(request.error);
