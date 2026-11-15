@@ -9,6 +9,7 @@ import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $broadcast from "@/helpers/Broadcast";
 import type { OnlineVideoPlaylistItem, Playlist, PlaylistSong } from "@/types/Music";
 import { usePlaylists } from "./usePlaylists";
+import { videoIdFromUrl } from "@/helpers/OnlineVideo";
 import Telemetry from "@/helpers/Telemetry";
 
 const _isActive = ref(false);
@@ -54,6 +55,12 @@ const playedDuration = computed(() =>
     .reduce((sum, s) => sum + _durationToSec(s.duration), 0)
 );
 const remainingDuration = computed(() => totalDuration.value - playedDuration.value);
+
+/** A fila é uma sequência de vídeos online (categoria/Tocar Todas de vídeos)? */
+const isOnlineVideoSequence = computed(() => {
+  const songs = currentPlaylist.value?.songs || [];
+  return songs.length > 0 && songs.every((song) => !!song.onlineVideo);
+});
 
 const currentSong = computed<PlaylistSong | null>(() => {
   if (!currentPlaylist.value) return null;
@@ -134,7 +141,17 @@ function _onPlaybackStarted(idMusic: unknown, videoId?: string): void {
   if (!_isActive.value || _launchingQueueItem) return;
   const current = currentSong.value;
   if (current?.onlineVideo) {
-    if (videoId && current.onlineVideo.videoId && videoId === current.onlineVideo.videoId) return;
+    // Eventos sem id (arquivo baixado/embed em outra janela) não identificam
+    // outro vídeo. E um evento atrasado de OUTRO item da mesma fila também não
+    // pode encerrá-la — só um vídeo de fora da fila assume o player.
+    const queueIds = new Set(
+      (currentPlaylist.value?.songs || [])
+        .map(
+          (song) => song.onlineVideo?.videoId || videoIdFromUrl(song.onlineVideo?.url || "") || ""
+        )
+        .filter(Boolean)
+    );
+    if (!videoId || queueIds.has(videoId)) return;
   } else if (Number(idMusic) === current?.id_music) {
     return;
   }
@@ -298,6 +315,21 @@ onUnmounted(() => {
   Media.unregisterPlaylistPlaybackHandler();
 });
 
+/**
+ * Estado e ações da fila para quem só precisa exibi-la (player do módulo de
+ * mídia). Não registra handlers de ciclo de vida como `usePlaylistPlayback`.
+ */
+export const playlistControls = {
+  isActive: _isActive,
+  currentIndex: _currentIndex,
+  currentPlaylist,
+  currentSong,
+  totalSongs,
+  isOnlineVideoSequence,
+  playNext,
+  playPrev,
+};
+
 export function usePlaylistPlayback() {
   return {
     isActive: _isActive,
@@ -311,6 +343,7 @@ export function usePlaylistPlayback() {
     playedDuration,
     remainingDuration,
     currentSong,
+    isOnlineVideoSequence,
     playedSongs: _playedSongs,
 
     playPlaylist,

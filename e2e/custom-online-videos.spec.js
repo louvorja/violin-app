@@ -152,10 +152,12 @@ test.describe("Meus Vídeos Online: categorias fixas (#51) e Tocar Todas (#67)",
     await expect(page.locator(".cv-chips-play-all")).toContainText("(2)");
     await page.locator(".cv-chips-play-all").click();
 
-    const playlistBar = page.locator(".playlist-bar");
-    await expect(playlistBar).toBeVisible({ timeout: 10_000 });
-    await expect(playlistBar).toContainText("Louvores");
-    await expect(playlistBar).toContainText("1/2");
+    const player = page.locator(".player").first();
+    await expect(player).toBeVisible({ timeout: 10_000 });
+    await expect(player).toContainText("Reproduzindo: Categoria Louvores 1/2 - Louvor 1");
+    const queueLabel = page.locator(".player__queue");
+    await expect(queueLabel).toHaveAttribute("data-queue-index", "0");
+    await expect(queueLabel).toHaveAttribute("data-queue-total", "2");
 
     // Vídeos online sem duração conhecida não devem exibir "00:00 / 00:00" no rodapé.
     await expect(page.locator(".footer")).not.toContainText("00:00 / 00:00");
@@ -283,4 +285,56 @@ test.describe("Meus Vídeos Online: categorias fixas (#51) e Tocar Todas (#67)",
     await expect(page.locator(".ov-list")).toBeVisible({ timeout: 10_000 });
     await expect(page.locator(".ov-card--list")).toHaveCount(1);
   });
+});
+
+test("Tocar todas desta categoria enfileira a categoria e mostra próximo/anterior", async ({
+  page,
+  context,
+}) => {
+  await mockNetwork(context);
+  await page.goto("/");
+  await page
+    .locator('[data-testid="modules-ready"]')
+    .waitFor({ state: "attached", timeout: 30_000 });
+  await seedCustomVideos(page, 3);
+  await openCustomVideos(page);
+
+  const chip = page.locator(".cv-chips .lj-category-chip", { hasText: "Louvores" });
+  await chip.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Tocar todas desta categoria" }).click();
+
+  const player = page.locator(".player").first();
+  await expect(player).toBeVisible({ timeout: 15_000 });
+  await expect(player).toContainText("Reproduzindo: Categoria Louvores 1/3 - Louvor 1");
+
+  await expect(page.locator(".playlist-bar")).toHaveCount(0);
+  const queueLabel = page.locator(".player__queue");
+  await expect(queueLabel).toContainText("Reproduzindo: Categoria Louvores 1/3 - Louvor 1");
+  await expect(queueLabel).toHaveAttribute("data-queue-index", "0");
+  await expect(queueLabel).toHaveAttribute("data-queue-total", "3");
+  const next = page.locator('.player-controls button[aria-label="Próximo item"]').first();
+  await expect(next).toBeVisible();
+  await expect(next).toBeEnabled();
+  await next.click();
+  await expect(queueLabel).toHaveAttribute("data-queue-index", "1");
+
+  // Minimiza a janela de mídia: a barra principal do rodapé assume a fila,
+  // sem a barra extra de playlist acima.
+  await page.evaluate(async () => {
+    const { default: Media } = await import("/src/composables/useMedia.ts");
+    Media.minimize();
+  });
+  const mainPlayer = page.locator(".footer .player");
+  await expect(mainPlayer).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".playlist-bar")).toHaveCount(0);
+  await expect(mainPlayer.locator(".player-title")).toContainText(
+    "Reproduzindo: Categoria Louvores 2/3 - Louvor 2"
+  );
+  await expect(mainPlayer).toHaveAttribute("data-queue-index", "1");
+  await expect(mainPlayer).toHaveAttribute("data-queue-total", "3");
+
+  const mainNext = mainPlayer.getByRole("button", { name: "Próximo item" });
+  await expect(mainNext).toBeVisible();
+  await mainNext.click();
+  await expect(page.locator(".player__queue")).toHaveAttribute("data-queue-index", "2");
 });

@@ -9,6 +9,7 @@ import AppData from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
+import { playlistControls } from "@/modules/musics/composables/usePlaylistPlayback";
 
 export interface PlayerButton {
   show: boolean;
@@ -17,6 +18,7 @@ export interface PlayerButton {
   highlight: boolean;
   icon: string;
   click: () => void;
+  label?: string;
 }
 
 export interface MenuMode {
@@ -77,15 +79,19 @@ export function usePlayerState(): {
   seekToProgress: (pct: number) => void;
   goToSlide: (index: number) => void;
 } {
-  const { t }     = useI18n();
+  const { t } = useI18n();
   const { width } = useViewport();
-  const audio     = useAudioPlayback();
+  const audio = useAudioPlayback();
 
-  const media   = computed<Record<string, unknown>>(() => Modules.get("media") as Record<string, unknown>);
+  const media = computed<Record<string, unknown>>(
+    () => Modules.get("media") as Record<string, unknown>
+  );
   // Como no teclado, o controle segue o pedido de pausa/retomada durante o fade.
   // O áudio ainda toca durante o fade-out; isso não deve impedir a retomada.
-  const isPaused = computed(() => AppData.get<boolean>(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true) !== false);
-  const slides  = computed<Slide[]>(() => Media.slides() as Slide[]);
+  const isPaused = computed(
+    () => AppData.get<boolean>(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true) !== false
+  );
+  const slides = computed<Slide[]>(() => Media.slides() as Slide[]);
   const has_instrumental_music = computed<boolean>(
     () => !!(media.value?.data as Record<string, unknown>)?.url_instrumental_music
   );
@@ -95,68 +101,107 @@ export function usePlayerState(): {
     return data?.custom === true && !data.url_music;
   });
 
-  const compact   = computed<boolean>(() => width.value <= 500);
+  const compact = computed<boolean>(() => width.value <= 500);
   const is_mobile = computed(() => AppData.get("is_mobile"));
 
   const volume_icon = computed<string>(() => {
     const v = audio.volume.value;
-    if (v <= 0)  return ICONS.PLAYER.VOLUME_MUTE;
+    if (v <= 0) return ICONS.PLAYER.VOLUME_MUTE;
     if (v <= 20) return ICONS.PLAYER.VOLUME_LOW;
     if (v <= 70) return ICONS.PLAYER.VOLUME_MEDIUM;
     return ICONS.PLAYER.VOLUME_HIGH;
   });
 
   const slide_text = computed<string>(() => {
-    const cfg   = media.value?.config as Record<string, unknown> | undefined;
-    const idx   = (cfg?.slide_index as number) ?? 0;
-    const item  = slides.value?.[idx];
+    const cfg = media.value?.config as Record<string, unknown> | undefined;
+    const idx = (cfg?.slide_index as number) ?? 0;
+    const item = slides.value?.[idx];
     if (!item?.lyric) return "";
     return String(item.lyric).replace(/<br>/gi, " / ").toUpperCase();
   });
 
   const buttons = computed<PlayerButton[]>(() => {
-    const cfg        = (media.value?.config as Record<string, unknown>) ?? {};
-    const lastSlide  = (cfg.last_slide as number) ?? 0;
+    const cfg = (media.value?.config as Record<string, unknown>) ?? {};
+    const lastSlide = (cfg.last_slide as number) ?? 0;
     const slideIndex = (cfg.slide_index as number) ?? 0;
 
-    const isYouTube = !!(cfg.is_youtube);
-    const hasAudio  = !!(cfg.audio) || isYouTube || !!(cfg.video_file);
+    const isYouTube = !!cfg.is_youtube;
+    const hasAudio = !!cfg.audio || isYouTube || !!cfg.video_file;
     const hasSlides = !isYouTube && lastSlide > 0;
 
     return [
       {
-        show: hasAudio, compact: true,  disabled: false,
-        highlight: false, icon: ICONS.PLAYER.REWIND_10,
+        show: hasAudio,
+        compact: true,
+        disabled: false,
+        highlight: false,
+        icon: ICONS.PLAYER.REWIND_10,
         click: () => rewind(),
       },
       {
-        show: hasSlides, compact: true, disabled: slideIndex <= 0,
-        highlight: false, icon: ICONS.PLAYER.PAGE_FIRST,
+        show: hasSlides,
+        compact: true,
+        disabled: slideIndex <= 0,
+        highlight: false,
+        icon: ICONS.PLAYER.PAGE_FIRST,
         click: () => first(),
       },
       {
-        show: hasSlides, compact: false, disabled: slideIndex <= 0,
-        highlight: false, icon: ICONS.ACTIONS.PREVIOUS,
+        show: hasSlides,
+        compact: false,
+        disabled: slideIndex <= 0,
+        highlight: false,
+        icon: ICONS.ACTIONS.PREVIOUS,
         click: () => prev(),
       },
       {
-        show: hasAudio, compact: false, disabled: false,
-        highlight: true, icon: isPaused.value ? ICONS.PLAYER.PLAYER : ICONS.PLAYER.PAUSE_PLAIN,
+        show: playlistControls.isActive.value,
+        compact: false,
+        disabled: playlistControls.currentIndex.value <= 0,
+        highlight: false,
+        icon: ICONS.PLAYER.PREV,
+        label: t("shell.player.prev_item"),
+        click: () => playlistControls.playPrev(),
+      },
+      {
+        show: hasAudio,
+        compact: false,
+        disabled: false,
+        highlight: true,
+        icon: isPaused.value ? ICONS.PLAYER.PLAYER : ICONS.PLAYER.PAUSE_PLAIN,
         click: () => playToggle(),
       },
       {
-        show: hasSlides, compact: false, disabled: slideIndex >= lastSlide - 1,
-        highlight: false, icon: ICONS.ACTIONS.NEXT,
+        show: playlistControls.isActive.value,
+        compact: false,
+        disabled: playlistControls.currentIndex.value >= playlistControls.totalSongs.value - 1,
+        highlight: false,
+        icon: ICONS.PLAYER.NEXT,
+        label: t("shell.player.next_item"),
+        click: () => playlistControls.playNext(),
+      },
+      {
+        show: hasSlides,
+        compact: false,
+        disabled: slideIndex >= lastSlide - 1,
+        highlight: false,
+        icon: ICONS.ACTIONS.NEXT,
         click: () => next(),
       },
       {
-        show: hasSlides, compact: true, disabled: slideIndex >= lastSlide - 1,
-        highlight: false, icon: ICONS.PLAYER.PAGE_LAST,
+        show: hasSlides,
+        compact: true,
+        disabled: slideIndex >= lastSlide - 1,
+        highlight: false,
+        icon: ICONS.PLAYER.PAGE_LAST,
         click: () => last(),
       },
       {
-        show: hasAudio, compact: true, disabled: false,
-        highlight: false, icon: ICONS.PLAYER.FORWARD_10,
+        show: hasAudio,
+        compact: true,
+        disabled: false,
+        highlight: false,
+        icon: ICONS.PLAYER.FORWARD_10,
         click: () => forward(),
       },
     ];
@@ -206,24 +251,54 @@ export function usePlayerState(): {
 
   const mode = computed<MenuMode>(
     () =>
-      menu_modes.value.find((item) => item.mode === (media.value?.config as Record<string, unknown>)?.mode) ??
-      menu_modes.value[0]
+      menu_modes.value.find(
+        (item) => item.mode === (media.value?.config as Record<string, unknown>)?.mode
+      ) ?? menu_modes.value[0]
   );
 
-  function playToggle():    void { if (isPaused.value) Media.play(); else Media.pause(); }
-  function rewind():        void { Media.advanceTime(-10); }
-  function forward():       void { Media.advanceTime(+10); }
-  function first():         void { Media.firstSlide(); }
-  function prev():          void { Media.prevSlide(); }
-  function next():          void { Media.nextSlide(); }
-  function last():          void { Media.lastSlide(); }
-  function open(data: unknown): void { Media.open(data as Parameters<typeof Media.open>[0]); }
-  function switchMode(mode: MusicActionEnum): void { Media.switchMode(mode); }
-  function openLyric():     void { Media.openLyric(); }
-  function maximize():      void { Media.maximize(); }
-  function close():         void { Media.close(); }
-  function fullscreen(value = true): void { Media.fullscreen(value); }
-  function toggleVolume():  void { Media.toogleVolume(); }
+  function playToggle(): void {
+    if (isPaused.value) Media.play();
+    else Media.pause();
+  }
+  function rewind(): void {
+    Media.advanceTime(-10);
+  }
+  function forward(): void {
+    Media.advanceTime(+10);
+  }
+  function first(): void {
+    Media.firstSlide();
+  }
+  function prev(): void {
+    Media.prevSlide();
+  }
+  function next(): void {
+    Media.nextSlide();
+  }
+  function last(): void {
+    Media.lastSlide();
+  }
+  function open(data: unknown): void {
+    Media.open(data as Parameters<typeof Media.open>[0]);
+  }
+  function switchMode(mode: MusicActionEnum): void {
+    Media.switchMode(mode);
+  }
+  function openLyric(): void {
+    Media.openLyric();
+  }
+  function maximize(): void {
+    Media.maximize();
+  }
+  function close(): void {
+    Media.close();
+  }
+  function fullscreen(value = true): void {
+    Media.fullscreen(value);
+  }
+  function toggleVolume(): void {
+    Media.toogleVolume();
+  }
   function setVolume(value?: number): void {
     Media.setVolume(value ?? audio.volume.value);
   }
@@ -234,13 +309,38 @@ export function usePlayerState(): {
     if (!Number.isFinite(time)) return;
     Media.goToTime(time);
   }
-  function goToSlide(index: number): void { Media.goToSlide(index); }
+  function goToSlide(index: number): void {
+    Media.goToSlide(index);
+  }
 
   return {
-    audio, media, slides, has_instrumental_music, compact, is_mobile,
-    volume_icon, slide_text, buttons, menu_modes, mode,
-    playToggle, rewind, forward, first, prev, next, last,
-    open, switchMode, openLyric, maximize, close, fullscreen, toggleVolume, setVolume,
-    seekToProgress, goToSlide,
+    audio,
+    media,
+    slides,
+    has_instrumental_music,
+    compact,
+    is_mobile,
+    volume_icon,
+    slide_text,
+    buttons,
+    menu_modes,
+    mode,
+    playToggle,
+    rewind,
+    forward,
+    first,
+    prev,
+    next,
+    last,
+    open,
+    switchMode,
+    openLyric,
+    maximize,
+    close,
+    fullscreen,
+    toggleVolume,
+    setVolume,
+    seekToProgress,
+    goToSlide,
   };
 }

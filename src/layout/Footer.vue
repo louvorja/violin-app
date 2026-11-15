@@ -7,17 +7,19 @@
     :class="{
       'footer--active': footerActive,
       'footer--bg-sound': hasBgSound,
-      'footer--bg-only': hasBgSound && !hasPlayer && !hasProjection,
-      'footer--fp-only': hasProjection && !hasPlayer && !hasBgSound,
+      'footer--bg-only': hasBgSound && !hasPlayer && !hasProjection && !playlist.isActive.value,
+      'footer--fp-only': hasProjection && !hasPlayer && !hasBgSound && !playlist.isActive.value,
       'footer--playlist': playlist.isActive.value,
       'footer--mobile-web': !Platform.isDesktop,
     }"
   >
     <BackgroundSoundPlayer v-if="hasBgSound" />
     <FileProjectionBar v-if="hasProjection" />
-    <div v-if="playlist.isActive.value" class="playlist-bar">
+    <div v-if="showPlaylistBar" class="playlist-bar">
       <LjIcon :icon="ICONS.PLAYER.PLAYLIST" :size="14" class="playlist-bar-icon" />
-      <span class="playlist-bar-name">{{ playlist.currentPlaylist.value?.name }}</span>
+      <span class="playlist-bar-name">
+        {{ $t("shell.player.playing_category", { name: playlist.currentPlaylist.value?.name }) }}
+      </span>
       <span class="playlist-bar-meta">
         {{ playlist.playedCount.value }}/{{ playlist.totalSongs.value }}
         <template v-if="playlist.totalDuration.value > 0">
@@ -26,23 +28,23 @@
         </template>
       </span>
       <div class="playlist-bar-controls">
-        <LjTooltip :text="$t('shell.player.prev')">
+        <LjTooltip :text="$t('shell.player.prev_item')">
           <button
             type="button"
             class="player-btn"
             :disabled="playlist.currentIndex.value <= 0"
-            :aria-label="$t('shell.player.prev')"
+            :aria-label="$t('shell.player.prev_item')"
             @click="playlist.playPrev()"
           >
             <LjIcon :icon="ICONS.PLAYER.PREV" :size="18" />
           </button>
         </LjTooltip>
-        <LjTooltip :text="$t('shell.player.next')">
+        <LjTooltip :text="$t('shell.player.next_item')">
           <button
             type="button"
             class="player-btn"
             :disabled="playlist.currentIndex.value >= playlist.totalSongs.value - 1"
-            :aria-label="$t('shell.player.next')"
+            :aria-label="$t('shell.player.next_item')"
             @click="playlist.playNext()"
           >
             <LjIcon :icon="ICONS.PLAYER.NEXT" :size="18" />
@@ -60,7 +62,12 @@
         </LjTooltip>
       </div>
     </div>
-    <div v-if="hasPlayer" class="player">
+    <div
+      v-if="hasPlayer"
+      class="player"
+      :data-queue-index="playlist.currentIndex.value"
+      :data-queue-total="playlist.totalSongs.value"
+    >
       <div class="player-title" :class="{ 'player-title--youtube': isYouTube }">
         <LjIcon
           :icon="isYouTube ? ICONS.MEDIA.YOUTUBE : ICONS.MEDIA.AUDIO"
@@ -68,15 +75,27 @@
           class="player-title-icon"
         />
         <span class="player-title-text lj-u-truncate">
-          <template v-if="isYouTube">{{ $t("shell.playing_youtube") }}:</template>
-          <template v-else>{{ $t("shell.playing") }}:</template>
-          {{ playerTitle }}
+          <template v-if="playlistVideoActive">
+            {{
+              $t("shell.player.playing_video_category", {
+                category: playlist.currentPlaylist.value?.name,
+                index: playlist.currentIndex.value + 1,
+                total: playlist.totalSongs.value,
+                video: playlist.currentSong.value?.name || "",
+              })
+            }}
+          </template>
+          <template v-else>
+            <template v-if="isYouTube">{{ $t("shell.playing_youtube") }}:</template>
+            <template v-else>{{ $t("shell.playing") }}:</template>
+            {{ playerTitle }}
+          </template>
         </span>
       </div>
 
       <div class="player-row">
         <div class="player-controls">
-          <LjTooltip v-if="hasSlides" :text="$t('shell.player.first')">
+          <LjTooltip v-if="hasSlides && !playlistVideoActive" :text="$t('shell.player.first')">
             <button
               type="button"
               class="player-btn"
@@ -87,15 +106,23 @@
               <LjIcon :icon="ICONS.PLAYER.PREV" :size="22" />
             </button>
           </LjTooltip>
-          <LjTooltip v-if="hasSlides" :text="$t('shell.player.prev')">
+          <LjTooltip
+            v-if="hasSlides || playlistVideoActive"
+            :text="playlistVideoActive ? $t('shell.player.prev_item') : $t('shell.player.prev')"
+          >
             <button
               type="button"
               class="player-btn"
-              :disabled="!canPrev"
-              :aria-label="$t('shell.player.prev')"
-              @click="prevSlide()"
+              :disabled="playlistVideoActive ? playlist.currentIndex.value <= 0 : !canPrev"
+              :aria-label="
+                playlistVideoActive ? $t('shell.player.prev_item') : $t('shell.player.prev')
+              "
+              @click="playlistVideoActive ? playlist.playPrev() : prevSlide()"
             >
-              <LjIcon :icon="ICONS.ACTIONS.PREVIOUS" :size="22" />
+              <LjIcon
+                :icon="playlistVideoActive ? ICONS.PLAYER.PREV : ICONS.ACTIONS.PREVIOUS"
+                :size="22"
+              />
             </button>
           </LjTooltip>
           <LjTooltip v-if="hasAudio" :text="$t('shell.player.rewind')">
@@ -137,18 +164,30 @@
               <LjIcon :icon="ICONS.PLAYER.FORWARD_10" :size="20" />
             </button>
           </LjTooltip>
-          <LjTooltip v-if="hasSlides" :text="$t('shell.player.next')">
+          <LjTooltip
+            v-if="hasSlides || playlistVideoActive"
+            :text="playlistVideoActive ? $t('shell.player.next_item') : $t('shell.player.next')"
+          >
             <button
               type="button"
               class="player-btn"
-              :disabled="!canNext"
-              :aria-label="$t('shell.player.next')"
-              @click="nextSlide()"
+              :disabled="
+                playlistVideoActive
+                  ? playlist.currentIndex.value >= playlist.totalSongs.value - 1
+                  : !canNext
+              "
+              :aria-label="
+                playlistVideoActive ? $t('shell.player.next_item') : $t('shell.player.next')
+              "
+              @click="playlistVideoActive ? playlist.playNext() : nextSlide()"
             >
-              <LjIcon :icon="ICONS.ACTIONS.NEXT" :size="22" />
+              <LjIcon
+                :icon="playlistVideoActive ? ICONS.PLAYER.NEXT : ICONS.ACTIONS.NEXT"
+                :size="22"
+              />
             </button>
           </LjTooltip>
-          <LjTooltip v-if="hasSlides" :text="$t('shell.player.last')">
+          <LjTooltip v-if="hasSlides && !playlistVideoActive" :text="$t('shell.player.last')">
             <button
               type="button"
               class="player-btn"
@@ -266,7 +305,14 @@ const hasPlayer = computed(() => {
 
 const hasBgSound = computed(() => !!bg.currentFile.value);
 const hasProjection = computed(() => fp.isProjecting.value);
-const footerActive = computed(() => hasPlayer.value || hasBgSound.value || hasProjection.value);
+/** Sequência de vídeos online usa a barra principal do player, sem barra extra. */
+const playlistVideoActive = computed(
+  () => playlist.isActive.value && playlist.isOnlineVideoSequence.value
+);
+const showPlaylistBar = computed(() => playlist.isActive.value && !playlistVideoActive.value);
+const footerActive = computed(
+  () => hasPlayer.value || hasBgSound.value || hasProjection.value || showPlaylistBar.value
+);
 
 // O rodapé some e volta por `transform`, e a altura varia com o que ele mostra
 // (player, som de fundo, playlist, projeção). O toast nasce na base da janela e

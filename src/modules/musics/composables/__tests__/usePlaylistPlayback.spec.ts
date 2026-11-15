@@ -170,8 +170,18 @@ describe("Tocar Todas: fila provisória", () => {
 
   it("reproduz vídeos on-line em sequência e encerra ao iniciar outro vídeo fora da fila (#67)", () => {
     playback.playOnlineVideoSequence("Adoração", [
-      { url: "https://www.youtube.com/embed/aaaaaaaaaaa", title: "Vídeo 1", videoId: "aaaaaaaaaaa", itemKey: "v1" },
-      { url: "https://www.youtube.com/embed/bbbbbbbbbbb", title: "Vídeo 2", videoId: "bbbbbbbbbbb", itemKey: "v2" },
+      {
+        url: "https://www.youtube.com/embed/aaaaaaaaaaa",
+        title: "Vídeo 1",
+        videoId: "aaaaaaaaaaa",
+        itemKey: "v1",
+      },
+      {
+        url: "https://www.youtube.com/embed/bbbbbbbbbbb",
+        title: "Vídeo 2",
+        videoId: "bbbbbbbbbbb",
+        itemKey: "v2",
+      },
     ]);
 
     expect(playback.isActive.value).toBe(true);
@@ -193,5 +203,34 @@ describe("Tocar Todas: fila provisória", () => {
     playbackStarted(undefined, "zzzzzzzzzzz");
     expect(playback.isActive.value).toBe(false);
     expect(playback.currentSong.value).toBeNull();
+  });
+
+  it("não encerra a fila quando o próprio vídeo começa sem video_id", () => {
+    playback.playOnlineVideoSequence("Adoração", [
+      {
+        url: "https://www.youtube.com/embed/aaaaaaaaaaa",
+        title: "Vídeo 1",
+        videoId: "aaaaaaaaaaa",
+        itemKey: "v1",
+      },
+      {
+        url: "https://www.youtube.com/embed/bbbbbbbbbbb",
+        title: "Vídeo 2",
+        videoId: "bbbbbbbbbbb",
+        itemKey: "v2",
+      },
+    ]);
+
+    // O arquivo baixado/embed pode anunciar o início sem o video_id.
+    playbackStarted(undefined, undefined);
+    expect(playback.isActive.value).toBe(true);
+
+    // Evento atrasado do primeiro vídeo também não derruba a fila.
+    playbackStarted(undefined, "aaaaaaaaaaa");
+    expect(playback.isActive.value).toBe(true);
+
+    // Um vídeo de fora da fila encerra.
+    playbackStarted(undefined, "zzzzzzzzzzz");
+    expect(playback.isActive.value).toBe(false);
   });
 });

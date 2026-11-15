@@ -4,7 +4,6 @@ import { createPinia, setActivePinia } from "pinia";
 import PlayerControls from "@/components/PlayerControls.vue";
 import LjIcon from "@/components/ui/LjIcon.vue";
 import { mountUi } from "@/components/ui/__tests__/mountUi";
-import { usePlayerState } from "@/composables/usePlayerState";
 import { useAudioPlayback } from "@/composables/useAudioPlayback";
 import AppData from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -13,9 +12,24 @@ import { ICONS } from "@/config/Icons";
 const media = vi.hoisted(() => ({ play: vi.fn(), pause: vi.fn() }));
 
 vi.mock("@/composables/useMedia", () => ({
-  default: { ...media, slides: () => [] },
+  default: {
+    ...media,
+    slides: () => [],
+    registerPlaylistEndHandler: vi.fn(),
+    unregisterPlaylistEndHandler: vi.fn(),
+    registerPlaylistCloseHandler: vi.fn(),
+    unregisterPlaylistCloseHandler: vi.fn(),
+    registerPlaylistPlaybackHandler: vi.fn(),
+    unregisterPlaylistPlaybackHandler: vi.fn(),
+    getActivePlaybackId: () => "playback",
+  },
 }));
 vi.mock("@/helpers/Telemetry", () => ({ default: {} }));
+
+// usePlayerState agora consulta a fila de reprodução no carregamento, e o
+// composable de playlists lê o UserData/Pinia. Ativa o Pinia antes do import.
+setActivePinia(createPinia());
+const { usePlayerState } = await import("@/composables/usePlayerState");
 
 const audio = useAudioPlayback();
 const CONFIG = KEYS.MODULES.MEDIA.CONFIG;
