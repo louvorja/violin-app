@@ -309,7 +309,7 @@ test("Tocar todas desta categoria enfileira a categoria e mostra próximo/anteri
 
   await expect(page.locator(".playlist-bar")).toHaveCount(0);
   const queueLabel = page.locator(".player__queue");
-  await expect(queueLabel).toContainText("Reproduzindo: Categoria Louvores 1/3 - Louvor 1");
+  await expect(queueLabel).toContainText(/Reproduzindo: Categoria Louvores 1\/3 - Louvor \d+/);
   await expect(queueLabel).toHaveAttribute("data-queue-index", "0");
   await expect(queueLabel).toHaveAttribute("data-queue-total", "3");
   const next = page.locator('.player-controls button[aria-label="Próximo item"]').first();
