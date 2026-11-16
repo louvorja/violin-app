@@ -2309,7 +2309,10 @@ então um desktop antigo simplesmente não serve as abas novas. Quem consome
 
 - **Player** (`/api/media`, permission `player`): estado do painel de mídia do
   desktop (arquivo, música, Biblioteca ou YouTube), em segundos, com título,
-  basename do arquivo, `source` (`file`/`youtube`) e `canPlay/canPause/canSeek`.
+  `source` (`file`/`youtube`) e `canPlay/canPause/canSeek`. `fileName` é o
+  basename de arquivos avulsos/vídeos; fica **vazio** para músicas do acervo
+  (álbum oficial ou coletânea personalizada), que se identificam por
+  `title`/`subtitle`.
   O estado traz `title` e `subtitle` — álbum quando é música, canal/categoria
   quando é vídeo. `play`/`pause`/`seek`/`seek-relative`/`next`/`previous`/`close`
   devolvem o snapshot novo; `seek-relative` usa `seconds` (10 s avança/volta), e

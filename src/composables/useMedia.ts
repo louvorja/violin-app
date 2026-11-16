@@ -88,6 +88,15 @@ let _playlistOnPlayback: ((_idMusic: unknown, _videoId?: string) => void) | null
  */
 let _arquivoDeAudio = false;
 /**
+ * A reprodução atual é uma música do acervo do programa (álbum oficial ou
+ * coletânea personalizada)?
+ *
+ * Nesse caso o Player não expõe o nome do arquivo: o título (e o álbum, quando
+ * houver) já identificam a música. Arquivos avulsos da Biblioteca/liturgia e
+ * vídeos continuam mostrando o nome do arquivo.
+ */
+let _acervoPlayback = false;
+/**
  * Encerra o modo "arquivo de áudio".
  *
  * O player deixa de ser "mídia tocando": a janela da Mídia fecha e as setas
@@ -426,7 +435,7 @@ function _mediaSnapshot(): MediaSnapshot {
     source: youtube ? "youtube" : "file",
     title: String($appdata.get(KEYS.MODULES.MEDIA.CONFIG.TITLE, "") || ""),
     subtitle: String($appdata.get(KEYS.MODULES.MEDIA.CONFIG.SUBTITLE, "") || ""),
-    fileName: youtube ? "" : _mediaBasename(audio || video || ""),
+    fileName: _acervoPlayback || youtube ? "" : _mediaBasename(audio || video || ""),
     position: _round3(position),
     duration: _round3(duration),
     canPlay: active && paused,
@@ -1807,6 +1816,7 @@ const _self = {
     }
 
     this.clearVariables();
+    _acervoPlayback = true;
     // O player compartilhado também reproduz arquivos de vídeo. Um
     // HTMLAudioElement consegue tocar alguns MP4, mas falha silenciosamente em
     // outros codecs e deixa a projeção visual sem relógio confiável.
@@ -2249,6 +2259,11 @@ const _self = {
 
     _audio.stop();
     this.clearVariables();
+    _acervoPlayback = true;
+    // O Player remoto lê o título do config; a música personalizada não passa
+    // pelo `open` do acervo, então o nome precisa ser publicado aqui.
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.TITLE, song?.nome || "");
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.SUBTITLE, "");
     _audio.setElementKind("audio");
     _setPlaybackContext(playbackContext);
 
@@ -2380,6 +2395,7 @@ const _self = {
       title: song?.nome,
       mediaType: "audio",
       mode: playback ? MusicActionEnum.INSTRUMENTAL : MusicActionEnum.AUDIO,
+      fromCollection: true,
     });
     return true;
   },
@@ -2800,6 +2816,10 @@ const _self = {
 
     _audio.stop();
     this.clearVariables();
+    // `id_music` é sempre acervo; `fromCollection` marca o áudio de uma
+    // coletânea personalizada aberto sem slides. Arquivo avulso continua com
+    // nome de arquivo.
+    _acervoPlayback = params.id_music != null || params.fromCollection === true;
     _audio.setElementKind(params.mediaType === "video" ? "video" : "audio");
     _setPlaybackContext(playbackContext);
     // Sinal para módulos como Som de Fundo (auto-pausa).
@@ -3285,6 +3305,7 @@ const _self = {
     }
     _slides.reset();
     _audio.reset();
+    _acervoPlayback = false;
     _setPlaybackContext(null);
     $appdata.set(KEYS.MODULES.MEDIA.DATA, {});
     $appdata.set(KEYS.MODULES.MEDIA.ID_MUSIC, null);

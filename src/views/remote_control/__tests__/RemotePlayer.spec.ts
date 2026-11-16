@@ -13,7 +13,17 @@ vi.mock("@/composables/useBroadcastListener", () => ({
   useBroadcastListener: vi.fn(),
 }));
 
-const i18n = createI18n({ legacy: false, locale: "pt", messages: { pt: {} } });
+const i18n = createI18n({
+  legacy: false,
+  locale: "pt",
+  messages: {
+    pt: {
+      remote_control: {
+        player: { source_file: "Arquivo", source_youtube: "YouTube" },
+      },
+    },
+  },
+});
 
 const MEDIA = {
   active: true,
@@ -70,6 +80,9 @@ describe("RemotePlayer — refresh e aba ativa", () => {
 
     await vi.advanceTimersByTimeAsync(2_000);
     expect(apiFetch).toHaveBeenCalledTimes(4);
+
+    // O label "Arquivo" vem antes do nome do arquivo.
+    expect(wrapper.find(".rp-now__file").text()).toBe("Arquivo · video.mp4");
 
     wrapper.unmount();
   });

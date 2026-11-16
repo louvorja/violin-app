@@ -9,8 +9,8 @@
       <div class="rp-now">
         <div class="rp-now__text">
           <div class="rp-now__title-row">
+            <span v-if="labelOnTitle" class="rp-now__source">{{ sourceLabel }} ·</span>
             <span class="rp-now__title">{{ title }}</span>
-            <span v-if="labelOnTitle" class="rp-now__source">· {{ sourceLabel }}</span>
           </div>
           <span v-if="state.subtitle" class="rp-now__subtitle">{{ state.subtitle }}</span>
           <span class="rp-now__meta">
@@ -29,7 +29,7 @@
           class="rp-now__file"
           :title="state.fileName"
         >
-          {{ state.fileName }} · {{ sourceLabel }}
+          {{ sourceLabel }} · {{ state.fileName }}
         </span>
       </div>
 
