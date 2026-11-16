@@ -2,7 +2,7 @@
 
 /**
  * Validadores dos payloads do Player/Cronômetro compartilhados entre a rota
- * HTTP (`playerRoutes.js`) e o relay SSE (`events.js`).
+ * HTTP (`remoteRoutes/player.js`) e o relay SSE (`events.js`).
  *
  * Antes cada arquivo tinha a própria cópia de `isMediaState`,
  * `isStopwatchState` e da validação de voltas. Uma mudança em um lado (ex.: o

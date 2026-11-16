@@ -64,7 +64,7 @@ const TICK_MS = 250;
 /** Uma emissão por segundo basta para os clientes; a UI pinta a 250 ms. */
 const STATE_EMIT_MS = 1000;
 const RUNNING_KEY = KEYS.MODULES.STOPWATCH.RUNNING;
-/** Mesmo limite do contrato da API/SSE (`events.js`/`playerRoutes.js`). */
+/** Mesmo limite do contrato da API/SSE (`events.js`/`remoteRoutes/player.js`). */
 const MAX_LAPS = 1_000;
 
 /** Configuração vinda do `UserData` (reativa — a ribbon também grava aqui). */

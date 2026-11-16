@@ -11,10 +11,11 @@
  *   - transmissionRoutes.js: as URLs/janelas da tela Opções → Transmissão
  *     (relógio, música, bíblia, projeções, anúncios, sorteio, libras) e os
  *     dados que esses displays carregam (`user-data`, `db`);
- *   - remoteRoutes.js: as features do controle remoto (teclado, liturgia,
- *     músicas, vídeos online, som de fundo, volume, chat).
+ *   - remoteRoutes/: as features do controle remoto, um arquivo por domínio
+ *     (teclado, liturgia, músicas, vídeos online, som de fundo, sorteio,
+ *     volume, chat, Biblioteca de Mídia, Player e Cronômetro).
  *
- * Os dois registros recebem tudo por `ctx` — por isso **nunca** requerem este
+ * Os registros recebem tudo por `ctx` — por isso **nunca** requerem este
  * arquivo (sem require circular) — e o `module.exports` mantém o mesmo
  * contrato de antes, com chaves literais para o `import { … }` ESM dos specs
  * continuar resolvendo (cjs-module-lexer não enxerga spread).
@@ -23,8 +24,7 @@
 const devices = require("../devices.js");
 const { safeSend } = require("../safeWebContents.js");
 const transmissionRoutes = require("./transmissionRoutes.js");
-const remoteRoutes = require("./remoteRoutes.js");
-const playerRoutes = require("./playerRoutes.js");
+const remoteRoutes = require("./remoteRoutes");
 
 
 function isPlainObject(value) {
@@ -397,29 +397,6 @@ function isMediaLibraryCommandResponse(payload) {
 }
 
 
-/**
- * Playlist de mídia do desktop (`modules.media_library.playlist` do userData).
- * Itens `{id, name, type}` — o que o controle remoto precisa para listar.
- */
-function isMediaLibraryPlaylistResponse(payload) {
-  if (!isPlainObject(payload) || payload.status !== "ok" || !Array.isArray(payload.items)) {
-    return false;
-  }
-  if (payload.items.length > 500) return false;
-  return payload.items.every(
-    (item) =>
-      isPlainObject(item) &&
-      typeof item.id === "string" &&
-      item.id.length > 0 &&
-      item.id.length <= 256 &&
-      typeof item.name === "string" &&
-      item.name.length <= 500 &&
-      typeof item.type === "string" &&
-      item.type.length <= 32
-  );
-}
-
-
 /** Binário da miniatura vindo do renderer (`?action=image`). */
 function isMediaLibraryImageResponse(payload) {
   if (!isPlainObject(payload) || payload.status !== "ok") return false;
@@ -556,12 +533,6 @@ function setupRoutes(
     isMediaLibraryImageResponse,
     hasDevicePermission,
   });
-  playerRoutes.register(app, {
-    getValidMainWindow,
-    requestRenderer,
-    sendRendererError,
-    hasDevicePermission,
-  });
 
 
   // ---------------------------------------------------------------
@@ -630,6 +601,5 @@ module.exports = {
   isMediaLibraryCanvaExportResponse,
   isMediaLibraryPlaylistAddResponse,
   isMediaLibraryCommandResponse,
-  isMediaLibraryPlaylistResponse,
   isMediaLibraryImageResponse,
 };
