@@ -28,6 +28,16 @@
 
     <ContextMenuPortal>
       <ContextMenuContent class="lj-ui-float lj-menu lj-category-chip__menu">
+        <ContextMenuItem
+          v-if="addAllLabel && count > 0"
+          class="lj-menu__item"
+          @select="$emit('add-all')"
+        >
+          <span class="lj-menu__mark">
+            <LjIcon :icon="ICONS.PLAYER.PLAYLIST_PLUS" :size="13" />
+          </span>
+          <span class="lj-menu__text">{{ addAllLabel }}</span>
+        </ContextMenuItem>
         <ContextMenuItem v-if="showPlay" class="lj-menu__item" @select="$emit('play')">
           <span class="lj-menu__mark">
             <LjIcon :icon="ICONS.PLAYER.PLAY" :size="13" />
@@ -75,6 +85,7 @@ withDefaults(
     active?: boolean;
     dropTarget?: boolean;
     addItemLabel?: string;
+    addAllLabel?: string;
     playLabel?: string;
     showPlay?: boolean;
     editLabel?: string;
@@ -90,6 +101,7 @@ withDefaults(
     active: false,
     dropTarget: false,
     addItemLabel: "",
+    addAllLabel: "",
     playLabel: "",
     showPlay: false,
     editLabel: "",
@@ -100,6 +112,7 @@ withDefaults(
 defineEmits<{
   select: [];
   add: [];
+  "add-all": [];
   play: [];
   edit: [];
 }>();

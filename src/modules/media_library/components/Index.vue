@@ -87,6 +87,7 @@
                 :count-for="categoryCount"
                 :drop-target-id="dropTargetId"
                 :add-item-label="t('ribbon.btn.add_item')"
+                :add-all-label="tm('add_all_to_playlist')"
                 :edit-label="t('shell.category.edit_category')"
                 :sort-mode="sortMode"
                 :sort-options="sortOptions"
@@ -97,6 +98,7 @@
                 @update:sort-mode="sortMode = $event"
                 @select="onCategoryChipClick"
                 @add="onCategoryAddClick"
+                @add-all="onCategoryAddAllClick"
                 @edit="editCategoryFromChip"
                 @dragover="onCategoryDragOver"
                 @dragleave="onCategoryDragLeave"
@@ -1373,6 +1375,42 @@ function adicionarItem(file: MediaFile): void {
 function addToPlaylist(file: MediaFile): void {
   playlist.value.push(itemDe(file));
   savePlaylist();
+}
+
+/**
+ * Arquivos de uma categoria, na ordem da grade (respeita o modo de ordenação).
+ *
+ * Não aplica os filtros de tipo nem a busca: o comando é sobre a categoria
+ * inteira, como o contador do chip. O chip "Sem categoria" (`UNCATEGORIZED_ID`)
+ * também inclui os arquivos de categorias que não existem mais — a mesma régua
+ * de `uncategorizedCount`.
+ */
+function filesOfCategory(categoryId: string): MediaFile[] {
+  const ids = new Set(categories.value.map((category) => category.id));
+  const inCategory = (file: MediaFile): boolean =>
+    categoryId === UNCATEGORIZED_ID
+      ? !file.categoryId || !ids.has(file.categoryId)
+      : file.categoryId === categoryId;
+  return sortByMode(files.value.filter(inCategory), sortMode.value, (file) => file.name);
+}
+
+/**
+ * "Adicionar tudo à playlist" no menu do chip: enfileira a categoria inteira.
+ *
+ * Não duplica o que já está na playlist — repetir o comando é idempotente e a
+ * confirmação diz quantos itens entraram de fato.
+ */
+function onCategoryAddAllClick(categoryId: string): void {
+  if (shouldSuppressCategoryClick(categoryId)) return;
+  const naPlaylist = new Set(playlist.value.map((item) => item.id));
+  const novos = filesOfCategory(categoryId).filter((file) => !naPlaylist.has(file.id));
+  if (!novos.length) {
+    $snackbar.show(tm("all_in_playlist"));
+    return;
+  }
+  for (const file of novos) playlist.value.push(itemDe(file));
+  savePlaylist();
+  $snackbar.show(tm("added_all_to_playlist", { count: novos.length }));
 }
 
 function removeFromPlaylist(index: number): void {

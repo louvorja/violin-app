@@ -28,10 +28,13 @@
   "rename": "Renomear",
   "delete": "Excluir",
   "add_to_playlist": "Adicionar à playlist",
+  "add_all_to_playlist": "Adicionar tudo à playlist",
   "remove_from_playlist": "Remover da playlist",
   "rename_placeholder": "Novo nome...",
   "file_added": "Arquivo adicionado à biblioteca",
   "added_to_playlist": "Adicionado à playlist",
+  "added_all_to_playlist": "{count} item adicionado à playlist | {count} itens adicionados à playlist",
+  "all_in_playlist": "Todos os itens já estão na playlist",
   "ribbon": {
     "title_ctx": "Gerenciar Biblioteca de Mídia",
     "background": "Fundo da Projeção",
