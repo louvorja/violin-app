@@ -2320,6 +2320,13 @@ então um desktop antigo simplesmente não serve as abas novas. Quem consome
   avançam o slide (como o botão do player do desktop). `canPrevious`/`canNext`
   refletem a fila ou o slide atual. `close` também
   encerra a projeção da mídia e responde 200 com `active:false`.
+  O `seek` publica o alvo **na hora** (`useAudioPlayback.seekTo` atualiza
+  `currentTime`/`progress`): o elemento de mídia só reporta a posição nova no
+  próximo `timeupdate`, e sem isso o snapshot devolvido pelo próprio comando (e
+  o SSE logo depois) carregava a posição antiga — a barra do app "voltava e
+  depois pulava". O app ainda segura o valor solto pelo dedo até o comando
+  voltar e a barra interpola a posição entre snapshots de 1 s por um relógio de
+  frames (Compose/SwiftUI).
 - **Cronômetro** (`/api/stopwatch`, permission `stopwatch`): o estado saiu do
   componente e virou o singleton `src/modules/stopwatch/state.ts`, então o
   cronômetro continua rodando com a janela fechada e o telão segue atualizando.

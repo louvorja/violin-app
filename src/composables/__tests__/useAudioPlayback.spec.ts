@@ -567,6 +567,29 @@ it("buffering curto só registra recuperação e playing repetido não repete in
   vi.useRealTimers();
 });
 
+it("seekTo publica o alvo na hora, sem esperar o próximo timeupdate", () => {
+  audio.reset();
+  const el = audio.getElement();
+  Object.defineProperty(el, "duration", { configurable: true, value: 120 });
+  Object.defineProperty(el, "currentTime", {
+    configurable: true,
+    writable: true,
+    value: 4.5,
+  });
+  audio.currentTime.value = 4.5;
+  audio.duration.value = 120;
+
+  audio.seekTo(90);
+
+  expect(el.currentTime).toBe(90);
+  // O ref alimenta `/api/media` e o SSE do controle remoto: precisa do alvo já,
+  // senão a barra volta por um instante para a posição antiga.
+  expect(audio.currentTime.value).toBe(90);
+  expect(audio.progress.value).toBeCloseTo(75);
+
+  audio.reset();
+});
+
 it("advanceTime(-10) volta ao início (0) quando currentTime é menor que 10s (#70)", () => {
   audio.reset();
   const el = audio.getElement();

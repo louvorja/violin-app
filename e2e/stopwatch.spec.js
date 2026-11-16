@@ -60,6 +60,8 @@ test("regressivo mostra a meta, avisa em amarelo e passa do zero em vermelho", a
   // O resto não depende de segundos; solto, o clique não espera a animação parar.
   await page.clock.resume();
   await page.getByTestId("ribbon-btn-stopwatch_reset").click();
+  // Reiniciar zera tempo e voltas, então pede confirmação.
+  await page.getByRole("alertdialog").getByRole("button", { name: "Sim" }).click();
   await expect(display).toHaveText("06:00");
   await expect(stage).toHaveAttribute("data-alert", "none");
   await expect(projection.locator(".module-projection__alert")).toHaveCount(0);
@@ -121,7 +123,7 @@ test("desligar tempo excedido no excedido para e mostra 00:00", async ({ page })
   await expect(page.getByTestId("ribbon-btn-stopwatch_toggle")).toContainText("Iniciar");
 });
 
-test("fechar a aba no X para a contagem e tira a borda do telão", async ({ page, context }) => {
+test("fechar a aba no X mantém a contagem e o telão no ar", async ({ page, context }) => {
   await openStopwatch(page);
   await page.getByRole("tab", { name: "Regressivo" }).click();
   await page.getByTestId("stopwatch-preset-5").click();
@@ -132,15 +134,20 @@ test("fechar a aba no X para a contagem e tira a borda do telão", async ({ page
   await page.clock.runFor(5 * 60_000 + 5_000);
   await expect(projection.getByTestId("module-projection-alert-danger")).toBeAttached();
 
+  /*
+   * O estado vive fora do módulo (singleton do renderer), justamente para o
+   * controle remoto operar com a janela fechada. Fechar a aba, então, não zera
+   * a contagem nem tira o telão do ar — só some a prévia.
+   */
   await page.locator(".subtab-close").first().click();
-  await expect(projection.locator(".module-projection__alert")).toHaveCount(0);
-  await expect(projection.locator(".module-projection__text")).toHaveCount(0);
+  await expect(projection.locator(".module-projection__alert")).toHaveCount(1);
+  await expect(projection.locator(".module-projection__text")).toHaveText("-00:05");
 
   await page.locator("#ribbon-tab-utilities").click();
   await page.locator('[data-testid="ribbon-btn-stopwatch"]').click();
-  await expect(page.getByTestId("stopwatch-display")).toHaveText("05:00");
-  await expect(page.getByTestId("ribbon-btn-stopwatch_toggle")).toContainText("Iniciar");
-  await expect(projection.locator(".module-projection__text")).toHaveText("05:00");
+  await expect(page.getByTestId("stopwatch-display")).toHaveText("-00:05");
+  await expect(page.getByTestId("ribbon-btn-stopwatch_toggle")).toContainText("Pausar");
+  await expect(projection.locator(".module-projection__text")).toHaveText("-00:05");
 });
 
 test("cores do aviso e do alerta da Formatação valem no número e na moldura, na tela e no telão", async ({
