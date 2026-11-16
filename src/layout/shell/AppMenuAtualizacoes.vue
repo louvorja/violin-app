@@ -632,8 +632,17 @@ async function checkDbUpdate(): Promise<void> {
     $userdata.set(KEYS.OPTIONS.LAST_DB_CHECK, lastDbCheck.value);
   } catch (error) {
     dbStatus.value = "error";
-    Telemetry.captureException(error, { source: "database_update_check", stage: "config" });
-    Telemetry.track("database_update_check_failed", failureDetails(error));
+    const details = failureDetails(error);
+    Telemetry.track("database_update_check_failed", details);
+    const offlineOrNetwork =
+      (typeof navigator !== "undefined" && navigator.onLine === false) ||
+      details.reason === "timeout" ||
+      details.reason === "network_or_type_error" ||
+      details.reason === "NetworkError" ||
+      details.reason === "AbortError";
+    if (!offlineOrNetwork) {
+      Telemetry.captureException(error, { source: "database_update_check", stage: "config" });
+    }
   } finally {
     dbChecking.value = false;
   }
@@ -717,6 +726,7 @@ async function exportDatabase(): Promise<void> {
   setBackupProgress({ phase: "export", current: 0, total: 1, detail: "loading" });
   try {
     const res = await DatabaseBackup.exportAll((progress) => setBackupProgress(progress));
+    if (res.canceled) return;
     $alert.info({
       title: t("options.updates.export_db_title"),
       text: t("options.updates.export_db_done", {
@@ -754,9 +764,21 @@ async function onImportFileChange(e: Event): Promise<void> {
     async (btn?: string) => {
       if (btn !== "yes") return;
       dbBackupState.value = "importing";
-      setBackupProgress({ phase: "import", current: 0, total: 1, detail: "loading" });
+      const taskId = "database-import";
+      bgTasks.registerTask(taskId, t("shell.background_tasks.database_import"));
+      const report = (progress: BackupProgress) => {
+        setBackupProgress(progress);
+        bgTasks.updateTask(taskId, {
+          progress: progress.total
+            ? Math.min(100, Math.round((progress.current / progress.total) * 100))
+            : 0,
+          detail: progress.detail,
+        });
+      };
+      report({ phase: "import", current: 0, total: 1, detail: "loading" });
       try {
-        const res = await DatabaseBackup.importAll(file, (progress) => setBackupProgress(progress));
+        const res = await DatabaseBackup.importAll(file, report);
+        bgTasks.completeTask(taskId);
         $alert.info(
           {
             title: t("options.updates.import_db_title"),
@@ -766,6 +788,8 @@ async function onImportFileChange(e: Event): Promise<void> {
           () => window.location.reload()
         );
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        bgTasks.updateTask(taskId, { status: "error", detail: message, error: message });
         console.error("[Atualizações] importDatabase:", err);
         $alert.error({
           title: t("options.updates.import_db_title"),

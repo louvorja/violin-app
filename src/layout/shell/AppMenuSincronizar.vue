@@ -735,6 +735,17 @@
               </span>
             </div>
             <div class="opt-stat">
+              <span class="opt-stat-label">{{ $t("options.storage.library_size") }}</span>
+              <span class="opt-stat-value">
+                {{ sync.humanSize(storageStats?.library?.bytes) }}
+                <small>
+                  ({{
+                    $t("options.storage.file_count", { count: storageStats?.library?.count || 0 })
+                  }})
+                </small>
+              </span>
+            </div>
+            <div class="opt-stat">
               <span class="opt-stat-label">{{ $t("options.storage.videos_folder") }}</span>
               <span class="opt-stat-value">
                 {{ sync.humanSize(storageStats?.videos?.bytes) }}
@@ -796,6 +807,16 @@
               <span class="opt-stat-label">{{ $t("options.storage.total") }}</span>
               <span class="opt-stat-value">{{ sync.humanSize(totalStorageBytes) }}</span>
             </div>
+          </div>
+
+          <div class="opt-row">
+            <div>
+              <span class="opt-label">{{ $t("options.storage.prune_library") }}</span>
+              <p class="opt-hint">{{ $t("options.storage.prune_library_hint") }}</p>
+            </div>
+            <LjButton size="sm" :disabled="pruningLibrary" @click="pruneLibrary">
+              {{ $t("options.storage.prune_library_action") }}
+            </LjButton>
           </div>
 
           <div class="opt-row">
@@ -907,6 +928,7 @@ import {
 import { useAppInstall } from "@/composables/useAppInstall";
 import { requestPersistence, webStorageUsage, type WebStorageUsage } from "@/helpers/WebFileStore";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { pruneOrphanLibraryFiles } from "@/helpers/LibraryMaintenance";
 import {
   formatBackgroundTaskDetail,
   formatBibleDownloadDetail,
@@ -935,6 +957,7 @@ interface DiskUsage {
 }
 
 interface StorageStats {
+  library?: { bytes: number; count: number };
   dataDir?: string;
   dataDirIssue?: { reason: "unavailable" | "failed"; wanted?: string; message?: string } | null;
   restartRequired?: boolean;
@@ -952,6 +975,7 @@ interface StorageStats {
 
 const sync = useSyncManager();
 const bgTasks = useBackgroundTasks();
+const pruningLibrary = ref(false);
 
 function findTask(id: string) {
   return bgTasks.tasks.value.find((t) => t.id === id && t.status === "running");
@@ -1786,6 +1810,39 @@ async function refreshMediaAccess(): Promise<void> {
     mediaAccounts.value = null;
     console.warn("[Sincronizar] storage.locations falhou:", error);
   }
+}
+
+async function pruneLibrary(): Promise<void> {
+  if (pruningLibrary.value) return;
+  $alert.yesno(
+    {
+      title: t("options.storage.prune_library"),
+      text: t("options.storage.prune_library_confirm"),
+      translate: false,
+    },
+    async (btn?: string) => {
+      if (btn !== "yes") return;
+      pruningLibrary.value = true;
+      try {
+        const removed = await pruneOrphanLibraryFiles();
+        $alert.info({
+          title: t("options.storage.prune_library"),
+          text: t("options.storage.prune_library_done", { count: removed }),
+          translate: false,
+        });
+        await reloadStats();
+      } catch (error) {
+        console.error("[Sincronizar] prune da biblioteca falhou:", error);
+        $alert.error({
+          title: t("options.storage.prune_library"),
+          text: t("options.storage.prune_library_error"),
+          translate: false,
+        });
+      } finally {
+        pruningLibrary.value = false;
+      }
+    }
+  );
 }
 
 async function reloadStats(): Promise<void> {

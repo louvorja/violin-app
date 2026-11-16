@@ -1,7 +1,24 @@
 <template>
   <div class="player">
     <div class="player__main">
-      <PlayerControls :buttons="buttons" :compact="compact" :loading="mediaLoading" />
+      <div class="player__controls-row">
+        <span
+          v-if="playlistActive && playlistVideoSequence"
+          class="player__queue"
+          :data-queue-index="playlistIndex"
+          :data-queue-total="playlistTotal"
+        >
+          {{
+            $t("shell.player.playing_video_category", {
+              category: playlistName,
+              index: playlistIndex + 1,
+              total: playlistTotal,
+              video: playlistVideoName,
+            })
+          }}
+        </span>
+        <PlayerControls :buttons="buttons" :compact="compact" :loading="mediaLoading" />
+      </div>
       <PlayerProgress
         v-if="hasPlayback"
         :progress="progress"
@@ -51,6 +68,7 @@ import PlayerProgress from "@/components/PlayerProgress.vue";
 import PlayerGauge from "@/components/PlayerGauge.vue";
 import PlayerActions from "@/components/PlayerActions.vue";
 import { usePlayerState } from "@/composables/usePlayerState";
+import { playlistControls } from "@/modules/musics/composables/usePlaylistPlayback";
 import { MediaConfig } from "@/types/Media";
 
 withDefaults(defineProps<{ location?: string }>(), { location: "" });
@@ -76,6 +94,12 @@ const {
 const { progress, currentTime, duration, buffered, isPaused, volume } = audio;
 
 const mediaLoading = computed(() => !!media.value?.loading);
+const playlistActive = playlistControls.isActive;
+const playlistVideoSequence = playlistControls.isOnlineVideoSequence;
+const playlistIndex = playlistControls.currentIndex;
+const playlistTotal = playlistControls.totalSongs;
+const playlistName = computed(() => playlistControls.currentPlaylist.value?.name || "");
+const playlistVideoName = computed(() => playlistControls.currentSong.value?.name || "");
 const mediaMinimized = computed(() => !!media.value?.minimized);
 const mediaConfig = computed((): MediaConfig => (media.value?.config as MediaConfig) ?? {});
 const hasPlayback = computed(() => !!mediaConfig.value.audio || !!mediaConfig.value.is_youtube);
@@ -99,6 +123,23 @@ const compactButtons = computed(() => buttons.value.filter((item) => item.compac
   display: flex;
   flex-direction: column;
   flex-grow: 1;
+  min-width: 0;
+}
+.player__controls-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  min-width: 0;
+}
+.player__queue {
+  flex: 0 1 auto;
+  max-width: 42%;
+  padding-left: var(--lj-space-4);
+  overflow: hidden;
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .player__side {

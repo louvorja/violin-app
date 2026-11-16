@@ -10,7 +10,9 @@ export function horarioDoTitulo(value: unknown): string {
   for (const token of tokens) {
     const antes = value.slice(0, token.index);
     // Safari anterior ao 16.4 não compila lookbehind. Verifica o prefixo separado.
-    if (/[\p{L}\p{N}/:.]$/u.test(antes)) continue;
+    // `[\p{N}]$` não reconhece dígitos astrais (𝟙) no motor do Chromium;
+    // separar as alternativas cobre o caso sem perder a checagem normal.
+    if (/\p{L}$/u.test(antes) || /\p{N}$/u.test(antes) || /[/:.]$/.test(antes)) continue;
     // Expressões de duração não são compromissos no relógio da liturgia.
     if (/(?:\b(?:dura[çc][ãa]o|durante|por|ap[óo]s|em)|\bdaqui\s+a)\s*:?\s*$/iu.test(antes)) {
       anteriorEraHorario = false;

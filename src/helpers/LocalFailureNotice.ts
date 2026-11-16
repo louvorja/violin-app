@@ -14,6 +14,7 @@ import {
 
 const MESSAGE_KEY: Record<LocalEnvironmentErrorKind, string> = {
   file_unreadable: "alert.local_file_unreadable",
+  file_too_large: "alert.local_file_too_large",
   storage_full: "alert.local_storage_full",
   storage_unavailable: "alert.local_storage_unavailable",
 };

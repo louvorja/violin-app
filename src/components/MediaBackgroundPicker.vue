@@ -115,14 +115,13 @@ import { ICONS } from "@/config/Icons";
 import { DB_TABLE } from "@/constants/DbTables";
 import $idb from "@/helpers/IndexedDB";
 import $path from "@/helpers/Path";
-import Platform from "@/helpers/Platform";
 
 interface LibraryRow {
   id: string;
   name: string;
   path?: string;
   type?: string;
-  data?: ArrayBuffer;
+  data?: Blob | ArrayBuffer;
   mime?: string;
   thumb?: string;
 }
@@ -165,7 +164,7 @@ function resolveUrl(row: LibraryRow, type: "image" | "video"): string {
     // bytes no IndexedDB são a fonte confiável no web.
     url = URL.createObjectURL(new Blob([row.data], { type: row.mime }));
   } else if (raw && !/^(blob|data|https?|louvorja|file):/i.test(raw)) {
-    url = Platform.isDesktop ? $path.local(raw) : raw;
+    url = $path.media(raw);
   } else if (!url && row.data && row.mime) {
     url = URL.createObjectURL(new Blob([row.data], { type: row.mime }));
   }
@@ -179,7 +178,7 @@ function resolveThumb(raw: string | undefined, type: "image" | "video", url: str
   const value = String(raw || "");
   if (!value) return type === "image" ? url : "";
   if (/^(blob|data|https?|louvorja|file):/i.test(value)) return value;
-  return Platform.isDesktop ? $path.local(value) : value;
+  return $path.media(value);
 }
 
 function normalize(row: LibraryRow, source: PickerItem["source"]): PickerItem | null {

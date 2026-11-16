@@ -1,7 +1,11 @@
 <template>
   <div
     class="ov-card"
-    :class="{ 'ov-card--active': active, 'ov-card--fixed': !!normHeight }"
+    :class="{
+      'ov-card--active': active,
+      'ov-card--fixed': !!normHeight && layout !== 'list',
+      'ov-card--list': layout === 'list',
+    }"
     :style="cardStyle"
     @click="$emit('select')"
   >
@@ -15,29 +19,54 @@
         @error="onThumbError($event)"
       />
       <div v-else class="ov-card-thumb-fallback">
-        <LjIcon :icon="fallbackIcon" size="32" color="#e74c3c" />
+        <LjIcon :icon="fallbackIcon" :size="layout === 'list' ? '20' : '32'" color="#e74c3c" />
       </div>
-      <button
-        v-if="playAll"
-        class="ov-card-play-all"
-        :title="tm('play_all')"
-        @click.stop="$emit('playAll')"
-      >
-        <LjIcon :icon="ICONS.PLAYER.PLAY" size="22" color="#fff" />
-      </button>
-      <div v-if="variant === 'video'" class="ov-card-play">
-        <LjIcon :icon="ICONS.PLAYER.PLAY" size="28" color="#fff" />
-      </div>
-      <span v-if="canDownload" class="ov-card-download-badge">
-        <OnlineVideoDownloadBadge :video-id="videoId" compact />
-      </span>
-      <div v-if="canDownload" class="ov-card-download">
-        <OnlineVideoDownload :video-id="videoId" :name="entity.title" :show-status="false" />
-      </div>
+      <template v-if="layout !== 'list'">
+        <button
+          v-if="playAll"
+          class="ov-card-play-all"
+          :title="tm('play_all')"
+          @click.stop="$emit('playAll')"
+        >
+          <LjIcon :icon="ICONS.PLAYER.PLAY" size="22" color="#fff" />
+        </button>
+        <div v-if="variant === 'video'" class="ov-card-play">
+          <LjIcon :icon="ICONS.PLAYER.PLAY" size="28" color="#fff" />
+        </div>
+        <span v-if="canDownload" class="ov-card-download-badge">
+          <OnlineVideoDownloadBadge :video-id="videoId" compact />
+        </span>
+        <div v-if="canDownload" class="ov-card-download">
+          <OnlineVideoDownload :video-id="videoId" :name="entity.title" :show-status="false" />
+        </div>
+      </template>
     </div>
     <div class="ov-card-body">
       <div class="ov-card-title">{{ entity.title }}</div>
       <div v-if="subtitle" class="ov-card-sub">{{ subtitle }}</div>
+    </div>
+    <div
+      v-if="layout === 'list' && (canDownload || playAll)"
+      class="ov-card-list-actions"
+      @click.stop
+    >
+      <OnlineVideoDownloadBadge v-if="canDownload" :video-id="videoId" compact />
+      <OnlineVideoDownload
+        v-if="canDownload"
+        :video-id="videoId"
+        :name="entity.title"
+        :show-status="false"
+      />
+      <button
+        v-if="playAll"
+        type="button"
+        class="ov-card-list-play-all"
+        :title="tm('play_all')"
+        :aria-label="tm('play_all')"
+        @click.stop="$emit('playAll')"
+      >
+        <LjIcon :icon="ICONS.PLAYER.PLAY" size="18" />
+      </button>
     </div>
   </div>
 </template>
@@ -104,6 +133,7 @@ const props = withDefaults(
     subtitle?: string;
     /** Capa da playlist deriva deste vídeo (1º por sequência). */
     firstVideoId?: string;
+    layout?: "grid" | "list";
   }>(),
   {
     variant: "video",
@@ -113,6 +143,7 @@ const props = withDefaults(
     playAll: false,
     subtitle: "",
     firstVideoId: "",
+    layout: "grid",
   }
 );
 
@@ -137,6 +168,7 @@ const normWidth = computed(() => cssSize(props.width));
 const normHeight = computed(() => cssSize(props.height));
 
 const cardStyle = computed(() => {
+  if (props.layout === "list") return { width: "100%" };
   const style: Record<string, string> = { width: normWidth.value || "100%" };
   // Largura explícita: impede o grid de esticar o item sobre o valor informado.
   if (normWidth.value && normWidth.value !== "100%") style.justifySelf = "start";
@@ -345,5 +377,62 @@ function onThumbLoad(e: Event): void {
   font-size: 10px;
   padding: 0 8px 6px;
   color: rgba(var(--lj-on-surface-ch), 0.5);
+}
+
+.ov-card--list {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+}
+.ov-card--list:hover {
+  transform: none;
+  box-shadow: none;
+  background: rgba(var(--lj-on-surface-ch), 0.08);
+}
+.ov-card--list .ov-card-thumb {
+  width: 64px;
+  height: 38px;
+  aspect-ratio: auto;
+  flex-shrink: 0;
+  border-radius: var(--lj-radius-sm);
+}
+.ov-card--list .ov-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ov-card--list .ov-card-title {
+  font-size: 13px;
+  padding: 0;
+  -webkit-line-clamp: 1;
+}
+.ov-card--list .ov-card-sub {
+  font-size: 11px;
+  padding: 0;
+}
+.ov-card-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.ov-card-list-play-all {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(var(--lj-on-surface-ch), 0.08);
+  color: var(--lj-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.ov-card-list-play-all:hover {
+  background: rgba(231, 76, 60, 0.85);
+  color: #fff;
 }
 </style>

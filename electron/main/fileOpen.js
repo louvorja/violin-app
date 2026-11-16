@@ -1,6 +1,6 @@
 /**
- * Arquivos .slja entregues pelo sistema operacional: duplo clique, "Abrir com",
- * arrastar sobre o ícone do app.
+ * Arquivos .slja (slides) e .llja (liturgia) entregues pelo sistema
+ * operacional: duplo clique, "Abrir com", arrastar sobre o ícone do app.
  *
  * Chegam por três caminhos, conforme a plataforma e o momento:
  *   - argv do próprio processo (Windows/Linux, app fechado);
@@ -15,10 +15,11 @@ const path = require("path");
 const { fileURLToPath } = require("url");
 
 const CHANNEL = "app:open-files";
-const SLJA_RE = /\.slja$/i;
+/** Extensões que o app registra no sistema (electron-builder.yml → fileAssociations). */
+const OPENABLE_RE = /\.(slja|llja)$/i;
 
 /**
- * Caminhos de .slja existentes numa lista de argumentos de linha de comando.
+ * Caminhos de .slja/.llja existentes numa lista de argumentos de linha de comando.
  *
  * O Linux entrega `file:///...` (o `%U` do .desktop passa URLs), o Windows e o
  * macOS entregam caminho puro, e um terminal pode entregar caminho relativo ao
@@ -41,7 +42,7 @@ function extractSljaPaths(argv, cwd = process.cwd()) {
         continue;
       }
     }
-    if (!SLJA_RE.test(candidate)) continue;
+    if (!OPENABLE_RE.test(candidate)) continue;
 
     const resolved = path.resolve(cwd, candidate);
     try {

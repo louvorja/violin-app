@@ -480,4 +480,27 @@ describe("WebFileStore", () => {
     });
     expect(await requestPersistence()).toBe(false);
   });
+
+  it("retenta quando Cache.put falha com NetworkError transitório no stream", async () => {
+    const audio = new FakeCache();
+    stores.set(AUDIO_CACHE, audio);
+    const originalPut = audio.put.bind(audio);
+    let putAttempts = 0;
+    vi.spyOn(audio, "put").mockImplementation(async (reqUrl, response) => {
+      putAttempts++;
+      if (putAttempts <= 2) {
+        throw new DOMException("Cache.put() encountered a network error", "NetworkError");
+      }
+      return originalPut(reqUrl, response);
+    });
+    const failure = vi.spyOn(ReliabilityDiagnostics, "reportReliabilityFailure");
+    try {
+      const result = await run([{ remote: files[0].remote }]);
+      expect(result).toEqual({ downloaded: 1, failed: 0 });
+      expect(putAttempts).toBe(3);
+      expect(failure).not.toHaveBeenCalled();
+    } finally {
+      failure.mockRestore();
+    }
+  });
 });

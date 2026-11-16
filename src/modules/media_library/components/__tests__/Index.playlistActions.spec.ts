@@ -59,7 +59,12 @@ vi.mock("@/helpers/ProjectionWindows", () => ({
   closeProjectionWindows: vi.fn(async () => {}),
   openProjectionWindows: vi.fn(async () => {}),
 }));
-vi.mock("@/helpers/Path", () => ({ default: { local: (p: string) => `louvorja://${p}` } }));
+vi.mock("@/helpers/Path", () => ({
+  default: {
+    local: (p: string) => `louvorja://${p}`,
+    media: (p: string) => (p.startsWith("louvorja://") ? p : `louvorja://${p}`),
+  },
+}));
 vi.mock("@/helpers/LocalFailureNotice", () => ({ reportLocalFileFailure: vi.fn() }));
 vi.mock("@/helpers/FilePath", () => ({ localPathOf: (p: string) => p }));
 /* A biblioteca vem do IndexedDB por `getAll`; o resto é tabela de categorias. */
@@ -127,6 +132,7 @@ vi.mock("@/components/ui", () => {
     LjEmpty: pass,
     LjIcon: pass,
     LjInput: { template: "<input />" },
+    LjSelect: { template: "<select />" },
     LjTabs: pass,
   };
 });

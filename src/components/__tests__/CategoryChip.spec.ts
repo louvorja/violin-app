@@ -78,12 +78,10 @@ describe("CategoryChip", () => {
     expect(wrapper.emitted("edit")).toHaveLength(1);
   });
 
-  it("separa o clique do botão adicionar do clique do chip", async () => {
-    const wrapper = montar({ showAdd: true, addLabel: "Adicionar" });
+  it("não desenha botão de adicionar no chip", () => {
+    const wrapper = montar();
 
-    await wrapper.find(".lj-category-chip__add").trigger("click");
-
-    expect(wrapper.emitted("add")).toHaveLength(1);
-    expect(wrapper.emitted("select")).toBeUndefined();
+    expect(wrapper.find(".lj-category-chip__add").exists()).toBe(false);
+    expect(wrapper.find(".lj-category-chip").findAll("button")).toHaveLength(0);
   });
 });

@@ -86,6 +86,8 @@
         <ModuleTimerDock
           :mode="mode"
           :warning-seconds="warningSeconds"
+          :warnings="DOCK_WARNINGS"
+          custom-warning
           :labels="dockLabels"
           @update:mode="setMode"
           @update:warning-seconds="setWarning"
@@ -341,12 +343,17 @@ function setWarning(seconds) {
   $userdata.set(KEYS.MODULES.STOPWATCH.WARNING_SECONDS, String(seconds));
 }
 
+/** Personalizado, 30 s e os minutos; "Não" fica no fim para desligar o aviso. */
+const DOCK_WARNINGS = [30, 60, 120, 300, 600, 0];
+
 const dockLabels = computed(() => ({
   mode: tm("ribbon.mode"),
   up: tm("mode.up"),
   down: tm("mode.down"),
   warning: tm("ribbon.warning"),
-  warnings: ["off", "m1", "m2", "m5", "m10"].map((k) => tm(`warning.${k}`)),
+  warnings: ["m30", "m1", "m2", "m5", "m10", "off"].map((k) => tm(`warning.${k}`)),
+  custom: tm("warning.custom"),
+  customPlaceholder: tm("warning.custom_placeholder"),
 }));
 
 /** Marca a próxima mudança de meta como extensão, não como recomeço. */

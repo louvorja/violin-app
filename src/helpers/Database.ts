@@ -288,7 +288,12 @@ function clearMark(): string {
 
 function renewClearMark(): void {
   try {
-    localStorage.setItem(CLEAR_MARK_KEY, Date.now().toString(36));
+    // Duas limpezas no mesmo milissegundo precisam gerar endereços diferentes;
+    // só o timestamp deixava a segunda resposta no cache HTTP da primeira.
+    localStorage.setItem(
+      CLEAR_MARK_KEY,
+      `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+    );
   } catch {
     // Sem armazenamento (janela privada): sobra só o cache HTTP até o fim do dia.
   }

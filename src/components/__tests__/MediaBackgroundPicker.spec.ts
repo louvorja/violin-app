@@ -19,7 +19,10 @@ vi.mock("@/helpers/IndexedDB", () => ({
 }));
 vi.mock("@/helpers/Platform", () => ({ default: { isDesktop: true } }));
 vi.mock("@/helpers/Path", () => ({
-  default: { local: (path: string) => `louvorja://local${path}` },
+  default: {
+    local: (path: string) => `louvorja://local${path}`,
+    media: (path: string) => (path.startsWith("louvorja://") ? path : `louvorja://local${path}`),
+  },
 }));
 
 describe("MediaBackgroundPicker", () => {

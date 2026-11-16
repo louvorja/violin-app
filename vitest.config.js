@@ -23,7 +23,7 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.js"],
     teardownTimeout: 5000,
     pool: needsVmThreads ? "vmThreads" : "forks",
-    exclude: ["**/node_modules/**", "**/e2e/**"],
+    exclude: ["**/node_modules/**", "**/e2e/**", "**/e2e-opfs/**"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

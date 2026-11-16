@@ -67,7 +67,8 @@ describe("arquivos locais da liturgia", () => {
         id: saved.ref_id,
         name: "aviso.png",
         mime: "image/png",
-        data: expect.any(ArrayBuffer),
+        data: expect.any(Blob),
+        size: 9,
       })
     );
     expect(await first.resolveLiturgyFile(saved.ref_id)).toEqual({
@@ -79,9 +80,7 @@ describe("arquivos locais da liturgia", () => {
     const next = await import("../LiturgyFiles");
     expect(await next.resolveLiturgyFile(saved.ref_id)).toMatchObject({ kind: "image" });
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
-    expect(
-      new TextDecoder().decode((records.get(saved.ref_id) as { data: ArrayBuffer }).data)
-    ).toBe("conteúdo");
+    expect(await (records.get(saved.ref_id) as { data: Blob }).data.text()).toBe("conteúdo");
   });
 
   it.each(["hino.mp3", "video.mp4", "leitura.pdf", "apresentacao.slja"])(
@@ -109,7 +108,7 @@ describe("arquivos locais da liturgia", () => {
     vi.stubGlobal("navigator", { storage: { estimate: async () => ({ quota: 5, usage: 4 }) } });
     const file = new File(["bytes"], "aviso.png");
     const read = vi.spyOn(file, "arrayBuffer");
-    await expect(files.importLiturgyFile(file)).rejects.toThrow("storage_full");
+    await expect(files.importLiturgyFile(file)).rejects.toMatchObject({ code: "storage_full" });
     expect(read).not.toHaveBeenCalled();
     expect(put).not.toHaveBeenCalled();
     vi.stubGlobal("navigator", {});

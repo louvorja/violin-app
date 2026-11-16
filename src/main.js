@@ -41,6 +41,15 @@ const bootstrap = (async () => {
     : import("@/bootstrap/main-auxiliary");
 })();
 
+// Bibliotecas web: migra os Blobs antigos para o OPFS depois da primeira
+// pintura e do Service Worker assumir. Roda uma vez; falhas ficam para o
+// próximo boot.
+if (profile === "shell" && !window.louvorjaApi) {
+  void import("@/helpers/WebLibraryMigration")
+    .then(({ scheduleWebLibraryMigration }) => scheduleWebLibraryMigration())
+    .catch((error) => console.warn("[main] migração OPFS não agendada:", error));
+}
+
 void bootstrap.catch((error) => {
   window.dispatchEvent(new CustomEvent("lj:bootstrap-failed", { detail: error }));
   console.error(`[main] Falha ao carregar bootstrap "${profile}":`, error);

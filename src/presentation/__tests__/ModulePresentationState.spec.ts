@@ -17,14 +17,20 @@ describe("module presentation state", () => {
       text: "00:30",
       color: "red",
     });
+    expect(
+      authority.publish({ module: "timer", text: "00:30\n11:00", clockColor: "#22C55E" })
+    ).toMatchObject({ clockColor: "#22C55E" });
+    expect(authority.publish({ module: "timer", clockColor: 4 })).toBeNull();
   });
 
   it("carries the stopwatch border alert and rejects unknown levels", () => {
     const authority = new ModulePresentationAuthority(100, "shell");
-    expect(authority.publish({ module: "stopwatch", text: "00:48", alert: "warning" }))
-      .toMatchObject({ alert: "warning" });
-    expect(authority.publish({ module: "stopwatch", text: "+00:05", alert: "danger" }))
-      .toMatchObject({ alert: "danger" });
+    expect(
+      authority.publish({ module: "stopwatch", text: "00:48", alert: "warning" })
+    ).toMatchObject({ alert: "warning" });
+    expect(
+      authority.publish({ module: "stopwatch", text: "+00:05", alert: "danger" })
+    ).toMatchObject({ alert: "danger" });
     expect(authority.publish({ module: "stopwatch", text: "1", alert: "blink" })).toBeNull();
     expect(authority.publish({ module: "stopwatch", text: "1" })).not.toHaveProperty("alert");
   });

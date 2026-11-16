@@ -2,6 +2,7 @@
 import Platform from "@/helpers/Platform";
 import { API_URL_DB } from "@/config/Api";
 import { encodeMediaPath, resolveMediaReference } from "@/helpers/MediaUrl";
+import { opfsUrl } from "@/helpers/OpfsStore";
 
 const DB_KEY_RE = /^[a-zA-Z0-9_-]+$/;
 
@@ -52,6 +53,35 @@ export default {
       return `louvorja://files${encodeMediaPath(reference.relativePath)}${source}`;
     }
     return reference.url;
+  },
+
+  /**
+   * URL reproduzível de um caminho guardado em registro (biblioteca, liturgia).
+   *
+   * Aceita as três formas que o banco tem hoje:
+   *   - esquema pronto (`blob:`, `data:`, `http(s)`, `louvorja://`, `file:`) → passa;
+   *   - caminho absoluto do aparelho (legado) → `louvorja://local/...`;
+   *   - caminho relativo do acervo (`media-library/...`) → `louvorja://files/...`.
+   *
+   * O relativo é o que sobrevive a mudar a pasta do acervo: o protocolo resolve
+   * contra a raiz atual, não contra a raiz de quando o registro foi criado.
+   */
+  media(value: string): string {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^opfs:/i.test(raw)) return opfsUrl(raw);
+    if (/^(blob|data|https?|louvorja|file):/i.test(raw)) return raw;
+    const absolute = raw.startsWith("/") || raw.startsWith("\\\\") || /^[A-Za-z]:[\\/]/.test(raw);
+    // Caminho absoluto só é reproduzível no desktop; no navegador ele volta
+    // como veio (registro antigo que não tem outra forma de abrir).
+    if (absolute) return Platform.isDesktop ? this.local(raw) : raw;
+    try {
+      return this.file(raw);
+    } catch {
+      // Sem API de arquivos configurada (web) um caminho relativo antigo não
+      // tem para onde ir; devolver cru é melhor que derrubar a tela.
+      return raw;
+    }
   },
 
   /**

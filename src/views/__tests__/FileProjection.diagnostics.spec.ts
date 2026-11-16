@@ -105,13 +105,23 @@ describe.each([
       })
     );
     await flushPromises();
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    emit(BROADCAST_TYPE.VIDEO_STATE, {
+      playback_id: "attempt",
+      revision: 1,
+      currentTime: 0,
+      duration: 60,
+      isPaused: false,
+      sampledAt: Date.now(),
+    });
+    await flushPromises();
     expect(h.log).toHaveBeenCalledWith(
       "warn",
       expect.stringContaining("video play rejected"),
       expect.objectContaining({
         playback_id: "attempt",
         window_role: role,
-        phase: "initial_play",
+        phase: "sync_play",
         source_scheme: "blob",
         stale_context: false,
         blob_resolution: "resolved",
@@ -155,6 +165,15 @@ describe.each([
       })
     );
     emit(BROADCAST_TYPE.FILE_PROJECTION, projection("first"));
+    await flushPromises();
+    emit(BROADCAST_TYPE.VIDEO_STATE, {
+      playback_id: "first",
+      revision: 1,
+      currentTime: 0,
+      duration: 60,
+      isPaused: false,
+      sampledAt: Date.now(),
+    });
     await flushPromises();
     emit(
       BROADCAST_TYPE.FILE_PROJECTION,

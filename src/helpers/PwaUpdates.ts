@@ -58,6 +58,7 @@ export function createPwaUpdateController(options: UpdateOptions) {
   let activation: (() => void) | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let retryDelay = RETRY_INITIAL_MS;
+  let retryDeadline = 0;
   const failures = new Map<string, { started: number; attempts: number }>();
   const observedRegistrations = new WeakSet<ServiceWorkerRegistration>();
   const observedWorkers = new WeakSet<ServiceWorker>();
@@ -70,6 +71,7 @@ export function createPwaUpdateController(options: UpdateOptions) {
     if (patch.status === "current" || patch.status === "ready") {
       clearTimeout(retryTimer);
       retryTimer = undefined;
+      retryDeadline = 0;
       retryDelay = RETRY_INITIAL_MS;
       for (const [stage, failure] of failures) {
         reportReliabilityEvent("pwa_update_recovered", {
@@ -117,10 +119,13 @@ export function createPwaUpdateController(options: UpdateOptions) {
     });
     if (!state.ready) publish({ status: online() ? "error" : "offline" });
     if (retryTimer === undefined && !state.ready) {
+      const delay = retryDelay;
+      retryDeadline = Date.now() + delay;
       retryTimer = setTimeout(() => {
         retryTimer = undefined;
+        retryDeadline = 0;
         if (!disposed && online() && document_.visibilityState === "visible") void check();
-      }, retryDelay);
+      }, delay);
       retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
     }
   };
@@ -434,11 +439,16 @@ export function createPwaUpdateController(options: UpdateOptions) {
   }
 
   const foreground = () => {
-    if (document_.visibilityState === "visible") void check();
+    if (document_.visibilityState !== "visible") return;
+    if (retryTimer !== undefined && Date.now() < retryDeadline) return;
+    void check();
   };
   listen(document_, "visibilitychange", foreground);
   listen(window_, "pageshow", foreground);
   listen(window_, "online", () => {
+    clearTimeout(retryTimer);
+    retryTimer = undefined;
+    retryDeadline = 0;
     void check();
   });
   listen(window_, "offline", () => {
@@ -477,8 +487,8 @@ export function startPwaUpdates(initialController?: ServiceWorker | null) {
     if (deployed) url.searchParams.set("network", "1");
     const response = await fetchWithTimeout(url, {
       cache: "no-store",
-      timeout: NET_TIMEOUT.QUICK,
-      signal: AbortSignal.timeout(NET_TIMEOUT.QUICK),
+      timeout: NET_TIMEOUT.DEFAULT,
+      signal: AbortSignal.timeout(NET_TIMEOUT.DEFAULT),
       source: deployed ? "pwa-deployed-build" : "pwa-build",
     });
     if (!response.ok) return null;

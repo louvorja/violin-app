@@ -231,9 +231,9 @@ const auxTextStyle = computed(() => {
 // CSS vars consumidas pelas classes .lj-slide__text--*
 const rootStyle = computed(() => ({
   ...slideStyle.rootStyle.value,
-  "--lj-cover-size": cfg.value.font_size_cover,
-  "--lj-lyric-size": cfg.value.font_size_lyric,
-  "--lj-aux-size": cfg.value.font_size_aux,
+  "--lj-cover-size": slideStyle.coverSizePct(slideObj.value),
+  "--lj-lyric-size": slideStyle.lyricSizePct(slideObj.value),
+  "--lj-aux-size": slideStyle.auxSizePct(slideObj.value),
 }));
 
 // Fade-in da preview ao montar (espelha o AlphaBlend do fmMusica Delphi).

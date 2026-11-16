@@ -9,8 +9,9 @@ export interface RoleContribuitor {
 enum RoleContribuitorEnum {
   web = "Web",
   desktop = "Violin Desktop",
-  delphi = "Delphi",
+  delphi = "Classic Desktop",
   api = "API",
+  mobile = "Mobile"
 }
 
 const ROLE_CONTRIBUTOR: Record<RoleContribuitorEnum, RoleContribuitor> = {
@@ -33,6 +34,11 @@ const ROLE_CONTRIBUTOR: Record<RoleContribuitorEnum, RoleContribuitor> = {
     name: RoleContribuitorEnum.api,
     icon: ICONS.PROJETOS.API,
     color: "#43a047",
+  },
+  [RoleContribuitorEnum.mobile]: {
+    name: RoleContribuitorEnum.mobile,
+    icon: ICONS.PROJETOS.MOBILE,
+    color: "#000000",
   },
 };
 
@@ -68,6 +74,7 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
         description: [
           ROLE_CONTRIBUTOR[RoleContribuitorEnum.web],
           ROLE_CONTRIBUTOR[RoleContribuitorEnum.desktop],
+          ROLE_CONTRIBUTOR[RoleContribuitorEnum.mobile],
         ],
         website: "https://79team.com",
         github: "diego-menezes",

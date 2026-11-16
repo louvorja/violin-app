@@ -265,12 +265,16 @@ describe("acompanhar o download do yt-dlp e projetar", () => {
     h.ensure.mockResolvedValue(ok(ID));
     expect(await openStream(embed(ID), "Louvor")).toBe(true);
     expect(h.openWindows).toHaveBeenCalled();
-    expect(openAudio).toHaveBeenCalledWith({
-      url: `louvorja://onlinevideo/${ID}.mp4`,
-      title: "Louvor",
-      mediaType: "video",
-      playback_id: expect.any(String),
-    }, true);
+    expect(openAudio).toHaveBeenCalledWith(
+      {
+        url: `louvorja://onlinevideo/${ID}.mp4`,
+        title: "Louvor",
+        mediaType: "video",
+        playbackId: expect.any(String),
+        videoId: ID,
+      },
+      true
+    );
   });
 
   it("cancelado pelo operador: não abre nada, e nenhum aviso de erro", async () => {
@@ -419,14 +423,19 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     });
     // Uma identidade só: a tela e o player falam do mesmo playback.
     const sent = h.send.mock.calls.find((c: unknown[]) => c[0] === BROADCAST_TYPE.FILE_PROJECTION)?.[1] as { playback_id: string };
-    expect(openAudio.mock.calls.at(-1)?.[0]).toMatchObject({ playback_id: sent.playback_id });
+    expect(openAudio.mock.calls.at(-1)?.[0]).toMatchObject({ playbackId: sent.playback_id });
     // a imagem do player do app vem da trilha de vídeo; o som, da de áudio
-    expect(openAudio).toHaveBeenCalledWith({
-      url: audio.url,
-      title: "Louvor",
-      mediaType: "video", playback_id: expect.any(String),
-      videoUrl: video.url,
-    }, true);
+    expect(openAudio).toHaveBeenCalledWith(
+      {
+        url: audio.url,
+        title: "Louvor",
+        mediaType: "video",
+        videoUrl: video.url,
+        playbackId: expect.any(String),
+        videoId: ID,
+      },
+      true
+    );
     expect(embedded).not.toHaveBeenCalled();
     // abre direto: nenhum toast de "abrindo" entre o clique e o vídeo
     expect(h.info).not.toHaveBeenCalled();
@@ -469,7 +478,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     controlledDownloads();
     expect(await openStream(embed(ID), "Louvor")).toBe(true);
     expect(openAudio).toHaveBeenCalledWith(
-      { url: file, title: "Louvor", mediaType: "video", playback_id: expect.any(String) },
+      { url: file, title: "Louvor", mediaType: "video", playbackId: expect.any(String), videoId: ID },
       true
     );
     expect(embedded).not.toHaveBeenCalled();
@@ -484,12 +493,16 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     expect(await opening).toBe(true);
     expect(embedded).not.toHaveBeenCalled();
     expect(h.warning).not.toHaveBeenCalled();
-    expect(openAudio).toHaveBeenCalledWith({
-      url: `louvorja://onlinevideo/${ID}.mp4`,
-      title: "Louvor",
-      mediaType: "video",
-      playback_id: expect.any(String),
-    }, true);
+    expect(openAudio).toHaveBeenCalledWith(
+      {
+        url: `louvorja://onlinevideo/${ID}.mp4`,
+        title: "Louvor",
+        mediaType: "video",
+        playbackId: expect.any(String),
+        videoId: ID,
+      },
+      true
+    );
   });
 
   it("o download só começa depois de o vídeo estar tocando, e sem guardá-lo", async () => {
@@ -1014,7 +1027,7 @@ describe("posse do palco durante a abertura do vídeo", () => {
     };
     expect(sent.clock).toBe("player");
     expect(openAudio).toHaveBeenCalledWith(
-      expect.objectContaining({ url: payload.url, mediaType: "video", playback_id: sent.playback_id }),
+      expect.objectContaining({ url: payload.url, mediaType: "video", playbackId: sent.playback_id }),
       true
     );
   });

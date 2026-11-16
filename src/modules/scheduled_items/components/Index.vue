@@ -336,6 +336,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { findDuplicateCategory } from "@/helpers/CategoryName";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import {
@@ -744,6 +745,10 @@ function openRenameCategory(cat: ScheduledCategory): void {
 async function confirmCategoryDialog(): Promise<void> {
   const nome = categoryNameInput.value.trim();
   if (!nome) return;
+  if (findDuplicateCategory(categories.value, nome, editingCatId.value)) {
+    $alert.error({ text: t("shell.category.duplicate_name"), translate: false });
+    return;
+  }
   const cor = categoryColorInput.value;
   if (editingCatId.value != null) {
     const cat = $liturgy

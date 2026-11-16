@@ -5,17 +5,6 @@
     :style="{ minWidth: isMobileWeb ? '0' : '500px' }"
     @close="stop"
   >
-    <!-- Header -->
-    <template #header>
-      <div class="bgs-header-actions">
-        <LjButton size="sm" variant="ghost" @click="selectAllCategoriesAndUncategorized">
-          {{ tm("show_all") }}
-        </LjButton>
-        <LjButton size="sm" variant="ghost" @click="selectedCategoryIds = new Set()">
-          {{ tm("hide_all") }}
-        </LjButton>
-      </div>
-    </template>
     <div
       class="bgm-root"
       :class="{ 'bgm-root--drag-over': isDragOver }"
@@ -26,45 +15,31 @@
     >
       <!-- Category chips -->
       <div v-if="categories.length || uncategorizedCount > 0" class="bgs-chips">
-        <span class="bgm-header-title">{{ tm("categories") }}</span>
-        <CategoryChip
-          v-for="cat in categories"
-          :key="cat.id"
-          :category-id="cat.id"
-          :name="cat.name"
-          :icon="cat.icon"
-          :icon-type="cat.iconType"
-          :color="cat.color"
-          :count="libraryFiles.filter((f) => f.categoryId === cat.id).length"
-          :active="selectedCategoryIds.has(cat.id)"
-          :drop-target="dropTargetId === cat.id"
+        <CategoryChipsBar
+          :title="tm('categories')"
+          :categories="categories"
+          :selected-ids="selectedCategoryIds"
+          :uncategorized-label="tm('uncategorized')"
+          :uncategorized-icon="ICONS.MUSIC.NOTE_OUTLINE"
+          :uncategorized-color="UNCATEGORIZED_COLOR"
+          :uncategorized-count="uncategorizedCount"
+          :count-for="categoryCount"
+          :drop-target-id="dropTargetId"
           :add-item-label="t('ribbon.btn.add_item')"
           :edit-label="t('shell.category.edit_category')"
-          @select="onCategoryChipClick(cat.id)"
-          @add="addItemsToCategory(cat.id)"
-          @edit="editCategoryFromChip(cat.id)"
-          @dragover="onCategoryDragOver($event, cat.id)"
-          @dragleave="onCategoryDragLeave($event, cat.id)"
-          @drop="onCategoryDrop($event, cat.id)"
-        />
-        <!-- Virtual: arquivos sem categoria -->
-        <CategoryChip
-          v-if="categories.length > 0 || uncategorizedCount > 0"
-          category-id=""
-          :name="tm('uncategorized')"
-          :icon="ICONS.MUSIC.NOTE_OUTLINE"
-          icon-type="icon"
-          :color="UNCATEGORIZED_COLOR"
-          :count="uncategorizedCount"
-          :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
-          :drop-target="dropTargetId === UNCATEGORIZED_ID"
-          :editable="false"
-          :add-item-label="t('ribbon.btn.add_item')"
-          @select="onCategoryChipClick(UNCATEGORIZED_ID)"
-          @add="addItemsToCategory(UNCATEGORIZED_ID)"
-          @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
-          @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
-          @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
+          :sort-mode="sortMode"
+          :sort-options="sortOptions"
+          :sort-label="t('components.category_bar.sort')"
+          :show-all-label="t('components.category_bar.show_all')"
+          :hide-all-label="t('components.category_bar.hide_all')"
+          @update:selected-ids="selectedCategoryIds = $event"
+          @update:sort-mode="sortMode = $event"
+          @select="onCategoryChipClick"
+          @add="addItemsToCategory"
+          @edit="editCategoryFromChip"
+          @dragover="onCategoryDragOver"
+          @dragleave="onCategoryDragLeave"
+          @drop="onCategoryDrop"
         />
       </div>
       <!-- Audio cards grid -->
@@ -73,11 +48,15 @@
           v-for="item in visibleFiles"
           :key="item.file.id"
           class="bgs-audio-card"
+          :class="{ 'lj-u-order-target': orderTargetId === item.file.id }"
           :style="{ '--card-color': item.color }"
           draggable="true"
           @click="onCardClick(item)"
           @dragstart="onCardDragStart($event, item.file)"
           @dragend="onCardDragEnd"
+          @dragover="onCardOrderDragOver($event, item.file.id)"
+          @dragleave="onCardOrderDragLeave($event, item.file.id)"
+          @drop="onCardOrderDrop($event, item.file.id)"
           @touchstart.passive="onCardTouchStart($event, item.file)"
           @contextmenu.prevent
         >
@@ -288,10 +267,21 @@ import { DB_TABLE } from "@/constants/DbTables";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { MediaFile } from "@/types/Media";
+import {
+  storeLibraryPath,
+  storeLibraryStream,
+  removeLibraryFile,
+  isManagedLibraryPath,
+} from "@/helpers/LibraryFiles";
+import { blobOf, byteSize } from "@/helpers/Bytes";
+import { mimeForName } from "@/helpers/Mime";
 import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
+import { useCardReorder } from "@/composables/useCardReorder";
+import { useItemSortMode } from "@/composables/useItemSortMode";
+import { sortByMode } from "@/helpers/ItemSort";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
-import CategoryChip from "@/components/CategoryChip.vue";
+import CategoryChipsBar from "@/components/CategoryChipsBar.vue";
 
 const { width: viewportWidth } = useViewport();
 const isMobileWeb = computed(() => viewportWidth.value > 0 && viewportWidth.value <= 700);
@@ -305,6 +295,8 @@ const STORE_LIBRARY = DB_TABLE.BACKGROUND_SOUND_LIBRARY;
 
 interface BgSoundFile extends MediaFile {
   categoryId: string;
+  /** Ordem manual usada pelo seletor "Personalizada". */
+  order?: number;
 }
 
 async function loadCategories(): Promise<CategoryFileData[]> {
@@ -345,10 +337,13 @@ async function saveLibraryFile(file: BgSoundFile): Promise<void> {
     fileName: String(file.fileName || file.name),
     path: String(file.path),
   };
-  if (file.data && file.data.byteLength > 0) {
+  if (file.data && byteSize(file.data) > 0) {
     plain.data = file.data;
-    plain.mime = String(file.mime || "audio/mpeg");
   }
+  if (file.mime) plain.mime = String(file.mime);
+  if (file.size) plain.size = file.size;
+  if (file.sha256) plain.sha256 = file.sha256;
+  if (file.order !== undefined) plain.order = file.order;
   await $idb.put(STORE_LIBRARY, plain);
 }
 
@@ -391,6 +386,10 @@ const UNCATEGORIZED_ID = "";
  */
 const UNCATEGORIZED_COLOR = "#607d8b";
 
+function categoryCount(categoryId: string): number {
+  return libraryFiles.value.filter((file) => (file.categoryId || "") === categoryId).length;
+}
+
 const uncategorizedCount = computed(() => {
   const ids = new Set(categories.value.map((c) => c.id));
   return libraryFiles.value.filter((f) => !f.categoryId || !ids.has(f.categoryId)).length;
@@ -405,6 +404,12 @@ const showManageDialog = ref(false);
 const categoryManagerRef = ref<{
   openEditCategory: (_category: CategoryFileData) => void;
 } | null>(null);
+const sortMode = useItemSortMode(KEYS.MODULES.BACKGROUND_SOUND.SORT_MODE);
+const sortOptions = computed(() => [
+  { value: "custom" as const, label: t("components.category_bar.custom") },
+  { value: "alpha_asc" as const, label: t("components.category_bar.alpha_asc") },
+  { value: "alpha_desc" as const, label: t("components.category_bar.alpha_desc") },
+]);
 const showAddAudioDialog = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const saving = ref(false);
@@ -514,7 +519,7 @@ const visibleFiles = computed(() => {
   const catById = new Map(categories.value.map((c) => [c.id, c]));
   const selected = selectedCategoryIds.value;
 
-  for (const f of libraryFiles.value) {
+  for (const f of sortByMode(libraryFiles.value, sortMode.value, soundDisplayName)) {
     const cat = catById.get(f.categoryId);
     // Sem categoria (ou categoria removida): aparece apenas no chip virtual.
     if (!cat) {
@@ -598,6 +603,14 @@ const {
   icon: categoryIcon,
 });
 
+const { orderTargetId, onCardOrderDragOver, onCardOrderDragLeave, onCardOrderDrop } =
+  useCardReorder<BgSoundFile>({
+    enabled: () => sortMode.value === "custom",
+    draggingId,
+    items: libraryFiles,
+    save: saveLibraryFile,
+  });
+
 function onCardClick(item: { file: BgSoundFile }): void {
   if (shouldSuppressClick(item.file.id)) return;
   toggleFile(item.file);
@@ -617,7 +630,8 @@ function addItemsToCategory(categoryId: string): void {
 function editCategoryFromChip(categoryId: string): void {
   const category = categories.value.find((item) => item.id === categoryId);
   if (!category) return;
-  showManageDialog.value = true;
+  // Abre só o formulário de edição; abrir também o gerenciador deixava dois
+  // diálogos sobrepostos e o primeiro clique caía no backdrop do de baixo.
   categoryManagerRef.value?.openEditCategory(category);
 }
 
@@ -673,8 +687,9 @@ async function handleDeleteCategory(id: string): Promise<void> {
   if (bg.currentFile.value && catFiles.some((f) => f.id === bg.currentFile.value?.id)) {
     bg.stop();
   }
-  // Remove todos os arquivos da categoria
+  // Remove todos os arquivos da categoria (registro e cópia no acervo)
   for (const f of catFiles) {
+    if (isManagedLibraryPath(f.path)) await removeLibraryFile(f.path);
     await deleteLibraryFile(f.id);
   }
   await deleteCategoryRecord(id);
@@ -744,11 +759,6 @@ async function onDrop(e: DragEvent): Promise<void> {
 /*  File management                                                   */
 /* ------------------------------------------------------------------ */
 
-async function readFileData(file: File): Promise<{ data: ArrayBuffer; mime: string }> {
-  const data = await file.arrayBuffer();
-  return { data, mime: file.type || "audio/mpeg" };
-}
-
 function openAddAudioMenu(): void {
   // Sem categoria é sempre uma opção — não bloqueia mais sem categorias.
   showAddAudioDialog.value = true;
@@ -773,18 +783,26 @@ async function addAudioFiles(categoryId: string): Promise<void> {
 async function addFileRecord(f: File, categoryId: string): Promise<BgSoundFile> {
   const filePath = localPathOf(f);
   const fileId = crypto.randomUUID();
+  const stored = filePath
+    ? await storeLibraryPath("background-sound", fileId, filePath)
+    : await storeLibraryStream({
+        kind: "background-sound",
+        recordId: fileId,
+        name: f.name,
+        size: f.size,
+        open: async () => f.stream() as ReadableStream<Uint8Array>,
+      });
   const bgFile: BgSoundFile = {
     id: fileId,
     name: "",
     fileName: f.name,
-    path: filePath || URL.createObjectURL(f),
+    path: stored.mode === "path" ? stored.path : URL.createObjectURL(stored.data),
     categoryId,
+    size: stored.size,
+    mime: f.type || mimeForName(f.name, "audio/mpeg"),
+    ...(stored.mode === "blob" ? { data: stored.data } : {}),
+    ...(stored.mode === "path" && stored.sha256 ? { sha256: stored.sha256 } : {}),
   };
-  if (!filePath) {
-    const { data, mime } = await readFileData(f);
-    bgFile.data = data;
-    bgFile.mime = mime;
-  }
   await saveLibraryFile(bgFile);
   return bgFile;
 }
@@ -846,6 +864,8 @@ async function removeFile(categoryId: string, file: MediaFile): Promise<void> {
 
 async function doRemove(fileId: string): Promise<void> {
   if (bg.currentFile.value?.id === fileId) bg.stop();
+  const record = libraryFiles.value.find((f) => f.id === fileId);
+  if (record && isManagedLibraryPath(record.path)) await removeLibraryFile(record.path);
   await deleteLibraryFile(fileId);
   const defaultKey = KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID;
   if (String($userdata.get(defaultKey, "")) === fileId) $userdata.set(defaultKey, "");
@@ -899,10 +919,18 @@ async function saveFileEdit(): Promise<void> {
   // fica como estava e o diálogo continua aberto para escolher outro arquivo.
   const newFile = editFileForm.value.newFile;
   const newFilePath = newFile ? localPathOf(newFile) : "";
-  let newData: { data: ArrayBuffer; mime: string } | null = null;
-  if (newFile && !newFilePath) {
+  let newStored: Awaited<ReturnType<typeof storeLibraryStream>> | null = null;
+  if (newFile) {
     try {
-      newData = await readFileData(newFile);
+      newStored = newFilePath
+        ? await storeLibraryPath("background-sound", storedFile.id, newFilePath)
+        : await storeLibraryStream({
+            kind: "background-sound",
+            recordId: storedFile.id,
+            name: newFile.name,
+            size: newFile.size,
+            open: async () => newFile.stream() as ReadableStream<Uint8Array>,
+          });
     } catch (error) {
       if (!reportLocalFileFailure(error, [newFile.name])) throw error;
       return;
@@ -912,16 +940,22 @@ async function saveFileEdit(): Promise<void> {
   storedFile.name = editFileForm.value.name.trim();
   storedFile.categoryId = editFileForm.value.categoryId;
 
-  if (newFile) {
+  if (newFile && newStored) {
+    const oldPath = storedFile.path;
     storedFile.fileName = newFile.name;
-    if (newFilePath) {
-      storedFile.path = newFilePath;
+    storedFile.path =
+      newStored.mode === "path" ? newStored.path : URL.createObjectURL(newStored.data);
+    storedFile.size = newStored.size;
+    if (newStored.mode === "blob") {
+      storedFile.data = newStored.data;
+      storedFile.mime = newFile.type || mimeForName(newFile.name, "audio/mpeg");
+    } else {
       delete storedFile.data;
-      storedFile.mime = undefined;
-    } else if (newData) {
-      storedFile.path = URL.createObjectURL(newFile);
-      storedFile.data = newData.data;
-      storedFile.mime = newData.mime;
+      storedFile.mime = newFile.type || mimeForName(newFile.name, "audio/mpeg");
+      if (newStored.sha256) storedFile.sha256 = newStored.sha256;
+    }
+    if (isManagedLibraryPath(oldPath) && oldPath !== storedFile.path) {
+      await removeLibraryFile(oldPath);
     }
   }
 
@@ -1113,7 +1147,8 @@ function rebuildAllBlobUrls(list: BgSoundFile[]): void {
       const key = "file_" + f.id;
       const old = createdObjectUrls.get(key);
       if (old) URL.revokeObjectURL(old);
-      const blob = new Blob([f.data], { type: f.mime });
+      const blob = blobOf(f.data, f.mime);
+      if (!blob) continue;
       const url = URL.createObjectURL(blob);
       createdObjectUrls.set(key, url);
       f.path = url;
@@ -1152,10 +1187,12 @@ async function migrateFromOldStructure(): Promise<void> {
         path: String(f.path),
         categoryId: String(cat.id),
       };
-      if (f.data && f.data.byteLength > 0) {
+      if (f.data && byteSize(f.data) > 0) {
         bgFile.data = f.data;
         bgFile.mime = String(f.mime || "audio/mpeg");
       }
+      if (f.size) bgFile.size = f.size;
+      if (f.sha256) bgFile.sha256 = f.sha256;
       await $idb.put(STORE_LIBRARY, bgFile as any);
     }
   }

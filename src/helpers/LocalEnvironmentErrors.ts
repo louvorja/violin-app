@@ -7,7 +7,11 @@
  * aviso e a interface explica o que o operador pode fazer.
  */
 
-export type LocalEnvironmentErrorKind = "file_unreadable" | "storage_full" | "storage_unavailable";
+export type LocalEnvironmentErrorKind =
+  | "file_unreadable"
+  | "file_too_large"
+  | "storage_full"
+  | "storage_unavailable";
 
 function field(error: unknown, key: "name" | "message"): string {
   if (!error || typeof error !== "object") return "";
@@ -20,11 +24,16 @@ export function classifyLocalEnvironmentError(error: unknown): LocalEnvironmentE
   const message = field(error, "message");
 
   if (name === "NotReadableError") return "file_unreadable";
+  if ((error as { code?: unknown })?.code === "too_large") return "file_too_large";
+  if ((error as { code?: unknown })?.code === "storage_full") return "storage_full";
   if (name === "QuotaExceededError") return "storage_full";
   if (name === "UnknownError" && /internal error|indexeddb/i.test(message)) {
     return "storage_unavailable";
   }
   if (name === "AbortError" && /transaction was aborted/i.test(message)) {
+    return "storage_unavailable";
+  }
+  if (name === "SecurityError" && /service worker|disabled/i.test(message)) {
     return "storage_unavailable";
   }
   return null;

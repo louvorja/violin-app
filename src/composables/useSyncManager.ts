@@ -886,22 +886,43 @@ export function useSyncManager() {
     // conexões/transações, em qualquer equipamento.
     const batchSize = 4;
     let completed = 0;
+    let succeeded = 0;
+    let consecutiveFailures = 0;
+    let abortedByFailure = false;
+    let rateLimited = false;
     const failedKeys = new Set<string>();
-    for (let i = 0; i < toDownload.length && !bibleCancelled.value; i += batchSize) {
+    const incompleteVersions = new Set<number>();
+    const MAX_CONSECUTIVE_FAILURES = 8;
+
+    for (
+      let i = 0;
+      i < toDownload.length && !bibleCancelled.value && !abortedByFailure;
+      i += batchSize
+    ) {
       const batch = toDownload.slice(i, i + batchSize);
-      await Promise.all(
+      const batchResults = await Promise.all(
         batch.map(async (ch) => {
           const key = `bible_${ch.versionId}_${ch.bookId}_${ch.n}`;
           const detail = formatBackgroundTaskDetail(key, t, bibleVersions);
           bibleProgress.value = { ...bibleProgress.value, currentFile: detail || key };
+          let ok = false;
           try {
             // A lista já foi filtrada pelo cache local. A leitura normal
             // compartilha o mesmo in-flight com a Bíblia e não cria outra
             // requisição por causa de `fresh`.
             const data = await Database.get(key, { silent: true });
-            if (data === null) failedKeys.add(key);
+            if (data === null) {
+              failedKeys.add(key);
+              incompleteVersions.add(ch.versionId);
+            } else {
+              ok = true;
+              succeeded += 1;
+            }
           } catch (e) {
             failedKeys.add(key);
+            incompleteVersions.add(ch.versionId);
+            const msg = String((e as Error)?.message || e);
+            if (/\b429\b/.test(msg)) rateLimited = true;
             console.warn(`[useSyncManager] falha ao baixar ${key}:`, e);
           }
           completed += 1;
@@ -912,8 +933,21 @@ export function useSyncManager() {
             _done: completed,
             _total: toDownload.length,
           });
+          return ok;
         })
       );
+
+      for (const ok of batchResults) {
+        if (ok) consecutiveFailures = 0;
+        else consecutiveFailures += 1;
+      }
+
+      if (rateLimited || consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        abortedByFailure = true;
+        for (let k = i + batch.length; k < toDownload.length; k += 1) {
+          incompleteVersions.add(toDownload[k].versionId);
+        }
+      }
     }
 
     bibleProgress.value = { ...bibleProgress.value, currentFile: "" };
@@ -923,22 +957,21 @@ export function useSyncManager() {
       bibleCancelled.value = false;
       bgTasks.updateTask("sync-bible", { status: "cancelled" });
     } else {
-      const completedVersionIds = versionIds.filter(
-        (versionId) =>
-          !toDownload.some(
-            (chapter) =>
-              chapter.versionId === versionId &&
-              failedKeys.has(`bible_${chapter.versionId}_${chapter.bookId}_${chapter.n}`)
-          )
-      );
+      const completedVersionIds = versionIds.filter((versionId) => !incompleteVersions.has(versionId));
       const previous = $userdata.get<number[]>(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, []) || [];
       $userdata.set(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, [
         ...new Set([...previous.filter((id) => !versionIds.includes(id)), ...completedVersionIds]),
       ]);
-      bgTasks.completeTask("sync-bible");
+      if (failedKeys.size > 0 || abortedByFailure) {
+        const reason = rateLimited ? "HTTP 429" : `${failedKeys.size} capítulo(s) indisponível(eis)`;
+        bibleCompletedMsg.value = reason;
+        bgTasks.updateTask("sync-bible", { status: "error", detail: reason, error: reason });
+      } else {
+        bgTasks.completeTask("sync-bible");
+      }
     }
     bumpBibleRevision();
-    return bibleProgress.value.done;
+    return succeeded;
   }
 
   async function saveBibleSelectionToDisk(toRemove: number[]): Promise<void> {

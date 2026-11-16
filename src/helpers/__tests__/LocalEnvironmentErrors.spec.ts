@@ -16,6 +16,10 @@ describe("classifyLocalEnvironmentError", () => {
       named("AbortError", "The transaction was aborted, so the request cannot be fulfilled."),
       "storage_unavailable",
     ],
+    [
+      named("SecurityError", "Service workers are disabled in the simulator."),
+      "storage_unavailable",
+    ],
   ])("reconhece %#", (error, kind) => {
     expect(classifyLocalEnvironmentError(error)).toBe(kind);
   });
