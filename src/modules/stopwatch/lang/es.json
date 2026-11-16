@@ -22,7 +22,8 @@
     "count_overtime": "Contar tiempo excedido",
     "warning": "Avisar cuando falten",
     "flash_borders": "Parpadear bordes",
-    "options": "Opciones"
+    "options": "Opciones",
+    "lap": "+ Vuelta"
   },
   "warning": {
     "custom": "Personalizado en segundos",
@@ -40,6 +41,15 @@
     "ends_at": "termina a las",
     "overtime": "Tiempo excedido",
     "presets": "Tiempos rápidos",
-    "minutes": "{n} min"
+    "minutes": "{n} min",
+    "laps": "Vueltas",
+    "no_laps": "Ninguna vuelta registrada.",
+    "clear_laps": "Borrar vueltas"
+  },
+  "alerts": {
+    "reset_title": "Reiniciar cronómetro",
+    "reset_text": "El tiempo y todas las vueltas se borrarán. ¿Deseas continuar?",
+    "clear_laps_title": "Borrar vueltas",
+    "clear_laps_text": "Todas las vueltas registradas se borrarán. ¿Deseas continuar?"
   }
 }

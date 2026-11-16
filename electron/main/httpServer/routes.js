@@ -24,6 +24,7 @@ const devices = require("../devices.js");
 const { safeSend } = require("../safeWebContents.js");
 const transmissionRoutes = require("./transmissionRoutes.js");
 const remoteRoutes = require("./remoteRoutes.js");
+const playerRoutes = require("./playerRoutes.js");
 
 
 function isPlainObject(value) {
@@ -472,7 +473,7 @@ function isMusicLibrarySongsResponse(payload) {
 
 function setupRoutes(
   app,
-  { getMainWindow, getUserData, getDatabaseUrl, getApiToken, rendererRequests }
+  { getMainWindow, getUserData, getDatabaseUrl, getApiToken, rendererRequests, getAppVersion }
 ) {
 
   /** Retorna mainWindow apenas se existir e não estiver destruída. */
@@ -555,6 +556,12 @@ function setupRoutes(
     isMediaLibraryImageResponse,
     hasDevicePermission,
   });
+  playerRoutes.register(app, {
+    getValidMainWindow,
+    requestRenderer,
+    sendRendererError,
+    hasDevicePermission,
+  });
 
 
   // ---------------------------------------------------------------
@@ -569,8 +576,13 @@ function setupRoutes(
     res.json({
       status: "ok",
       app: "LouvorJA",
+      version: typeof getAppVersion === "function" ? getAppVersion() : "",
       authorized: info.authorized === true,
       permissions: Array.isArray(info.permissions) ? info.permissions : [],
+      // Features implementadas nesta versão. O app remoto esconde módulos que
+      // o desktop antigo não conhece (ex.: Player/Cronômetro no Violin 2.0).
+      // O controle web é servido por esta mesma versão e não precisa filtrar.
+      features: ["player", "stopwatch"],
     });
   });
 

@@ -32,7 +32,7 @@ const HTTP_RENDERER_RESPONSE_CHANNEL = "http:renderer-response";
  * pessoais. O `preloadIpcContract.spec` cobre a lista de prefixos justamente
  * para o próximo esquecimento falhar no teste e não em produção.
  */
-const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos|custom-music|background-sound|volume|media-library|draw):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos|custom-music|background-sound|volume|media-library|draw|media|stopwatch):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 contextBridge.exposeInMainWorld("louvorjaApi", {
   /** Resolve o caminho real de um File arrastado/selecionado (Electron 32+). */
@@ -802,6 +802,8 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       "http:volume",
       "http:media-library",
       "http:draw",
+      "http:media",
+      "http:stopwatch",
     ];
     const handlers = events.map((evt) => {
       const handler = (_e, data) => cb(evt, data);

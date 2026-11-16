@@ -59,10 +59,21 @@
       <p v-else-if="!files.length" class="rbs-empty">{{ t("remote_control.bgsound.empty") }}</p>
 
       <template v-for="group in groups" :key="group.id">
-        <span class="rbs-category" :style="group.color ? { color: group.color } : undefined">
-          {{ group.name }}
-        </span>
-        <div class="rbs-list">
+        <button
+          type="button"
+          class="rbs-category"
+          :style="group.color ? { color: group.color } : undefined"
+          :aria-expanded="!collapsedGroups.has(group.id)"
+          @click="toggleGroup(group.id)"
+        >
+          <LjIcon
+            :icon="collapsedGroups.has(group.id) ? ICONS.UI.CHEVRON_RIGHT : ICONS.UI.CHEVRON_DOWN"
+            :size="14"
+          />
+          <span class="rbs-category__label">{{ group.name }}</span>
+          <span class="rbs-category__count">{{ group.files.length }}</span>
+        </button>
+        <div v-if="!collapsedGroups.has(group.id)" class="rbs-list">
           <button
             v-for="file in group.files"
             :key="file.id"
@@ -115,6 +126,16 @@ const currentName = ref("");
 const volume = ref(50);
 const files = ref<{ id: string; name: string; categoryId: string | null }[]>([]);
 const categories = ref<{ id: string; name: string; color: string | null }[]>([]);
+/** Grupos recolhidos: o cabeçalho fica, os sons do grupo somem. */
+const collapsedGroups = ref<Set<string>>(new Set());
+
+function toggleGroup(id: string): void {
+  // Novo Set a cada clique: mutar o atual não dispararia o template.
+  const next = new Set(collapsedGroups.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  collapsedGroups.value = next;
+}
 
 /** Agrupa por categoria; sem categoria (ou sem id) cai no rótulo avulso. */
 const groups = computed(() => {
@@ -257,10 +278,35 @@ defineExpose({ refresh });
 }
 
 .rbs-category {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  width: 100%;
+  min-height: 36px;
+  margin: 0;
+  padding: var(--lj-space-1, 4px) 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
   font-size: var(--lj-text-xs);
   font-weight: var(--lj-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.rbs-category__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rbs-category__count {
+  flex-shrink: 0;
+  font-weight: 500;
+  opacity: 0.8;
 }
 
 .rbs-list {

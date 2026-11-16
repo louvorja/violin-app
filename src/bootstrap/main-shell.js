@@ -92,6 +92,7 @@ import { startThemeSync } from "@/composables/useAppTheme";
 import { BootOrchestrator } from "@/bootstrap/BootOrchestrator";
 import { useLibrasState } from "@/modules/libras/composables/useLibrasState";
 import drawModule from "@/modules/draw/state";
+import stopwatchModule from "@/modules/stopwatch/state";
 import { createDrawProjection } from "@/modules/draw/projection";
 import { handleProjectionStateRequest } from "@/helpers/ProjectionStateRequests";
 import { listenForVideoStateRequests } from "@/helpers/VideoStateRequest";
@@ -2323,6 +2324,137 @@ $storage.hydrate().then(async () => {
         case "http:drawing-name":
           Broadcast.send(BROADCAST_TYPE.DRAWING_TEXT, { text: String(data.name) });
           break;
+        case "http:media": {
+          const requestId = data?.requestId;
+          if (!requestId || !Platform.httpServer?.respond) break;
+          try {
+            const action = data?.action;
+            if (action === "status") {
+              Platform.httpServer.respond(requestId, { status: "ok", state: Media.snapshot() });
+              break;
+            }
+            if (action !== "close" && !Media.snapshot().active) {
+              Platform.httpServer.respond(requestId, {
+                status: "error",
+                code: "NO_MEDIA",
+                error: "Nada em reprodução",
+              });
+              break;
+            }
+            if (action === "play") {
+              Media.play();
+            } else if (action === "pause") {
+              Media.pause(true);
+            } else if (action === "seek") {
+              const position = Number(data?.position);
+              if (!Number.isFinite(position) || position < 0 || !Media.seekTo(position)) {
+                Platform.httpServer.respond(requestId, {
+                  status: "error",
+                  code: "INVALID_POSITION",
+                  error: "Posição inválida",
+                });
+                break;
+              }
+            } else if (action === "seek-relative") {
+              const seconds = Number(data?.seconds);
+              if (!Number.isFinite(seconds) || seconds === 0) {
+                Platform.httpServer.respond(requestId, {
+                  status: "error",
+                  code: "INVALID_SEEK",
+                  error: "Passo inválido",
+                });
+                break;
+              }
+              Media.advanceTime(seconds);
+            } else if (action === "next") {
+              // Fila ativa → próxima música; sem fila → próximo slide, como o
+              // botão do player do desktop.
+              Media.nextItem();
+            } else if (action === "previous") {
+              Media.previousItem();
+            } else if (action === "close") {
+              Media.close(true);
+            } else {
+              Platform.httpServer.respond(requestId, {
+                status: "error",
+                code: "INVALID_ACTION",
+                error: "action inválida",
+              });
+              break;
+            }
+            Platform.httpServer.respond(requestId, { status: "ok", state: Media.snapshot() });
+          } catch (error) {
+            Platform.httpServer.respond(requestId, {
+              status: "error",
+              code: error?.code || "COMMAND_FAILED",
+              error: error?.message || "falha no player",
+            });
+          }
+          break;
+        }
+        case "http:stopwatch": {
+          const requestId = data?.requestId;
+          if (!requestId || !Platform.httpServer?.respond) break;
+          try {
+            stopwatchModule.ensureStopwatchLoaded();
+            const action = data?.action;
+            if (action === "start") {
+              stopwatchModule.start();
+            } else if (action === "pause") {
+              stopwatchModule.pause();
+            } else if (action === "reset") {
+              stopwatchModule.resetAll();
+            } else if (action === "clear-laps") {
+              stopwatchModule.clearLaps();
+            } else if (action === "lap") {
+              stopwatchModule.lap();
+            } else if (action === "set-mode") {
+              const mode = data?.mode;
+              if (mode !== "countup" && mode !== "countdown") {
+                throw Object.assign(new Error("mode inválido"), { code: "INVALID_MODE" });
+              }
+              if (mode === "countdown") {
+                const target = Number(data?.target);
+                if (!Number.isFinite(target) || target <= 0) {
+                  throw Object.assign(new Error("target inválido"), { code: "INVALID_TARGET" });
+                }
+                stopwatchModule.setMode("down");
+                stopwatchModule.setTarget(target);
+              } else {
+                stopwatchModule.setMode("up");
+              }
+            } else if (action === "set-target") {
+              const target = Number(data?.target);
+              if (!Number.isFinite(target) || target < 0) {
+                throw Object.assign(new Error("target inválido"), { code: "INVALID_TARGET" });
+              }
+              stopwatchModule.setTarget(target);
+            } else if (action === "extend-target") {
+              const seconds = Number(data?.seconds);
+              if (!Number.isFinite(seconds) || seconds === 0) {
+                throw Object.assign(new Error("seconds inválido"), { code: "INVALID_TARGET" });
+              }
+              stopwatchModule.extendTarget(seconds);
+            } else if (action === "project") {
+              await stopwatchModule.project();
+            } else if (action === "unproject") {
+              await stopwatchModule.unproject();
+            } else if (action !== "status") {
+              throw Object.assign(new Error("action inválida"), { code: "INVALID_ACTION" });
+            }
+            Platform.httpServer.respond(requestId, {
+              status: "ok",
+              state: stopwatchModule.snapshot(),
+            });
+          } catch (error) {
+            Platform.httpServer.respond(requestId, {
+              status: "error",
+              code: error?.code || "COMMAND_FAILED",
+              error: error?.message || "falha no cronômetro",
+            });
+          }
+          break;
+        }
         case "http:draw": {
           const requestId = data?.requestId;
           if (!requestId || !Platform.httpServer?.respond) break;

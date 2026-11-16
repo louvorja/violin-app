@@ -881,7 +881,12 @@ async function projectVideo(v: VideoItem): Promise<void> {
     return;
   }
   projectingId.value = v.id;
-  const opened = await Media.openYouTube(embedUrl, v.name);
+  const category = categoryName(v.categoryId);
+  const opened = await Media.openYouTube(
+    embedUrl,
+    v.name,
+    category ? { subtitle: category } : undefined
+  );
   // Cancelado ou impossível de tocar: sai do destaque, salvo se outro vídeo já o substituiu.
   if (!opened && projectingId.value === v.id) projectingId.value = "";
   const ytId = extractYoutubeId(v.url);
@@ -906,6 +911,7 @@ function startVideoSequence(label: string, list: VideoItem[]): void {
       return {
         url: embedUrl,
         title: v.name,
+        subtitle: categoryName(v.categoryId),
         videoId: extractYoutubeId(v.url) || undefined,
         itemKey: v.id,
       };

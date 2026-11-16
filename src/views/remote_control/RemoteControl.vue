@@ -111,6 +111,26 @@
         <remote-media-library ref="mediaLibraryRef" :token="token" @show-snackbar="showSnackbar" />
       </div>
 
+      <!-- Tab Player (mídia em reprodução) -->
+      <div v-if="isBooted('player')" v-show="tab === 'player'" class="rc-pane">
+        <remote-player
+          ref="playerRef"
+          :token="token"
+          :active="tab === 'player'"
+          @show-snackbar="showSnackbar"
+        />
+      </div>
+
+      <!-- Tab Cronômetro -->
+      <div v-if="isBooted('stopwatch')" v-show="tab === 'stopwatch'" class="rc-pane">
+        <remote-stopwatch
+          ref="stopwatchRef"
+          :token="token"
+          :active="tab === 'stopwatch'"
+          @show-snackbar="showSnackbar"
+        />
+      </div>
+
       <!-- Tab Atalhos -->
       <div v-if="isBooted('shortcuts')" v-show="tab === 'shortcuts'" class="rc-pane">
         <remote-shortcuts :token="token" @show-snackbar="showSnackbar" />
@@ -256,6 +276,8 @@ import RemoteBackgroundSound from "./RemoteBackgroundSound.vue";
 import RemotePresenter from "./RemotePresenter.vue";
 import RemoteMediaLibrary from "./RemoteMediaLibrary.vue";
 import RemoteDraw from "./RemoteDraw.vue";
+import RemotePlayer from "./RemotePlayer.vue";
+import RemoteStopwatch from "./RemoteStopwatch.vue";
 
 /** @typedef {import('@/types/Bible').ActiveBibleState} ActiveBibleState */
 
@@ -278,6 +300,8 @@ const backgroundSoundRef = ref(null);
 const mediaLibraryRef = ref(null);
 const musicRef = ref(null);
 const drawRef = ref(null);
+const playerRef = ref(null);
+const stopwatchRef = ref(null);
 
 const tabItems = computed(() =>
   [
@@ -303,6 +327,11 @@ const tabItems = computed(() =>
     },
     { value: "music", label: t("module_group.musics.title"), icon: ICONS.MUSIC.NOTE },
     {
+      value: "player",
+      label: t("remote_control.tabs.player"),
+      icon: ICONS.PLAYER.PLAY,
+    },
+    {
       value: "presenter",
       label: t("remote_control.tabs.presenter"),
       icon: ICONS.PROJECTION.PRESENTATION,
@@ -311,6 +340,11 @@ const tabItems = computed(() =>
       value: "shortcuts",
       label: t("remote_control.tabs.shortcuts"),
       icon: ICONS.UI.KEYBOARD,
+    },
+    {
+      value: "stopwatch",
+      label: t("remote_control.tabs.stopwatch"),
+      icon: ICONS.MODULES.STOPWATCH,
     },
     { value: "slides", label: t("remote_control.tabs.slides"), icon: ICONS.UI.VIEW_GRID },
     {
@@ -749,6 +783,10 @@ async function refreshState() {
       await mediaLibraryRef.value.refresh();
     } else if (tab.value === "draw" && drawRef.value) {
       await drawRef.value.refresh();
+    } else if (tab.value === "player" && playerRef.value) {
+      await playerRef.value.refresh();
+    } else if (tab.value === "stopwatch" && stopwatchRef.value) {
+      await stopwatchRef.value.refresh();
     }
   } finally {
     loading.value = false;

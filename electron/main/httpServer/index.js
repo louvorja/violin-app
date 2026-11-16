@@ -339,6 +339,7 @@ async function start({ port, mainWindow } = {}) {
     getDatabaseUrl: () => protocolModule.getRemoteConfig().databaseUrl,
     getApiToken: () => protocolModule.getRemoteConfig().apiToken,
     rendererRequests: _getRendererRequests(),
+    getAppVersion: () => electronApp.getVersion(),
   });
 
   // Arquivos legacy do Delphi (`<dados>/server/*`) — opcional, mantém

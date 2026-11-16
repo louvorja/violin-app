@@ -19,7 +19,7 @@
       <LjIcon
         :icon="ICONS.MODULES.LITURGY"
         :color="getModule(ModuleEnum.LITURGY).color"
-        size="20"
+        size="18"
       />
       <span class="liturgy-header-title lj-u-truncate">{{ $t("shell.liturgy_title") }}</span>
       <span v-if="!effectiveCollapsed && totals.count > 0" class="liturgy-totals">

@@ -22,7 +22,8 @@
     "count_overtime": "Contar tempo excedido",
     "warning": "Avisar faltando",
     "flash_borders": "Piscar bordas",
-    "options": "Opções"
+    "options": "Opções",
+    "lap": "+ Volta"
   },
   "warning": {
     "custom": "Personalizado em segundos",
@@ -40,6 +41,15 @@
     "ends_at": "termina às",
     "overtime": "Tempo excedido",
     "presets": "Tempos rápidos",
-    "minutes": "{n} min"
+    "minutes": "{n} min",
+    "laps": "Voltas",
+    "no_laps": "Nenhuma volta registrada.",
+    "clear_laps": "Zerar voltas"
+  },
+  "alerts": {
+    "reset_title": "Reiniciar cronômetro",
+    "reset_text": "O tempo e todas as voltas serão apagados. Deseja continuar?",
+    "clear_laps_title": "Zerar voltas",
+    "clear_laps_text": "Todas as voltas registradas serão apagadas. Deseja continuar?"
   }
 }

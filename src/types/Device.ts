@@ -14,6 +14,8 @@
  *   integrado) e enviar arquivos do celular para o desktop pelo remoto
  * - keyboard: enviar teclas de atalho (módulo Atalhos do app)
  * - draw: configurar e iniciar o Sorteio (números ou nomes)
+ * - player: controlar o player de mídia (o que estiver em reprodução)
+ * - stopwatch: controlar o Cronômetro do desktop
  */
 export type DevicePermission =
   | "root"
@@ -27,6 +29,8 @@ export type DevicePermission =
   | "media_library"
   | "music"
   | "online_videos"
+  | "player"
+  | "stopwatch"
   | "volume";
 
 /** Lista completa de permissões disponíveis. */
@@ -42,6 +46,8 @@ export const DEVICE_PERMISSIONS: DevicePermission[] = [
   "media_library",
   "music",
   "online_videos",
+  "player",
+  "stopwatch",
   "volume",
 ];
 
@@ -59,6 +65,8 @@ export const DEVICE_PERMISSION_LABELS: Record<DevicePermission, string> = {
   volume: "options.transmission.permission_volume",
   media_library: "options.transmission.permission_media_library",
   keyboard: "options.transmission.permission_keyboard",
+  player: "options.transmission.permission_player",
+  stopwatch: "options.transmission.permission_stopwatch",
 };
 
 /**

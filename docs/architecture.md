@@ -2282,6 +2282,10 @@ real e responde pela `RENDERER_RESPONSE_CHANNEL`.
 | GET             | `/api/background-sound`                                   | —                                                                                                                                                                      | Estado + biblioteca de som de fundo (permission `background_sound`)                      |
 | POST            | `/api/background-sound`                                   | `{ action: play\|pause\|resume\|stop\|play-default, id? }`                                                                                                             | Controla o player; `play-default` inicia o som padrão (permission `background_sound`)    |
 | POST            | `/api/volume`                                             | `{ action: up\|down, step? } \| { action: set, value }`                                                                                                                | Volume dos players 0..100 (permission `volume`, só app)                                  |
+| GET             | `/api/media`                                              | —                                                                                                                                                                      | Estado do player de mídia (permission `player`)                                          |
+| POST            | `/api/media`                                              | `{ action: play\|pause\|seek\|close, position? }`                                                                                                                    | Controla o que estiver em reprodução (permission `player`)                               |
+| GET             | `/api/stopwatch`                                          | —                                                                                                                                                                      | Estado do cronômetro: tempo, modo, meta, voltas (permission `stopwatch`)                 |
+| POST            | `/api/stopwatch`                                          | `{ action: start\|pause\|reset\|lap\|clear-laps\|set-mode\|set-target\|extend-target, ... }`                                                                       | Controla o cronômetro (permission `stopwatch`)                                           |
 | GET             | `/api/media-library`                                      | `?action=library\|canva\|image`, `lang`, `folderId`, `continuation`, `url`                                                                                             | Acervo/Canva do módulo Biblioteca de Mídia (permission `media_library`)                  |
 | POST            | `/api/media-library`                                      | `{ action: project, id } \| { action: canva-project, designId?\|url? } \| { action: playlist, command: add\|remove\|clear\|goto\|play\|next\|prev\|stop, id?/index? }` | Projeta item/design, controla a playlist (permission `media_library`)                    |
 | GET             | `/api/media-library?action=playlist`                      | —                                                                                                                                                                      | Itens da playlist (`modules.media_library.playlist` do userData, servido pelo main)      |
@@ -2293,6 +2297,41 @@ real e responde pela `RENDERER_RESPONSE_CHANNEL`.
 | POST            | `/api/register-device`                                    | `{ token, name, model, platform, fingerprint }`                                                                                                                        | Cadastro de device (antes do auth)                                                       |
 
 Todos os endpoints POST exigem `Content-Type: application/json`.
+
+### Player e Cronômetro (mídia em reprodução + voltas)
+
+Duas features novas do controle remoto, anunciadas em `features` no `/api/ping`
+(`["player", "stopwatch"]`) — um **app remoto** novo conectado a um desktop
+antigo esconde os módulos. O `RemoteControl.vue` (web servido pelo próprio
+desktop) não filtra por `features`: a página e o servidor são da mesma versão,
+então um desktop antigo simplesmente não serve as abas novas. Quem consome
+`features` é o app remoto (KMP/iOS):
+
+- **Player** (`/api/media`, permission `player`): estado do painel de mídia do
+  desktop (arquivo, música, Biblioteca ou YouTube), em segundos, com título,
+  basename do arquivo, `source` (`file`/`youtube`) e `canPlay/canPause/canSeek`.
+  O estado traz `title` e `subtitle` — álbum quando é música, canal/categoria
+  quando é vídeo. `play`/`pause`/`seek`/`seek-relative`/`next`/`previous`/`close`
+  devolvem o snapshot novo; `seek-relative` usa `seconds` (10 s avança/volta), e
+  `next`/`previous` avançam a fila de músicas quando ela está ativa; sem fila,
+  avançam o slide (como o botão do player do desktop). `canPrevious`/`canNext`
+  refletem a fila ou o slide atual. `close` também
+  encerra a projeção da mídia e responde 200 com `active:false`.
+- **Cronômetro** (`/api/stopwatch`, permission `stopwatch`): o estado saiu do
+  componente e virou o singleton `src/modules/stopwatch/state.ts`, então o
+  cronômetro continua rodando com a janela fechada e o telão segue atualizando.
+  `mode` usa `countup`/`countdown`; `laps` traz `{index, elapsed, shown}`
+  (`shown` é o que estava no display — restante no regressivo). `reset` limpa
+  tempo **e** voltas; `clear-laps` só as voltas; `set-mode`/`set-target` zeram
+  o tempo; `extend-target` soma sem zerar (+1 min). `project`/`unproject`
+  abrem/fecham a projeção do cronômetro (janela ou camada da Projeção de
+  Fundo) e `projecting` reflete o estado; o mesmo botão existe no app e no web.
+- A janela do cronômetro ganhou a lista de voltas no slot `left` do
+  `ModuleContainer` (com “Zerar voltas” no topo) e o botão **+ Volta** na ribbon,
+  ao lado de Iniciar/Pausar. Reiniciar e zerar voltas pedem confirmação.
+- O estado é relayado no SSE (`media_state`/`stopwatch_state`, com `seq`
+  monotônico) e replicado no app (`/api` + SSE, polling de segurança) e nas abas
+  Player/Cronômetro do controle web.
 
 ### Biblioteca de Mídia (acervo + Canva + upload)
 

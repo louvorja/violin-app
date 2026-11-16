@@ -2,9 +2,12 @@
  * useMedia.spec.ts — Estado do player que a janela de Mídia lê.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
+import type { MockInstance } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import $appdata from "@/helpers/AppData";
 import $alert from "@/helpers/Alert";
+import Broadcast from "@/helpers/Broadcast";
+import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { KEYS } from "@/constants/UserDataKeys";
 
 type Media = typeof import("@/composables/useMedia").default;
@@ -36,6 +39,49 @@ describe("Media.clearVariables — slide_index", () => {
     media.clearVariables();
 
     expect(slideIndex()).toBe(0);
+  });
+});
+
+describe("Media — estado remoto no fechamento", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    $appdata.set(KEYS.MODULES.MEDIA.SHOW, false);
+    $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, false);
+    $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, false);
+  });
+
+  function ultimoMediaState(send: MockInstance): Record<string, unknown> | undefined {
+    const estados = send.mock.calls
+      .filter(([tipo]) => tipo === BROADCAST_TYPE.MEDIA_STATE)
+      .map(([, payload]) => payload as Record<string, unknown>);
+    return estados.at(-1);
+  }
+
+  it("close publica um unico media_state inativo depois de zerar as flags", () => {
+    $appdata.set(KEYS.MODULES.MEDIA.SHOW, true);
+    $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, true);
+    $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, true);
+    const send = vi
+      .spyOn(Broadcast, "send")
+      .mockReturnValue({ crossWindow: false, remoteRelay: "not_required" });
+
+    media.close(true);
+
+    const estado = ultimoMediaState(send);
+    expect(estado).toMatchObject({ active: false, title: "", subtitle: "", fileName: "" });
+    expect(send).toHaveBeenCalledWith(BROADCAST_TYPE.MEDIA_CLOSE);
+  });
+
+  it("stop também publica inativo (o comando de parar não deixa active preso)", () => {
+    $appdata.set(KEYS.MODULES.MEDIA.SHOW, true);
+    $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, true);
+    const send = vi
+      .spyOn(Broadcast, "send")
+      .mockReturnValue({ crossWindow: false, remoteRelay: "not_required" });
+
+    media.stop();
+
+    expect(ultimoMediaState(send)).toMatchObject({ active: false });
   });
 });
 

@@ -1,5 +1,7 @@
 "use strict";
 
+const { isMediaState, isStopwatchState } = require("./payloadValidation");
+
 /**
  * Bridge SSE para clients de transmissão (OBS, celular, navegador remoto).
  *
@@ -35,6 +37,8 @@ const REMOTE_RELAY_TYPES = new Set([
   "slide_change",
   "slides_data",
   "media_close",
+  "media_state",
+  "stopwatch_state",
   "bible_verse",
   "bible_format_changed",
   "module_projection_value",
@@ -406,6 +410,8 @@ function publish(msg) {
   if (!msg || typeof msg.type !== "string") return;
   if (!REMOTE_RELAY_TYPES.has(msg.type)) return;
   if (msg.type === "music_presentation_snapshot" && !isValidMusicSnapshot(msg.payload)) return;
+  if (msg.type === "media_state" && !isMediaState(msg.payload)) return;
+  if (msg.type === "stopwatch_state" && !isStopwatchState(msg.payload)) return;
 
   // `media_close` invalida o estado de slide/letra — qualquer client que
   // conectar DEPOIS do close não deve receber replay da música anterior.
