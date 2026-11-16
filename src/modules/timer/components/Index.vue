@@ -32,13 +32,22 @@
             :style="[textStyle, displayColorStyle]"
             data-testid="timer-display"
           >
-            {{ projecao }}
+            <span class="sw-display__time">{{ display }}</span>
+            <span
+              v-if="showTargetTime"
+              class="sw-display__clock"
+              :style="[clockColorStyle, displayColorStyle]"
+            >
+              {{ targetTime }}
+            </span>
           </div>
           <ModuleAlertFrame :level="flashBorders ? alertLevel : ''" :color="displayColor" />
         </div>
         <ModuleTimerDock
           :mode="mode"
           :warning-seconds="showAlert ? alertSeconds : 0"
+          :warnings="DOCK_WARNINGS"
+          custom-warning
           :labels="dockLabels"
           @update:mode="mode = $event"
           @update:warning-seconds="setWarning"
@@ -74,7 +83,7 @@ import { timerShowsTarget, timerTargetTime } from "../projectionText";
 
 $userdata.setIfNull(KEYS.MODULES.TIMER.END_ACTION, MediaEnum.NONE);
 
-const { show_format } = useModuleFormat("timer", manifest);
+const { show_format, fmt } = useModuleFormat("timer", manifest);
 const { rootStyle, textStyle, alertStyle, warningStyle, bgImage, imageStyle, container } =
   useModuleBodyStyle("timer");
 const endAction = useTimerEndAction("timer", KEYS.MODULES.TIMER);
@@ -163,18 +172,36 @@ const displayColorStyle = computed(() =>
   displayColor.value ? { color: displayColor.value } : null
 );
 
+/** Cor própria do relógio; desligada, o texto continua com `font_color`. */
+const clockColor = computed<string | undefined>(() => {
+  if (!fmt.clock_color_enabled) return undefined;
+  const value = typeof fmt.clock_color === "string" ? fmt.clock_color.trim() : "";
+  return value || undefined;
+});
+const clockColorStyle = computed(() => (clockColor.value ? { color: clockColor.value } : null));
+
+/** Aviso/alerta manda mais que a cor própria; sem eles, vale a do relógio. */
+const clockLineColor = computed<string | undefined>(
+  () => displayColor.value || clockColor.value || undefined
+);
+
 function setWarning(value: number): void {
   // "Não" desliga o destaque; os outros botões ligam e definem os segundos.
   $userdata.set(KEYS.MODULES.TIMER.SHOW_ALERT, value > 0);
   if (value > 0) $userdata.set(KEYS.MODULES.TIMER.ALERT_SECONDS, value);
 }
 
+/** Personalizado, 30 s e os minutos; "Não" fica no fim para desligar o aviso. */
+const DOCK_WARNINGS = [30, 60, 120, 300, 600, 0] as const;
+
 const dockLabels = computed(() => ({
   mode: tm("ribbon.mode"),
   up: tm("mode.up"),
   down: tm("mode.down"),
   warning: tm("ribbon.warning"),
-  warnings: ["off", "m1", "m2", "m5", "m10"].map((k) => tm(`warning.${k}`)),
+  warnings: ["m30", "m1", "m2", "m5", "m10", "off"].map((k) => tm(`warning.${k}`)),
+  custom: tm("warning.custom"),
+  customPlaceholder: tm("warning.custom_placeholder"),
 }));
 
 const overtime = computed<boolean>(
@@ -208,6 +235,7 @@ function emitProjection(): void {
     text: projectionActive.value ? projecao.value : "",
     active: projectionActive.value,
     color: projectionActive.value ? displayColor.value : undefined,
+    clockColor: projectionActive.value ? clockLineColor.value : undefined,
     alert:
       projectionActive.value && flashBorders.value && alertLevel.value
         ? alertLevel.value
@@ -216,7 +244,7 @@ function emitProjection(): void {
 }
 
 watch(
-  [projecao, alertActive, alertLevel, flashBorders, displayColor, projectionActive],
+  [projecao, alertActive, alertLevel, flashBorders, clockLineColor, projectionActive],
   emitProjection,
   { immediate: true }
 );
@@ -393,6 +421,10 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
   transition: color var(--lj-transition-slow);
   white-space: pre-line;
+}
+.sw-display__time,
+.sw-display__clock {
+  display: block;
 }
 .sw-warning {
   color: #f59e0b;

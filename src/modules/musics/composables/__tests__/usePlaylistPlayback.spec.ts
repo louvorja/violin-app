@@ -3,21 +3,23 @@ import { KEYS } from "@/constants/UserDataKeys";
 import type { Playlist } from "@/types/Music";
 
 const open = vi.fn();
+const openYouTube = vi.fn<(..._args: unknown[]) => Promise<boolean>>(async () => true);
 const close = vi.fn();
 let mediaClosed: () => void = () => {};
 let songEnded: () => boolean = () => false;
-let playbackStarted: (_idMusic: unknown) => void = () => {};
+let playbackStarted: (_idMusic: unknown, _videoId?: string) => void = () => {};
 let playlists: Playlist[] = [];
 let preferences: Record<string, boolean> = {};
 vi.mock("@/composables/useMedia", () => ({
   default: {
     open: (...args: unknown[]) => open(...args),
+    openYouTube: (...args: unknown[]) => openYouTube(...args),
     close: (...args: unknown[]) => close(...args),
     registerPlaylistEndHandler: (handler: () => boolean) => (songEnded = handler),
     unregisterPlaylistEndHandler: vi.fn(),
     registerPlaylistCloseHandler: (handler: () => void) => (mediaClosed = handler),
     unregisterPlaylistCloseHandler: vi.fn(),
-    registerPlaylistPlaybackHandler: (handler: (_idMusic: unknown) => void) =>
+    registerPlaylistPlaybackHandler: (handler: (_idMusic: unknown, _videoId?: string) => void) =>
       (playbackStarted = handler),
     unregisterPlaylistPlaybackHandler: vi.fn(),
     getActivePlaybackId: () => "playback",
@@ -60,6 +62,7 @@ beforeEach(() => {
   playlists = [playlist];
   preferences = {};
   open.mockClear();
+  openYouTube.mockClear();
   close.mockClear();
 });
 afterEach(() => {
@@ -162,6 +165,72 @@ describe("Tocar Todas: fila provisória", () => {
   it("um arquivo ou vídeo sem música do acervo também encerra a playlist", () => {
     playback.playPlaylist(playlist);
     playbackStarted(null);
+    expect(playback.isActive.value).toBe(false);
+  });
+
+  it("reproduz vídeos on-line em sequência e encerra ao iniciar outro vídeo fora da fila (#67)", () => {
+    playback.playOnlineVideoSequence("Adoração", [
+      {
+        url: "https://www.youtube.com/embed/aaaaaaaaaaa",
+        title: "Vídeo 1",
+        videoId: "aaaaaaaaaaa",
+        itemKey: "v1",
+      },
+      {
+        url: "https://www.youtube.com/embed/bbbbbbbbbbb",
+        title: "Vídeo 2",
+        videoId: "bbbbbbbbbbb",
+        itemKey: "v2",
+      },
+    ]);
+
+    expect(playback.isActive.value).toBe(true);
+    expect(playback.totalDuration.value).toBe(0);
+    expect(openYouTube).toHaveBeenLastCalledWith(
+      "https://www.youtube.com/embed/aaaaaaaaaaa",
+      "Vídeo 1"
+    );
+
+    playbackStarted(undefined, "aaaaaaaaaaa");
+    expect(playback.isActive.value).toBe(true);
+
+    finishSong();
+    expect(openYouTube).toHaveBeenLastCalledWith(
+      "https://www.youtube.com/embed/bbbbbbbbbbb",
+      "Vídeo 2"
+    );
+
+    playbackStarted(undefined, "zzzzzzzzzzz");
+    expect(playback.isActive.value).toBe(false);
+    expect(playback.currentSong.value).toBeNull();
+  });
+
+  it("não encerra a fila quando o próprio vídeo começa sem video_id", () => {
+    playback.playOnlineVideoSequence("Adoração", [
+      {
+        url: "https://www.youtube.com/embed/aaaaaaaaaaa",
+        title: "Vídeo 1",
+        videoId: "aaaaaaaaaaa",
+        itemKey: "v1",
+      },
+      {
+        url: "https://www.youtube.com/embed/bbbbbbbbbbb",
+        title: "Vídeo 2",
+        videoId: "bbbbbbbbbbb",
+        itemKey: "v2",
+      },
+    ]);
+
+    // O arquivo baixado/embed pode anunciar o início sem o video_id.
+    playbackStarted(undefined, undefined);
+    expect(playback.isActive.value).toBe(true);
+
+    // Evento atrasado do primeiro vídeo também não derruba a fila.
+    playbackStarted(undefined, "aaaaaaaaaaa");
+    expect(playback.isActive.value).toBe(true);
+
+    // Um vídeo de fora da fila encerra.
+    playbackStarted(undefined, "zzzzzzzzzzz");
     expect(playback.isActive.value).toBe(false);
   });
 });

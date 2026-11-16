@@ -20,12 +20,10 @@ export interface MediaOpenParams {
    * baixa: trilha de vídeo e trilha de áudio). O player do app a mostra, muda.
    */
   videoUrl?: string;
-  /**
-   * Identidade da reprodução que as janelas de projeção já receberam (vídeo).
-   * O player adota a mesma: as telas só obedecem a VIDEO_STATE com o id delas,
-   * e um segundo id criado aqui deixava a tela presa ao primeiro, rodando sozinha.
-   */
-  playback_id?: string;
+  /** Identificador do vídeo on-line quando reproduzido a partir de cache/stream. */
+  videoId?: string;
+  /** Identidade já reservada pela projeção de arquivo para evitar reemissão dupla. */
+  playbackId?: string;
 }
 
 export interface MediaConfig {
@@ -93,8 +91,11 @@ export interface MediaFile {
   name: string;
   fileName: string;
   path: string;
-  data?: ArrayBuffer;
+  /** Blob (novo) ou ArrayBuffer (legado). */
+  data?: Blob | ArrayBuffer;
   mime?: string;
+  size?: number;
+  sha256?: string;
 }
 
 export interface YouTubeControlPayload {

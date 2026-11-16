@@ -19,7 +19,7 @@
       <template v-if="searching">
         <div class="ov-section-title">{{ tm("search_results") }}</div>
         <div v-if="!searchResults.length" class="ov-empty">{{ tm("empty") }}</div>
-        <div class="ov-grid">
+        <div :class="viewMode === 'list' ? 'ov-list' : 'ov-grid'">
           <OnlineVideoCard
             v-for="video in searchResults"
             :key="video.video_id"
@@ -27,6 +27,7 @@
             height="150"
             :entity="video"
             variant="video"
+            :layout="viewMode"
             :active="projectingId === video.video_id"
             :subtitle="playlistTitle(video.playlist_id)"
             @select="projectVideo(video)"
@@ -51,7 +52,7 @@
       <template v-if="!searching && level === 1">
         <div class="ov-section-title">{{ tm("channels") }}</div>
         <div v-if="!channels.length && !loading" class="ov-empty">{{ tm("empty") }}</div>
-        <div class="ov-grid">
+        <div :class="viewMode === 'list' ? 'ov-list' : 'ov-grid'">
           <OnlineVideoCard
             v-for="ch in channels"
             :key="ch.channel_id"
@@ -59,6 +60,7 @@
             height="200"
             :entity="ch"
             variant="channel"
+            :layout="viewMode"
             play-all
             :subtitle="ch.custom_url"
             @select="selectChannel(ch)"
@@ -71,7 +73,7 @@
       <template v-if="!searching && level === 2">
         <div class="ov-section-title">{{ tm("playlists") }}</div>
         <div v-if="!playlists.length" class="ov-empty">{{ tm("empty") }}</div>
-        <div class="ov-grid">
+        <div :class="viewMode === 'list' ? 'ov-list' : 'ov-grid'">
           <OnlineVideoCard
             v-for="pl in playlists"
             :key="pl.playlist_id"
@@ -79,6 +81,7 @@
             height="200"
             :entity="pl"
             variant="playlist"
+            :layout="viewMode"
             play-all
             :first-video-id="firstVideoIdOfPlaylist(pl.playlist_id) ?? ''"
             :subtitle="`${videosOf(pl.playlist_id)} ${tm('videos_count')}`"
@@ -92,7 +95,7 @@
       <template v-if="!searching && level === 3">
         <div class="ov-section-title">{{ tm("videos") }}</div>
         <div v-if="!videos.length" class="ov-empty">{{ tm("empty") }}</div>
-        <div class="ov-grid">
+        <div :class="viewMode === 'list' ? 'ov-list' : 'ov-grid'">
           <OnlineVideoCard
             v-for="video in videos"
             :key="video.video_id"
@@ -100,6 +103,7 @@
             height="150"
             :entity="video"
             variant="video"
+            :layout="viewMode"
             :active="projectingId === video.video_id"
             @select="projectVideo(video)"
           />
@@ -125,6 +129,7 @@ import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import Media from "@/composables/useMedia";
 import { prepare as prepareOnlineVideo } from "@/helpers/OnlineVideo";
 import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
+import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $database from "@/helpers/Database";
 import $userdata from "@/helpers/UserData";
@@ -135,11 +140,15 @@ import { LjTooltip } from "@components/ui";
 const { t: i18nT, locale } = useI18n();
 const tm = (key: string): string => i18nT(`modules.online_videos.${key}`);
 const downloads = useOnlineVideoDownloads();
+const playlistPlayback = usePlaylistPlayback();
 
 const loading = ref(false);
 const error = ref<string | null>(null);
 const level = ref(1);
 const search = ref("");
+const viewMode = computed<"grid" | "list">(() =>
+  $userdata.get<string>(KEYS.OPTIONS.ONLINE_VIDEO_VIEW_MODE, "grid") === "list" ? "list" : "grid"
+);
 const selectedChannel = ref<Channel | null>(null);
 const selectedPlaylist = ref<Playlist | null>(null);
 const projectingId = ref<string>("");
@@ -217,29 +226,55 @@ function firstVideoIdOfPlaylist(playlistId: string): string | null {
   return list[0]?.video_id || null;
 }
 
-/** Reproduz o primeiro vídeo do canal/playlist — inicia a sequência. */
-function playFirstVideoOf(playlistId: string): void {
-  const list = (apiData.value?.videos ?? [])
-    .filter((v) => v.playlist_id === playlistId)
-    .sort(byTitle);
-  if (!list.length) return;
-  projectVideo(list[0]);
+function startVideoSequence(name: string, list: OnlineVideo[]): void {
+  const unique = dedupeByVideoId(list);
+  if (!unique.length) return;
+  playlistPlayback.playOnlineVideoSequence(
+    name,
+    unique.map((video) => ({
+      url: buildEmbedUrl(video.video_id),
+      title: video.title,
+      videoId: video.video_id,
+      itemKey: video.video_id,
+    }))
+  );
 }
 
 function playChannelVideos(channelId: string): void {
-  const pls = (apiData.value?.playlists ?? []).filter((p) => p.channel_id === channelId);
+  const ch = (apiData.value?.channels ?? []).find((c) => c.channel_id === channelId);
+  const pls = (apiData.value?.playlists ?? [])
+    .filter((p) => p.channel_id === channelId)
+    .sort(byTitle);
+  const list: OnlineVideo[] = [];
   for (const pl of pls) {
-    const first = (apiData.value?.videos ?? []).find((v) => v.playlist_id === pl.playlist_id);
-    if (first) {
-      playFirstVideoOf(first.playlist_id);
-      return;
-    }
+    const plVideos = (apiData.value?.videos ?? [])
+      .filter((v) => v.playlist_id === pl.playlist_id)
+      .sort(byTitle);
+    list.push(...plVideos);
   }
+  startVideoSequence(ch?.title || tm("channels"), list);
 }
 
 function playPlaylistVideos(playlistId: string): void {
-  playFirstVideoOf(playlistId);
+  const list = (apiData.value?.videos ?? [])
+    .filter((v) => v.playlist_id === playlistId)
+    .sort(byTitle);
+  startVideoSequence(playlistTitle(playlistId) || tm("playlists"), list);
 }
+
+watch(
+  () => playlistPlayback.currentSong.value,
+  (song) => {
+    const key = song?.onlineVideo?.itemKey;
+    if (key) {
+      projectingId.value = key;
+      $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, true);
+    } else if (!song && projectingId.value) {
+      projectingId.value = "";
+      $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, false);
+    }
+  }
+);
 
 function videosOf(playlistId: string) {
   return (apiData.value?.videos ?? []).filter((v) => v.playlist_id === playlistId).length;
@@ -440,6 +475,11 @@ function close(): void {
   align-items: flex-start;
   justify-content: flex-start;
   gap: 10px;
+}
+.ov-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .ov-empty {
   font-size: 12px;

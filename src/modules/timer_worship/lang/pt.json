@@ -64,6 +64,9 @@
     "warning": "Avisar faltando"
   },
   "warning": {
+    "custom": "Personalizado em segundos",
+    "custom_placeholder": "0",
+    "m30": "30 s",
     "off": "Não",
     "m1": "1 min",
     "m2": "2 min",

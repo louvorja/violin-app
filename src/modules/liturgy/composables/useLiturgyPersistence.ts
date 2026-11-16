@@ -3,6 +3,7 @@ import { useLiturgyI18n, chaveLiturgia } from "../i18n";
 import $liturgy, { toLocalDate } from "@/helpers/Liturgy";
 import $userdata from "@/helpers/UserData";
 import $alert from "@/helpers/Alert";
+import { findDuplicateCategory } from "@/helpers/CategoryName";
 import { KEYS } from "@/constants/UserDataKeys";
 import type { ScheduledCategory, ScheduledItem } from "@/types/Liturgy";
 
@@ -84,8 +85,13 @@ export function useLiturgyPersistence() {
 
   function addCategory(): void {
     $alert.prompt({ title: t("schedules.new_category") }, (nome: string | null) => {
-      if (!nome || !nome.trim()) return;
-      const id = $liturgy.addScheduledCategory(nome.trim());
+      const trimmed = nome?.trim();
+      if (!trimmed) return;
+      if (findDuplicateCategory(_scheduledCategoriesCache.value, trimmed)) {
+        $alert.error({ text: "shell.category.duplicate_name" });
+        return;
+      }
+      const id = $liturgy.addScheduledCategory(trimmed);
       _refreshScheduled();
       activeCatId.value = id;
     });
@@ -108,6 +114,11 @@ export function useLiturgyPersistence() {
   function saveCategoryName(id: string | number, name?: string): void {
     const trimmed = (name ?? editingCatName.value).trim();
     if (trimmed) {
+      if (findDuplicateCategory(_scheduledCategoriesCache.value, trimmed, id)) {
+        $alert.error({ text: "shell.category.duplicate_name" });
+        editingCatId.value = null;
+        return;
+      }
       $liturgy.updateScheduledCategory(id, { nome: trimmed });
       _refreshScheduled();
     }

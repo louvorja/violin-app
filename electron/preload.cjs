@@ -585,6 +585,40 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     setAutoCache: (enabled) => ipcRenderer.invoke("storage:setAutoCache", enabled),
   },
 
+  /**
+   * Arquivos das bibliotecas no acervo. Só o main decide onde gravar; o
+   * renderer manda o tipo, o id do registro e os bytes/path de origem.
+   */
+  libraryFiles: {
+    storePath: (input) => ipcRenderer.invoke("libraryFiles:storePath", input),
+    begin: (input) => ipcRenderer.invoke("libraryFiles:begin", input),
+    write: (token, chunk) => ipcRenderer.invoke("libraryFiles:write", token, chunk),
+    end: (token) => ipcRenderer.invoke("libraryFiles:end", token),
+    abort: (token) => ipcRenderer.invoke("libraryFiles:abort", token),
+    openRead: (rel) => ipcRenderer.invoke("libraryFiles:openRead", rel),
+    readChunk: (token, length) => ipcRenderer.invoke("libraryFiles:readChunk", token, length),
+    closeRead: (token) => ipcRenderer.invoke("libraryFiles:closeRead", token),
+    stageBegin: (input) => ipcRenderer.invoke("libraryFiles:stageBegin", input),
+    commitRestore: (restoreToken, rels) =>
+      ipcRenderer.invoke("libraryFiles:commitRestore", restoreToken, rels),
+    rollbackRestore: (restoreToken, committed) =>
+      ipcRenderer.invoke("libraryFiles:rollbackRestore", restoreToken, committed),
+    cleanupRestore: (restoreToken) =>
+      ipcRenderer.invoke("libraryFiles:cleanupRestore", restoreToken),
+    remove: (rel) => ipcRenderer.invoke("libraryFiles:remove", rel),
+    info: (rel) => ipcRenderer.invoke("libraryFiles:info", rel),
+    freeSpace: () => ipcRenderer.invoke("libraryFiles:freeSpace"),
+    prune: (knownPaths, options) => ipcRenderer.invoke("libraryFiles:prune", knownPaths, options),
+  },
+
+  /** Sink de exportação do pacote da liturgia, gravado direto no destino. */
+  libraryExport: {
+    choose: (input) => ipcRenderer.invoke("libraryExport:choose", input),
+    write: (token, chunk) => ipcRenderer.invoke("libraryExport:write", token, chunk),
+    end: (token) => ipcRenderer.invoke("libraryExport:end", token),
+    abort: (token) => ipcRenderer.invoke("libraryExport:abort", token),
+  },
+
   /** Abre um arquivo no programa padrão do sistema operacional. */
   shell: {
     openPath: (filePath) => ipcRenderer.invoke("shell:openPath", filePath),

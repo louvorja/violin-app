@@ -35,6 +35,12 @@ describe("extractSljaPaths", () => {
     expect(extractSljaPaths(argv)).toEqual([]);
   });
 
+  it("também acha a liturgia .llja", () => {
+    const liturgia = path.join(dir, "Culto de Sábado.llja");
+    fs.writeFileSync(liturgia, "x");
+    expect(extractSljaPaths(["C:\\app\\LouvorJA.exe", liturgia, hino])).toEqual([liturgia, hino]);
+  });
+
   it("reconhece a extensão em qualquer caixa e com espaços no nome", () => {
     expect(extractSljaPaths([comEspaco])).toEqual([comEspaco]);
   });

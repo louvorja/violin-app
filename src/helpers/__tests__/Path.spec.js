@@ -97,6 +97,35 @@ describe("Path.file — modo desktop", () => {
   });
 });
 
+describe("Path.media — caminho de registro", () => {
+  it("no desktop, relativo vira louvorja://files e absoluto vira louvorja://local", () => {
+    Platform.isDesktop = true;
+    expect(Path.media("media-library/id/foto.jpg")).toBe(
+      "louvorja://files/media-library/id/foto.jpg"
+    );
+    expect(Path.media("/home/ana/foto.jpg")).toBe("louvorja://local/home/ana/foto.jpg");
+    expect(Path.media("C:\\Users\\ana\\foto.jpg")).toBe("louvorja://local/C:/Users/ana/foto.jpg");
+  });
+
+  it("no web, relativo usa a API de arquivos e absoluto volta cru", () => {
+    Platform.isDesktop = false;
+    expect(Path.media("media-library/id/foto.jpg")).toBe(`${FILES_URL}/media-library/id/foto.jpg`);
+    expect(Path.media("/home/ana/foto.jpg")).toBe("/home/ana/foto.jpg");
+  });
+
+  it("esquema pronto passa direto", () => {
+    for (const url of [
+      "blob:http://x/y",
+      "data:image/png;base64,AA",
+      "https://cdn/x.jpg",
+      "louvorja://files/x.jpg",
+      "file:///x.jpg",
+    ]) {
+      expect(Path.media(url)).toBe(url);
+    }
+  });
+});
+
 describe("Path.local", () => {
   it("codifica acento e espaço em caminho Unix", () => {
     expect(Path.local("/home/ana/Área de trabalho/hino.mp3")).toBe(

@@ -66,7 +66,17 @@
             ...textShadowStyle,
           }"
         >
-          {{ text }}
+          <template v-if="textParts">
+            <span class="module-projection__line">{{ textParts.first }}</span>
+            <span
+              v-if="textParts.rest"
+              class="module-projection__line"
+              :style="{ color: clockColor }"
+            >
+              {{ textParts.rest }}
+            </span>
+          </template>
+          <template v-else>{{ text }}</template>
         </span>
 
         <span
@@ -141,6 +151,7 @@ const drawMode = ref("number");
 const drawWheel = ref(null);
 const active = ref(false);
 const color = ref("");
+const clockColor = ref("");
 const alert = ref("");
 
 // O Sorteio tem layout dedicado que monta os chips dos já sorteados.
@@ -228,6 +239,16 @@ const textShadowStyle = computed(() => {
   return { textShadow: css };
 });
 
+/**
+ * Timer/timer_worship projetam duas linhas: a contagem e a hora-alvo. Só a
+ * segunda recebe `clockColor`; sem ele, o texto continua sendo um bloco só.
+ */
+const textParts = computed(() => {
+  if (!clockColor.value) return null;
+  const [first, ...rest] = String(text.value).split("\n");
+  return { first, rest: rest.join("\n") };
+});
+
 const font_size_px = computed(() => fontSizePc(font_size.value));
 const ref_font_size_px = computed(() => fontSizePc(reference_font_size.value));
 const border_spacing_px = computed(() => Number(border_spacing.value) || 10);
@@ -260,6 +281,7 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload) => {
   }
   active.value = payload.active ?? true;
   color.value = payload.color || "";
+  clockColor.value = payload.clockColor || "";
   alert.value = payload.alert === "warning" || payload.alert === "danger" ? payload.alert : "";
 });
 
@@ -349,6 +371,10 @@ onMounted(() => {
 .module-projection__text {
   white-space: pre-wrap;
   line-height: 1.4;
+}
+
+.module-projection__line {
+  display: block;
 }
 
 /* Os módulos utilitários usam estes mesmos pesos e métricas no preview do

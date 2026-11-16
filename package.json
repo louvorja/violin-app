@@ -57,10 +57,12 @@
     "test:visual": "percy exec -- playwright test e2e/visual.spec.js",
     "coverage": "vitest run --coverage",
     "prepare": "husky",
-    "type-check": "vue-tsc --noEmit"
+    "type-check": "vue-tsc --noEmit",
+    "test:e2e:opfs": "playwright test --config playwright.opfs.config.js --workers=1"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",
+    "@zip.js/zip.js": "^2.25.0",
     "electron-updater": "^6.8.9",
     "express": "^4.22.1",
     "fs-extra": "^11.2.0",

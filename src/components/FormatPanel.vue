@@ -79,6 +79,8 @@ function fieldComponent(field) {
 const FIELD_LABEL_KEYS = {
   font: "components.customization.font",
   font_color: "components.customization.color",
+  clock_color_enabled: "components.customization.clock_color_toggle",
+  clock_color: "components.customization.clock_color",
   font_size: "components.customization.size",
   text_shadow: "components.customization.text_shadow",
   text_shadow_color: "components.customization.shadow_color",
@@ -139,6 +141,8 @@ const groupedFields = computed(() => {
   };
 
   for (const [key, def] of Object.entries(fields)) {
+    // Campo dependente (ex.: cor do relógio) só existe com o switch ligado.
+    if (def.showWhen && !fmt[def.showWhen]) continue;
     const f = { key, ...def };
     if (def.type === "h-align" || def.type === "v-align") {
       f.options = ALIGN_OPTIONS[def.type];
@@ -164,6 +168,8 @@ const groupedFields = computed(() => {
     else if (
       key === "font" ||
       key === "font_color" ||
+      key === "clock_color_enabled" ||
+      key === "clock_color" ||
       key === "font_size" ||
       key === "text_shadow" ||
       key === "text_shadow_color" ||

@@ -105,8 +105,9 @@ function _create(): AudioPlayback {
   let _clockStalled = false;
   const _mediaStates = new WeakMap<
     HTMLMediaElement,
-    { key: string; started: boolean; phase: string }
+    { key: string; started: boolean; phase: string; startedAt: number }
   >();
+  const _sourceStartedAt = new WeakMap<HTMLMediaElement, number>();
   const LISTENING_REPORT_INTERVAL_MS = 30_000;
   // A UI e o transporte de projeção já publicam progresso a no máximo 10 Hz.
   // Amostrar o relógio do elemento a 60 Hz fazia Vue recalcular refs/watchers
@@ -224,7 +225,7 @@ function _create(): AudioPlayback {
     const key = `${context?.playback_id}:${context?.media_stage_epoch ?? 0}`;
     let state = _mediaStates.get(el);
     if (!state || state.key !== key) {
-      state = { key, started: false, phase: "loading" };
+      state = { key, started: false, phase: "loading", startedAt: now };
       _mediaStates.set(el, state);
     }
     if (eventName === "waiting" || eventName === "stalled") {
@@ -295,7 +296,14 @@ function _create(): AudioPlayback {
       eventName === "canplay" ||
       eventName === "canplaythrough"
     ) {
-      Telemetry.track("music_media_ready", _telemetryProps(el, { readiness: eventName }));
+      const readyStartedAt = _sourceStartedAt.get(el) ?? state.startedAt;
+      Telemetry.track(
+        "music_media_ready",
+        _telemetryProps(el, {
+          readiness: eventName,
+          elapsed_ms: Math.max(0, now - readyStartedAt),
+        })
+      );
       return;
     }
     if (eventName === "error") {
@@ -473,6 +481,7 @@ function _create(): AudioPlayback {
 
   function _unlisten(el: HTMLMediaElement): void {
     _mediaStates.delete(el);
+    _sourceStartedAt.delete(el);
     if (!_listening.has(el)) return;
     el.removeEventListener("timeupdate", _syncTime);
     el.removeEventListener("progress", _syncTime);
@@ -557,6 +566,7 @@ function _create(): AudioPlayback {
       el.volume = volume.value / 100;
       el.dataset.lazy = lazy ? "1" : "";
       if (ownsSource && src.startsWith("blob:")) _ownedSources.set(el, src);
+      _sourceStartedAt.set(el, Date.now());
       el.src = src;
       for (const eventName of [
         "loadstart",
@@ -798,6 +808,7 @@ function _create(): AudioPlayback {
     _releaseOwnedSource(el);
     if (ownsSource && src.startsWith("blob:")) _ownedSources.set(el, src);
     isLazy.value = lazy;
+    _sourceStartedAt.set(el, Date.now());
     el.src = src;
     el.load();
   }
@@ -914,7 +925,8 @@ function _create(): AudioPlayback {
   }
 
   function advanceTime(delta: number): void {
-    seekTo(currentTime.value + delta);
+    if (!Number.isFinite(delta)) return;
+    seekTo(Math.max(0, currentTime.value + delta));
   }
 
   // Fade rápido para UX: ~200ms total. Antes era ~1200ms (0.05 a cada 60ms),

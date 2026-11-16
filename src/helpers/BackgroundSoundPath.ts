@@ -15,13 +15,13 @@
  * mais". Com URL nova a cada toque o próprio player segura o teto — só
  * existe uma URL viva por vez (a que está em `_audio.src`).
  */
-import Platform from "@/helpers/Platform";
 import Path from "@/helpers/Path";
+import { blobOf } from "@/helpers/Bytes";
 
 /** Registro do `BACKGROUND_SOUND_LIBRARY` (só os campos que interessam aqui). */
 export interface BackgroundSoundRecord {
   path?: string | null;
-  data?: ArrayBuffer | Uint8Array | null;
+  data?: Blob | ArrayBuffer | Uint8Array | null;
   mime?: string | null;
 }
 
@@ -35,13 +35,12 @@ export function resolveBackgroundSoundPath(file: BackgroundSoundRecord): string 
   const raw = typeof file.path === "string" ? file.path : "";
 
   if (file.data && file.mime && (!raw || raw.startsWith("blob:") || !PLAIN_PATH_RE.test(raw))) {
-    // Nova URL a cada toque — nunca reutilizar (ver KDoc). O cast acomoda o
-    // `Uint8Array<ArrayBufferLike>` do IDB no `BlobPart` genérico do lib.dom.
-    return URL.createObjectURL(new Blob([file.data as BlobPart], { type: file.mime }));
+    // Nova URL a cada toque — nunca reutilizar (ver KDoc).
+    const blob = blobOf(file.data, file.mime);
+    return blob ? URL.createObjectURL(blob) : "";
   }
 
   if (!raw) return "";
   if (SCHEME_RE.test(raw)) return raw;
-  if (Platform.isDesktop) return Path.local(raw);
-  return raw;
+  return Path.media(raw);
 }

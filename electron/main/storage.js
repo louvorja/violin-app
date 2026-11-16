@@ -81,6 +81,14 @@ async function stats() {
   const jsonDir = paths.jsonCacheDir();
   const managed = await listManagedMedia(filesDir);
   const filesStat = { bytes: managed.reduce((sum, file) => sum + file.size, 0), files: managed.length };
+  // Bibliotecas do app: pastas próprias, fora do catálogo gerenciado.
+  const libraryStat = { bytes: 0, files: 0 };
+  for (const name of ["media-library", "background-projection", "background-sound", "liturgy-files"]) {
+    for (const file of await _listAllFiles(path.join(filesDir, name))) {
+      libraryStat.bytes += file.size;
+      libraryStat.files += 1;
+    }
+  }
   const videoStat = await _videoSize(paths.videosDir());
   const canvaStat = { bytes: 0, files: 0 };
   for (const arquivo of await _listAllFiles(paths.canvaDir())) {
@@ -125,13 +133,28 @@ async function stats() {
     filesDir,
     jsonDir,
     files: { bytes: filesStat.bytes, count: filesStat.files },
+    library: { bytes: libraryStat.bytes, count: libraryStat.files },
     canva: { bytes: canvaStat.bytes, count: canvaStat.files },
     json: { bytes: jsonBytes, count: jsonCount },
     music: { bytes: musicBytes, count: musicCount },
     bible: { bytes: bibleBytes, count: bibleCount },
     total: {
-      bytes: filesStat.bytes + videoStat.bytes + canvaStat.bytes + jsonBytes + musicBytes + bibleBytes,
-      count: filesStat.files + videoStat.files + canvaStat.files + jsonCount + musicCount + bibleCount,
+      bytes:
+        filesStat.bytes +
+        libraryStat.bytes +
+        videoStat.bytes +
+        canvaStat.bytes +
+        jsonBytes +
+        musicBytes +
+        bibleBytes,
+      count:
+        filesStat.files +
+        libraryStat.files +
+        videoStat.files +
+        canvaStat.files +
+        jsonCount +
+        musicCount +
+        bibleCount,
     },
   };
 }

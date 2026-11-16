@@ -100,48 +100,31 @@
 
             <!-- Chips de categorias (filtro) -->
             <div v-if="categories.length || uncategorizedCount > 0" class="media-chips">
-              <span class="media-chips-title">{{ tm("categories") }}</span>
-              <CategoryChip
-                v-for="cat in categories"
-                :key="cat.id"
-                :category-id="cat.id"
-                :name="cat.name"
-                :icon="cat.icon"
-                :icon-type="cat.iconType"
-                :color="cat.color"
-                :count="files.filter((f) => f.categoryId === cat.id).length"
-                :active="selectedCategoryIds.has(cat.id)"
-                :drop-target="dropTargetId === cat.id"
+              <CategoryChipsBar
+                :title="tm('categories')"
+                :categories="categories"
+                :selected-ids="selectedCategoryIds"
+                :uncategorized-label="tm('uncategorized')"
+                :uncategorized-icon="ICONS.UI.FILE_MULTIPLE"
+                uncategorized-color="var(--lj-text-subtle)"
+                :uncategorized-count="uncategorizedCount"
+                :count-for="categoryCount"
+                :drop-target-id="dropTargetId"
                 :add-item-label="t('ribbon.btn.add_item')"
                 :edit-label="t('shell.category.edit_category')"
-                show-add
-                :add-label="tm('add_files')"
-                @select="onCategoryChipClick(cat.id)"
-                @add="onCategoryAddClick(cat.id)"
-                @edit="editCategoryFromChip(cat.id)"
-                @dragover="onCategoryDragOver($event, cat.id)"
-                @dragleave="onCategoryDragLeave($event, cat.id)"
-                @drop="onCategoryDrop($event, cat.id)"
-              />
-              <CategoryChip
-                v-if="categories.length > 0 || uncategorizedCount > 0"
-                category-id=""
-                :name="tm('uncategorized')"
-                :icon="ICONS.UI.FILE_MULTIPLE"
-                icon-type="icon"
-                color="var(--lj-text-subtle)"
-                :count="uncategorizedCount"
-                :active="selectedCategoryIds.has(UNCATEGORIZED_ID)"
-                :drop-target="dropTargetId === UNCATEGORIZED_ID"
-                :editable="false"
-                :add-item-label="t('ribbon.btn.add_item')"
-                show-add
-                :add-label="tm('add_files')"
-                @select="onCategoryChipClick(UNCATEGORIZED_ID)"
-                @add="onCategoryAddClick(UNCATEGORIZED_ID)"
-                @dragover="onCategoryDragOver($event, UNCATEGORIZED_ID)"
-                @dragleave="onCategoryDragLeave($event, UNCATEGORIZED_ID)"
-                @drop="onCategoryDrop($event, UNCATEGORIZED_ID)"
+                :sort-mode="sortMode"
+                :sort-options="sortOptions"
+                :sort-label="t('components.category_bar.sort')"
+                :show-all-label="t('components.category_bar.show_all')"
+                :hide-all-label="t('components.category_bar.hide_all')"
+                @update:selected-ids="selectedCategoryIds = $event"
+                @update:sort-mode="sortMode = $event"
+                @select="onCategoryChipClick"
+                @add="onCategoryAddClick"
+                @edit="editCategoryFromChip"
+                @dragover="onCategoryDragOver"
+                @dragleave="onCategoryDragLeave"
+                @drop="onCategoryDrop"
               />
             </div>
             <div v-if="filteredFiles.length" class="media-grid">
@@ -149,11 +132,15 @@
                 v-for="file in filteredFiles"
                 :key="file.id"
                 class="media-grid-item"
+                :class="{ 'lj-u-order-target': orderTargetId === file.id }"
                 :style="{ '--card-category-color': categoryColor(file.categoryId) }"
                 draggable="true"
                 @click="onCardClick(file)"
                 @dragstart="onCardDragStart($event, file)"
                 @dragend="onCardDragEnd"
+                @dragover="onCardOrderDragOver($event, file.id)"
+                @dragleave="onCardOrderDragLeave($event, file.id)"
+                @drop="onCardOrderDrop($event, file.id)"
                 @touchstart.passive="onCardTouchStart($event, file)"
                 @contextmenu.prevent
               >
@@ -467,8 +454,11 @@ import { localPathOf } from "@/helpers/FilePath";
 import $snackbar from "@/helpers/Snackbar";
 import { hasMediaCategoryDrag } from "@/helpers/MediaCategoryDrag";
 import { useCategoryDrag } from "@/composables/useCategoryDrag";
+import { useCardReorder } from "@/composables/useCardReorder";
+import { useItemSortMode } from "@/composables/useItemSortMode";
+import { sortByMode } from "@/helpers/ItemSort";
 import CategoryDragGhost from "@/components/CategoryDragGhost.vue";
-import CategoryChip from "@/components/CategoryChip.vue";
+import CategoryChipsBar from "@/components/CategoryChipsBar.vue";
 import CategoryItemIcon from "@/components/CategoryItemIcon.vue";
 import { ICONS } from "@/config/Icons";
 import $idb from "@/helpers/IndexedDB";
@@ -495,6 +485,14 @@ import {
   fileProjectionPageFor,
   newFileProjectionId,
 } from "@/helpers/FileProjectionPage";
+import {
+  storeLibraryPath,
+  storeLibraryStream,
+  removeLibraryFile,
+  isManagedLibraryPath,
+} from "@/helpers/LibraryFiles";
+import { blobOf, byteSize } from "@/helpers/Bytes";
+import { mimeForName } from "@/helpers/Mime";
 
 const { width: viewportWidth } = useViewport();
 const mobileLayout = computed(() => !Platform.isDesktop && viewportWidth.value <= 1000);
@@ -511,8 +509,10 @@ interface MediaFile {
   type: "image" | "video" | "pdf" | "audio";
   thumb?: string;
   addedAt: number;
-  data?: ArrayBuffer;
+  data?: Blob | ArrayBuffer;
   mime?: string;
+  size?: number;
+  sha256?: string;
   categoryId?: string;
   /** PDF gerado de um PowerPoint: o .pptx de origem e a situação das fontes. */
   pptx?: {
@@ -523,6 +523,8 @@ interface MediaFile {
     /** Este PC pode apresentar com o próprio PowerPoint. */
     nativeAvailable?: boolean;
   };
+  /** Ordem manual usada pelo seletor "Personalizada". */
+  order?: number;
 }
 
 interface PlaylistItem {
@@ -563,7 +565,7 @@ async function loadLibrary(): Promise<MediaFile[]> {
 
 async function saveFile(file: MediaFile): Promise<void> {
   const plain = { ...file };
-  if (plain.data && plain.data.byteLength === 0) {
+  if (plain.data && byteSize(plain.data) === 0) {
     delete plain.data;
   }
   await $idb.put(STORE_LIBRARY, plain);
@@ -621,6 +623,12 @@ const showManageDialog = ref(false);
 const categoryManagerRef = ref<{
   openEditCategory: (_category: CategoryFileData) => void;
 } | null>(null);
+const sortMode = useItemSortMode(KEYS.MODULES.MEDIA_LIBRARY.SORT_MODE);
+const sortOptions = computed(() => [
+  { value: "custom" as const, label: t("components.category_bar.custom") },
+  { value: "alpha_asc" as const, label: t("components.category_bar.alpha_asc") },
+  { value: "alpha_desc" as const, label: t("components.category_bar.alpha_desc") },
+]);
 const showCategorySelect = ref(false);
 const saving = ref(false);
 let pendingCategoryId: string | null = null;
@@ -630,6 +638,10 @@ async function loadCategories(): Promise<void> {
   categories.value = (await $idb.getAll<CategoryFileData>(STORE_CATEGORY)).sort((a, b) =>
     a.name.localeCompare(b.name)
   );
+}
+
+function categoryCount(categoryId: string): number {
+  return files.value.filter((file) => (file.categoryId || "") === categoryId).length;
 }
 
 function categoryName(categoryId?: string): string {
@@ -685,6 +697,14 @@ const {
   assign: moveFileToCategory,
 });
 
+const { orderTargetId, onCardOrderDragOver, onCardOrderDragLeave, onCardOrderDrop } =
+  useCardReorder<MediaFile>({
+    enabled: () => sortMode.value === "custom",
+    draggingId,
+    items: files,
+    save: saveFile,
+  });
+
 function onCardClick(file: MediaFile): void {
   if (shouldSuppressClick(file.id)) return;
   void tocarDaBiblioteca(file);
@@ -703,7 +723,8 @@ function onCategoryAddClick(categoryId: string): void {
 function editCategoryFromChip(categoryId: string): void {
   const category = categories.value.find((item) => item.id === categoryId);
   if (!category) return;
-  showManageDialog.value = true;
+  // Abre só o formulário de edição; abrir também o gerenciador deixava dois
+  // diálogos sobrepostos e o primeiro clique caía no backdrop do de baixo.
   categoryManagerRef.value?.openEditCategory(category);
 }
 
@@ -824,17 +845,13 @@ function revokeObjectUrl(id: string): void {
   }
 }
 
-function createObjectUrl(id: string, data: ArrayBuffer, mime: string): string {
+function createObjectUrl(id: string, data: Blob | ArrayBuffer, mime: string): string {
   revokeObjectUrl(id);
-  const blob = new Blob([data], { type: mime });
+  const blob = blobOf(data, mime);
+  if (!blob) return "";
   const url = URL.createObjectURL(blob);
   createdObjectUrls.set(id, url);
   return url;
-}
-
-async function readFileData(file: File): Promise<{ data: ArrayBuffer; mime: string }> {
-  const data = await file.arrayBuffer();
-  return { data, mime: file.type || "application/octet-stream" };
 }
 
 /* ------------------------------------------------------------------ */
@@ -1042,6 +1059,90 @@ async function onDrop(e: DragEvent): Promise<void> {
   showCategorySelect.value = true;
 }
 
+function newMediaId(): string {
+  return "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+}
+
+/**
+ * Grava o arquivo no acervo (desktop) ou no IndexedDB (web) e cria o registro.
+ *
+ * Desktop: copia para `<acervo>/media-library/<id>/` e guarda o caminho
+ * relativo; nenhum byte vai para o banco. Web: grava no OPFS quando disponível
+ * (5 GB) ou no IndexedDB como `Blob` (500 MB).
+ */
+async function saveImportedFile(input: {
+  name: string;
+  type: MediaFile["type"];
+  categoryId: string;
+  sourcePath?: string;
+  blob?: Blob;
+}): Promise<MediaFile> {
+  const id = newMediaId();
+  let name = input.name;
+  let sourcePath = input.sourcePath;
+  let blob = input.blob;
+
+  // HEIC no desktop: o Chromium não decodifica, então converte antes de copiar.
+  if (sourcePath && isHeic(name)) {
+    const response = await fetchWithTimeout($path.media(sourcePath), {
+      timeout: NET_TIMEOUT.MEDIA,
+      source: "file",
+    });
+    const raw = await response.blob();
+    const converted = await ensureRenderableImage(name, new File([raw], name, { type: raw.type }));
+    name = converted.name;
+    blob = converted.blob;
+    sourcePath = undefined;
+  }
+
+  const stored =
+    sourcePath && !isHeic(name)
+      ? await storeLibraryPath("media", id, sourcePath)
+      : await (async () => {
+          if (!blob) throw new Error("missing_file");
+          return storeLibraryStream({
+            kind: "media",
+            recordId: id,
+            name,
+            size: blob.size,
+            open: async () => blob.stream() as ReadableStream<Uint8Array>,
+          });
+        })();
+
+  const path = stored.mode === "path" ? stored.path : URL.createObjectURL(stored.data);
+  const file: MediaFile = {
+    id,
+    name,
+    path,
+    type: input.type,
+    addedAt: Date.now(),
+    size: stored.size,
+    mime: blob?.type || mimeForName(name),
+    ...(stored.mode === "blob" ? { data: stored.data } : {}),
+    ...(stored.mode === "path" && stored.sha256 ? { sha256: stored.sha256 } : {}),
+    categoryId: input.categoryId,
+  };
+  if (input.type === "image") {
+    file.thumb = stored.mode === "path" ? $path.media(path) : path;
+  }
+  if (stored.mode === "blob") createdObjectUrls.set(id, path);
+  try {
+    await saveFile(file);
+  } catch (error) {
+    if (stored.mode === "path") await removeLibraryFile(stored.path);
+    else revokeObjectUrl(id);
+    throw error;
+  }
+  files.value.unshift(file);
+  // Sem filtro ativo, o arquivo recém-importado precisa aparecer; escolher a
+  // categoria dele evita que a grade fique vazia com a seleção vazia.
+  if (selectedCategoryIds.value.size === 0) {
+    selectedCategoryIds.value = new Set([input.categoryId || UNCATEGORIZED_ID]);
+  }
+  if (input.type === "video") generateAndStoreThumb(file);
+  return file;
+}
+
 /** Importa um arquivo arrastado (com caminho no desktop ou blob na web). */
 async function importDroppedEntry(f: File, categoryId: string): Promise<void> {
   const filePath = localPathOf(f);
@@ -1051,52 +1152,22 @@ async function importDroppedEntry(f: File, categoryId: string): Promise<void> {
   }
   const tipoDoDrop = tipoDoArquivo(f.name, (f as File).type);
   if (!tipoDoDrop) return;
-  /* Com caminho no disco, o registro guarda só o caminho; os bytes ficam onde
-   * já estavam. HEIC é a exceção: não decodifica no Chromium e precisa ser
-   * convertido antes de virar arquivo autocontido. */
   if (filePath && !isHeic(f.name, (f as File).type)) {
-    const file: MediaFile = {
-      id: "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+    await saveImportedFile({
       name: f.name,
-      path: filePath,
       type: tipoDoDrop,
-      addedAt: Date.now(),
       categoryId,
-    };
-    if (tipoDoDrop === "image") file.thumb = buildThumbPath(filePath);
-    await saveFile(file);
-    files.value.unshift(file);
-    if (tipoDoDrop === "video") generateAndStoreThumb(file);
+      sourcePath: filePath,
+    });
     return;
   }
-  {
-    // Sem caminho (web) ou HEIC/HEIF: armazena autocontido. Só IMAGEM passa
-    // pela conversão; áudio e vídeo vão como vieram, senão o conversor tentaria
-    // decodificar um mp3 como imagem.
-    const { blob, name } =
-      tipoDoDrop === "image"
-        ? await ensureRenderableImage(f.name, f)
-        : { blob: f as Blob, name: f.name };
-    const fileType = tipoDoDrop;
-    const fileId = "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
-    const path = URL.createObjectURL(blob);
-    const { data, mime } = await readFileData(new File([blob], name, { type: blob.type }));
-    const file: MediaFile = {
-      id: fileId,
-      name,
-      path,
-      type: fileType,
-      addedAt: Date.now(),
-      data,
-      mime,
-      categoryId,
-    };
-    if (fileType === "image") file.thumb = path;
-    createdObjectUrls.set(fileId, path);
-    await saveFile(file);
-    files.value.unshift(file);
-    if (fileType === "video") generateAndStoreThumb(file);
-  }
+  // Sem caminho (web) ou HEIC/HEIF: só IMAGEM passa pela conversão; áudio e
+  // vídeo vão como vieram, senão o conversor tentaria decodificar um mp3.
+  const { blob, name } =
+    tipoDoDrop === "image"
+      ? await ensureRenderableImage(f.name, f)
+      : { blob: f as Blob, name: f.name };
+  await saveImportedFile({ name, type: tipoDoDrop, categoryId, blob });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1132,6 +1203,7 @@ async function removeFile(file: MediaFile): Promise<void> {
     savePlaylist();
   }
   await deleteFile(file.id);
+  if (isManagedLibraryPath(file.path)) await removeLibraryFile(file.path);
   files.value = files.value.filter((f) => f.id !== file.id);
 }
 
@@ -1142,10 +1214,9 @@ async function removeFile(file: MediaFile): Promise<void> {
 const filteredFiles = computed(() => {
   /* A aba Canva não tem arquivo local — quem monta a grade é o CanvaTab. */
   if (libraryFilter.value === "canva") return [];
-  let list = files.value;
-  if (selectedCategoryIds.value.size > 0) {
-    list = list.filter((f) => selectedCategoryIds.value.has(f.categoryId || UNCATEGORIZED_ID));
-  }
+  let list = files.value.filter((f) =>
+    selectedCategoryIds.value.has(f.categoryId || UNCATEGORIZED_ID)
+  );
   if (libraryFilter.value !== "all") {
     list = list.filter((f) => f.type === libraryFilter.value);
   }
@@ -1153,7 +1224,7 @@ const filteredFiles = computed(() => {
     const q = searchQuery.value.toLowerCase();
     list = list.filter((f) => f.name.toLowerCase().includes(q));
   }
-  return list;
+  return sortByMode(list, sortMode.value, (file) => file.name);
 });
 
 const currentItem = computed(() =>
@@ -1763,7 +1834,7 @@ async function regerarNoPalco(): Promise<void> {
 
 function buildThumbPath(filePath: string): string | undefined {
   if (Platform.isDesktop) {
-    return $path.local(filePath);
+    return $path.media(filePath);
   }
   return undefined;
 }
@@ -1825,18 +1896,11 @@ async function doAddFiles(categoryId: string): Promise<void> {
         noteUnsupported();
         continue;
       }
-      const file: MediaFile = {
-        id: "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
-        name,
-        path: rawPath,
-        type: fileType,
-        addedAt: Date.now(),
-        categoryId,
-      };
-      if (fileType === "image") file.thumb = buildThumbPath(rawPath);
-      await saveFile(file);
-      files.value.unshift(file);
-      if (fileType === "video") generateAndStoreThumb(file);
+      try {
+        await saveImportedFile({ name, type: fileType, categoryId, sourcePath: rawPath });
+      } catch (error) {
+        if (!reportLocalFileFailure(error, [name])) console.error("[media] import falhou:", error);
+      }
     }
   } else {
     fileInput.value?.click();
@@ -1881,44 +1945,24 @@ async function onFilesSelected(e: Event): Promise<void> {
         continue;
       }
       if (filePath && !isHeic(f.name, (f as File).type)) {
-        const file: MediaFile = {
-          id: "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+        await saveImportedFile({
           name: f.name,
-          path: filePath,
           type: fileType,
-          addedAt: Date.now(),
           categoryId: pendingCategoryId ?? UNCATEGORIZED_ID,
-        };
-        if (fileType === "image") file.thumb = buildThumbPath(filePath);
-        await saveFile(file);
-        files.value.unshift(file);
-        if (fileType === "video") generateAndStoreThumb(file);
+          sourcePath: filePath,
+        });
       } else {
-        // Sem caminho (web/drag-drop) ou HEIC/HEIF: armazena autocontido. Só
-        // IMAGEM é convertida (o Chromium não decodifica HEIC); áudio e vídeo
-        // vão como vieram.
+        // Sem caminho (web/drag-drop) ou HEIC/HEIF: só IMAGEM é convertida.
         const { blob, name } =
           fileType === "image"
             ? await ensureRenderableImage(f.name, f)
             : { blob: f as Blob, name: f.name };
-        const fileId = "file_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
-        const path = URL.createObjectURL(blob);
-        const { data, mime } = await readFileData(new File([blob], name, { type: blob.type }));
-        const file: MediaFile = {
-          id: fileId,
+        await saveImportedFile({
           name,
-          path,
           type: fileType,
-          addedAt: Date.now(),
-          data,
-          mime,
           categoryId: pendingCategoryId ?? UNCATEGORIZED_ID,
-        };
-        if (fileType === "image") file.thumb = path;
-        createdObjectUrls.set(fileId, path);
-        await saveFile(file);
-        files.value.unshift(file);
-        if (fileType === "video") generateAndStoreThumb(file);
+          blob,
+        });
       }
     } catch (error) {
       if (!reportLocalFileFailure(error, [f.name])) throw error;
@@ -2004,10 +2048,7 @@ function clearPlaylist(): void {
 /* ------------------------------------------------------------------ */
 
 function resolvePath(raw: string): string {
-  if (raw.startsWith("http") || raw.startsWith("blob:") || raw.startsWith("louvorja://"))
-    return raw;
-  if (Platform.isDesktop) return $path.local(raw);
-  return raw;
+  return $path.media(raw);
 }
 
 // Cache de objectURLs de HEIC já convertidos para projeção (por item.id).
@@ -2505,7 +2546,11 @@ onMounted(async () => {
      * Para imagem a troca de um data URL antigo pelo caminho `louvorja://`
      * continua: é o que impede de embutir a imagem inteira no banco.
      */
-    if (Platform.isDesktop && f.type === "image" && f.path.startsWith("/")) {
+    if (
+      Platform.isDesktop &&
+      f.type === "image" &&
+      (f.path.startsWith("/") || isManagedLibraryPath(f.path))
+    ) {
       if (!f.thumb || !f.thumb.startsWith("louvorja://")) {
         f.thumb = buildThumbPath(f.path);
       }

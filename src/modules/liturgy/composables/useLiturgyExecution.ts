@@ -34,6 +34,7 @@ import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@constants/FileTypes";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
 import { localFileStatus, type LocalFileStatus } from "@/helpers/LocalFileStatus";
+import { isManagedLibraryPath, libraryFileInfo } from "@/helpers/LibraryFiles";
 import { mediaSourceDetails } from "@/helpers/MediaDiagnostics";
 import Telemetry from "@/helpers/Telemetry";
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
@@ -45,6 +46,37 @@ import {
 import { canLinkOverlay, youtubeVideoId } from "../overlayLink";
 import { ativarOverlayVinculado, prepararExecucao } from "../linkedOverlay";
 import { isYoutube } from "../item";
+
+interface MediaLibraryRecord {
+  path?: string;
+  type?: string;
+  data?: ArrayBuffer | ArrayBufferView | Blob;
+  mime?: string;
+}
+
+/**
+ * URL viva para os bytes de um registro da Biblioteca de Mídia, uma por
+ * registro durante a sessão (sem criar outra a cada clique no item).
+ */
+const liveMediaUrls = new Map<string, string>();
+function liveUrlFor(id: string, rec: MediaLibraryRecord): string {
+  const cached = liveMediaUrls.get(id);
+  if (cached) return cached;
+  const data = rec.data;
+  if (!data) return "";
+  const size =
+    typeof Blob !== "undefined" && data instanceof Blob
+      ? data.size
+      : (data as ArrayBuffer | ArrayBufferView).byteLength;
+  if (!size) return "";
+  const blob =
+    typeof Blob !== "undefined" && data instanceof Blob
+      ? data
+      : new Blob([data as BlobPart], { type: rec.mime || "" });
+  const url = URL.createObjectURL(blob);
+  liveMediaUrls.set(id, url);
+  return url;
+}
 
 // A shell e o módulo podem pedir arquivos ao mesmo tempo. Uma leitura/abertura
 // antiga que termina depois não assume a URL da solicitação mais recente.
@@ -275,6 +307,9 @@ export function useLiturgyExecution() {
    */
   async function openWithSystemPlayer(dir: string, kind: string): Promise<boolean> {
     if (!Platform.isDesktop || !dir || /^(blob|data):/i.test(dir)) return false;
+    // Caminho relativo do acervo: o SO não sabe resolvê-lo; o player interno sabe.
+    if (!/^([A-Za-z]:[\\/]|\\\\|\/)/.test(dir) && !/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir))
+      return false;
     const api = Platform.api as LouvorjaApi | null;
     if (!api?.shell?.openPath) return false;
     try {
@@ -353,12 +388,14 @@ export function useLiturgyExecution() {
       let target = item.dir;
       let typeHint = item.subtipo || undefined;
       if (item.ref_id) {
-        const rec = await $idb.get<{ path?: string; type?: string }>(
-          DB_TABLE.MEDIA_LIBRARY,
-          item.ref_id
-        );
+        const rec = await $idb.get<MediaLibraryRecord>(DB_TABLE.MEDIA_LIBRARY, item.ref_id);
         if (rec?.path) target = rec.path;
         if (rec?.type) typeHint = rec.type;
+        // Registro com os bytes guardados (web, HEIC, importado de um pacote): o
+        // `blob:` salvo morreu com a sessão em que foi criado. O telão relê pela
+        // `libRef`, mas o player daqui (áudio e o som do vídeo) usa esta URL — sem
+        // recriar, dava "Não foi possível tocar este áudio".
+        if (target.startsWith("blob:") && rec) target = liveUrlFor(item.ref_id, rec) || target;
       }
       if (!target) {
         reportMissingResource("execute_media_library", "media_library_item");
@@ -471,7 +508,7 @@ export function useLiturgyExecution() {
   /** Converte o registro em uma URL tocável na janela atual. */
   function resolvePlayableSoundUrl(rec: {
     path: string;
-    data?: ArrayBuffer;
+    data?: Blob | ArrayBuffer;
     mime?: string;
   }): string {
     const p = rec.path || "";
@@ -483,9 +520,8 @@ export function useLiturgyExecution() {
     }
     // URLs completas passam direto.
     if (/^(https?|blob|data|louvorja):/i.test(p)) return p;
-    // Caminho absoluto no desktop → protocolo local.
-    if (Platform.isDesktop) return $path.local(p);
-    return p;
+    // Caminho do acervo (relativo) ou absoluto → protocolo do Path.
+    return $path.media(p);
   }
 
   /**
@@ -561,8 +597,7 @@ export function useLiturgyExecution() {
     // blob:/data: usam UM único barra após o esquema — passam direto.
     if (/^(blob|data):/i.test(dir)) return dir;
     if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir)) return dir;
-    if (Platform.isDesktop) return $path.local(dir);
-    return $path.file(dir);
+    return $path.media(dir);
   }
 
   /**
@@ -572,8 +607,13 @@ export function useLiturgyExecution() {
    * URLs remotas/blob seguem o fluxo normal (a falha ali é de rede/formato).
    */
   async function _localFileStatus(dir: string): Promise<LocalFileStatus> {
-    if (!dir || !Platform.isDesktop) return "ok";
+    if (!dir) return "ok";
     if (/^(blob|data):/i.test(dir)) return "ok";
+    if (isManagedLibraryPath(dir)) {
+      const info = await libraryFileInfo(dir).catch(() => null);
+      return info && !info.exists ? "not_found" : "ok";
+    }
+    if (!Platform.isDesktop) return "ok";
     const hasProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(dir);
     if (hasProtocol && !/^louvorja:\/\/local\//i.test(dir)) return "ok";
     const isLocalPath =

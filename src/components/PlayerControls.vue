@@ -9,6 +9,8 @@
       :variant="button.highlight ? 'primary' : 'ghost'"
       size="sm"
       icon-only
+      :title="button.label"
+      :aria-label="button.label"
       @click="button.click"
     />
   </div>

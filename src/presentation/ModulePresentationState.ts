@@ -5,6 +5,8 @@ export interface ModuleValue {
   reference?: string | string[];
   active?: boolean;
   color?: string;
+  /** Cor da linha do relógio (timer/timer_worship), separada do texto. */
+  clockColor?: string;
   extra?: string;
   mode?: "number" | "names";
   wheel?: ModuleWheelState;
@@ -46,7 +48,7 @@ export function readModuleValue(value: unknown): ModuleValue | null {
   if (!record(value) || typeof value.module !== "string" || !/^[a-z0-9_]{1,64}$/.test(value.module))
     return null;
   const result: ModuleValue = { module: value.module };
-  for (const key of ["text", "color", "extra"] as const) {
+  for (const key of ["text", "color", "clockColor", "extra"] as const) {
     const field = value[key];
     if (field === undefined) continue;
     if (typeof field !== "string" || field.length > (key === "text" ? 20_000 : 1_000)) return null;

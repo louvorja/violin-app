@@ -19,7 +19,7 @@ export interface BackgroundProjectionRecord {
   name?: string;
   path?: string | null;
   type?: string;
-  data?: ArrayBuffer | Uint8Array | null;
+  data?: Blob | ArrayBuffer | Uint8Array | null;
   mime?: string | null;
 }
 

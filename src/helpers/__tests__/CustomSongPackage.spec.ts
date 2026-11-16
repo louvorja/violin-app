@@ -284,15 +284,81 @@ describe("abrir no editor", () => {
     const pacote = await delphiPackage(["", "verso"], [0, 4], mp3(7));
     const { song, loose } = await readSongFile(new File([pacote], ".slja"), "Nova música");
     expect(loose).toBe(false);
-    expect(song.nome).toBe("Nova música");
-    expect(song.audio_token).toBe("pkg://audio/Faixa.mp3");
+    expect(song?.nome).toBe("Nova música");
+    expect(song?.audio_token).toBe("pkg://audio/Faixa.mp3");
   });
 
   it("arquivo de playback abre na faixa de playback", async () => {
     const pacote = await delphiPackage(["Hino", "verso"], [0, 4], mp3(8));
     const { song } = await readSongFile(new File([pacote], "Hino -PB.slja"));
-    expect(song.audio_token).toBe("");
-    expect(song.playback_token).toBe("pkg://audio/Faixa.mp3");
-    expect(song.playback_name).toBe("Faixa.mp3");
+    expect(song?.audio_token).toBe("");
+    expect(song?.playback_token).toBe("pkg://audio/Faixa.mp3");
+    expect(song?.playback_name).toBe("Faixa.mp3");
+  });
+});
+
+describe("classificação de faixa e pacote unificado (#62)", () => {
+  it("export clássico grava faixa explícita para reimportar sem perguntar", async () => {
+    const original = await songWithBothTracks();
+    const sungOnly = await buildSongPackages({
+      ...original,
+      playback_token: "",
+      playback_name: "",
+    });
+    const pbOnly = await buildSongPackages({
+      ...original,
+      audio_token: "",
+      audio_name: "",
+    });
+
+    const classifyLegacyTracks = vi.fn();
+    const res = await importSongFiles(
+      asFiles([...sungOnly, ...pbOnly].map((f, i) => ({ ...f, fileName: `SemSufixo-${i}.slja` }))),
+      { classifyLegacyTracks }
+    );
+    expect(classifyLegacyTracks).not.toHaveBeenCalled();
+    expect(res.songs).toHaveLength(2);
+    expect(hasSung(res.songs[0]) && !hasPlayback(res.songs[0])).toBe(true);
+    expect(!hasSung(res.songs[1]) && hasPlayback(res.songs[1])).toBe(true);
+  });
+
+  it("arquivo legado sem etiqueta de faixa consulta o usuário e respeita Playback/Cancelar", async () => {
+    const pacote = await delphiPackage(["Hino Legado", "verso"], [0, 6], mp3(9));
+    const file = new File([pacote], "Hino Legado.slja");
+
+    const cancelRes = await importSongFiles([file], {
+      classifyLegacyTracks: async () => null,
+    });
+    expect(cancelRes.cancelled).toBe(true);
+    expect(cancelRes.songs).toHaveLength(0);
+
+    const pbRes = await importSongFiles([file], {
+      classifyLegacyTracks: async (items) => {
+        expect(items).toHaveLength(1);
+        return { [items[0].key]: "playback" };
+      },
+    });
+    expect(pbRes.songs).toHaveLength(1);
+    expect(hasSung(pbRes.songs[0])).toBe(false);
+    expect(hasPlayback(pbRes.songs[0])).toBe(true);
+    expect(slideTimes(pbRes.songs[0].slides, true)).toEqual([0, 6]);
+  });
+
+  it("export unificado empacota as duas faixas num único .slja e restaura em 1 música", async () => {
+    const original = await songWithBothTracks();
+    const packages = await buildSongPackages(original, original.nome, { mode: "unified" });
+    expect(packages).toHaveLength(1);
+    expect(packages[0].fileName).toBe("Hino Novo.slja");
+
+    const classifyLegacyTracks = vi.fn();
+    const imported = await importSongFiles(asFiles(packages), { classifyLegacyTracks });
+    expect(classifyLegacyTracks).not.toHaveBeenCalled();
+    expect(imported.songs).toHaveLength(1);
+    const [song] = imported.songs;
+    expect(hasSung(song) && hasPlayback(song)).toBe(true);
+    expect(song.audio_name).toBe("hino.mp3");
+    expect(song.playback_name).toBe("hino-pb.mp3");
+    expect(slideTimes(song.slides)).toEqual([0, 10, 20]);
+    expect(slideTimes(song.slides, true)).toEqual([0, 14, 20]);
   });
 });

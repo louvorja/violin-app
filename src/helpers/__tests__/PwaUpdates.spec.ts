@@ -582,4 +582,25 @@ describe("PwaUpdates", () => {
     await vi.advanceTimersByTimeAsync(15_000);
     expect(h.sw.register).toHaveBeenCalledWith("/sw.js?build=B", expect.anything());
   });
+
+  it("não ignora o backoff ativo ao alternar foco repetidamente em visibilitychange (#11)", async () => {
+    const deployed = vi
+      .fn()
+      .mockRejectedValueOnce(new DOMException("signal timed out", "TimeoutError"))
+      .mockResolvedValue("B");
+    const h = boot({ loaded: "A", deployed });
+    await h.tick();
+    expect(deployed).toHaveBeenCalledTimes(1);
+    expect(h.latest().status).toBe("error");
+
+    await vi.advanceTimersByTimeAsync(2000);
+    h.document_.dispatchEvent(new Event("visibilitychange"));
+    h.window_.dispatchEvent(new Event("pageshow"));
+    await h.tick();
+    expect(deployed).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(13_000);
+    expect(deployed).toHaveBeenCalledTimes(2);
+    expect(h.sw.register).toHaveBeenCalledWith("/sw.js?build=B", expect.anything());
+  });
 });

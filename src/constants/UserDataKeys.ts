@@ -63,6 +63,9 @@ export const KEYS = {
     },
     BACKGROUND_PROJECTION: {
       SHOW_RETURN: `${MODULES}.${ModuleEnum.BACKGROUND_PROJECTION}.show_return`,
+      SORT_MODE: `${MODULES}.${ModuleEnum.BACKGROUND_PROJECTION}.sort_mode`,
+      FADE_DURATION: `${MODULES}.${ModuleEnum.BACKGROUND_PROJECTION}.fade_duration`,
+      LOOP_FADE: `${MODULES}.${ModuleEnum.BACKGROUND_PROJECTION}.loop_fade`,
       IS_PLAYING: `${MODULES}.${ModuleEnum.BACKGROUND_PROJECTION}.is_playing`,
     },
     BIBLE: {
@@ -86,6 +89,7 @@ export const KEYS = {
     },
     BACKGROUND_SOUND: {
       IS_PLAYING: `${MODULES}.${ModuleEnum.BACKGROUND_SOUND}.is_playing`,
+      SORT_MODE: `${MODULES}.${ModuleEnum.BACKGROUND_SOUND}.sort_mode`,
       /** Som marcado como padrão (id do arquivo da biblioteca) — ponteiro único. */
       DEFAULT_ID: `${MODULES}.${ModuleEnum.BACKGROUND_SOUND}.default_id`,
     },
@@ -199,6 +203,7 @@ export const KEYS = {
     },
     MEDIA_LIBRARY: {
       IS_PLAYING: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.is_playing`,
+      SORT_MODE: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.sort_mode`,
       TRANSITION_TYPE: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.transition_type`,
       TRANSITION_DURATION: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.transition_duration`,
       /** Parâmetros da transição — folhas por efeito (via tabela) + `EASE` compartilhado. */
@@ -236,6 +241,9 @@ export const KEYS = {
     },
     ONLINE_VIDEOS: {
       IS_PROJECTING: `${MODULES}.${ModuleEnum.ONLINE_VIDEOS}.is_projecting`,
+    },
+    CUSTOM_ONLINE_VIDEOS: {
+      SORT_MODE: `${MODULES}.${ModuleEnum.CUSTOM_ONLINE_VIDEOS}.sort_mode`,
     },
     OVERLAY: {
       ENABLED: `${MODULES}.${ModuleEnum.OVERLAY}.enabled`,
@@ -450,6 +458,8 @@ export const KEYS = {
     TELEMETRY: `${OPTIONS}.telemetry`,
     TELEMETRY_ID: `${OPTIONS}.telemetry_id`,
     YOUTUBE_ACTION: `${OPTIONS}.youtube_action`,
+    /** Modo de exibição em Vídeos On-line e Meus Vídeos Online: `"grid"` (Miniaturas) ou `"list"` (Lista). */
+    ONLINE_VIDEO_VIEW_MODE: `${OPTIONS}.online_video_view_mode`,
     DEV: {
       DEVTOOLS_MAIN_WINDOW: `${OPTIONS}.dev.devtools_main_window`,
       DEVTOOLS_PROJECTIONS: `${OPTIONS}.dev.devtools_projections`,

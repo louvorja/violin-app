@@ -23,22 +23,17 @@
         </span>
         <span class="lj-category-chip__name">{{ name }}</span>
         <span class="lj-category-chip__count">{{ count }}</span>
-        <button
-          v-if="showAdd"
-          type="button"
-          class="lj-category-chip__add"
-          :title="addLabel"
-          :aria-label="addLabel"
-          @click.stop="$emit('add')"
-          @keydown.stop
-        >
-          <LjIcon :icon="ICONS.ACTIONS.ADD" :size="12" />
-        </button>
       </div>
     </ContextMenuTrigger>
 
     <ContextMenuPortal>
       <ContextMenuContent class="lj-ui-float lj-menu lj-category-chip__menu">
+        <ContextMenuItem v-if="showPlay" class="lj-menu__item" @select="$emit('play')">
+          <span class="lj-menu__mark">
+            <LjIcon :icon="ICONS.PLAYER.PLAY" :size="13" />
+          </span>
+          <span class="lj-menu__text">{{ playLabel }}</span>
+        </ContextMenuItem>
         <ContextMenuItem class="lj-menu__item" @select="$emit('add')">
           <span class="lj-menu__mark">
             <LjIcon :icon="ICONS.ACTIONS.ADD" :size="13" />
@@ -79,9 +74,9 @@ withDefaults(
     count?: number;
     active?: boolean;
     dropTarget?: boolean;
-    showAdd?: boolean;
-    addLabel?: string;
     addItemLabel?: string;
+    playLabel?: string;
+    showPlay?: boolean;
     editLabel?: string;
     editable?: boolean;
   }>(),
@@ -94,9 +89,9 @@ withDefaults(
     count: 0,
     active: false,
     dropTarget: false,
-    showAdd: false,
-    addLabel: "",
     addItemLabel: "",
+    playLabel: "",
+    showPlay: false,
     editLabel: "",
     editable: true,
   }
@@ -105,6 +100,7 @@ withDefaults(
 defineEmits<{
   select: [];
   add: [];
+  play: [];
   edit: [];
 }>();
 </script>
@@ -178,34 +174,6 @@ defineEmits<{
   background: color-mix(in srgb, var(--category-chip-color) 30%, transparent);
   font-size: var(--lj-text-xs);
   line-height: 16px;
-}
-
-.lj-category-chip__add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  opacity: 0.6;
-  transition:
-    background var(--lj-transition-fast),
-    opacity var(--lj-transition-fast);
-}
-
-.lj-category-chip__add:hover {
-  background: color-mix(in srgb, var(--category-chip-color) 20%, transparent);
-  opacity: 1;
-}
-
-.lj-category-chip__add:focus-visible {
-  outline: none;
-  box-shadow: var(--lj-ui-focus);
 }
 
 @media (pointer: coarse) {

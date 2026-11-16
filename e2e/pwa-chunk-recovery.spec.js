@@ -11,7 +11,8 @@ test("recupera importação interrompida pelo botão mesmo sem uma versão nova"
   // Executa o controlador, a guarda de atividade e o aviso reais, com SW e import() nativos.
   // Os demais serviços da aplicação só oferecem o estado necessário à guarda.
   const mocks = {
-    "@/helpers/Http": "export const NET_TIMEOUT={QUICK:5000}; export const fetchWithTimeout=fetch;",
+    "@/helpers/Http":
+      "export const NET_TIMEOUT={QUICK:5000,DEFAULT:5000}; export const fetchWithTimeout=fetch;",
     "@/helpers/ReliabilityDiagnostics":
       "export const reportReliabilityEvent=()=>{}; export const reportReliabilityFailure=()=>{};",
     "@/helpers/Platform": "export default {isDesktop:false};",

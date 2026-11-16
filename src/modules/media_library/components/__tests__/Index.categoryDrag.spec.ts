@@ -122,6 +122,7 @@ vi.mock("@/components/ui", () => {
     LjEmpty: pass,
     LjIcon: pass,
     LjInput: { template: "<input />" },
+    LjSelect: { template: "<select />" },
     LjTabs: pass,
   };
 });
@@ -247,6 +248,16 @@ describe("Biblioteca de Mídia: arrastar card para categoria", () => {
     // O clique sintetizado do toque não pode alternar o filtro do chip.
     await chip.trigger("click");
     expect(chip.classes()).toContain("lj-category-chip--active");
+  });
+
+  it("o título Categorias mostra todas e depois oculta todas", async () => {
+    expect(wrapper.findAll(".media-grid-item")).toHaveLength(1);
+
+    await wrapper.get(".category-bar__title").trigger("click");
+    expect(wrapper.findAll(".media-grid-item")).toHaveLength(0);
+
+    await wrapper.get(".category-bar__title").trigger("click");
+    expect(wrapper.findAll(".media-grid-item")).toHaveLength(1);
   });
 
   it("clique normal no chip continua alternando o filtro", async () => {

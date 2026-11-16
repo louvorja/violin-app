@@ -7,8 +7,9 @@ import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import Media from "@/composables/useMedia";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $broadcast from "@/helpers/Broadcast";
-import type { Playlist, PlaylistSong } from "@/types/Music";
+import type { OnlineVideoPlaylistItem, Playlist, PlaylistSong } from "@/types/Music";
 import { usePlaylists } from "./usePlaylists";
+import { videoIdFromUrl } from "@/helpers/OnlineVideo";
 import Telemetry from "@/helpers/Telemetry";
 
 const _isActive = ref(false);
@@ -20,6 +21,7 @@ const _shuffleOrder = ref<number[]>([]);
 const { playlists } = usePlaylists();
 
 const _advanceLock = ref(false);
+let _launchingQueueItem = false;
 const _songAvailable = shallowRef<(_song: PlaylistSong) => boolean>(() => true);
 /** Fila provisória, não salva: o "Tocar Todas" de uma lista toca por aqui. */
 const _sequence = shallowRef<Playlist | null>(null);
@@ -53,6 +55,12 @@ const playedDuration = computed(() =>
     .reduce((sum, s) => sum + _durationToSec(s.duration), 0)
 );
 const remainingDuration = computed(() => totalDuration.value - playedDuration.value);
+
+/** A fila é uma sequência de vídeos online (categoria/Tocar Todas de vídeos)? */
+const isOnlineVideoSequence = computed(() => {
+  const songs = currentPlaylist.value?.songs || [];
+  return songs.length > 0 && songs.every((song) => !!song.onlineVideo);
+});
 
 const currentSong = computed<PlaylistSong | null>(() => {
   if (!currentPlaylist.value) return null;
@@ -88,7 +96,16 @@ function _playSongAt(index: number): void {
   _advanceLock.value = true;
   $dev.write("playlist:play", { index, name: song.name });
 
-  Media.open({ id_music: song.id_music, mode: MusicActionEnum.AUDIO });
+  _launchingQueueItem = true;
+  try {
+    if (song.onlineVideo) {
+      void Media.openYouTube(song.onlineVideo.url, song.onlineVideo.title);
+    } else {
+      Media.open({ id_music: song.id_music, mode: MusicActionEnum.AUDIO });
+    }
+  } finally {
+    _launchingQueueItem = false;
+  }
   Telemetry.track("music_playlist_play", {
     playlist_id: _currentPlaylistId.value,
     index,
@@ -120,9 +137,25 @@ function _stopInternal(): void {
 }
 
 /** Outra música, arquivo ou vídeo assumiu o player: a fila acaba e não volta sozinha. */
-function _onPlaybackStarted(idMusic: unknown): void {
-  if (!_isActive.value || Number(idMusic) === currentSong.value?.id_music) return;
-  $dev.write("playlist:interrupted", { id_music: idMusic });
+function _onPlaybackStarted(idMusic: unknown, videoId?: string): void {
+  if (!_isActive.value || _launchingQueueItem) return;
+  const current = currentSong.value;
+  if (current?.onlineVideo) {
+    // Eventos sem id (arquivo baixado/embed em outra janela) não identificam
+    // outro vídeo. E um evento atrasado de OUTRO item da mesma fila também não
+    // pode encerrá-la — só um vídeo de fora da fila assume o player.
+    const queueIds = new Set(
+      (currentPlaylist.value?.songs || [])
+        .map(
+          (song) => song.onlineVideo?.videoId || videoIdFromUrl(song.onlineVideo?.url || "") || ""
+        )
+        .filter(Boolean)
+    );
+    if (!videoId || queueIds.has(videoId)) return;
+  } else if (Number(idMusic) === current?.id_music) {
+    return;
+  }
+  $dev.write("playlist:interrupted", { id_music: idMusic, video_id: videoId });
   _stopInternal();
 }
 
@@ -282,6 +315,21 @@ onUnmounted(() => {
   Media.unregisterPlaylistPlaybackHandler();
 });
 
+/**
+ * Estado e ações da fila para quem só precisa exibi-la (player do módulo de
+ * mídia). Não registra handlers de ciclo de vida como `usePlaylistPlayback`.
+ */
+export const playlistControls = {
+  isActive: _isActive,
+  currentIndex: _currentIndex,
+  currentPlaylist,
+  currentSong,
+  totalSongs,
+  isOnlineVideoSequence,
+  playNext,
+  playPrev,
+};
+
 export function usePlaylistPlayback() {
   return {
     isActive: _isActive,
@@ -295,6 +343,7 @@ export function usePlaylistPlayback() {
     playedDuration,
     remainingDuration,
     currentSong,
+    isOnlineVideoSequence,
     playedSongs: _playedSongs,
 
     playPlaylist,
@@ -302,6 +351,21 @@ export function usePlaylistPlayback() {
     /** Toca a lista do primeiro ao último item, sem salvá-la como playlist. */
     playSequence(name: string, songs: PlaylistSong[]): void {
       const now = new Date().toISOString();
+      const sequence = { id: `sequence:${name}`, name, songs, createdAt: now, updatedAt: now };
+      _sequence.value = sequence;
+      playPlaylist(sequence);
+    },
+
+    /** Toca uma fila de vídeos on-line em sequência usando a mesma fila de playlist. */
+    playOnlineVideoSequence(name: string, videos: OnlineVideoPlaylistItem[]): void {
+      const now = new Date().toISOString();
+      const songs: PlaylistSong[] = videos.map((video, idx) => ({
+        id_music: -(idx + 1),
+        name: video.title,
+        duration: 0,
+        has_instrumental_music: false,
+        onlineVideo: video,
+      }));
       const sequence = { id: `sequence:${name}`, name, songs, createdAt: now, updatedAt: now };
       _sequence.value = sequence;
       playPlaylist(sequence);

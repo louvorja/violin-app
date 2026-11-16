@@ -10,6 +10,7 @@ import { agendaParaPersistir, lerHorario } from "../agenda";
 const TABLE = DB_TABLE.LITURGY_LIBRARY;
 const DEFAULT_COLOR = "#00004F";
 const JA_GROUP_KEY = /^\d+$/;
+const HEX_COLOR = /^#[\da-f]{6}$/i;
 
 /**
  * Chaves i18n dos dias da semana, na ordem de `Date.getDay()` (0 = domingo).
@@ -271,22 +272,9 @@ export function useLiturgyLibrary() {
     $liturgy.clearLibraryReferences(id);
   }
 
-  function exportToJson(items: LiturgyLibraryItem["items"], name: string): void {
-    const payload = {
-      name,
-      exportedAt: new Date().toISOString(),
-      items: agendaParaPersistir(items),
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${name.replace(/[^a-zA-Z0-9]/g, "_")}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function parseImport(json: string): { name: string; items: LiturgyItem[] } | null {
+  function parseImport(
+    json: string
+  ): { name: string; color?: string; items: LiturgyItem[] } | null {
     try {
       const data = JSON.parse(json);
       if (data && typeof data.name === "string" && Array.isArray(data.items)) {
@@ -296,7 +284,9 @@ export function useLiturgyLibrary() {
           .filter((i): i is LiturgyItem => i !== null);
         // Se o arquivo tinha itens mas nenhum foi válido, rejeita o import inteiro.
         if (rawItems.length > 0 && items.length === 0) return null;
-        return { name: data.name, items };
+        const color =
+          typeof data.color === "string" && HEX_COLOR.test(data.color) ? data.color : undefined;
+        return { name: data.name, ...(color ? { color } : {}), items };
       }
       return null;
     } catch {
@@ -326,7 +316,6 @@ export function useLiturgyLibrary() {
     getByName,
     save,
     remove,
-    exportToJson,
     parseImport,
     bindingMatches,
   };

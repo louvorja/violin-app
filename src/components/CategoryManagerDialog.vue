@@ -58,8 +58,11 @@
     :icon="editingId ? ICONS.ACTIONS.EDIT : ICONS.ACTIONS.ADD"
   >
     <LjField layout="column" :label="$t('shell.category.category_name')">
-      <LjInput v-model="form.name" />
+      <LjInput v-model="form.name" :invalid="!!duplicateCategory" />
     </LjField>
+    <p v-if="duplicateCategory" class="cat-form-error" role="alert">
+      {{ $t("shell.category.duplicate_name") }}
+    </p>
 
     <div class="cat-form-grid">
       <div class="cat-form-col">
@@ -137,7 +140,7 @@
       <LjButton
         size="sm"
         variant="primary"
-        :disabled="!form.name.trim() || saving"
+        :disabled="!form.name.trim() || !!duplicateCategory || saving"
         :loading="saving"
         @click="saveForm"
       >
@@ -148,7 +151,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   LjButton,
@@ -162,6 +165,7 @@ import {
 import { ICONS } from "@/config/Icons";
 import { CATEGORY_COLOR_PRESETS, CATEGORY_ICON_OPTIONS } from "@/constants/CategoryOptions";
 import $alert from "@/helpers/Alert";
+import { findDuplicateCategory } from "@/helpers/CategoryName";
 import { MediaFile } from "@/types/Media";
 
 export interface CategoryFileData {
@@ -220,6 +224,14 @@ const form = ref<{
   color: props.colorPresets[0] || "#4CAF50",
 });
 
+/**
+ * Categoria existente com o mesmo nome, ignorando a que está em edição.
+ * A verificação vale para os quatro módulos que usam este diálogo.
+ */
+const duplicateCategory = computed<CategoryFileData | null>(() =>
+  findDuplicateCategory(props.categories, form.value.name, editingId.value)
+);
+
 watch(showForm, (v) => {
   if (!v) editingId.value = null;
 });
@@ -265,7 +277,7 @@ async function deleteFromForm(): Promise<void> {
 }
 
 function saveForm(): void {
-  if (!form.value.name.trim()) return;
+  if (!form.value.name.trim() || duplicateCategory.value) return;
   const cat: CategoryFileData = {
     id: editingId.value || crypto.randomUUID(),
     name: form.value.name.trim(),
@@ -291,8 +303,7 @@ function onIconFile(e: Event): void {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
-    const data = reader.result as ArrayBuffer;
-    form.value.iconData = data;
+    form.value.iconData = reader.result as ArrayBuffer;
     form.value.iconMime = file.type || "image/png";
     form.value.iconImage = URL.createObjectURL(file);
     form.value.iconType = "image";
@@ -404,6 +415,12 @@ defineExpose({ openEditCategory });
   color: var(--lj-text-muted);
   font-size: var(--lj-text-base);
   font-weight: var(--lj-weight-medium);
+}
+
+.cat-form-error {
+  margin: calc(-1 * var(--lj-space-2)) 0 0;
+  color: var(--lj-danger);
+  font-size: var(--lj-text-sm);
 }
 
 .cat-divider {
