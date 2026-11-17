@@ -4,6 +4,12 @@ Sistema de apresentação de letras de músicas e conteúdo bíblico para uso em
 
 > **Contexto para agentes:** comece por `AGENTS.md` e use `docs/architecture.md` como a visão arquitetural atual. Este arquivo conserva detalhes e contexto histórico; quando houver conflito, o código e esses dois documentos prevalecem.
 
+## Fluxo de branches e releases (`dev` → `main`)
+
+- **`dev` (pré-`main`):** é a branch padrão de integração contínua. Todo desenvolvimento diário, correções, funcionalidades, pull requests e pushes rotineiros devem ir para `dev` (ou a partir de branches abertas contra `dev`).
+- **`main` (somente versões):** `main` é bloqueada para commits diretos do dia a dia e reservada **exclusivamente para publicação de novas versões (releases)**. Como o workflow `.github/workflows/deploy.yaml` publica o site/PWA direto a partir de `main`, nada sem versão fechada deve entrar ali.
+- **Processo de release:** quando uma versão for ser publicada, integre `dev` em `main` conforme `docs/releasing.md` (commit de versão + tag anotada `v<versão>`, publicando o rascunho no GitHub antes de expor a nova versão em `main`) e mantenha `dev` sincronizada após a release.
+
 ## Stack
 
 - **Vue 3** + Composition API
