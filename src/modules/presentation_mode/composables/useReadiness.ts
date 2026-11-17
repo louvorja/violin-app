@@ -190,8 +190,8 @@ function _startPrepare(program: Program, label: string): boolean {
   };
 
   void (async () => {
-    const cloud = useCloudFiles();
     try {
+      const cloud = useCloudFiles();
       if (cloudPaths.length) step(tm("readiness.step_cloud"));
       for (const path of cloudPaths) {
         if (cancelled) break;
