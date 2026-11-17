@@ -52,12 +52,12 @@
         {{ tm("readiness.recheck") }}
       </LjButton>
       <LjButton
+        v-if="state.preparing"
         :icon="ICONS.ACTIONS.CLOUD_DOWNLOAD"
-        :disabled="state.checking || (!downloadable && !state.preparing)"
         data-testid="pm-readiness-background"
-        @click="prepareInBackground"
+        @click="continueInBackground"
       >
-        {{ state.preparing ? tm("readiness.background_now") : tm("readiness.background") }}
+        {{ tm("readiness.background_now") }}
       </LjButton>
       <LjButton
         variant="primary"
@@ -79,7 +79,6 @@ import { LjButton, LjDialog, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
-import $snackbar from "@/helpers/Snackbar";
 import { useProgram } from "../composables/useProgram";
 import { useReadiness } from "../composables/useReadiness";
 
@@ -167,20 +166,12 @@ function prepareAll(): void {
 }
 
 /**
- * O mesmo trabalho, mas a janela sai da frente na hora: o andamento (e o
- * cancelamento) ficam nas tarefas em segundo plano do topo. Com um preparo
- * já em curso, o botão só fecha a janela — o trabalho continua.
+ * Com o preparo já em curso, tira a janela da frente: o andamento (e o
+ * cancelamento) seguem nas tarefas em segundo plano do topo.
  */
-function prepareInBackground(): void {
-  if (state.checking) return;
-  if (state.preparing) {
-    open.value = false;
-    return;
-  }
-  if (!downloadable.value) return;
-  if (!prepare(program.program.value, tm("readiness.task"))) return;
+function continueInBackground(): void {
+  if (!state.preparing) return;
   open.value = false;
-  $snackbar.info(tm("readiness.background_started"), { timeout: 7000 });
 }
 
 function edit(itemId: string): void {
