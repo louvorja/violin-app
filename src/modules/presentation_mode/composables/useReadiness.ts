@@ -5,6 +5,8 @@ import $path from "@/helpers/Path";
 import Platform from "@/helpers/Platform";
 import Telemetry from "@/helpers/Telemetry";
 import { resolveMediaReference } from "@/helpers/MediaUrl";
+import { i18nAtual } from "@/i18n";
+import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { Music } from "@/types/Music";
 import type { Program, ProgramItem } from "@/types/Presentation";
@@ -28,6 +30,13 @@ interface SongNeed {
   /** Caminho remoto (`/musics/pt/…`) e endereço para baixar. */
   remote: string;
   url: string;
+}
+
+/** Textos da tarefa em segundo plano. */
+function tm(key: string, params?: Record<string, unknown>): string {
+  const t = i18nAtual()?.global?.t as ((..._args: unknown[]) => unknown) | undefined;
+  const full = `modules.presentation_mode.${key}`;
+  return t ? String(t(full, params)) : full;
 }
 
 const state = reactive({
@@ -147,31 +156,85 @@ async function check(program: Program): Promise<void> {
   }
 }
 
-/** Baixa os hinos (inteiros: o app guarda o que baixou) e o que está só na nuvem. */
-async function prepare(program: Program, label: string): Promise<void> {
-  if (state.preparing) return;
+let _prepareId = 0;
+
+/**
+ * Prepara o programa: primeiro os arquivos que só existem na nuvem, depois os
+ * hinos. Tudo acompanha em "Processos em segundo plano" — inclusive quando a
+ * janela é fechada — e o cancelamento da tarefa para o laço.
+ */
+function _startPrepare(program: Program, label: string): boolean {
+  if (state.preparing) return false;
   state.preparing = true;
-  try {
-    if (state.cloud.length) void useCloudFiles().downloadAll([...state.cloud], label);
-    for (const need of state.songs) {
-      try {
-        const res = await fetchWithTimeout($path.file(need.url), {
-          timeout: NET_TIMEOUT.MEDIA,
-          source: "presentation_readiness",
-        });
-        await res.arrayBuffer();
-      } catch (e) {
-        Telemetry.captureException(e, { source: "presentation_readiness_song" });
-      }
-    }
-    Telemetry.track("presentation_readiness_prepared", {
-      songs: state.songs.length,
-      cloud: state.cloud.length,
+
+  const songs = [...state.songs];
+  const cloudPaths = [...state.cloud];
+  const total = cloudPaths.length + songs.length;
+  const taskId = `pm-readiness-${++_prepareId}`;
+  const tasks = useBackgroundTasks();
+  let done = 0;
+  let cancelled = false;
+  const stop = () => {
+    cancelled = true;
+  };
+
+  tasks.registerTask(taskId, label, stop);
+  const step = (text: string) => {
+    if (cancelled) return;
+    tasks.updateTask(taskId, {
+      progress: total ? Math.round((done / total) * 100) : 0,
+      detail: total
+        ? `${text} · ${tm("readiness.step_progress", { done, total })}`
+        : text,
     });
-  } finally {
-    state.preparing = false;
-  }
-  await check(program);
+  };
+
+  void (async () => {
+    const cloud = useCloudFiles();
+    try {
+      if (cloudPaths.length) step(tm("readiness.step_cloud"));
+      for (const path of cloudPaths) {
+        if (cancelled) break;
+        await cloud.download(path);
+        done++;
+        step(tm("readiness.step_cloud"));
+      }
+      if (!cancelled && songs.length) step(tm("readiness.step_songs"));
+      for (const need of songs) {
+        if (cancelled) break;
+        try {
+          const res = await fetchWithTimeout($path.file(need.url), {
+            timeout: NET_TIMEOUT.MEDIA,
+            source: "presentation_readiness",
+          });
+          await res.arrayBuffer();
+        } catch (e) {
+          Telemetry.captureException(e, { source: "presentation_readiness_song" });
+        }
+        done++;
+        step(tm("readiness.step_songs"));
+      }
+      if (cancelled) {
+        tasks.cancelTask(taskId);
+        return;
+      }
+      tasks.completeTask(taskId);
+      Telemetry.track("presentation_readiness_prepared", {
+        songs: songs.length,
+        cloud: cloudPaths.length,
+      });
+    } finally {
+      state.preparing = false;
+      await check(program);
+    }
+  })();
+
+  return true;
+}
+
+/** `true` quando o trabalho começou (e segue em segundo plano). */
+function prepare(program: Program, label: string): boolean {
+  return _startPrepare(program, label);
 }
 
 const problems = computed(

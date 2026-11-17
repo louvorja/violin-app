@@ -590,6 +590,12 @@
     "recheck": "Verificar de nuevo",
     "prepare": "Preparar todo ({n})",
     "task": "Preparando el culto",
+    "background": "Descargar en segundo plano",
+    "background_now": "Continuar en segundo plano",
+    "background_started": "Descargando en segundo plano. Sigue el avance en Procesos en segundo plano.",
+    "step_cloud": "Descargando archivos de la nube",
+    "step_songs": "Descargando himnos",
+    "step_progress": "{done} de {total}",
     "choose": "Elegir",
     "more": "y {n} más"
   },
