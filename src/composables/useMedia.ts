@@ -1296,7 +1296,10 @@ async function _loadAudioSrc(
     }
   }
 
-  if (!needsOpusDecode && (streamsFromDisk || $appdata.get(KEYS.SHELL.IS_ONLINE))) {
+  if (
+    !needsOpusDecode &&
+    (!ehRemota(audioUrl) || streamsFromDisk || $appdata.get(KEYS.SHELL.IS_ONLINE))
+  ) {
     if (_activePlayback) {
       _activePlayback = { ..._activePlayback, lazy: true };
       if (!deferAudioContext) _audio.setTelemetryContext(_activePlayback);
@@ -2559,6 +2562,8 @@ const _self = {
           ? payload.playback_id
           : _newPlaybackId(),
     };
+    const effectiveVideoAudioUrl =
+      projection.type === "video" ? videoAudioUrl || projection.url : undefined;
     const stageEpoch = ++_stageEpoch;
     /* Antes de qualquer janela ler o arquivo: a partir do registro, o protocolo
        só entrega áudio já conferido (ver AudioPacketScan). */
@@ -2566,7 +2571,9 @@ const _self = {
       projection.type === "video"
         ? Promise.all([
             prepareLocalMediaAudio(projection.url),
-            prepareLocalMediaAudio(videoAudioUrl),
+            ...(effectiveVideoAudioUrl && effectiveVideoAudioUrl !== projection.url
+              ? [prepareLocalMediaAudio(effectiveVideoAudioUrl)]
+              : []),
           ])
         : null;
     _dropPendingDownload();
@@ -2610,10 +2617,10 @@ const _self = {
     }
     if (stageEpoch !== _stageEpoch) return false;
     $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, projection);
-    if (projection.type === "video" && videoAudioUrl) {
+    if (projection.type === "video" && effectiveVideoAudioUrl) {
       await this.openAudio(
         {
-          url: videoAudioUrl,
+          url: effectiveVideoAudioUrl,
           title: projection.title || "",
           mediaType: "video",
           playbackId: projection.playback_id,
