@@ -47,6 +47,12 @@ const { NativeShow } = require("./nativeShow.js");
 const PPT_EXT = [".pptx", ".ppsx", ".pptm", ".ppt", ".pps", ".odp"];
 const OOXML_EXT = [".pptx", ".ppsx", ".pptm"];
 const MAX_BYTES = 1024 * 1024 * 1024; // 1 GB — apresentação com vídeo pesado
+/**
+ * Acima disto a leitura do ZIP (JSZip) fica caríssima: o arquivo é tratado
+ * como apresentação grande e as fontes/features não são conferidas. O
+ * PowerPoint/LibreOffice seguem desenhando os slides normalmente.
+ */
+const MAX_SCAN_BYTES = 200 * 1024 * 1024;
 
 const FETCH_TIMEOUT_MS = 20000;
 
@@ -329,8 +335,9 @@ async function _convert(rawPath, { onProgress = () => {}, log = console.log, for
   }
 
   // Animações e mídias: o modo imagem não leva; a interface sugere o modo nativo.
+  const big = v.size > MAX_SCAN_BYTES;
   let features = { animatedSlides: 0, videos: 0, audios: 0 };
-  if (OOXML_EXT.includes(path.extname(file).toLowerCase())) {
+  if (!big && OOXML_EXT.includes(path.extname(file).toLowerCase())) {
     try {
       features = await readPptxFeatures(file);
     } catch {
@@ -341,14 +348,20 @@ async function _convert(rawPath, { onProgress = () => {}, log = console.log, for
   onProgress({ phase: "fonts" });
   let report = { items: [], installed: 0, embedded: false };
   let fontsError = "";
-  try {
-    report = await ensureFontsCached(file, onProgress, log, { force });
-  } catch (e) {
-    // Sem a análise de fontes ainda dá para converter — só não há garantia.
-    // O motivo vai para a tela: antes ficava só no console e a lista vinha vazia.
-    fontsError = String(e?.message || e).slice(0, 400);
-    log("[pptx] análise de fontes falhou:", fontsError);
+  if (big) {
+    fontsError = "Apresentação grande: as fontes não foram conferidas.";
+    log(`[pptx] ${(v.size / (1024 * 1024)).toFixed(0)} MB: varredura de fontes ignorada`);
     onProgress({ phase: "fonts", fonts: [], error: fontsError });
+  } else {
+    try {
+      report = await ensureFontsCached(file, onProgress, log, { force });
+    } catch (e) {
+      // Sem a análise de fontes ainda dá para converter — só não há garantia.
+      // O motivo vai para a tela: antes ficava só no console e a lista vinha vazia.
+      fontsError = String(e?.message || e).slice(0, 400);
+      log("[pptx] análise de fontes falhou:", fontsError);
+      onProgress({ phase: "fonts", fonts: [], error: fontsError });
+    }
   }
 
   const outDir = _outDir();
@@ -670,7 +683,7 @@ async function _nativeStart(
     await fs.rm(path.join(dir, antigo), { force: true }).catch(() => {});
   }
   const copia = path.join(dir, `apresentacao-${Date.now()}${path.extname(v.file).toLowerCase()}`);
-  await fs.writeFile(copia, await fs.readFile(v.file));
+  await fs.copyFile(v.file, copia);
   const python = converter.id === "libreoffice" ? await _acharPythonUno(converter.soffice) : null;
   try {
     const show = _nativeShow(converter, python);

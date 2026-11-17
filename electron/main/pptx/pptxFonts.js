@@ -9,6 +9,17 @@
 const fs = require('fs/promises');
 const JSZip = require('jszip');
 
+/** Mesmo teto da varredura em `index.js`: acima disso não abrimos o ZIP inteiro. */
+const MAX_ZIP_BYTES = 200 * 1024 * 1024;
+
+async function tooBig(filePath) {
+  try {
+    return (await fs.stat(filePath)).size > MAX_ZIP_BYTES;
+  } catch {
+    return false;
+  }
+}
+
 const ATTR_RE = /<a:(latin|sym)\b[^>]*?\btypeface="([^"]*)"/g;
 const EMBED_RE = /<p:embeddedFont>\s*<p:font\b[^>]*?\btypeface="([^"]*)"/g;
 
@@ -20,6 +31,7 @@ function decodeXml(s) {
 }
 
 async function readPptxFonts(filePath) {
+  if (await tooBig(filePath)) return { fonts: [], embedded: [] };
   const data = await fs.readFile(filePath);
   const zip = await JSZip.loadAsync(data);
   const found = new Set();
@@ -50,6 +62,7 @@ async function readPptxFonts(filePath) {
  *   → [{ typeface: 'Brich', style: 'regular', ttf: Buffer, fsType: 0 }]
  */
 async function extractEmbeddedFonts(filePath, onlyTypefaces = null) {
+  if (await tooBig(filePath)) return [];
   const { eotToTtf } = require('mtx-decompressor');
   const zip = await JSZip.loadAsync(await fs.readFile(filePath));
   const pres = zip.file('ppt/presentation.xml');
@@ -93,6 +106,7 @@ const AUDIO_RE = /\.(mp3|wav|m4a|wma|aac|ogg|mid|midi|aiff?)$/i;
  * @returns {Promise<{animatedSlides: number, videos: number, audios: number}>}
  */
 async function readPptxFeatures(filePath) {
+  if (await tooBig(filePath)) return { animatedSlides: 0, videos: 0, audios: 0 };
   const zip = await JSZip.loadAsync(await fs.readFile(filePath));
   let animatedSlides = 0;
   for (const name of Object.keys(zip.files)) {

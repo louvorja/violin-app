@@ -23,6 +23,8 @@ const handlers = { get: new Map(), post: new Map() };
 const requestedPrefixes = [];
 const enviados = [];
 let rendererReply = { status: "ok", items: [], categories: [] };
+/** Quando definido, o round-trip do renderer fica pendente até resolver (teste do 202 → done). */
+let rendererPending = null;
 /** userData servido pelo main (a playlist vive nele). */
 let userData = { modules: { media_library: { playlist: [] } } };
 
@@ -150,7 +152,7 @@ beforeAll(async () => {
           requestedPrefixes.push(prefix);
           return {
             requestId: `${prefix}:00000000-0000-4000-8000-000000000009`,
-            promise: Promise.resolve(rendererReply),
+            promise: rendererPending ?? Promise.resolve(rendererReply),
             cancel: () => {},
           };
         },
@@ -178,6 +180,7 @@ beforeEach(() => {
   };
   requestedPrefixes.length = 0;
   enviados.length = 0;
+  rendererPending = null;
 });
 
 describe("permission media_library", () => {
@@ -583,5 +586,52 @@ describe("POST /api/media-library/upload", () => {
     expect(res.code).toBe(201);
     expect(res.body.item.type).toBe("pdf");
     expect(res.body.item.categoryId).toBe("cat-1");
+  });
+
+  it("PPTX responde 202 e só fica done depois de o renderer registrar", async () => {
+    const pptxReal = require("../../pptx/index.js");
+    const convertSpy = vi.spyOn(pptxReal, "convert").mockResolvedValue({
+      ok: true,
+      path: path.join(mocks.root, "private", "culto.pdf"),
+      fonts: [],
+      features: null,
+      nativeAvailable: false,
+    });
+    let liberarRegistro;
+    rendererPending = new Promise((resolve) => {
+      liberarRegistro = resolve;
+    });
+    try {
+      const res = await callUpload(
+        [Buffer.from("PPTX")],
+        { "x-file-name": "culto.pptx" },
+        COM_PERMISSAO
+      );
+
+      expect(res.code).toBe(202);
+      expect(res.body.status).toBe("converting");
+      const uploadId = res.body.uploadId;
+      expect(uploadId).toMatch(/^pu_/);
+
+      // A conversão terminou, mas o `saved` ainda não foi confirmado: continua converting.
+      await vi.waitFor(() => {
+        expect(convertSpy).toHaveBeenCalledOnce();
+      });
+      let lista = await callGet("/api/media-library/phone-uploads", {}, COM_PERMISSAO);
+      expect(lista.body.uploads.find((u) => u.id === uploadId)?.status).toBe("converting");
+
+      liberarRegistro({ status: "ok" });
+      await vi.waitFor(async () => {
+        const g = await callGet("/api/media-library/phone-uploads", {}, COM_PERMISSAO);
+        expect(g.body.uploads.find((u) => u.id === uploadId)?.status).toBe("done");
+      });
+      const done = enviados.find(
+        ([ch, p]) => ch === "http:media-library" && p.action === "phone-pptx" && p.status === "done"
+      );
+      expect(done).toBeTruthy();
+    } finally {
+      convertSpy.mockRestore();
+      rendererPending = null;
+    }
   });
 });

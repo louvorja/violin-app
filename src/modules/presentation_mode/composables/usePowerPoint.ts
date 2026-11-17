@@ -43,6 +43,13 @@ export interface PowerPointProgress {
 
 /** Caminho do .pptx → o que se sabe dele. Preenchido a cada conversão. */
 export const powerPointInfo = reactive(new Map<string, PowerPointInfo>());
+/**
+ * Falhas recentes por arquivo: reexibir o mesmo PPTX no palco não deve
+ * reconverter (e pedir permissão de novo) a cada troca. `Gerar de novo`
+ * ignora o cache e tenta outra vez.
+ */
+const failures = new Map<string, { at: number; error: string }>();
+const FAILURE_TTL_MS = 5 * 60 * 1000;
 /** A conversão que está demorando, para a faixa de andamento do módulo. */
 export const powerPointProgress = ref<PowerPointProgress | null>(null);
 /**
@@ -109,6 +116,7 @@ async function convert(path: string, opts?: { force?: boolean }): Promise<Conver
   try {
     const res = (await Platform.convertPresentation(path, opts).catch(() => null)) as ConvertResponse | null;
     if (res?.ok) {
+      failures.delete(path);
       const r = res as Extract<ConvertResponse, { ok: true }> & Partial<PowerPointInfo>;
       powerPointInfo.set(path, {
         fonts: Array.isArray(r.fonts) ? r.fonts : [],
@@ -116,6 +124,8 @@ async function convert(path: string, opts?: { force?: boolean }): Promise<Conver
         fontsError: typeof r.fontsError === "string" ? r.fontsError : "",
         features: r.features ?? null,
       });
+    } else {
+      failures.set(path, { at: Date.now(), error: res?.error ?? "exception" });
     }
     return res;
   } finally {
@@ -143,6 +153,11 @@ export function missingFontNames(info: PowerPointInfo | null | undefined): strin
  */
 export function loadPowerPointInfo(path: string, name?: string): void {
   if (!POWERPOINT_ENABLED || powerPointInfo.has(path) || pending.has(path)) return;
+  const failure = failures.get(path);
+  if (failure) {
+    if (Date.now() - failure.at < FAILURE_TTL_MS) return;
+    failures.delete(path);
+  }
   void (name ? convertNamed(path, name) : convert(path));
 }
 

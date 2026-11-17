@@ -19,6 +19,7 @@ function register(app, ctx) {
   const {
     getValidMainWindow,
     requestRenderer,
+    requestRendererSilent,
     sendRendererError,
     getUserData,
     isPlainObject,
@@ -524,7 +525,39 @@ function register(app, ctx) {
           nativeAvailable: r.nativeAvailable === true,
         },
       };
-      safeSend(mainWindow, "http:media-library", { action: "saved", record });
+      /*
+       * Só entra na Biblioteca depois do `put` no IndexedDB: o celular vê
+       * "pronto" exatamente quando o item já pode ser listado. Sem `res` HTTP
+       * pendente (a rota respondeu 202), usamos o round-trip silencioso.
+       */
+      let confirmacao = null;
+      try {
+        confirmacao = await requestRendererSilent(
+          mainWindow,
+          "http:media-library",
+          { action: "saved", record },
+          {
+            prefix: "media-library",
+            timeoutMs: 8_000,
+            maxPayloadBytes: 8_192,
+            validatePayload: (payload) =>
+              isPlainObject(payload) &&
+              (payload.status === "ok" ||
+                (payload.status === "error" && typeof payload.error === "string")),
+          }
+        );
+      } catch (error) {
+        const message = `Falha ao registrar na Biblioteca: ${String(error?.message || error).slice(0, 240)}`;
+        atualizar({ status: "error", message });
+        avisar({ status: "error", message });
+        return;
+      }
+      if (!confirmacao || confirmacao.status !== "ok") {
+        const message = `Falha ao registrar na Biblioteca: ${String(confirmacao?.error || "sem confirmação").slice(0, 240)}`;
+        atualizar({ status: "error", message });
+        avisar({ status: "error", message });
+        return;
+      }
       atualizar({ status: "done", itemId: record.id });
       avisar({ status: "done" });
       console.log(`[httpServer] media-library PowerPoint do celular convertido → ${r.path}`);

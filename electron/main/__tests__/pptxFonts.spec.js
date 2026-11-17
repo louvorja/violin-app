@@ -174,6 +174,24 @@ describe("readPptxFeatures", () => {
   });
 });
 
+describe("arquivo grande", () => {
+  it("acima do teto de varredura não abre o ZIP", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "lj-pptx-big-"));
+    const file = path.join(dir, "grande.pptx");
+    await fs.ensureFile(file);
+    await fs.truncate(file, 201 * 1024 * 1024);
+    try {
+      const { readPptxFonts: readFonts, readPptxFeatures: readFeatures, extractEmbeddedFonts } =
+        require("../pptx/pptxFonts.js");
+      expect(await readFonts(file)).toEqual({ fonts: [], embedded: [] });
+      expect(await readFeatures(file)).toEqual({ animatedSlides: 0, videos: 0, audios: 0 });
+      expect(await extractEmbeddedFonts(file)).toEqual([]);
+    } finally {
+      await fs.remove(dir);
+    }
+  });
+});
+
 describe("nativeShow", () => {
   it("o script do modo nativo não tem crase e posiciona no monitor do PA", () => {
     const { SCRIPT } = require("../pptx/nativeShow.js");

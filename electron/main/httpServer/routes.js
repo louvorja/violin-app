@@ -507,6 +507,24 @@ function setupRoutes(
     }
   }
 
+  /**
+   * O mesmo round-trip do `requestRenderer`, para trabalho que já respondeu ao
+   * HTTP (ex.: o PPTX do celular): não há `res` pendente para receber o erro.
+   */
+  async function requestRendererSilent(mainWindow, eventType, payload, options) {
+    const { EventEmitter } = require("events");
+    const res = new EventEmitter();
+    res.headersSent = true;
+    res.writableEnded = true;
+    res.destroyed = false;
+    res.status = () => res;
+    res.json = () => res;
+    res.send = () => res;
+    res.set = () => res;
+    res.end = () => res;
+    return requestRenderer(mainWindow, res, eventType, payload, options);
+  }
+
 
   function sendRendererError(res, error, timeoutMessage) {
     if (res.headersSent || res.writableEnded || res.destroyed) return;
@@ -538,6 +556,7 @@ function setupRoutes(
   remoteRoutes.register(app, {
     getValidMainWindow,
     requestRenderer,
+    requestRendererSilent,
     sendRendererError,
     getUserData,
     // Catálogo/hinários/álbuns: a rota baixa sob demanda o que ainda não está
