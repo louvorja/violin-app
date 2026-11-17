@@ -1,0 +1,1 @@
+#app-container{position:relative;display:flex;flex:1 1 auto;flex-direction:column;max-width:100%;height:100vh;background:var(--lj-surface-bg);color:var(--lj-text);backface-visibility:hidden}#app-container.is-transparent{background:transparent}
