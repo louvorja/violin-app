@@ -47,6 +47,7 @@
   "program": {
     "date": "Fecha del programa",
     "change_date": "Cambiar la fecha",
+    "conflict_date": "Otro equipo guardó este programa. Resuelve el conflicto en la barra de estado antes de cambiar la fecha o la carpeta de la iglesia: la edición hecha aquí todavía no se guardó.",
     "today": "Hoy",
     "settings": "Hora de inicio y carpeta de la iglesia",
     "now": "Ahora",

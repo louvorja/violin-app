@@ -75,6 +75,7 @@ import {
   checkRemote,
   conflictVersions,
   flushProgram,
+  hasPendingConflict,
   loadProgram,
   resolveConflict,
   saveProgram,
@@ -199,6 +200,20 @@ describe("programStore", () => {
     // O operador fica com a daqui.
     await resolveConflict("local", program("daqui"));
     expect(onDisk()?.program.sessions[0].items[0].title).toBe("daqui");
+    expect(sync.state).toBe("saved");
+  });
+
+  it("há conflito pendente até o operador resolvê-lo", async () => {
+    otherSaves("v1");
+    await loadProgram("2026-10-10");
+    otherSaves("da igreja");
+    saveProgram(program("daqui"));
+    await flushProgram();
+    expect(hasPendingConflict()).toBe(true);
+    expect(sync.state).toBe("conflict");
+
+    await resolveConflict("local", program("daqui"));
+    expect(hasPendingConflict()).toBe(false);
     expect(sync.state).toBe("saved");
   });
 

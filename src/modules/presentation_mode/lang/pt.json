@@ -47,6 +47,7 @@
   "program": {
     "date": "Data do programa",
     "change_date": "Trocar a data",
+    "conflict_date": "Outro computador salvou este programa. Resolva o conflito na barra de status antes de trocar a data ou a pasta da igreja — a edição feita aqui ainda não foi salva.",
     "today": "Hoje",
     "settings": "Horário de início e pasta da igreja",
     "now": "Agora",

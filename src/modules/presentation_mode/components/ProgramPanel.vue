@@ -16,6 +16,7 @@
         </template>
         <div class="pm-program__date-form">
           <LjInput
+            :key="dateEpoch"
             type="date"
             size="sm"
             :model-value="date"
@@ -386,8 +387,17 @@ const dateLabel = computed(() => {
   return `${weekday} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
 });
 
+/** Muda para remontar o campo de data quando a troca é recusada (conflito). */
+const dateEpoch = ref(0);
+
 function onDate(value: string | number | null): void {
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) void setDate(value);
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    // A data só muda se o programa não estiver em conflito; senão o campo é
+    // remontado, para não continuar mostrando a data que foi recusada.
+    void setDate(value).then((ok) => {
+      if (!ok) dateEpoch.value++;
+    });
+  }
 }
 
 const nowLabel = computed(() =>

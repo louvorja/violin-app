@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => {
   const store: Record<string, unknown> = {};
-  return { store, listDir: vi.fn(), renameFile: vi.fn() };
+  return {
+    store,
+    listDir: vi.fn(),
+    renameFile: vi.fn(),
+    trashFile: vi.fn(),
+    setFileHidden: vi.fn(),
+  };
 });
 vi.mock("@/helpers/UserData", async () => {
   const { reactive } = await import("vue");
@@ -15,7 +21,13 @@ vi.mock("@/helpers/UserData", async () => {
   };
 });
 vi.mock("@/helpers/Platform", () => ({
-  default: { isDesktop: true, listDir: m.listDir, renameFile: m.renameFile },
+  default: {
+    isDesktop: true,
+    listDir: m.listDir,
+    renameFile: m.renameFile,
+    trashFile: m.trashFile,
+    setFileHidden: m.setFileHidden,
+  },
 }));
 vi.mock("@/helpers/Telemetry", () => ({ default: { captureException: vi.fn(), track: vi.fn() } }));
 
@@ -103,6 +115,43 @@ describe("useFileLibrary por aba", () => {
     const audio = useFileLibrary("audio");
     expect(audio.folders).toBe(files.folders);
     expect(audio.queue).toBe(files.queue);
+  });
+});
+
+describe("fila de Anterior/Próximo", () => {
+  it("pula o arquivo excluído e continua a partir da posição atual", async () => {
+    m.trashFile.mockResolvedValue({ ok: true });
+    const lib = useFileLibrary("files");
+    await lib.openSource("/culto");
+    lib.startQueue(entry("intro.mp4"));
+    expect(lib.queue.value?.entries.map((e) => e.name)).toEqual([
+      "foto.jpg",
+      "intro.mp4",
+      "sermao.pdf",
+    ]);
+
+    expect(await lib.trash(entry("intro.mp4"))).toBe(true);
+    expect(lib.queue.value?.entries.map((e) => e.name)).toEqual(["foto.jpg", "sermao.pdf"]);
+    expect(lib.queue.value?.index).toBe(1);
+    expect(lib.stepQueue("next")).toBeNull();
+    expect(lib.stepQueue("prev")?.name).toBe("foto.jpg");
+  });
+
+  it("excluir o único item da fila a esvazia", async () => {
+    m.trashFile.mockResolvedValue({ ok: true });
+    const lib = useFileLibrary("files");
+    await lib.openSource("/culto");
+    lib.startQueue(entry("sermao.pdf"), [entry("sermao.pdf")]);
+    await lib.trash(entry("sermao.pdf"));
+    expect(lib.queue.value).toBeNull();
+  });
+
+  it("tirar a pasta da biblioteca tira os arquivos dela da fila", async () => {
+    const lib = useFileLibrary("files");
+    await lib.openSource("/culto");
+    lib.startQueue(entry("foto.jpg"));
+    await lib.removeFolder("/culto");
+    expect(lib.queue.value).toBeNull();
   });
 });
 

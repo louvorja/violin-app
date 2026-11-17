@@ -1,12 +1,28 @@
 import { computed, ref, watch } from "vue";
 import $userdata from "@/helpers/UserData";
+import $alert from "@/helpers/Alert";
 import { KEYS } from "@/constants/UserDataKeys";
+import { ModuleEnum } from "@/enums/ModuleEnum";
 import Telemetry from "@/helpers/Telemetry";
 import type { Program, ProgramItem, ProgramModel, ProgramSession } from "@/types/Presentation";
 import { flattenItems, minutesOfDate } from "../program/time";
 import { sessionsFromModel } from "../program/models";
-import { checkRemote, loadProgram, saveProgram } from "./programStore";
+import { checkRemote, hasPendingConflict, loadProgram, saveProgram } from "./programStore";
 import { useChurchFolder } from "./useChurchFolder";
+
+/** O `$alert` traduz na hora de pintar: recebe a chave, não o texto. */
+const alertKey = (key: string) => `modules.${ModuleEnum.PRESENTATION_MODE}.${key}`;
+
+/**
+ * Há edição deste computador esperando e outro computador salvou por cima.
+ * Trocar de data (ou de pasta) recarregaria o documento e a edição morreria
+ * só no DocStore: o operador resolve o conflito primeiro.
+ */
+function _blockedByConflict(): boolean {
+  if (!hasPendingConflict()) return false;
+  $alert.info({ text: alertKey("program.conflict_date") });
+  return true;
+}
 
 /**
  * Programa do culto: um documento por data, e o estado da execução ao vivo ao
@@ -112,7 +128,9 @@ function _watchFolder(): void {
   watch(
     () => useChurchFolder().root.value,
     () => {
-      if (_loaded.value) void _load(_date.value);
+      if (!_loaded.value) return;
+      if (_blockedByConflict()) return;
+      void _load(_date.value);
     }
   );
 }
@@ -235,11 +253,14 @@ export function useProgram() {
       });
     },
 
-    async setDate(date: string): Promise<void> {
-      if (date === _date.value && _loaded.value) return;
+    /** `false`: a data não mudou porque o programa aberto está em conflito. */
+    async setDate(date: string): Promise<boolean> {
+      if (date === _date.value && _loaded.value) return true;
+      if (_blockedByConflict()) return false;
       _date.value = date;
       _resetRuntime();
       await _load(date);
+      return true;
     },
 
     setPlannedStart(plannedStart: string): void {

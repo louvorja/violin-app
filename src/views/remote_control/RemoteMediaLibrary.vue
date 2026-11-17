@@ -106,6 +106,17 @@
             variant="ghost"
             size="lg"
             class="rm-item__action"
+            :icon="ICONS.ACTIONS.RESTART"
+            icon-only
+            :loading="retrying === u.id"
+            :title="t('remote_control.media_library.retry')"
+            @click.stop="retryUpload(u)"
+          />
+          <LjButton
+            v-if="u.status === 'error'"
+            variant="ghost"
+            size="lg"
+            class="rm-item__action"
             :icon="ICONS.ACTIONS.CLOSE"
             icon-only
             :title="t('remote_control.media_library.dismiss')"
@@ -962,6 +973,35 @@ function pendingLabel(u: PhoneUpload): string {
 function dismissPending(id: string): void {
   pending.value = pending.value.filter((u) => u.id !== id);
   myUploads.delete(id);
+}
+
+/** "Tentar de novo": o PC reconverte o mesmo arquivo, sem o celular reenviar. */
+const retrying = ref<string | null>(null);
+
+async function retryUpload(u: PhoneUpload): Promise<void> {
+  if (retrying.value) return;
+  retrying.value = u.id;
+  try {
+    const res = await postApi(
+      `/api/media-library/phone-uploads/${encodeURIComponent(u.id)}/retry`,
+      {},
+      props.token
+    );
+    if (!res.ok) {
+      snack(await mensagemDeErro(res), "error");
+      return;
+    }
+    pending.value = pending.value.map((p) =>
+      p.id === u.id
+        ? { ...p, status: "converting", phase: "fonts", done: 0, total: 0, message: "" }
+        : p
+    );
+    startPolling();
+  } catch {
+    snack(t("remote_control.errors.generic"), "error");
+  } finally {
+    retrying.value = null;
+  }
 }
 
 function stopPolling(): void {

@@ -6,6 +6,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT } from "@/constants/FileTypes";
 import { SLJA_EXT } from "@/helpers/SljaPlayer";
 import { isPowerPoint, POWERPOINT_ENABLED } from "./usePowerPoint";
+import { isInside } from "../program/portable";
 
 /**
  * Navegador de arquivos do Modo apresentação.
@@ -107,6 +108,26 @@ const favorites = computed<LibraryEntry[]>(
  * grade não muda o que o telão está percorrendo.
  */
 const _queue = ref<{ entries: LibraryEntry[]; index: number } | null>(null);
+
+/**
+ * Saiu do disco (excluído) ou a pasta saiu da biblioteca: a fila de
+ * Anterior/Próximo não pode parar em um arquivo que não existe mais. A
+ * posição atual é preservada quando ela sobrevive; senão, a fila anda para a
+ * próxima.
+ */
+function _dropFromQueue(match: (path: string) => boolean): void {
+  const q = _queue.value;
+  if (!q || !q.entries.some((e) => match(e.path))) return;
+  const atual = q.entries[q.index];
+  const entries = q.entries.filter((e) => !match(e.path));
+  if (!entries.length) {
+    _queue.value = null;
+    return;
+  }
+  const index =
+    atual && entries.includes(atual) ? entries.indexOf(atual) : Math.min(q.index, entries.length - 1);
+  _queue.value = { entries, index };
+}
 
 export type QueueStep = "first" | "prev" | "next" | "last";
 
@@ -338,6 +359,7 @@ export function useFileLibrary(scope: LibraryScope = "files") {
         KEYS.MODULES.PRESENTATION_MODE.LIBRARY_FOLDERS,
         folders.value.filter((f) => f.path !== path)
       );
+      _dropFromQueue((p) => isInside(p, path));
       for (const n of _navs.values()) {
         if (n.source.value === path) {
           n.source.value = ALL;
@@ -419,6 +441,7 @@ export function useFileLibrary(scope: LibraryScope = "files") {
     async trash(entry: LibraryEntry): Promise<boolean> {
       const result = (await Platform.trashFile(entry.path)) as { ok: boolean };
       if (!result?.ok) return false;
+      _dropFromQueue((p) => p === entry.path);
       if (favorites.value.some((f) => f.path === entry.path)) {
         $userdata.set(
           KEYS.MODULES.PRESENTATION_MODE.LIBRARY_FAVORITES,

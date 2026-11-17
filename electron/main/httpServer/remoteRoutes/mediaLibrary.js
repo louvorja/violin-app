@@ -453,15 +453,41 @@ function register(app, ctx) {
   /*
    * PowerPoints do celular em conversão: o celular pergunta o andamento
    * (GET /api/media-library/phone-uploads) e mostra "Preparando os slides…" na
-   * lista até o item ficar pronto. Some 10 minutos depois de terminar.
+   * lista até o item ficar pronto. Concluído some em 10 minutos; com falha, o
+   * arquivo enviado fica 7 dias para o celular tentar de novo sem reenviar.
    */
   const phoneUploads = new Map();
+  /*
+   * Arquivo e categoria de cada envio — só para o retry; não vai na resposta
+   * do celular (não expõe caminho local).
+   */
+  const phoneUploadSources = new Map();
   const PHONE_UPLOAD_KEEP_MS = 10 * 60 * 1000;
+  /** Falhou: guarda o arquivo e a mensagem para "Tentar de novo". */
+  const PHONE_UPLOAD_RETRY_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+  /** `converting` sem fim (app fechou no meio) não fica preso na lista do celular. */
+  const PHONE_UPLOAD_STALE_MS = 30 * 60 * 1000;
 
   function limparPhoneUploads() {
     const agora = Date.now();
     for (const [id, u] of phoneUploads) {
-      if (u.status !== "converting" && agora - u.updatedAt > PHONE_UPLOAD_KEEP_MS) phoneUploads.delete(id);
+      const idade = agora - u.updatedAt;
+      if (u.status === "converting") {
+        if (idade > PHONE_UPLOAD_STALE_MS) {
+          Object.assign(u, {
+            status: "error",
+            message: "A conversão não terminou. Tente de novo.",
+            updatedAt: agora,
+          });
+        }
+        continue;
+      }
+      const limite = u.status === "error" ? PHONE_UPLOAD_RETRY_KEEP_MS : PHONE_UPLOAD_KEEP_MS;
+      if (idade <= limite) continue;
+      phoneUploads.delete(id);
+      const info = phoneUploadSources.get(id);
+      phoneUploadSources.delete(id);
+      if (info?.source) void fs.promises.unlink(info.source).catch(() => {});
     }
   }
 
@@ -473,8 +499,52 @@ function register(app, ctx) {
     res.json({ uploads: [...phoneUploads.values()] });
   });
 
+  /*
+   * Falhou a conversão? O celular pede para tentar de novo sem reenviar o
+   * arquivo (que continua em <perfil>/library/media até 7 dias).
+   */
+  app.post("/api/media-library/phone-uploads/:id/retry", async (req, res) => {
+    if (!hasMediaLibraryPermission(req)) {
+      return res.status(403).json({ error: "Device sem permissão da biblioteca de mídia" });
+    }
+    limparPhoneUploads();
+    const mainWindow = getValidMainWindow();
+    if (!mainWindow) {
+      return res.status(503).json({ error: "Janela principal não disponível" });
+    }
+    const uploadId = typeof req.params?.id === "string" ? req.params.id : "";
+    const atual = phoneUploads.get(uploadId);
+    const info = phoneUploadSources.get(uploadId);
+    if (!atual || !info) {
+      return res.status(404).json({ error: "Envio não encontrado" });
+    }
+    if (atual.status === "converting") {
+      return res.status(409).json({ error: "A conversão já está em andamento" });
+    }
+    const existe = await fs.promises
+      .stat(info.source)
+      .then((st) => st.isFile())
+      .catch(() => false);
+    if (!existe) {
+      // Sumiu do disco: não há o que reconverter; o celular precisa reenviar.
+      phoneUploads.delete(uploadId);
+      phoneUploadSources.delete(uploadId);
+      return res.status(410).json({ error: "O arquivo enviado não está mais disponível. Envie de novo." });
+    }
+    void converterPowerPointDoCelular(
+      mainWindow,
+      uploadId,
+      info.source,
+      info.fileName,
+      info.categoryId
+    );
+    res.status(202).json({ status: "converting", uploadId, name: info.fileName });
+  });
+
   /** Converte o PowerPoint que chegou do celular e registra o PDF na Biblioteca. */
   async function converterPowerPointDoCelular(mainWindow, uploadId, source, fileName, categoryId) {
+    // Retry usa o mesmo arquivo: o envio não precisa ser repetido.
+    phoneUploadSources.set(uploadId, { source, fileName, categoryId });
     const estado = { id: uploadId, name: fileName, status: "converting", phase: "fonts", done: 0, total: 0, message: "", itemId: null, updatedAt: Date.now() };
     phoneUploads.set(uploadId, estado);
     const atualizar = (patch) => Object.assign(estado, patch, { updatedAt: Date.now() });
@@ -505,8 +575,7 @@ function register(app, ctx) {
       });
       if (!r || !r.ok) {
         const message = (r && r.message) || "Falha ao converter";
-        // Não virou item da Biblioteca: o arquivo enviado não fica perdido na pasta.
-        await fs.promises.unlink(source).catch(() => {});
+        // O arquivo enviado fica: o celular tenta de novo sem reenviar os bytes.
         atualizar({ status: "error", message });
         avisar({ status: "error", message });
         return;
@@ -560,11 +629,12 @@ function register(app, ctx) {
       }
       atualizar({ status: "done", itemId: record.id });
       avisar({ status: "done" });
+      phoneUploadSources.delete(uploadId);
       console.log(`[httpServer] media-library PowerPoint do celular convertido → ${r.path}`);
     } catch (error) {
       const message = String(error?.message || error).slice(0, 300);
       console.warn("[httpServer] media-library PowerPoint do celular falhou:", message);
-      await fs.promises.unlink(source).catch(() => {});
+      // Mesma regra da falha de conversão: mantém o envio para "Tentar de novo".
       atualizar({ status: "error", message });
       avisar({ status: "error", message });
     }

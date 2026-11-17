@@ -116,6 +116,15 @@ export async function flushProgram(): Promise<void> {
   _writing = null;
 }
 
+/**
+ * Há edição deste computador que não pôde ser gravada porque outro computador
+ * salvou antes (`expectMtime`). Enquanto isso, trocar de data perderia a
+ * edição: o chamador deve pedir para resolver o conflito primeiro.
+ */
+export function hasPendingConflict(): boolean {
+  return !!_pending && sync.diskChanged;
+}
+
 async function refreshConflicts(date: string): Promise<void> {
   const st = await churchFiles.stat("program", date);
   sync.conflicts = st.ok ? st.conflicts : [];

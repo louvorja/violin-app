@@ -97,6 +97,13 @@ async function callUpload(chunks, headers, authInfo) {
   return res;
 }
 
+/** Rota com `:id` na URL (retry do PowerPoint do celular). */
+async function callPostParams(route, params, body, authInfo) {
+  const res = response();
+  await handlers.post.get(route)({ params, body, authInfo, headers: {} }, res);
+  return res;
+}
+
 const ITEMS = {
   status: "ok",
   items: [
@@ -633,5 +640,79 @@ describe("POST /api/media-library/upload", () => {
       convertSpy.mockRestore();
       rendererPending = null;
     }
+  });
+
+  it("falha mantém o arquivo enviado e o retry reconverte sem reenviar", async () => {
+    const pptxReal = require("../../pptx/index.js");
+    const convertSpy = vi
+      .spyOn(pptxReal, "convert")
+      .mockResolvedValueOnce({ ok: false, error: "conversion_failed", message: "sem PowerPoint" })
+      .mockResolvedValueOnce({
+        ok: true,
+        path: path.join(mocks.root, "private", "culto.pdf"),
+        fonts: [],
+        features: null,
+        nativeAvailable: false,
+      });
+    try {
+      const media = path.join(mocks.root, "private", "library", "media");
+      const antes = new Set(await fs.readdir(media).catch(() => []));
+      const res = await callUpload(
+        [Buffer.from("PPTX")],
+        { "x-file-name": "culto.pptx", "x-category-id": "cat-1" },
+        COM_PERMISSAO
+      );
+      expect(res.code).toBe(202);
+      const uploadId = res.body.uploadId;
+
+      await vi.waitFor(() => {
+        const erro = enviados.find(
+          ([ch, p]) =>
+            ch === "http:media-library" && p.action === "phone-pptx" && p.status === "error"
+        );
+        expect(erro).toBeTruthy();
+      });
+      const novos = (await fs.readdir(media)).filter(
+        (f) => f.endsWith(".pptx") && !antes.has(f)
+      );
+      expect(novos).toHaveLength(1);
+      const arquivoEnviado = novos[0];
+
+      const retry = await callPostParams(
+        "/api/media-library/phone-uploads/:id/retry",
+        { id: uploadId },
+        {},
+        COM_PERMISSAO
+      );
+      expect(retry.code).toBe(202);
+      expect(retry.body.status).toBe("converting");
+
+      await vi.waitFor(async () => {
+        const g = await callGet("/api/media-library/phone-uploads", {}, COM_PERMISSAO);
+        expect(g.body.uploads.find((u) => u.id === uploadId)?.status).toBe("done");
+      });
+      expect(convertSpy).toHaveBeenCalledTimes(2);
+      expect(await fs.readdir(media)).toContain(arquivoEnviado);
+    } finally {
+      convertSpy.mockRestore();
+    }
+  });
+
+  it("retry sem permissão leva 403 e id desconhecido leva 404", async () => {
+    const semPermissao = await callPostParams(
+      "/api/media-library/phone-uploads/:id/retry",
+      { id: "pu_nao_existe" },
+      {},
+      SEM_PERMISSAO
+    );
+    expect(semPermissao.code).toBe(403);
+
+    const desconhecido = await callPostParams(
+      "/api/media-library/phone-uploads/:id/retry",
+      { id: "pu_nao_existe" },
+      {},
+      COM_PERMISSAO
+    );
+    expect(desconhecido.code).toBe(404);
   });
 });

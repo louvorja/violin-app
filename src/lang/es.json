@@ -1165,6 +1165,7 @@
       "preparing_count": "Generando diapositiva {done} de {total}…",
       "ready": "Listo: {name}",
       "failed_item": "No funcionó: {message}",
+      "retry": "Intentar de nuevo",
       "dismiss": "Descartar"
     },
     "presentation": {
