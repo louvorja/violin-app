@@ -720,6 +720,12 @@ function pickImportDatabase(): void {
   importFileInput.value?.click();
 }
 
+function formatOmittedFilesPreview(files: string[]): string {
+  const shown = files.slice(0, 8);
+  const more = files.length > shown.length ? `\n… (+${files.length - shown.length})` : "";
+  return `${shown.join("\n")}${more}`;
+}
+
 async function exportDatabase(): Promise<void> {
   if (dbBackupBusy.value) return;
   dbBackupState.value = "exporting";
@@ -727,6 +733,22 @@ async function exportDatabase(): Promise<void> {
   try {
     const res = await DatabaseBackup.exportAll((progress) => setBackupProgress(progress));
     if (res.canceled) return;
+    if (res.omittedFiles?.length) {
+      $alert.show({
+        color: "warning",
+        title: t("options.updates.export_db_title"),
+        text: t("options.updates.export_db_partial", {
+          file: res.fileName,
+          tables: res.tables,
+          rows: res.rows,
+          count: res.omittedFiles.length,
+          files: formatOmittedFilesPreview(res.omittedFiles),
+        }),
+        buttons: [{ text: "alert.close", color: "warning", value: "close" }],
+        translate: false,
+      });
+      return;
+    }
     $alert.info({
       title: t("options.updates.export_db_title"),
       text: t("options.updates.export_db_done", {
@@ -738,9 +760,10 @@ async function exportDatabase(): Promise<void> {
     });
   } catch (e) {
     console.error("[Atualizações] exportDatabase:", e);
+    const detail = e instanceof Error && e.message ? `\n${e.message}` : "";
     $alert.error({
       title: t("options.updates.export_db_title"),
-      text: t("options.updates.export_db_error"),
+      text: `${t("options.updates.export_db_error")}${detail}`,
       translate: false,
     });
   } finally {
@@ -779,6 +802,24 @@ async function onImportFileChange(e: Event): Promise<void> {
       try {
         const res = await DatabaseBackup.importAll(file, report);
         bgTasks.completeTask(taskId);
+        if (res.omittedFiles?.length) {
+          $alert.show(
+            {
+              color: "warning",
+              title: t("options.updates.import_db_title"),
+              text: t("options.updates.import_db_partial", {
+                tables: res.tables,
+                rows: res.rows,
+                count: res.omittedFiles.length,
+                files: formatOmittedFilesPreview(res.omittedFiles),
+              }),
+              buttons: [{ text: "alert.close", color: "warning", value: "close" }],
+              translate: false,
+            },
+            () => window.location.reload()
+          );
+          return;
+        }
         $alert.info(
           {
             title: t("options.updates.import_db_title"),

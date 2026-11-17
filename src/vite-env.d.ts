@@ -327,8 +327,19 @@ declare global {
       ) => Promise<{ committed: Array<{ rel: string; existed: boolean }> }>;
       rollbackRestore: (
         restoreToken: string,
-        committed: Array<{ rel: string; existed: boolean }>
+        committed?: Array<{ rel: string; existed: boolean }>
       ) => Promise<{ ok: boolean }>;
+      markRestoreCommitted?: (restoreToken: string) => Promise<{ ok: boolean }>;
+      listPendingRestores?: () => Promise<
+        Array<{
+          token: string;
+          journal: {
+            token: string;
+            status: "committing-files" | "committing-db" | "committed";
+            files: Array<{ rel: string; existed: boolean }>;
+          } | null;
+        }>
+      >;
       cleanupRestore: (restoreToken: string) => Promise<{ ok: boolean }>;
       remove: (rel: string) => Promise<{ removed: boolean }>;
       info: (rel: string) => Promise<{ exists: boolean; size: number; mtimeMs?: number }>;

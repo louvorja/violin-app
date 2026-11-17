@@ -516,6 +516,9 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       ipcRenderer.invoke("libraryFiles:commitRestore", restoreToken, rels),
     rollbackRestore: (restoreToken, committed) =>
       ipcRenderer.invoke("libraryFiles:rollbackRestore", restoreToken, committed),
+    markRestoreCommitted: (restoreToken) =>
+      ipcRenderer.invoke("libraryFiles:markRestoreCommitted", restoreToken),
+    listPendingRestores: () => ipcRenderer.invoke("libraryFiles:listPendingRestores"),
     cleanupRestore: (restoreToken) =>
       ipcRenderer.invoke("libraryFiles:cleanupRestore", restoreToken),
     remove: (rel) => ipcRenderer.invoke("libraryFiles:remove", rel),

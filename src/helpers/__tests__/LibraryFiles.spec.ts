@@ -4,7 +4,7 @@ const h = vi.hoisted(() => ({
   platform: {
     isDesktop: true,
     api: null as {
-      libraryFiles?: { prune: (known: string[]) => Promise<{ removed: number }> } | null;
+      libraryFiles?: Record<string, unknown> | null;
     } | null,
   },
 }));
@@ -56,5 +56,17 @@ describe("LibraryFiles — caminhos gerenciados", () => {
       "media-library/id/foto.png",
       "liturgy-files/lf-1/anexo.pdf",
     ]);
+  });
+
+  it("openDesktopLibraryFile retorna null quando ausente (ENOENT) mas propaga erro real de leitura", async () => {
+    const openRead = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error("EACCES: permission denied"));
+    h.platform.api = { libraryFiles: { openRead, readChunk: vi.fn(), closeRead: vi.fn() } };
+    const { openDesktopLibraryFile } = await load();
+
+    expect(await openDesktopLibraryFile("media-library/a/ausente.jpg")).toBeNull();
+    await expect(openDesktopLibraryFile("media-library/b/travado.jpg")).rejects.toThrow("EACCES");
   });
 });

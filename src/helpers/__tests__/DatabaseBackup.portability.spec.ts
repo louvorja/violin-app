@@ -85,6 +85,15 @@ const h = vi.hoisted(() => ({
   isDesktop: false,
   opfsSupported: true,
   desktopDisk: new Map<string, Uint8Array>(),
+  desktopUnreadable: new Set<string>(),
+  desktopJournals: new Map<
+    string,
+    {
+      token: string;
+      status: "committing-files" | "committing-db" | "committed";
+      files: Array<{ rel: string; existed: boolean }>;
+    }
+  >(),
   desktopStaged: new Map<string, { restoreToken: string; rel: string; chunks: Uint8Array[]; committed?: boolean }>(),
   desktopReadTokens: new Map<string, { data: Uint8Array; offset: number }>(),
   lockBusy: false,
@@ -103,6 +112,9 @@ vi.mock("@/helpers/Platform", () => ({
       return {
         libraryFiles: {
           openRead: vi.fn(async (rel: string) => {
+            if (h.desktopUnreadable.has(rel)) {
+              throw new Error(`EACCES: permissão negada ao ler ${rel}`);
+            }
             const data = h.desktopDisk.get(rel);
             if (!data) return null;
             const token = `read-${h.nextToken++}`;
@@ -139,6 +151,14 @@ vi.mock("@/helpers/Platform", () => ({
           }),
           commitRestore: vi.fn(async (restoreToken: string, rels: string[]) => {
             const committed: Array<{ rel: string; existed: boolean }> = [];
+            const planned = rels.map((rel) => ({ rel, existed: h.desktopDisk.has(rel) }));
+            if (planned.length) {
+              h.desktopJournals.set(restoreToken, {
+                token: restoreToken,
+                status: "committing-files",
+                files: planned,
+              });
+            }
             for (const rel of rels) {
               const staged = Array.from(h.desktopStaged.values()).find(
                 (entry) => entry.restoreToken === restoreToken && entry.rel === rel && entry.committed
@@ -158,19 +178,48 @@ vi.mock("@/helpers/Platform", () => ({
               h.desktopDisk.set(rel, out);
               committed.push({ rel, existed });
             }
+            if (planned.length) {
+              h.desktopJournals.set(restoreToken, {
+                token: restoreToken,
+                status: "committing-db",
+                files: planned,
+              });
+            }
             return { committed };
           }),
-          rollbackRestore: vi.fn(async (restoreToken: string, committed: Array<{ rel: string; existed: boolean }>) => {
-            for (const item of [...committed].reverse()) {
-              if (item.existed) {
-                const prev = h.desktopDisk.get(`__rb__/${restoreToken}/${item.rel}`);
-                if (prev) h.desktopDisk.set(item.rel, prev);
-              } else {
-                h.desktopDisk.delete(item.rel);
+          rollbackRestore: vi.fn(
+            async (restoreToken: string, committed?: Array<{ rel: string; existed: boolean }>) => {
+              const list =
+                committed && committed.length
+                  ? committed
+                  : h.desktopJournals.get(restoreToken)?.files ?? [];
+              for (const item of [...list].reverse()) {
+                if (item.existed) {
+                  const prev = h.desktopDisk.get(`__rb__/${restoreToken}/${item.rel}`);
+                  if (prev) h.desktopDisk.set(item.rel, prev);
+                } else {
+                  h.desktopDisk.delete(item.rel);
+                }
               }
+              for (const key of Array.from(h.desktopDisk.keys())) {
+                if (key.startsWith(`__rb__/${restoreToken}/`)) h.desktopDisk.delete(key);
+              }
+              h.desktopJournals.delete(restoreToken);
+              return { ok: true };
             }
+          ),
+          markRestoreCommitted: vi.fn(async (restoreToken: string) => {
+            const j = h.desktopJournals.get(restoreToken);
+            if (!j) return { ok: false };
+            h.desktopJournals.set(restoreToken, { ...j, status: "committed" });
             return { ok: true };
           }),
+          listPendingRestores: vi.fn(async () =>
+            Array.from(h.desktopJournals.entries()).map(([token, journal]) => ({
+              token,
+              journal,
+            }))
+          ),
           cleanupRestore: vi.fn(async (restoreToken: string) => {
             for (const key of Array.from(h.desktopDisk.keys())) {
               if (key.startsWith(`__rb__/${restoreToken}/`)) h.desktopDisk.delete(key);
@@ -178,6 +227,7 @@ vi.mock("@/helpers/Platform", () => ({
             for (const [k, v] of h.desktopStaged) {
               if (v.restoreToken === restoreToken) h.desktopStaged.delete(k);
             }
+            h.desktopJournals.delete(restoreToken);
             return { ok: true };
           }),
         },
@@ -301,10 +351,15 @@ vi.mock("@/helpers/IndexedDB", () => ({
 import DatabaseBackup, { recoverPendingBackupRestore } from "@/helpers/DatabaseBackup";
 import { loadZipJs } from "@/helpers/Zip";
 
+const encBytes = (s: string) => new TextEncoder().encode(s);
+const decBytes = (b?: Uint8Array) => (b ? new TextDecoder().decode(b) : "");
+
 describe("DatabaseBackup portability, atomic restore & crash recovery", () => {
   beforeEach(() => {
     h.rows.clear();
     h.desktopDisk.clear();
+    h.desktopUnreadable.clear();
+    h.desktopJournals.clear();
     h.desktopStaged.clear();
     h.desktopReadTokens.clear();
     h.replaceFailOnce = false;
@@ -526,5 +581,71 @@ describe("DatabaseBackup portability, atomic restore & crash recovery", () => {
     await expect(
       DatabaseBackup.importAll(new File([new Uint8Array([1, 2, 3])], "x.ljdb"))
     ).rejects.toThrow("outra aba");
+  });
+
+  it("desktop: falha claramente quando arquivo físico não pode ser lido e lista ausentes em omittedFiles", async () => {
+    h.isDesktop = true;
+    h.rows.set(DB_TABLE.MEDIA_LIBRARY, [
+      { id: "m1", name: "bloqueado.mp4", path: "media-library/m1/bloqueado.mp4" },
+    ]);
+    h.desktopDisk.set("media-library/m1/bloqueado.mp4", encBytes("VID"));
+    h.desktopUnreadable.add("media-library/m1/bloqueado.mp4");
+
+    // 1) Erro real de leitura (permissão / EIO) deve falhar a exportação, nunca omitir em silêncio.
+    await expect(DatabaseBackup.exportAll()).rejects.toThrow("EACCES");
+
+    // 2) Arquivo ausente (ENOENT) é registrado no manifest e devolvido em omittedFiles (não silencioso).
+    h.desktopUnreadable.clear();
+    h.desktopDisk.clear();
+    h.rows.set(DB_TABLE.MEDIA_LIBRARY, [
+      { id: "m2", name: "sumiu.jpg", path: "media-library/m2/sumiu.jpg" },
+    ]);
+    await expect(
+      DatabaseBackup.exportAll(undefined, { failOnMissingFiles: true })
+    ).rejects.toThrow("media-library/m2/sumiu.jpg");
+
+    const partial = await DatabaseBackup.exportAll();
+    expect(partial.omittedFiles).toEqual(["media-library/m2/sumiu.jpg"]);
+    const imported = await DatabaseBackup.importAll(new File([h.exportedFile!], partial.fileName));
+    expect(imported.omittedFiles).toEqual(["media-library/m2/sumiu.jpg"]);
+  });
+
+  it("desktop: recoverPendingBackupRestore reverte arquivos se cair após commitRestore e antes do IDB", async () => {
+    h.isDesktop = true;
+    const token = "desk-crash-before-idb";
+    h.desktopDisk.set("media-library/k1/keep.jpg", encBytes("CORRUPT-NEW"));
+    h.desktopDisk.set(`__rb__/${token}/media-library/k1/keep.jpg`, encBytes("ORIGINAL-SAFE"));
+    h.desktopDisk.set("media-library/k2/added.jpg", encBytes("ADDED-NEW"));
+    h.desktopJournals.set(token, {
+      token,
+      status: "committing-db",
+      files: [
+        { rel: "media-library/k1/keep.jpg", existed: true },
+        { rel: "media-library/k2/added.jpg", existed: false },
+      ],
+    });
+
+    await recoverPendingBackupRestore();
+
+    expect(decBytes(h.desktopDisk.get("media-library/k1/keep.jpg"))).toBe("ORIGINAL-SAFE");
+    expect(h.desktopDisk.has("media-library/k2/added.jpg")).toBe(false);
+    expect(h.desktopJournals.size).toBe(0);
+
+    // Após commit do IDB (__backup_commit__ presente), mantém novos arquivos e limpa marcador/journal.
+    const tokenDone = "desk-crash-after-idb";
+    h.desktopDisk.set("media-library/k1/keep.jpg", encBytes("RESTORED-FINAL"));
+    h.desktopDisk.set(`__rb__/${tokenDone}/media-library/k1/keep.jpg`, encBytes("OLD"));
+    h.desktopJournals.set(tokenDone, {
+      token: tokenDone,
+      status: "committing-db",
+      files: [{ rel: "media-library/k1/keep.jpg", existed: true }],
+    });
+    h.rows.set(DB_TABLE.CACHE, [{ id: "__backup_commit__", token: tokenDone }]);
+
+    await recoverPendingBackupRestore();
+
+    expect(decBytes(h.desktopDisk.get("media-library/k1/keep.jpg"))).toBe("RESTORED-FINAL");
+    expect(h.desktopJournals.size).toBe(0);
+    expect((h.rows.get(DB_TABLE.CACHE) ?? []).find((r) => r.id === "__backup_commit__")).toBeUndefined();
   });
 });

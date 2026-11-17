@@ -68,6 +68,7 @@ interface BackupManifest {
   tables: BackupManifestTable[];
   opfs?: BackupManifestFile[];
   library?: BackupManifestFile[];
+  omittedFiles?: string[];
 }
 
 interface OpfsRestoreJournal {
@@ -82,11 +83,17 @@ export interface BackupExportResult {
   tables: number;
   rows: number;
   canceled?: boolean;
+  omittedFiles?: string[];
+}
+
+export interface BackupExportOptions {
+  failOnMissingFiles?: boolean;
 }
 
 export interface BackupImportResult {
   tables: number;
   rows: number;
+  omittedFiles?: string[];
 }
 
 export interface BackupProgress {
@@ -257,7 +264,8 @@ async function estimateBackupBytes(
 }
 
 async function exportStreaming(
-  onProgress?: (_progress: BackupProgress) => void
+  onProgress?: (_progress: BackupProgress) => void,
+  options?: BackupExportOptions
 ): Promise<BackupExportResult> {
   const fileName = exportFileName();
   const totalSteps = BACKUP_TABLES.length * 2 + 1;
@@ -289,6 +297,7 @@ async function exportStreaming(
   const manifestTables: BackupManifestTable[] = [];
   const opfsFiles: BackupManifestFile[] = [];
   const libraryFiles: BackupManifestFile[] = [];
+  const omittedFiles: string[] = [];
   const seenFiles = new Set<string>();
   let totalRows = 0;
   let binaryId = 0;
@@ -323,9 +332,14 @@ async function exportStreaming(
           if (seenFiles.has(rel)) continue;
           seenFiles.add(rel);
           const source = await openDesktopLibraryFile(rel);
-          if (!source) continue;
-          const stream = await source.open().catch(() => null);
-          if (!stream) continue;
+          if (!source) {
+            omittedFiles.push(rel);
+            continue;
+          }
+          const stream = await source.open();
+          if (!stream) {
+            throw new Error(`Não foi possível abrir o arquivo da biblioteca "${rel}".`);
+          }
           const zipPath = `library/${rel}`;
           await writer.add(
             zipPath,
@@ -344,7 +358,10 @@ async function exportStreaming(
           if (seenFiles.has(rel) || !isOpfsRel(rel)) continue;
           seenFiles.add(rel);
           const file = await readOpfsFile(rel);
-          if (!file) continue;
+          if (!file) {
+            omittedFiles.push(rel);
+            continue;
+          }
           const zipPath = `opfs/${rel}`;
           await writer.add(zipPath, new BlobReader(file), { level: 0 });
           opfsFiles.push({
@@ -357,6 +374,12 @@ async function exportStreaming(
       }
     }
 
+    if (options?.failOnMissingFiles && omittedFiles.length > 0) {
+      throw new Error(
+        `Arquivos da biblioteca ausentes durante a exportação: ${omittedFiles.join(", ")}`
+      );
+    }
+
     const manifest: BackupManifest = {
       format: EXPORT_FORMAT,
       version: EXPORT_VERSION,
@@ -367,6 +390,7 @@ async function exportStreaming(
       tables: manifestTables,
       opfs: opfsFiles,
       ...(libraryFiles.length ? { library: libraryFiles } : {}),
+      ...(omittedFiles.length ? { omittedFiles } : {}),
     };
 
     await writer.add(manifestFileName(), new TextReader(JSON.stringify(manifest, null, 2)), {
@@ -379,6 +403,7 @@ async function exportStreaming(
       fileName,
       tables: BACKUP_TABLES.length,
       rows: totalRows,
+      ...(omittedFiles.length ? { omittedFiles } : {}),
     };
   } catch (error) {
     await sink.abort().catch(() => {});
@@ -577,56 +602,97 @@ async function clearBackupCommitMarker(expectedToken?: string): Promise<void> {
   }
 }
 
+let inFlightRecovery: Promise<void> | null = null;
+
 /**
- * Recupera ou limpa uma restauração web interrompida no boot, respeitando o
- * bloqueio entre abas para nunca apagar staging de uma restauração ativa.
+ * Recupera ou limpa uma restauração interrompida no boot (Desktop e Web),
+ * respeitando o bloqueio entre abas no navegador para não interferir em
+ * outra aba ativa.
  */
 export async function recoverPendingBackupRestore(): Promise<void> {
-  if (Platform.isDesktop || !isOpfsSupported()) return;
-  await withBackupLock(async () => {
-    const tokens = await listOpfsStagingTokens();
+  if (inFlightRecovery) return inFlightRecovery;
+  inFlightRecovery = (async () => {
     const idb = $idb as typeof $idb & {
       get?: <T>(_table: string, _id: string) => Promise<T | undefined>;
     };
-    const commitMarker =
-      typeof idb.get === "function"
-        ? await idb
-            .get<{ id: string; token?: string }>(DB_TABLE.CACHE, BACKUP_COMMIT_MARKER_ID)
-            .catch(() => undefined)
-        : undefined;
 
-    for (const token of tokens) {
-      const raw = await readOpfsText(stagingJournalRel(token)).catch(() => null);
-      if (!raw) {
-        await removeStaging(token).catch(() => {});
-        continue;
+    if (Platform.isDesktop) {
+      const desktop = (Platform.api as LouvorjaApi | null)?.libraryFiles;
+      if (!desktop?.listPendingRestores) return;
+      const pending = await desktop.listPendingRestores().catch(() => []);
+      const commitMarker =
+        pending.length > 0 && typeof idb.get === "function"
+          ? await idb
+              .get<{ id: string; token?: string }>(DB_TABLE.CACHE, BACKUP_COMMIT_MARKER_ID)
+              .catch(() => undefined)
+          : undefined;
+      for (const item of pending) {
+        const token = item?.token;
+        if (!token) continue;
+        const journal = item.journal;
+        if (!journal || journal.token !== token) {
+          await desktop.cleanupRestore(token).catch(() => {});
+          continue;
+        }
+        const dbCommitted =
+          journal.status === "committed" ||
+          (commitMarker?.token !== undefined && commitMarker.token === token);
+        if (!dbCommitted && (journal.status === "committing-files" || journal.status === "committing-db")) {
+          await desktop.rollbackRestore(token, journal.files).catch(() => {});
+        } else {
+          await clearBackupCommitMarker(token);
+          await desktop.cleanupRestore(token).catch(() => {});
+        }
       }
-      let journal: OpfsRestoreJournal | null = null;
-      try {
-        journal = JSON.parse(raw) as OpfsRestoreJournal;
-      } catch {
-        journal = null;
-      }
-      if (!journal || journal.token !== token) {
-        await removeStaging(token).catch(() => {});
-        continue;
-      }
-      const dbCommitted =
-        journal.status === "committed" ||
-        (commitMarker?.token !== undefined && commitMarker.token === token);
-      if (!dbCommitted && journal.status !== "committing-files" && journal.status !== "committing-db") {
-        await removeStaging(token).catch(() => {});
-        continue;
-      }
-      if (!dbCommitted) {
-        await rollbackOpfsJournal(journal);
-      } else {
-        await clearBackupCommitMarker(token);
-      }
-      await removeStaging(token).catch(() => {});
+      return;
     }
-    await pruneOpfsStaging().catch(() => false);
-  }).catch(() => {});
+
+    if (!isOpfsSupported()) return;
+    await withBackupLock(async () => {
+      const tokens = await listOpfsStagingTokens();
+      const commitMarker =
+        typeof idb.get === "function"
+          ? await idb
+              .get<{ id: string; token?: string }>(DB_TABLE.CACHE, BACKUP_COMMIT_MARKER_ID)
+              .catch(() => undefined)
+          : undefined;
+
+      for (const token of tokens) {
+        const raw = await readOpfsText(stagingJournalRel(token)).catch(() => null);
+        if (!raw) {
+          await removeStaging(token).catch(() => {});
+          continue;
+        }
+        let journal: OpfsRestoreJournal | null = null;
+        try {
+          journal = JSON.parse(raw) as OpfsRestoreJournal;
+        } catch {
+          journal = null;
+        }
+        if (!journal || journal.token !== token) {
+          await removeStaging(token).catch(() => {});
+          continue;
+        }
+        const dbCommitted =
+          journal.status === "committed" ||
+          (commitMarker?.token !== undefined && commitMarker.token === token);
+        if (!dbCommitted && journal.status !== "committing-files" && journal.status !== "committing-db") {
+          await removeStaging(token).catch(() => {});
+          continue;
+        }
+        if (!dbCommitted) {
+          await rollbackOpfsJournal(journal);
+        } else {
+          await clearBackupCommitMarker(token);
+        }
+        await removeStaging(token).catch(() => {});
+      }
+      await pruneOpfsStaging().catch(() => false);
+    }).catch(() => {});
+  })().finally(() => {
+    inFlightRecovery = null;
+  });
+  return inFlightRecovery;
 }
 
 function collectIncomingManifestFiles(manifest: BackupManifest): BackupManifestFile[] {
@@ -780,21 +846,24 @@ async function importStreaming(
       await writeOpfsText(stagingJournalRel(token), JSON.stringify(opfsJournal));
     }
 
-    // 3) Commit atômico do IndexedDB com marcador da transação.
+    // 3) Commit atômico do IndexedDB com marcador da transação (Desktop e Web).
     step += 1;
     onProgress?.({ phase: "import", current: step, total, detail: "writing" });
-    const marker =
-      !Platform.isDesktop && opfsJournal
-        ? { table: DB_TABLE.CACHE, row: { id: BACKUP_COMMIT_MARKER_ID, token } }
-        : undefined;
+    const hasStagedFiles = opfsJournal !== null || stagedDesktopRels.length > 0;
+    const marker = hasStagedFiles
+      ? { table: DB_TABLE.CACHE, row: { id: BACKUP_COMMIT_MARKER_ID, token } }
+      : undefined;
     previousFallback = await commitDatabaseTables(data, marker);
     dbCommitted = true;
 
     // 4) Limpeza pós-commit.
     if (Platform.isDesktop) {
-      await (Platform.api as LouvorjaApi | null)?.libraryFiles
-        ?.cleanupRestore(token)
-        .catch(() => {});
+      const desktop = (Platform.api as LouvorjaApi | null)?.libraryFiles;
+      if (stagedDesktopRels.length) {
+        await desktop?.markRestoreCommitted?.(token).catch(() => {});
+        await clearBackupCommitMarker(token);
+      }
+      await desktop?.cleanupRestore(token).catch(() => {});
     } else {
       if (opfsJournal) {
         await writeOpfsText(
@@ -812,7 +881,14 @@ async function importStreaming(
     }
     onProgress?.({ phase: "import", current: total, total, detail: "done" });
 
-    return { tables: data.size, rows: totalRows };
+    const manifestOmitted = Array.isArray(manifest.omittedFiles)
+      ? manifest.omittedFiles.filter((value): value is string => typeof value === "string")
+      : [];
+    return {
+      tables: data.size,
+      rows: totalRows,
+      ...(manifestOmitted.length ? { omittedFiles: manifestOmitted } : {}),
+    };
   } catch (error) {
     if (!dbCommitted) {
       if (Platform.isDesktop) {
@@ -849,14 +925,19 @@ async function importStreaming(
 export default {
   recoverPendingBackupRestore,
 
-  async exportAll(onProgress?: (_progress: BackupProgress) => void): Promise<BackupExportResult> {
-    return exportStreaming(onProgress);
+  async exportAll(
+    onProgress?: (_progress: BackupProgress) => void,
+    options?: BackupExportOptions
+  ): Promise<BackupExportResult> {
+    await recoverPendingBackupRestore();
+    return exportStreaming(onProgress, options);
   },
 
   async importAll(
     file: File,
     onProgress?: (_progress: BackupProgress) => void
   ): Promise<BackupImportResult> {
+    await recoverPendingBackupRestore();
     return withBackupLock(async () => {
       onProgress?.({ phase: "import", current: 0, total: 4, detail: "loading" });
 

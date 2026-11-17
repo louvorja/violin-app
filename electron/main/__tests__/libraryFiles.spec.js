@@ -227,7 +227,71 @@ describe("libraryFiles", () => {
     expect(fs.existsSync(path.join(paths.filesDir(), addedRel))).toBe(false);
 
     await call("libraryFiles:cleanupRestore", restoreToken);
-    expect(fs.existsSync(path.join(paths.filesDir(), ".restore-staging", restoreToken))).toBe(false);
+    expect(fs.existsSync(path.join(paths.filesDir(), ".staging", restoreToken))).toBe(false);
+  });
+
+  it("commitRestore grava journal.json no disco e rollbackRestore reverte sem lista em memória", async () => {
+    const existingRel = "media-library/k1/foto.jpg";
+    const addedRel = "liturgy-files/k2/slide.pdf";
+    fs.outputFileSync(path.join(paths.filesDir(), existingRel), "ORIGINAL");
+
+    const restoreToken = "550e8400-e29b-41d4-a716-446655440001";
+    const s1 = await call("libraryFiles:stageBegin", {
+      restoreToken,
+      rel: existingRel,
+      size: 6,
+    });
+    await call("libraryFiles:write", s1.token, new TextEncoder().encode("NOVO-1"));
+    await call("libraryFiles:end", s1.token);
+
+    const s2 = await call("libraryFiles:stageBegin", {
+      restoreToken,
+      rel: addedRel,
+      size: 6,
+    });
+    await call("libraryFiles:write", s2.token, new TextEncoder().encode("NOVO-2"));
+    await call("libraryFiles:end", s2.token);
+
+    await call("libraryFiles:commitRestore", restoreToken, [existingRel, addedRel]);
+    const pending = await call("libraryFiles:listPendingRestores");
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({
+      token: restoreToken,
+      journal: {
+        token: restoreToken,
+        status: "committing-db",
+        files: [
+          { rel: existingRel, existed: true },
+          { rel: addedRel, existed: false },
+        ],
+      },
+    });
+
+    // Simula crash/reinício: rollbackRestore sem lista `committed` usa o journal.json do disco.
+    await call("libraryFiles:rollbackRestore", restoreToken);
+    expect(fs.readFileSync(path.join(paths.filesDir(), existingRel), "utf8")).toBe("ORIGINAL");
+    expect(fs.existsSync(path.join(paths.filesDir(), addedRel))).toBe(false);
+    expect(await call("libraryFiles:listPendingRestores")).toEqual([]);
+  });
+
+  it("markRestoreCommitted marca status 'committed' no journal e openRead propaga arquivo inválido", async () => {
+    const targetRel = "media-library/k3/foto.jpg";
+    fs.outputFileSync(path.join(paths.filesDir(), targetRel), "OK");
+    const restoreToken = "550e8400-e29b-41d4-a716-446655440002";
+    const s1 = await call("libraryFiles:stageBegin", { restoreToken, rel: targetRel, size: 4 });
+    await call("libraryFiles:write", s1.token, new TextEncoder().encode("V2OK"));
+    await call("libraryFiles:end", s1.token);
+    await call("libraryFiles:commitRestore", restoreToken, [targetRel]);
+    expect(await call("libraryFiles:markRestoreCommitted", restoreToken)).toEqual({ ok: true });
+    const pending = await call("libraryFiles:listPendingRestores");
+    expect(pending[0]?.journal?.status).toBe("committed");
+    await call("libraryFiles:cleanupRestore", restoreToken);
+
+    // Arquivo ilegível (symlink / diretório no lugar do arquivo) deve falhar, não retornar null.
+    const badRel = "media-library/bad1/link.jpg";
+    const badAbs = path.join(paths.filesDir(), badRel);
+    fs.ensureDirSync(badAbs);
+    await expect(call("libraryFiles:openRead", badRel)).rejects.toThrow("Caminho inválido");
   });
 
   it.skipIf(process.platform === "win32")(
