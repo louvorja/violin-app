@@ -93,14 +93,6 @@ vinculado a um item de Canva, arquivo ou música não é ativado** quando o
 item vai pelo programa. O resultado de `execute` também é o que o programa
 precisa para saber o que está no ar.
 
-O programa vira um adaptador: música no palco com a versão escolhida, Canva
-com o link renovado, arquivo da nuvem baixado antes e PowerPoint como PDF.
-Isso corrige um defeito de hoje: nesses caminhos o programa executa um item
-montado na hora, sem o `linked_overlay_id` do original, então o **overlay
-vinculado a um item de Canva, arquivo ou música não é ativado** quando o
-item vai pelo programa. O resultado de `execute` também é o que o programa
-precisa para saber o que está no ar.
-
 ## Para decidir junto (fase 2)
 
 1. **Um módulo só.** Liturgia e programa como um módulo profundo: a sessão
