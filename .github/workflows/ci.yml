@@ -63,3 +63,46 @@ jobs:
 
       - name: Conferir web Android e iPhone no build PWA
         run: npm run test:e2e:mobile:build
+
+  # O app Electron só abre com display: xvfb dá uma tela virtual ao runner.
+  # Um teste opt-in (LJ_RUN_REMOTE_MUSIC_ALBUM=1) para o caminho que mais dói
+  # no controle remoto: álbum que só existe no IndexedDB, offline.
+  e2e-electron:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Instalar dependências
+        run: npm ci
+        env:
+          HUSKY: "0"
+
+      - name: Instalar bibliotecas do Electron e do Playwright
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          npx playwright install --with-deps chromium
+
+      - name: Rodar o E2E do Electron (xvfb)
+        run: |
+          set -o pipefail
+          xvfb-run -a env LJ_RUN_REMOTE_MUSIC_ALBUM=1 \
+            npx playwright test --config playwright.electron.config.js --workers=1 2>&1 | tee e2e-electron.log
+
+      - name: Guardar o log do E2E
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-electron-log
+          path: |
+            e2e-electron.log
+            playwright-report/
+          retention-days: 7

@@ -67,18 +67,31 @@ Nada muda de comportamento: o código foi movido do programa para a
 liturgia, e `useLiturgyExecution` usa o mesmo `isYoutube`. Os testes da
 classificação mudaram para `src/modules/liturgy/__tests__/item.spec.ts`.
 
-## Etapa 2 — a execução
+## Etapa 2 — a execução (proposta, ainda não implementada)
 
 ```ts
 useItemExecution(adapter?).execute(item, { musicMode?, startAt? })
   → "projected" | "skipped" | "failed"
 ```
 
-A ordem fica fixa num lugar só: recolhe o overlay do item anterior, pergunta
-ao adaptador (que pode reescrever o item, dizer que já tratou ou abortar),
-despacha pelo `tipo` e, se projetou, ativa o overlay vinculado. A liturgia
-usa sem adaptador; `executeItem` e `executeAnnouncements` continuam como
-atalhos.
+A ordem fica fixa num lugar só — **quando esta etapa existir**. Hoje o
+caminho real são `useProgramExecution` (programa) e `useLiturgyExecution`
+(liturgia), ainda com regras próprias; `useItemExecution` não existe em
+`src/`. O desenho abaixo é o alvo, não uma API disponível: não a procure no
+código antes de implementá-la.
+
+O desenho: recolhe o overlay do item anterior, pergunta ao adaptador (que
+pode reescrever o item, dizer que já tratou ou abortar), despacha pelo `tipo`
+e, se projetou, ativa o overlay vinculado. A liturgia usa sem adaptador;
+`executeItem` e `executeAnnouncements` continuam como atalhos.
+
+O programa vira um adaptador: música no palco com a versão escolhida, Canva
+com o link renovado, arquivo da nuvem baixado antes e PowerPoint como PDF.
+Isso corrige um defeito de hoje: nesses caminhos o programa executa um item
+montado na hora, sem o `linked_overlay_id` do original, então o **overlay
+vinculado a um item de Canva, arquivo ou música não é ativado** quando o
+item vai pelo programa. O resultado de `execute` também é o que o programa
+precisa para saber o que está no ar.
 
 O programa vira um adaptador: música no palco com a versão escolhida, Canva
 com o link renovado, arquivo da nuvem baixado antes e PowerPoint como PDF.

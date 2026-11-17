@@ -83,10 +83,13 @@ o PowerPoint gerou.
 
 ```
 <dados>/pptx/
-├── <hash do arquivo>-<assinatura das fontes>-<conversor>-v2.pdf
+├── <hash do arquivo>-<assinatura das fontes>-<conversor>-v3.pdf
 ├── <mesmo nome>.json      metadado (arquivo de origem, fontes, data)
 └── fonts/                 fontes extraídas/baixadas (embedded/, google/)
 ```
+
+Arquivos acima de **200 MB** não têm o ZIP aberto (fontes/animações): a
+conversão segue, avisando que as fontes não foram conferidas.
 
 A assinatura das fontes muda quando uma fonte que faltava passa a existir:
 o mesmo arquivo é convertido de novo. A pasta fica fora de `files/` porque é
@@ -108,9 +111,20 @@ contas do computador. Pelo mesmo motivo o PowerPoint não deve voltar para lá.
 | `electron/main/pptx/windowsScript.js`     | script PowerShell (fontes + COM)                    |
 | `src/modules/media_library/pptxImport.ts` | validação da resposta e textos de andamento         |
 
-IPC: `pptx:status`, `pptx:convert` (`{ path }`), `pptx:openPermissionSettings`
-(abre Arquivos e Pastas no macOS) e o evento `pptx:progress`.
-O caminho é validado no main (extensão, existência, tamanho).
+IPC: `pptx:status`, `pptx:convert` (`{ path, force?, engine? }`),
+`pptx:openPermissionSettings` (abre Arquivos e Pastas no macOS) e o evento
+`pptx:progress`. `force` é o "Gerar de novo" (ignora o PDF guardado) e
+`engine` escolhe `auto`/`powerpoint`/`libreoffice`. O retorno de sucesso traz
+`{ ok, path, fonts, features, nativeAvailable, cached, permissionFallback,
+staleFonts }`; a falha traz `{ ok: false, code, message }` (contrato em
+`src/modules/media_library/pptxImport.ts`). O caminho é validado no main
+(extensão, existência, tamanho).
+
+Apresentações com macros (`.ppt`, `.pps`, `.pptm`, `.ppsm`) pedem confirmação
+do operador uma vez por arquivo antes de abrir/converter. A lista de extensões
+é única, em `electron/shared/presentationExtensions.json`, lida pelo main e
+pelo renderer. O upload feito pelo celular recusa esses formatos: não há quem
+confirme do outro lado.
 
 ## Modo nativo: animações, vídeos e áudios
 
