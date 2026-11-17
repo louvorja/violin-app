@@ -30,6 +30,8 @@ interface SongNeed {
   /** Caminho remoto (`/musics/pt/…`) e endereço para baixar. */
   remote: string;
   url: string;
+  /** Qual arquivo da música falta: o cantado ou o playback. */
+  mode: "sung" | "pb";
 }
 
 /** Textos da tarefa em segundo plano. */
@@ -46,6 +48,8 @@ const state = reactive({
   pending: [] as ProgramItem[],
   songs: [] as SongNeed[],
   cloud: [] as string[],
+  /** Caminho na nuvem → título do item do programa que o usa. */
+  cloudOwners: {} as Record<string, string>,
   missing: [] as string[],
   empty: [] as ProgramItem[],
   outside: [] as string[],
@@ -54,14 +58,17 @@ const state = reactive({
 });
 
 /** Os arquivos de áudio que a versão escolhida usa; "escolher na hora" precisa dos dois. */
-function songUrls(item: ProgramItem, music: Music): string[] {
+function songUrls(item: ProgramItem, music: Music): { mode: "sung" | "pb"; url: string }[] {
   const mode = item.source?.subtipo ?? "";
   const sung = music.url_music ?? "";
   const pb = music.url_instrumental_music ?? "";
   if (mode === "lyric") return [];
-  if (mode === "pb" || mode === "audio_pb") return [pb];
-  if (mode === "sung" || mode === "audio") return [sung];
-  return [sung, pb];
+  if (mode === "pb" || mode === "audio_pb") return [{ mode: "pb", url: pb }];
+  if (mode === "sung" || mode === "audio") return [{ mode: "sung", url: sung }];
+  return [
+    { mode: "sung", url: sung },
+    { mode: "pb", url: pb },
+  ];
 }
 
 async function songsToDownload(program: Program): Promise<SongNeed[]> {
@@ -74,9 +81,9 @@ async function songsToDownload(program: Program): Promise<SongNeed[]> {
   for (const item of items) {
     const music = await $database.get<Music>(`music_${item.source!.id_music}`).catch(() => null);
     if (!music) continue;
-    for (const url of songUrls(item, music)) {
+    for (const { mode, url } of songUrls(item, music)) {
       const remote = resolveMediaReference(url)?.relativePath;
-      if (remote) needs.push({ item, remote, url });
+      if (remote) needs.push({ item, remote, url, mode });
     }
   }
   if (!needs.length) return [];
@@ -137,6 +144,23 @@ async function check(program: Program): Promise<void> {
 
     state.pending = pendingItems(program);
     state.songs = await songsToDownload(program);
+    const owners = new Map<string, string>();
+    for (const item of program.sessions.flatMap((s) => s.items)) {
+      if (
+        item.source?.tipo === LiturgyItemTypeEnum.ARQUIVO &&
+        item.source.dir &&
+        !isUrl(item.source.dir)
+      ) {
+        owners.set(item.source.dir, item.title);
+      }
+      for (const child of item.children ?? []) {
+        if (child.path && !isUrl(child.path)) owners.set(child.path, item.title);
+      }
+      if (item.folder) {
+        for (const path of folderFiles.get(item.folder) ?? []) owners.set(path, item.title);
+      }
+    }
+    state.cloudOwners = Object.fromEntries(owners);
     state.cloud = toCheck.filter((p) => cloud.stateOf(p) === "cloud");
     state.missing = Platform.isDesktop ? await missingPaths(local) : [];
     state.empty = program.sessions

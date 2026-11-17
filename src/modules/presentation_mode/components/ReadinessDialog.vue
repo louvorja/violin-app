@@ -27,7 +27,12 @@
         <p class="pm-ready__hint">{{ tm(`readiness.${group.key}_hint`) }}</p>
         <ul class="pm-ready__list">
           <li v-for="row in group.rows.slice(0, 8)" :key="row.key" class="pm-ready__row">
-            <span class="pm-ready__name" :title="row.title">{{ row.label }}</span>
+            <span class="pm-ready__text">
+              <span class="pm-ready__name" :title="row.title">{{ row.label }}</span>
+              <span v-if="row.detail" class="pm-ready__detail" :title="row.title">
+                {{ row.detail }}
+              </span>
+            </span>
             <LjButton
               v-if="row.itemId"
               size="sm"
@@ -112,7 +117,36 @@ interface Row {
   key: string;
   label: string;
   title: string;
+  /** O arquivo/versão de fato que será baixado (ou o item que o usa). */
+  detail?: string;
   itemId?: string;
+}
+
+/** Uma linha por música: as versões que faltam ficam juntas no detalhe. */
+function songRows(): Row[] {
+  const byItem = new Map<string, typeof state.songs>();
+  for (const need of state.songs) {
+    const list = byItem.get(need.item.id) ?? [];
+    list.push(need);
+    byItem.set(need.item.id, list);
+  }
+  return [...byItem.entries()].map(([itemId, needs]) => {
+    const item = needs[0].item;
+    const label = item.title || item.source?.item || baseName(needs[0].remote);
+    const music = item.source?.item?.trim();
+    const parts: string[] = [];
+    // O título do item pode ser genérico ("Hino inicial"): a música de fato vem junto.
+    if (music && music !== label) parts.push(music);
+    for (const need of needs) {
+      parts.push(`${tm(`music_modes.${need.mode}`)} · ${baseName(need.remote)}`);
+    }
+    return {
+      key: itemId,
+      label,
+      title: needs.map((n) => n.remote).join("\n"),
+      detail: parts.join(" | "),
+    };
+  });
 }
 
 const groups = computed(() => {
@@ -125,16 +159,17 @@ const groups = computed(() => {
     {
       key: "songs",
       icon: ICONS.MUSIC.MUSIC,
-      rows: state.songs.map((s) => ({
-        key: s.remote,
-        label: s.item.source?.item || s.item.title,
-        title: s.remote,
-      })),
+      rows: songRows(),
     },
     {
       key: "cloud",
       icon: ICONS.ACTIONS.CLOUD_DOWNLOAD,
-      rows: state.cloud.map((p) => ({ key: p, label: baseName(p), title: p })),
+      rows: state.cloud.map((p) => ({
+        key: p,
+        label: baseName(p),
+        title: p,
+        detail: state.cloudOwners[p] ?? "",
+      })),
     },
     {
       key: "missing",
@@ -237,10 +272,25 @@ function edit(itemId: string): void {
   padding-left: 22px;
 }
 
-.pm-ready__name {
+.pm-ready__text {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-width: 0;
+  margin-bottom: 10px;
+}
+
+.pm-ready__name {
   overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Qual arquivo/versão será baixado de fato (o título do item fica em cima). */
+.pm-ready__detail {
+  overflow: hidden;
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-subtle);
   white-space: nowrap;
   text-overflow: ellipsis;
 }

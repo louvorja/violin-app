@@ -55,10 +55,14 @@ vi.mock("../useFileLibrary", () => ({ readFolder: vi.fn(async () => []) }));
 const { useReadiness } = await import("../useReadiness");
 
 const program = { sessions: [] } as unknown as Program;
-const song = (url: string): { item: ProgramItem; remote: string; url: string } => ({
+const song = (
+  url: string,
+  mode: "sung" | "pb" = "sung"
+): { item: ProgramItem; remote: string; url: string; mode: "sung" | "pb" } => ({
   item: {} as ProgramItem,
   remote: url,
   url,
+  mode,
 });
 
 describe("useReadiness — preparar em segundo plano", () => {
