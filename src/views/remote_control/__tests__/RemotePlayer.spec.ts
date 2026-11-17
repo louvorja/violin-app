@@ -84,6 +84,21 @@ describe("RemotePlayer — refresh e aba ativa", () => {
     // O label "Arquivo" vem antes do nome do arquivo.
     expect(wrapper.find(".rp-now__file").text()).toBe("Arquivo · video.mp4");
 
+    // Botões de salto ±10s seguem canSeek como o slider.
+    const steps = wrapper.findAll(".rp-steps > *");
+    expect(steps[1].attributes("disabled")).toBe("false");
+    expect(steps[2].attributes("disabled")).toBe("false");
+
+    apiFetch.mockImplementationOnce(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "ok", state: { ...MEDIA, canSeek: false } }),
+    }));
+    await (wrapper.vm as unknown as { refresh: () => Promise<void> }).refresh();
+    await flushPromises();
+    expect(steps[1].attributes("disabled")).toBe("true");
+    expect(steps[2].attributes("disabled")).toBe("true");
+
     wrapper.unmount();
   });
 });

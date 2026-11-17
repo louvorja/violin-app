@@ -14,7 +14,7 @@
 import { computed, ref, type ComputedRef, type CSSProperties } from "vue";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
-import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
+import { SLIDE_STYLE_DEFAULT, normalizeSlideTextCase } from "@/config/SlideStyle";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { FONT, resolveFont } from "@/config/Fonts";
@@ -180,6 +180,7 @@ interface SlideCfg {
   text_border_color: string;
   text_border_width: number;
   text_border_radius: number;
+  text_case: string;
   affect_external_slides: boolean;
   custom_text_format_active: boolean;
   custom_background_active: boolean;
@@ -280,6 +281,15 @@ const _readSlideOpts = (): SlideCfg => {
       ? Math.min(10, Math.max(1, textBorderWidth))
       : 2;
     merged.text_border_radius = _numeroNaFaixa(KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0, 0, 50);
+    const textCase = $userdata.get<string>(KEYS.OPTIONS.SLIDE.TEXT_CASE, null);
+    if (
+      textCase === "uppercase" ||
+      textCase === "capitalize" ||
+      textCase === "normal" ||
+      textCase === "none"
+    ) {
+      merged.text_case = textCase;
+    }
   }
 
   // Flag global de "afetar slides externos"
@@ -443,6 +453,7 @@ export function useSlideStyle(): SlideStyleAPI {
     void _returnBgReady.value;
     // Re-avalia quando o checkbox de fundo personalizado ou retorno é toggleado
     void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_TEXT_FORMAT, false);
+    void $userdata.get<string>(KEYS.OPTIONS.SLIDE.TEXT_CASE, null);
     void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_BACKGROUND, false);
     void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_BACKGROUND, false);
     void $userdata.get<boolean>(KEYS.OPTIONS.SLIDE.CUSTOM_RETURN_TEXT_FORMAT, false);
@@ -472,10 +483,16 @@ export function useSlideStyle(): SlideStyleAPI {
     if (_overrideExternalText()) return fromCfg;
     return fromSlide || fromCfg;
   }
-  function _externalTextTransform(slide?: SlideOption): CSSProperties {
+  function _slideTextTransform(slide?: SlideOption): CSSProperties {
+    if (!cfg.value.custom_text_format_active) {
+      return { textTransform: "uppercase" };
+    }
     const s = slide as { id_music?: number; custom_song_id?: string; tipo?: string } | null;
     const isCustomSlide = s?.id_music == null && (s?.custom_song_id != null || s?.tipo != null);
-    return isCustomSlide && !_overrideExternalText() ? { textTransform: "none" } : {};
+    if (isCustomSlide && !cfg.value.affect_external_slides) {
+      return { textTransform: "uppercase" };
+    }
+    return { textTransform: normalizeSlideTextCase(cfg.value.text_case) };
   }
 
   function coverSizePct(slide?: SlideOption): number {
@@ -510,7 +527,7 @@ export function useSlideStyle(): SlideStyleAPI {
       textShadow: _buildTextShadow() ?? "none",
       lineHeight: 1.3,
       maxWidth: "92vw",
-      ..._externalTextTransform(slide),
+      ..._slideTextTransform(slide),
     };
   }
 
@@ -527,7 +544,7 @@ export function useSlideStyle(): SlideStyleAPI {
       textShadow: _buildTextShadow() ?? "none",
       lineHeight: 1.3,
       maxWidth: "92vw",
-      ..._externalTextTransform(slide),
+      ..._slideTextTransform(slide),
     };
   }
 
@@ -543,7 +560,7 @@ export function useSlideStyle(): SlideStyleAPI {
       textShadow: _buildTextShadow() ?? "none",
       lineHeight: 1.3,
       maxWidth: "92vw",
-      ..._externalTextTransform(slide),
+      ..._slideTextTransform(slide),
     };
   }
 
@@ -676,21 +693,16 @@ export function useSlideStyle(): SlideStyleAPI {
     return bruto === "normal" ? "none" : bruto;
   });
 
-  const _normalizeTextCase = (v: string | null | undefined): string => {
-    const raw = v ?? "uppercase";
-    return raw === "normal" ? "none" : raw;
-  };
-
   const returnTopTextTransform = computed(() => {
     if (cfg.value.custom_return_text_format_active) {
-      return _normalizeTextCase(cfg.value.return_top_text_case);
+      return normalizeSlideTextCase(cfg.value.return_top_text_case);
     }
     return "uppercase";
   });
 
   const returnBottomTextTransform = computed(() => {
     if (cfg.value.custom_return_text_format_active) {
-      return _normalizeTextCase(cfg.value.return_bottom_text_case);
+      return normalizeSlideTextCase(cfg.value.return_bottom_text_case);
     }
     return "uppercase";
   });

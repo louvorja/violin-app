@@ -32,6 +32,7 @@ export const SLIDE_STYLE_DEFAULT = Object.freeze({
   text_border_color: "#FFFFFF",
   text_border_width: 2,
   text_border_radius: 0,
+  text_case: "uppercase",
   affect_external_slides: true, // formatação personalizada vence formatação do slide externo
   custom_background_active: false, // toggle "Fundo personalizado" ligado pelo usuário
   shadow_enabled: false,
@@ -61,3 +62,18 @@ export const SLIDE_STYLE_DEFAULT = Object.freeze({
   return_bottom_text_align: "center",
   custom_return_text_format_active: false,
 });
+
+export type SlideTextCase = "uppercase" | "capitalize" | "none";
+
+/**
+ * Normaliza o estilo de caixa dos slides para CSS `text-transform` (`"normal"`
+ * legado equivale a `"none"`). Qualquer valor inválido volta ao padrão em caixa alta.
+ */
+export function normalizeSlideTextCase(value: string | null | undefined): SlideTextCase {
+  const raw = String(value ?? "uppercase")
+    .trim()
+    .toLowerCase();
+  if (raw === "normal" || raw === "none") return "none";
+  if (raw === "capitalize") return "capitalize";
+  return "uppercase";
+}

@@ -65,7 +65,7 @@
           icon-only
           :icon="ICONS.PLAYER.REWIND_10"
           :aria-label="t('remote_control.player.rewind')"
-          :disabled="busy || !state.active"
+          :disabled="busy || !state.active || !state.canSeek"
           @click="seekRelative(-10)"
         />
         <LjButton
@@ -74,7 +74,7 @@
           icon-only
           :icon="ICONS.PLAYER.FORWARD_10"
           :aria-label="t('remote_control.player.forward')"
-          :disabled="busy || !state.active"
+          :disabled="busy || !state.active || !state.canSeek"
           @click="seekRelative(10)"
         />
         <LjButton
