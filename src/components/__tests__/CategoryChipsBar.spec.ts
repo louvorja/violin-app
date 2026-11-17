@@ -36,8 +36,10 @@ function montar(overrides: Record<string, unknown> = {}) {
     global: {
       stubs: {
         CategoryChip: {
-          props: ["categoryId", "name", "active"],
-          template: '<button class="stub-chip" :data-cat="categoryId">{{ name }}</button>',
+          props: ["categoryId", "name", "active", "addAllLabel"],
+          emits: ["add-all"],
+          template:
+            '<button class="stub-chip" :data-cat="categoryId" :data-add-all="addAllLabel" @click="$emit(\'add-all\')">{{ name }}</button>',
         },
         LjSelect: {
           props: ["modelValue", "items"],
@@ -84,5 +86,21 @@ describe("CategoryChipsBar", () => {
   it("mostra reproduzir categoria só quando playable e há rótulo", () => {
     const wrapper = montar({ playLabel: "Reproduzir categoria", playable: () => true });
     expect(wrapper.find(".stub-chip").attributes("data-cat")).toBe("cat-1");
+  });
+
+  it("repassa o rótulo e o evento de adicionar tudo ao chip", async () => {
+    const wrapper = montar({ addAllLabel: "Adicionar tudo à playlist" });
+
+    const chips = wrapper.findAll(".stub-chip");
+    expect(chips[0].attributes("data-add-all")).toBe("Adicionar tudo à playlist");
+
+    await chips[0].trigger("click");
+    expect(wrapper.emitted("add-all")?.[0]).toEqual(["cat-1"]);
+  });
+
+  it("sem rótulo, não habilita adicionar tudo em nenhum chip", () => {
+    const wrapper = montar();
+
+    expect(wrapper.find(".stub-chip").attributes("data-add-all")).toBe("");
   });
 });

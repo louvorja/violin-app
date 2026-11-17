@@ -106,7 +106,28 @@ describe("RemoteMediaLibrary — biblioteca", () => {
     // cards[0] = ensaio.mp4 (Vídeos), cards[1] = Culto.jpg (sem categoria).
     expect(cards[0].text()).toContain("ensaio.mp4");
     expect(cards[1].text()).toContain("Culto.jpg");
-    expect(wrapper.findAll(".rm-group")[0].text()).toBe("Vídeos");
+    const groups = wrapper.findAll(".rm-group");
+    expect(groups[0].text()).toContain("Vídeos");
+    expect(groups[0].find(".rm-group__count").text()).toBe("1");
+    wrapper.unmount();
+  });
+
+  it("clicar na categoria recolhe e reabre os itens do grupo", async () => {
+    const wrapper = abrir();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(wrapper.findAll(".rm-item")).toHaveLength(2);
+
+    await wrapper.findAll(".rm-group")[0].trigger("click");
+    // Só o item "sem categoria" continua visível; o cabeçalho fica.
+    expect(wrapper.findAll(".rm-group")).toHaveLength(2);
+    expect(wrapper.findAll(".rm-item")).toHaveLength(1);
+    expect(wrapper.find(".rm-item").text()).toContain("Culto.jpg");
+    expect(wrapper.findAll(".rm-group")[0].attributes("aria-expanded")).toBe("false");
+
+    await wrapper.findAll(".rm-group")[0].trigger("click");
+    expect(wrapper.findAll(".rm-item")).toHaveLength(2);
+    expect(wrapper.findAll(".rm-group")[0].attributes("aria-expanded")).toBe("true");
     wrapper.unmount();
   });
 

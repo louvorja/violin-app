@@ -656,6 +656,22 @@
               />
               <span>{{ $t("options.slides.text_border_enabled") }}</span>
             </label>
+
+            <div class="opt-format-field">
+              <label class="opt-format-label" for="opt-slides-text-case">
+                {{ $t("options.slides.text_case") }}
+              </label>
+              <LjSelect
+                id="opt-slides-text-case"
+                :items="opcoesCaixaTexto"
+                :model-value="
+                  normalizeSlideTextCase(
+                    getUserData(KEYS.OPTIONS.SLIDE.TEXT_CASE, SLIDE_STYLE_DEFAULT.text_case)
+                  )
+                "
+                @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_CASE, $event)"
+              />
+            </div>
           </div>
         </div>
 
@@ -1699,7 +1715,7 @@ import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/Settings";
 import { AUTO_THEME_ID, isThemePreference, THEME_IDS } from "@/config/Themes";
-import { SLIDE_STYLE_DEFAULT } from "@/config/SlideStyle";
+import { SLIDE_STYLE_DEFAULT, normalizeSlideTextCase } from "@/config/SlideStyle";
 import { estiloDeFundo, opcoesDeAjuste } from "@/helpers/BackgroundStyle";
 import { FONT } from "@/config/Fonts";
 import { refreshReturnBg, refreshSlideBg } from "@/composables/useSlideStyle";
@@ -2102,6 +2118,7 @@ function restoreTextFormat(): void {
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR, SLIDE_STYLE_DEFAULT.text_border_color);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_WIDTH, 2);
   saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_RADIUS, 0);
+  saveUserData(KEYS.OPTIONS.SLIDE.TEXT_CASE, SLIDE_STYLE_DEFAULT.text_case);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_ENABLED, false);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, SLIDE_STYLE_DEFAULT.shadow_color);
   saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_BLUR, 12);

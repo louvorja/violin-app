@@ -91,6 +91,13 @@ export const contextualPages: RibbonPage[] = [
             },
           },
           {
+            id: `${moduleId}_lap`,
+            icon: ICONS.CATEGORY.FLAG,
+            label: `${modulePath}.ribbon.lap`,
+            action: `${moduleId}_lap`,
+            color: "#3498db",
+          },
+          {
             id: `${moduleId}_reset`,
             icon: ICONS.ACTIONS.RESTART,
             label: "ribbon.btn.stopwatch_reset",

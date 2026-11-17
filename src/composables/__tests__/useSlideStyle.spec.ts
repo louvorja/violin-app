@@ -17,6 +17,8 @@ describe("useSlideStyle — leitura das opções", () => {
     setActivePinia(createPinia());
     for (const k of [
       K.CUSTOM_TEXT_FORMAT,
+      K.TEXT_CASE,
+      K.AFFECT_EXTERNAL_SLIDES,
       K.SHADOW_ENABLED,
       K.SHADOW_BLUR,
       K.SHADOW_OFFSET_Y,
@@ -186,7 +188,7 @@ describe("useSlideStyle — leitura das opções", () => {
     expect(useSlideStyle().textTransform.value).toBe("none");
   });
 
-  it("preserva cor, tamanho e caixa de slide personalizado quando a formatação global de texto está desligada (#59)", () => {
+  it("preserva cor e tamanho de slide personalizado sem mudar a projeção de MAIÚSCULAS por padrão (#59 #74)", () => {
     $userdata.set(K.CUSTOM_TEXT_FORMAT, false);
     $userdata.set(K.AFFECT_EXTERNAL_SLIDES, true);
 
@@ -202,23 +204,31 @@ describe("useSlideStyle — leitura das opções", () => {
     expect(style.coverSizePct(slide)).toBe(22);
     expect(style.lyricSizePct(slide)).toBe(22);
     expect(style.auxSizePct(slide)).toBe(12);
-    expect(style.lyricStyle(slide)).toMatchObject({ color: "#33cc99", textTransform: "none" });
-    expect(style.auxStyle(slide)).toMatchObject({ color: "#ff8800", textTransform: "none" });
+    expect(style.coverStyle(slide)).toMatchObject({ textTransform: "uppercase" });
+    expect(style.lyricStyle(slide)).toMatchObject({ color: "#33cc99", textTransform: "uppercase" });
+    expect(style.auxStyle(slide)).toMatchObject({ color: "#ff8800", textTransform: "uppercase" });
   });
 
-  it("sobrescreve cor/tamanho externos só quando CUSTOM_TEXT_FORMAT e AFFECT_EXTERNAL_SLIDES estão ativos (#59)", () => {
+  it("sobrescreve cor/tamanho/caixa externos só quando CUSTOM_TEXT_FORMAT e AFFECT_EXTERNAL_SLIDES estão ativos (#59 #74)", () => {
     $userdata.set(K.CUSTOM_TEXT_FORMAT, true);
     $userdata.set(K.TEXT_COLOR, "#112233");
     $userdata.set(K.BODY_SIZE, 16);
+    $userdata.set(K.TEXT_CASE, "none");
     $userdata.set(K.AFFECT_EXTERNAL_SLIDES, true);
 
+    const nativeSlide = { id_music: 10 };
     const slide = { custom_song_id: "song-1", color: "#33cc99", font_size_pct: 22 };
     const style = useSlideStyle();
     expect(style.lyricSizePct(slide)).toBe(16);
-    expect(style.lyricStyle(slide).color).toBe("#112233");
+    expect(style.lyricStyle(slide)).toMatchObject({ color: "#112233", textTransform: "none" });
+    expect(style.lyricStyle(nativeSlide).textTransform).toBe("none");
+
+    $userdata.set(K.TEXT_CASE, "capitalize");
+    expect(style.lyricStyle(slide).textTransform).toBe("capitalize");
 
     $userdata.set(K.AFFECT_EXTERNAL_SLIDES, false);
     expect(style.lyricSizePct(slide)).toBe(22);
-    expect(style.lyricStyle(slide).color).toBe("#33cc99");
+    expect(style.lyricStyle(slide)).toMatchObject({ color: "#33cc99", textTransform: "uppercase" });
+    expect(style.lyricStyle(nativeSlide).textTransform).toBe("capitalize");
   });
 });

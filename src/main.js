@@ -22,6 +22,14 @@ async function migratePrivateReferencesOnce() {
 // Antes do primeiro quadro: o iOS 26 tira a cor da barra de status do <body>.
 if (profile === "shell") document.body.classList.add("lj-shell-body");
 const bootstrap = (async () => {
+  if (profile === "shell") {
+    try {
+      const { recoverPendingBackupRestore } = await import("@/helpers/DatabaseBackup");
+      await recoverPendingBackupRestore();
+    } catch (error) {
+      console.warn("[main] Recuperação de backup pendente falhou:", error);
+    }
+  }
   if (profile === "shell" && window.louvorjaApi?.storage.privatePathMappings) {
     await migratePrivateReferencesOnce();
   }

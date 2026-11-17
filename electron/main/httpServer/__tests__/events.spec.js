@@ -340,3 +340,65 @@ describe("HTTP SSE — backpressure", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe("HTTP SSE — player de mídia e cronômetro", () => {
+  const mediaState = {
+    active: true,
+    playing: true,
+    loading: false,
+    minimized: false,
+    source: "file",
+    title: "Culto",
+    subtitle: "Canal do culto",
+    fileName: "video.mp4",
+    position: 12.5,
+    duration: 95,
+    canPlay: false,
+    canPause: true,
+    canSeek: true,
+    canPrevious: false,
+    canNext: false,
+    seq: 1,
+  };
+
+  const stopwatchState = {
+    running: true,
+    mode: "countup",
+    elapsed: 1.5,
+    target: null,
+    remaining: null,
+    alert: "",
+    overtime: true,
+    showSeconds: true,
+    warningSeconds: 60,
+    laps: [{ index: 1, elapsed: 1.2, shown: 1 }],
+    projecting: false,
+    seq: 2,
+  };
+
+  it("relaya e devolve o último estado para um cliente atrasado", () => {
+    const client = openClient();
+    events.publish({ type: "media_state", payload: mediaState });
+    events.publish({ type: "stopwatch_state", payload: stopwatchState });
+
+    expect(messages(client.writes)).toEqual([
+      { type: "media_state", payload: mediaState },
+      { type: "stopwatch_state", payload: stopwatchState },
+    ]);
+
+    const replay = messages(openClient().writes);
+    expect(replay).toContainEqual({ type: "media_state", payload: mediaState });
+    expect(replay).toContainEqual({ type: "stopwatch_state", payload: stopwatchState });
+  });
+
+  it("descarta payload inválido sem quebrar o stream", () => {
+    const client = openClient();
+    events.publish({ type: "media_state", payload: { ...mediaState, position: -1 } });
+    events.publish({ type: "stopwatch_state", payload: { ...stopwatchState, mode: "up" } });
+    events.publish({ type: "media_state", payload: { ...mediaState, seq: 3 } });
+
+    expect(messages(client.writes)).toEqual([
+      { type: "media_state", payload: { ...mediaState, seq: 3 } },
+    ]);
+  });
+});

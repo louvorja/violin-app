@@ -28,10 +28,13 @@
   "rename": "Renombrar",
   "delete": "Eliminar",
   "add_to_playlist": "Añadir a la lista de reproducción",
+  "add_all_to_playlist": "Añadir todo a la lista de reproducción",
   "remove_from_playlist": "Quitar de la lista",
   "rename_placeholder": "Nuevo nombre...",
   "file_added": "Archivo añadido a la biblioteca",
   "added_to_playlist": "Añadido a la lista de reproducción",
+  "added_all_to_playlist": "{count} elemento añadido a la lista de reproducción | {count} elementos añadidos a la lista de reproducción",
+  "all_in_playlist": "Todos los elementos ya están en la lista de reproducción",
   "ribbon": {
     "title_ctx": "Gestionar Biblioteca de Medios",
     "background": "Fondo de Proyección",

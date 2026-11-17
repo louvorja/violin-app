@@ -89,6 +89,15 @@ let _playlistOnPlayback: ((_idMusic: unknown, _videoId?: string) => void) | null
  */
 let _arquivoDeAudio = false;
 /**
+ * A reprodução atual é uma música do acervo do programa (álbum oficial ou
+ * coletânea personalizada)?
+ *
+ * Nesse caso o Player não expõe o nome do arquivo: o título (e o álbum, quando
+ * houver) já identificam a música. Arquivos avulsos da Biblioteca/liturgia e
+ * vídeos continuam mostrando o nome do arquivo.
+ */
+let _acervoPlayback = false;
+/**
  * Encerra o modo "arquivo de áudio".
  *
  * O player deixa de ser "mídia tocando": a janela da Mídia fecha e as setas
@@ -333,6 +342,145 @@ function _broadcastVideoState(currentTime?: number, isPaused?: boolean): void {
     ...snapshot,
     ...version,
   });
+}
+
+/** Snapshot do player de mídia consumido pela API/SSE do controle remoto. */
+export interface MediaSnapshot {
+  active: boolean;
+  playing: boolean;
+  loading: boolean;
+  minimized: boolean;
+  source: "file" | "youtube";
+  title: string;
+  /** Álbum (música) ou canal/categoria (vídeo); vazio quando não há. */
+  subtitle: string;
+  fileName: string;
+  position: number;
+  duration: number;
+  canPlay: boolean;
+  canPause: boolean;
+  canSeek: boolean;
+  /** Há item anterior/próximo na fila de músicas ativa? */
+  canPrevious: boolean;
+  canNext: boolean;
+  seq: number;
+}
+
+let _mediaStateSeq = 0;
+let _mediaStateTimer: ReturnType<typeof setInterval> | null = null;
+/** Provider registrado pela fila de músicas (evita import circular). */
+interface MediaPlaylistNavigation {
+  isActive: () => boolean;
+  canNext: () => boolean;
+  canPrevious: () => boolean;
+  next: () => void;
+  previous: () => void;
+}
+let _playlistNavigation: MediaPlaylistNavigation | null = null;
+
+function _mediaBasename(value: string): string {
+  if (!value) return "";
+  const clean = value.split(/[?#]/)[0];
+  const index = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
+  return index >= 0 ? clean.slice(index + 1) : clean;
+}
+
+function _mediaActive(): boolean {
+  return Boolean(
+    $appdata.get(KEYS.MODULES.MEDIA.SHOW, false) ||
+      $appdata.get(KEYS.MODULES.MEDIA.IS_PLAYING, false) ||
+      $appdata.get(KEYS.MODULES.MEDIA.MINIMIZED, false)
+  );
+}
+
+function _round3(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+/**
+ * Estado do player para o remoto. Não expõe caminho completo (só o basename)
+ * e usa segundos, igual ao `<audio>`/YouTube.
+ */
+function _mediaSnapshot(): MediaSnapshot {
+  const active = _mediaActive();
+  const youtube = _isYouTube();
+  const audio = String($appdata.get(KEYS.MODULES.MEDIA.CONFIG.AUDIO, "") || "");
+  const video = String($appdata.get(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, "") || "");
+  const loading = Boolean($appdata.get(KEYS.MODULES.MEDIA.LOADING, false));
+  const paused = _audio.isPaused.value;
+  const rawPosition = Number(_audio.currentTime.value);
+  const rawDuration = Number(_audio.duration.value);
+  // Live streams/YouTube podem reportar Infinity/NaN na duração; o contrato
+  // da API/SSE exige números finitos e não negativos.
+  const position = active && Number.isFinite(rawPosition) ? Math.max(0, rawPosition) : 0;
+  const duration = active && Number.isFinite(rawDuration) ? Math.max(0, rawDuration) : 0;
+  const minimized = Boolean($appdata.get(KEYS.MODULES.MEDIA.MINIMIZED, false));
+  const nav = _playlistNavigation;
+  const playlistActive = nav?.isActive() === true;
+  // Testes/composables parciais podem omitir o deck; o snapshot não pode quebrar.
+  const slidesValue = (_slides as { slides?: { value?: unknown } }).slides?.value;
+  const slideIndexValue = (_slides as { slideIndex?: { value?: unknown } }).slideIndex?.value;
+  const slideCount = Array.isArray(slidesValue) ? slidesValue.length : 0;
+  const slideIndex = typeof slideIndexValue === "number" ? slideIndexValue : 0;
+  const canPrevious = active && (
+    playlistActive ? nav.canPrevious() : slideCount > 0 && slideIndex > 0
+  );
+  const canNext = active && (
+    playlistActive ? nav.canNext() : slideCount > 0 && slideIndex < slideCount - 1
+  );
+  return {
+    active,
+    playing: active && !paused && !loading,
+    loading,
+    minimized,
+    source: youtube ? "youtube" : "file",
+    title: String($appdata.get(KEYS.MODULES.MEDIA.CONFIG.TITLE, "") || ""),
+    subtitle: String($appdata.get(KEYS.MODULES.MEDIA.CONFIG.SUBTITLE, "") || ""),
+    fileName: _acervoPlayback || youtube ? "" : _mediaBasename(audio || video || ""),
+    position: _round3(position),
+    duration: _round3(duration),
+    canPlay: active && paused,
+    canPause: active && !paused,
+    canSeek: active && duration > 0,
+    canPrevious,
+    canNext,
+    seq: ++_mediaStateSeq,
+  };
+}
+
+function _broadcastMediaState(): void {
+  $broadcast.send(BROADCAST_TYPE.MEDIA_STATE, _mediaSnapshot());
+}
+
+function _startMediaStateTimer(): void {
+  if (_mediaStateTimer) return;
+  _mediaStateTimer = setInterval(() => {
+    if (_mediaActive()) _broadcastMediaState();
+    else _stopMediaStateTimer();
+  }, 1000);
+}
+
+function _stopMediaStateTimer(): void {
+  if (!_mediaStateTimer) return;
+  clearInterval(_mediaStateTimer);
+  _mediaStateTimer = null;
+}
+
+/**
+ * Publica o player como inativo e encerra o timer de estado.
+ *
+ * Usado no fechamento efetivo (close/stop/fim do áudio avulso). O
+ * `clearVariables()` apenas limpa a configuração: se ele publicasse o snapshot
+ * antes de `SHOW`/`IS_PLAYING`/`MINIMIZED` virarem false, o SSE receberia
+ * `active: true` com título/arquivo vazios e não receberia mais nada.
+ */
+function _publishInactiveMediaState(): void {
+  $appdata.set(KEYS.MODULES.MEDIA.SHOW, false);
+  $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, false);
+  $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, false);
+  $appdata.set(KEYS.MODULES.MEDIA.LOADING, false);
+  _broadcastMediaState();
+  _stopMediaStateTimer();
 }
 
 /**
@@ -1171,7 +1319,10 @@ async function _loadAudioSrc(
     }
   }
 
-  if (!needsOpusDecode && (streamsFromDisk || $appdata.get(KEYS.SHELL.IS_ONLINE))) {
+  if (
+    !needsOpusDecode &&
+    (!ehRemota(audioUrl) || streamsFromDisk || $appdata.get(KEYS.SHELL.IS_ONLINE))
+  ) {
     if (_activePlayback) {
       _activePlayback = { ..._activePlayback, lazy: true };
       if (!deferAudioContext) _audio.setTelemetryContext(_activePlayback);
@@ -1407,6 +1558,9 @@ _audio.onTimeUpdate((ct, d) => {
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.BUFFERED, _audio.buffered.value);
   }
 
+  // Mantém o estado do remoto fresco enquanto houver reprodução.
+  _startMediaStateTimer();
+
   if (!_audio.isPaused.value && ct >= d && d > 0 && !_switchingMode) {
     // Com uma apresentação ligada, acabar a mídia não acaba a apresentação:
     // as telas ficam abertas, no fundo configurado.
@@ -1416,6 +1570,7 @@ _audio.onTimeUpdate((ct, d) => {
        * o telão pode estar mostrando um PDF por baixo. */
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
       _encerrarAudioArquivo();
+      _publishInactiveMediaState();
     } else if (_playlistOnEnd) {
       const handled = _playlistOnEnd();
       if (!handled) {
@@ -1710,6 +1865,7 @@ const _self = {
     }
 
     this.clearVariables();
+    _acervoPlayback = true;
     // O player compartilhado também reproduz arquivos de vídeo. Um
     // HTMLAudioElement consegue tocar alguns MP4, mas falha silenciosamente em
     // outros codecs e deixa a projeção visual sem relógio confiável.
@@ -2154,6 +2310,11 @@ const _self = {
 
     _audio.stop();
     this.clearVariables();
+    _acervoPlayback = true;
+    // O Player remoto lê o título do config; a música personalizada não passa
+    // pelo `open` do acervo, então o nome precisa ser publicado aqui.
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.TITLE, song?.nome || "");
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.SUBTITLE, "");
     _audio.setElementKind("audio");
     _setPlaybackContext(playbackContext);
 
@@ -2285,6 +2446,7 @@ const _self = {
       title: song?.nome,
       mediaType: "audio",
       mode: playback ? MusicActionEnum.INSTRUMENTAL : MusicActionEnum.AUDIO,
+      fromCollection: true,
     });
     return true;
   },
@@ -2384,7 +2546,7 @@ const _self = {
     _audio.stop();
     this.clearVariables();
     _slides.reset();
-    $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, false);
+    _publishInactiveMediaState();
   },
 
   /**
@@ -2397,6 +2559,9 @@ const _self = {
     if (!_arquivoDeAudio) return;
     _audio.stop();
     _encerrarAudioArquivo();
+    // O áudio avulso acabou: o remoto precisa ver o player inativo agora, e
+    // não só no próximo polling.
+    _publishInactiveMediaState();
   },
 
   /** O editor assume as janelas de slides; um player de arquivo/vídeo anterior precisa sair. */
@@ -2447,6 +2612,8 @@ const _self = {
           ? payload.playback_id
           : _newPlaybackId(),
     };
+    const effectiveVideoAudioUrl =
+      projection.type === "video" ? videoAudioUrl || projection.url : undefined;
     const stageEpoch = ++_stageEpoch;
     /* Antes de qualquer janela ler o arquivo: a partir do registro, o protocolo
        só entrega áudio já conferido (ver AudioPacketScan). */
@@ -2454,7 +2621,9 @@ const _self = {
       projection.type === "video"
         ? Promise.all([
             prepareLocalMediaAudio(projection.url),
-            prepareLocalMediaAudio(videoAudioUrl),
+            ...(effectiveVideoAudioUrl && effectiveVideoAudioUrl !== projection.url
+              ? [prepareLocalMediaAudio(effectiveVideoAudioUrl)]
+              : []),
           ])
         : null;
     _dropPendingDownload();
@@ -2471,7 +2640,7 @@ const _self = {
       /* O áudio avulso morreu aqui (não antes de validar o payload). */
       _encerrarAudioArquivo();
       this.clearVariables();
-      $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, false);
+      _publishInactiveMediaState();
     } else {
       // Liturgia, timer e HTTP historicamente mostram imagem/PDF sobre uma
       // música ainda audível. Retira só o slide musical do telão.
@@ -2498,10 +2667,10 @@ const _self = {
     }
     if (stageEpoch !== _stageEpoch) return false;
     $broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, projection);
-    if (projection.type === "video" && videoAudioUrl) {
+    if (projection.type === "video" && effectiveVideoAudioUrl) {
       await this.openAudio(
         {
-          url: videoAudioUrl,
+          url: effectiveVideoAudioUrl,
           title: projection.title || "",
           mediaType: "video",
           playbackId: projection.playback_id,
@@ -2554,9 +2723,7 @@ const _self = {
       }
 
       this.clearVariables();
-      $appdata.set(KEYS.MODULES.MEDIA.SHOW, false);
-      $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, false);
-      $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, false);
+      _publishInactiveMediaState();
       $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE);
       if (!keepProjectionWindows)
         _queueStageWindows(_stageEpoch, closeProjectionWindows).catch((e) => {
@@ -2580,9 +2747,7 @@ const _self = {
     /* `close()` também cala o áudio: o modo "arquivo de áudio" acabou aqui. */
     _encerrarAudioArquivo();
     this.clearVariables();
-    $appdata.set(KEYS.MODULES.MEDIA.SHOW, false);
-    $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, false);
-    $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, false);
+    _publishInactiveMediaState();
 
     // Reseta o estado de slides — sem isso o `useSlides.slides` retém o
     // último array, e qualquer janela/cliente que reabra fica vendo a
@@ -2709,6 +2874,10 @@ const _self = {
 
     _audio.stop();
     this.clearVariables();
+    // `id_music` é sempre acervo; `fromCollection` marca o áudio de uma
+    // coletânea personalizada aberto sem slides. Arquivo avulso continua com
+    // nome de arquivo.
+    _acervoPlayback = params.id_music != null || params.fromCollection === true;
     _audio.setElementKind(params.mediaType === "video" ? "video" : "audio");
     _setPlaybackContext(playbackContext);
     // Sinal para módulos como Som de Fundo (auto-pausa).
@@ -2800,6 +2969,10 @@ const _self = {
     $appdata.set(KEYS.MODULES.MEDIA.DATA, data);
     $appdata.set(KEYS.MODULES.MEDIA.ID_MUSIC, id_music);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.TITLE, data.name);
+    // `openAudio` limpa o config no início (inclusive o subtítulo). Reaplica o
+    // álbum do playback atual para uma reabertura/retry desta música não perder
+    // o subtítulo que o Player mostra.
+    this.setAlbumInfo($appdata.get(KEYS.MODULES.MEDIA.ID_ALBUM) as string | number | null);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.MODE, mode);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, true);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.SLIDE_INDEX, 0);
@@ -2861,9 +3034,12 @@ const _self = {
   async openYouTube(
     url: string,
     title: string,
-    options: { preferStream?: boolean } = {}
+    options: { preferStream?: boolean; subtitle?: string } = {}
   ): Promise<boolean> {
     PlayerKeyboard.claim();
+    // Música usa o álbum; vídeo usa o canal/categoria. Sem contexto, limpa
+    // para não herdar o subtítulo da mídia anterior.
+    $appdata.set(KEYS.MODULES.MEDIA.CONFIG.SUBTITLE, options.subtitle || "");
     const id = OnlineVideo.videoIdFromUrl(url);
     // Dois cliques no mesmo vídeo enquanto ele abre partilham a tentativa em
     // curso; um segundo vídeo de fato revoga a primeira tentativa.
@@ -2878,13 +3054,25 @@ const _self = {
       if (stageEpoch !== _stageEpoch) return false;
       if (id && downloaded) {
         const outcome = await _prepareDownloadedYouTube(id, title);
-        if (outcome !== "embed") return outcome === "playing";
+        if (outcome !== "embed") {
+          // O caminho de arquivo passa por `openAudio`, que limpa o config;
+          // reaplica o canal/categoria do pedido original.
+          if (outcome === "playing") {
+            $appdata.set(KEYS.MODULES.MEDIA.CONFIG.SUBTITLE, options.subtitle || "");
+          }
+          return outcome === "playing";
+        }
       } else if (id && OnlineVideo.downloadEnabled()) {
         if (options.preferStream === true) {
           // Modo antigo, mantido para diagnóstico/teste: tenta tocar das trilhas
           // diretas antes de abrir o embed.
           const outcome = await _prepareStreamedYouTube(id, title);
-          if (outcome !== "embed") return outcome === "playing";
+          if (outcome !== "embed") {
+            if (outcome === "playing") {
+              $appdata.set(KEYS.MODULES.MEDIA.CONFIG.SUBTITLE, options.subtitle || "");
+            }
+            return outcome === "playing";
+          }
           void useOnlineVideoDownloads().download(id, title, {
             keep: false,
             quiet: true,
@@ -2903,7 +3091,9 @@ const _self = {
       }
       if (stageEpoch !== _stageEpoch) return false;
       await this.openEmbeddedYouTube(url, title, stageEpoch);
-      return stageEpoch === _stageEpoch;
+      if (stageEpoch !== _stageEpoch) return false;
+      $appdata.set(KEYS.MODULES.MEDIA.CONFIG.SUBTITLE, options.subtitle || "");
+      return true;
     } finally {
       if (_opening.value === opening) _opening.value = null;
     }
@@ -3121,6 +3311,8 @@ const _self = {
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.DURATION, _audio.duration.value);
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, _audio.isPaused.value);
       $appdata.set(KEYS.MODULES.MEDIA.CONFIG.PROGRESS, _audio.progress.value);
+      _startMediaStateTimer();
+      _broadcastMediaState();
     });
     _ytWatchdog = setTimeout(() => {
       if (_isYouTube() && !_ytStateReceived) {
@@ -3171,6 +3363,7 @@ const _self = {
     }
     _slides.reset();
     _audio.reset();
+    _acervoPlayback = false;
     _setPlaybackContext(null);
     $appdata.set(KEYS.MODULES.MEDIA.DATA, {});
     $appdata.set(KEYS.MODULES.MEDIA.ID_MUSIC, null);
@@ -3194,16 +3387,22 @@ const _self = {
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.AUDIO_ONLY, false);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.VIDEO_FILE, false);
     $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_YOUTUBE, false);
+    // O snapshot inativo é publicado pelo chamador (close/stop/fim do áudio),
+    // depois que SHOW/IS_PLAYING/MINIMIZED já estão false. Publicar aqui daria
+    // um `active: true` com título/arquivo vazios.
+    _stopMediaStateTimer();
   },
 
   minimize(): void {
     $appdata.set(KEYS.MODULES.MEDIA.SHOW, false);
     $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, true);
+    _broadcastMediaState();
   },
 
   maximize(): void {
     $appdata.set(KEYS.MODULES.MEDIA.SHOW, true);
     $appdata.set(KEYS.MODULES.MEDIA.MINIMIZED, false);
+    _broadcastMediaState();
   },
 
   isMinimized(): boolean {
@@ -3216,6 +3415,34 @@ const _self = {
 
   config(): unknown {
     return $appdata.get(KEYS.MODULES.MEDIA.CONFIG.ROOT);
+  },
+
+  /** Estado do player para o controle remoto (`/api/media`). */
+  snapshot(): MediaSnapshot {
+    return _mediaSnapshot();
+  },
+
+  /**
+   * A fila de músicas informa se há anterior/próximo. Fica fora do `useMedia`
+   * para não criar import circular (a fila importa o Media).
+   */
+  registerPlaylistNavigation(navigation: MediaPlaylistNavigation | null): void {
+    _playlistNavigation = navigation;
+  },
+
+  /**
+   * Seek pedido pelo remoto. Clampa na duração e devolve `false` quando não há
+   * mídia ativa ou o valor é inválido. Emite o estado na hora.
+   */
+  seekTo(seconds: number): boolean {
+    if (!_mediaActive()) return false;
+    const value = Number(seconds);
+    if (!Number.isFinite(value) || value < 0) return false;
+    const duration = Number(_audio.duration.value) || 0;
+    const target = duration > 0 ? Math.min(value, duration) : value;
+    this.goToTime(target);
+    _broadcastMediaState();
+    return true;
   },
 
   slides(): Slide[] {
@@ -3303,6 +3530,9 @@ const _self = {
         $appdata.set(KEYS.MODULES.MEDIA.CONFIG.IS_PAUSED, false);
         _audio.isPaused.value = false;
       }
+      _broadcastMediaState();
+      if (bool) _stopMediaStateTimer();
+      else _startMediaStateTimer();
       if (callback) callback();
       return;
     }
@@ -3363,6 +3593,10 @@ const _self = {
         if (callback) callback();
       }
     }
+
+    _broadcastMediaState();
+    if (bool) _stopMediaStateTimer();
+    else _startMediaStateTimer();
   },
 
   firstSlide(): void {
@@ -3378,6 +3612,26 @@ const _self = {
     if (_pdfPageStep(-1)) return;
     _slides.goPrev();
   },
+  /** Próximo item: fila ativa → próxima música; senão → próximo slide. */
+  nextItem(): void {
+    const nav = _playlistNavigation;
+    if (nav?.isActive()) {
+      nav.next();
+      return;
+    }
+    this.nextSlide();
+  },
+
+  /** Item anterior: fila ativa → música anterior; senão → slide anterior. */
+  previousItem(): void {
+    const nav = _playlistNavigation;
+    if (nav?.isActive()) {
+      nav.previous();
+      return;
+    }
+    this.prevSlide();
+  },
+
   nextSlide(): void {
     if (_navigationDelegate && !_isPlayingMusic()) {
       void _navigationDelegate.next();

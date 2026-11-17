@@ -99,7 +99,13 @@ function _playSongAt(index: number): void {
   _launchingQueueItem = true;
   try {
     if (song.onlineVideo) {
-      void Media.openYouTube(song.onlineVideo.url, song.onlineVideo.title);
+      if (song.onlineVideo.subtitle) {
+        void Media.openYouTube(song.onlineVideo.url, song.onlineVideo.title, {
+          subtitle: song.onlineVideo.subtitle,
+        });
+      } else {
+        void Media.openYouTube(song.onlineVideo.url, song.onlineVideo.title);
+      }
     } else {
       Media.open({ id_music: song.id_music, mode: MusicActionEnum.AUDIO });
     }
@@ -308,6 +314,19 @@ $broadcast.listen((msg) => {
   if (msg.type === BROADCAST_TYPE.MEDIA_PREV_MUSIC && _isActive.value) playPrev();
   if (msg.type === BROADCAST_TYPE.MEDIA_NEXT_MUSIC && _isActive.value) playNext();
 });
+
+// O Player remoto mostra/anula os botões de anterior/próxima conforme a fila.
+// A checagem também cobre testes que mockam o Media apenas com o que usam.
+if (typeof Media.registerPlaylistNavigation === "function") {
+  Media.registerPlaylistNavigation({
+    isActive: () => _isActive.value,
+    canNext: () =>
+      _isActive.value && totalSongs.value > 0 && _currentIndex.value < totalSongs.value - 1,
+    canPrevious: () => _isActive.value && _currentIndex.value > 0,
+    next: playNext,
+    previous: playPrev,
+  });
+}
 
 onUnmounted(() => {
   Media.unregisterPlaylistEndHandler();

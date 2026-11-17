@@ -55,7 +55,7 @@ test.describe("Editor de Slides & fluxo .slja (#59, #61, #62)", () => {
     await page.locator(".se-slide-list-add").click();
 
     const textArea = page.locator("textarea.se-textarea").first();
-    await textArea.fill("LOUVAI AO SENHOR");
+    await textArea.fill("Louvai ao Senhor");
 
     const formatPanel = page.locator("details.se-panel").nth(1);
     const textColorInput = formatPanel.locator('input[type="color"]').nth(1);
@@ -67,15 +67,17 @@ test.describe("Editor de Slides & fluxo .slja (#59, #61, #62)", () => {
     await fontSizeInput.dispatchEvent("change");
 
     const previewMain = page.locator(".se-preview-text--main");
-    await expect(previewMain).toContainText("LOUVAI AO SENHOR");
+    await expect(previewMain).toContainText("Louvai ao Senhor");
     await expect(previewMain).toHaveCSS("color", "rgb(0, 204, 102)");
+    await expect(previewMain).toHaveCSS("text-transform", "none");
 
     await page.locator("#ribbon-tab-ctx_slide_editor_slides").click();
     await page.locator('[data-testid="ribbon-btn-editor_project"]').click();
 
     const projectedMain = projection.locator(".lj-slide__text--lyric");
-    await expect(projectedMain).toContainText("LOUVAI AO SENHOR", { timeout: 10_000 });
+    await expect(projectedMain).toContainText("Louvai ao Senhor", { timeout: 10_000 });
     await expect(projectedMain).toHaveCSS("color", "rgb(0, 204, 102)");
+    await expect(projectedMain).toHaveCSS("text-transform", "uppercase");
   });
 
   test("classifica .slja legado, preserva ms, converte faixa e exporta pacote unificado (#61, #62)", async ({

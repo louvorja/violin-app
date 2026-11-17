@@ -151,6 +151,22 @@ describe("áudio de arquivo: palco", () => {
   });
 });
 
+describe("áudio de arquivo: nome do arquivo", () => {
+  const ARQUIVO = { ...AUDIO, url: "file:///tmp/fundo.mp3", title: "Fundo" };
+
+  it("arquivo avulso expõe o basename", async () => {
+    await media.openAudio(ARQUIVO).catch(() => {});
+
+    expect(media.snapshot().fileName).toBe("fundo.mp3");
+  });
+
+  it("música do acervo não expõe o nome do arquivo", async () => {
+    await media.openAudio({ ...ARQUIVO, fromCollection: true }).catch(() => {});
+
+    expect(media.snapshot().fileName).toBe("");
+  });
+});
+
 describe("áudio de arquivo: player", () => {
   it("abre a janela da Mídia quando pedido", async () => {
     await media.openAudio(AUDIO).catch(() => {});

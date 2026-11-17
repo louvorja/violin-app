@@ -116,7 +116,23 @@
 
       <ul v-if="rows.length > 0" class="rm-list">
         <template v-for="row in rows" :key="row.key">
-          <li v-if="row.kind === 'group'" class="rm-group">{{ row.label }}</li>
+          <li v-if="row.kind === 'group'">
+            <button
+              type="button"
+              class="rm-group"
+              :aria-expanded="!collapsedGroups.has(row.key)"
+              @click="toggleGroup(row.key)"
+            >
+              <LjIcon
+                :icon="
+                  collapsedGroups.has(row.key) ? ICONS.UI.CHEVRON_RIGHT : ICONS.UI.CHEVRON_DOWN
+                "
+                :size="14"
+              />
+              <span class="rm-group__label">{{ row.label }}</span>
+              <span class="rm-group__count">{{ row.count }}</span>
+            </button>
+          </li>
           <li v-else class="rm-item" @click="projectItem(row.item)">
             <img v-if="row.thumb" class="rm-item__thumb" :src="row.thumb" loading="lazy" alt="" />
             <span v-else class="rm-item__icon" :aria-hidden="true">
@@ -443,8 +459,25 @@ function thumbUrl(raw?: string | null): string {
 }
 
 type Row =
-  | { kind: "group"; key: string; label: string }
+  | { kind: "group"; key: string; label: string; count: number }
   | { kind: "item"; key: string; title: string; thumb: string; subtitle: string; item: MediaItem };
+
+/** Categorias recolhidas: o cabeçalho fica, os itens do grupo somem. */
+const collapsedGroups = ref<Set<string>>(new Set());
+
+function toggleGroup(key: string): void {
+  // Novo Set a cada clique: mutar o atual não dispara o computed.
+  const next = new Set(collapsedGroups.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  collapsedGroups.value = next;
+}
+
+// Buscar dentro de uma categoria recolhida pareceria "não achou nada":
+// digitar reabre todos os grupos.
+watch(query, (value) => {
+  if (value.trim() && collapsedGroups.value.size > 0) collapsedGroups.value = new Set();
+});
 
 const rows = computed<Row[]>(() => {
   const term = query.value.trim().toLowerCase();
@@ -458,11 +491,15 @@ const rows = computed<Row[]>(() => {
     const key = item.categoryId || "";
     byCategory.set(key, [...(byCategory.get(key) || []), item]);
   }
+  const pushGroup = (key: string, label: string, bucket: MediaItem[]) => {
+    linhas.push({ kind: "group", key, label, count: bucket.length });
+    if (collapsedGroups.value.has(key)) return;
+    linhas.push(...bucket.map((item): Row => libraryRow(item)));
+  };
   for (const category of categories.value) {
     const bucket = byCategory.get(category.id);
     if (!bucket?.length) continue;
-    linhas.push({ kind: "group", key: `g-${category.id}`, label: category.name });
-    linhas.push(...bucket.map((item): Row => libraryRow(item)));
+    pushGroup(`cat:${category.id}`, category.name, bucket);
     byCategory.delete(category.id);
   }
   // "Sem categoria" por último; ids órfãos (categoria apagada) antes, em
@@ -470,17 +507,11 @@ const rows = computed<Row[]>(() => {
   for (const [categoryId, bucket] of [...byCategory.entries()]
     .filter(([id]) => id !== "")
     .sort(([a], [b]) => a.localeCompare(b))) {
-    linhas.push({
-      kind: "group",
-      key: `g-${categoryId || "none"}`,
-      label: categoryId ? categoryId : semCategoria,
-    });
-    linhas.push(...bucket.map((item): Row => libraryRow(item)));
+    pushGroup(`orphan:${categoryId}`, categoryId || semCategoria, bucket);
   }
   const semCategoriaBucket = byCategory.get("");
   if (semCategoriaBucket?.length) {
-    linhas.push({ kind: "group", key: "g-none", label: semCategoria });
-    linhas.push(...semCategoriaBucket.map((item): Row => libraryRow(item)));
+    pushGroup("uncategorized", semCategoria, semCategoriaBucket);
   }
   return linhas;
 });
@@ -1076,12 +1107,36 @@ defineExpose({ refresh });
 }
 
 .rm-group {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2, 8px);
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: var(--lj-space-1, 4px) 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--lj-text-muted, #666);
-  padding: var(--lj-space-2, 8px) 0 var(--lj-space-1, 4px);
+}
+
+.rm-group__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-group__count {
+  flex-shrink: 0;
+  font-weight: 500;
+  opacity: 0.8;
 }
 
 .rm-item {

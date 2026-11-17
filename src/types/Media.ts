@@ -24,6 +24,11 @@ export interface MediaOpenParams {
   videoId?: string;
   /** Identidade já reservada pela projeção de arquivo para evitar reemissão dupla. */
   playbackId?: string;
+  /**
+   * Áudio de uma coletânea personalizada aberto sem slides (id_music ausente).
+   * O Player não deve exibir o nome do arquivo dessa música do acervo.
+   */
+  fromCollection?: boolean;
 }
 
 export interface MediaConfig {

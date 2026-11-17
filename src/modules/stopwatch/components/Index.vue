@@ -1,11 +1,35 @@
 <template>
-  <ModuleContainer
-    ref="moduleContainer"
-    :manifest="manifest"
-    :style="{ minWidth: '300px' }"
-    @close="close()"
-    @show="onModuleShow"
-  >
+  <ModuleContainer ref="moduleContainer" :manifest="manifest" :style="{ minWidth: '300px' }">
+    <!-- Voltas registradas: ficam à esquerda da prévia, com o botão de zerar no topo. -->
+    <template #left>
+      <aside class="sw-laps" :aria-label="tm('screen.laps')">
+        <div class="sw-laps__header">
+          <span class="sw-laps__title">{{ tm("screen.laps") }}</span>
+          <LjButton
+            size="sm"
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.DELETE"
+            :title="tm('screen.clear_laps')"
+            :aria-label="tm('screen.clear_laps')"
+            :disabled="laps.length === 0"
+            data-testid="stopwatch-clear-laps"
+            @click="confirmClearLaps"
+          />
+        </div>
+
+        <ol v-if="laps.length" class="sw-laps__list" data-testid="stopwatch-laps">
+          <li v-for="item in lapsNewestFirst" :key="item.index" class="sw-laps__row">
+            <span class="sw-laps__index">#{{ item.index }}</span>
+            <span class="sw-laps__time">{{ formatLap(item) }}</span>
+          </li>
+        </ol>
+        <p v-else class="sw-laps__empty" data-testid="stopwatch-no-laps">
+          {{ tm("screen.no_laps") }}
+        </p>
+      </aside>
+    </template>
+
     <div class="lj-u-flex lj-u-h-full">
       <ModuleFormatDrawer v-model="show_format" :module-id="'stopwatch'" :manifest="manifest" />
       <div class="sw-layout">
@@ -125,43 +149,55 @@
 </template>
 
 <script setup>
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ICONS } from "@/config/Icons";
 import { LjButton, LjChip } from "@/components/ui";
-import { ref, computed, watch, onBeforeUnmount, onMounted } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
 import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import ModuleAlertFrame from "@/components/ModuleAlertFrame.vue";
 import ModuleTimerDock from "@/components/ModuleTimerDock.vue";
-import { playBeep } from "@helpers/AudioBeep";
 import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useScreenProjection } from "@/composables/useScreenProjection";
-import $userdata from "@/helpers/UserData";
-import { KEYS } from "@/constants/UserDataKeys";
+import $alert from "@/helpers/Alert";
+import { formatStopwatch } from "../stopwatchClock";
 import {
-  elapsedMs,
-  endsAtLabel,
-  formatStopwatch,
-  shownSeconds,
-  stopwatchAlert,
-  stopwatchProgress,
-} from "../stopwatchClock";
+  addMinute,
+  alert,
+  alertColor,
+  clearLaps,
+  display,
+  endsAt,
+  ensureStopwatchLoaded,
+  flashBorders,
+  lap,
+  laps,
+  mode,
+  overtime,
+  progress,
+  resetAll,
+  setMode,
+  setTarget,
+  setWarning,
+  targetLabel,
+  targetSeconds,
+  toggle,
+  warningSeconds,
+} from "../state";
 
 const PRESETS = [5, 10, 15, 30];
-/** Quatro pinturas por segundo bastam para o segundo virar na hora certa. */
-const TICK_MS = 250;
 
 const { show_format } = useModuleFormat("stopwatch", manifest);
-const { rootStyle, textStyle, alertStyle, warningStyle, bgImage, imageStyle, container } =
-  useModuleBodyStyle("stopwatch");
+const { rootStyle, textStyle, bgImage, imageStyle, container } = useModuleBodyStyle("stopwatch");
 
-const projection = useModuleProjection("stopwatch", {
+useModuleProjection("stopwatch", {
   onAction(action, payload) {
     if (action === "toggle") toggle();
-    else if (action === "reset") reset();
+    else if (action === "lap") lap();
+    else if (action === "reset") confirmReset();
     else if (action === "set_time") setTimeFromPayload(payload);
     else if (action === "toggle_format") show_format.value = !show_format.value;
   },
@@ -177,170 +213,52 @@ const screen = useScreenProjection({
 });
 const onAir = computed(() => screen.aberto.value);
 
-function playAlarm() {
-  try {
-    playBeep(880, 0.25, 0.5, 0);
-    playBeep(880, 0.25, 0.5, 0.3);
-    playBeep(1100, 0.4, 0.5, 0.6);
-  } catch {
-    /* noop */
-  }
-}
-
 const moduleContainer = ref(null);
 const tm = (key, named) => moduleContainer.value?.tm(key, named) || key;
 
-/*
- * O modo é lido direto do UserData: quem troca pode ser a ribbon (que grava a
- * chave sem passar por aqui) ou o seletor da própria tela. O `watch` abaixo
- * zera nos dois casos — antes só o setter zerava, e pela ribbon o Regressivo
- * ficava mostrando 00:00 até alguém apertar Iniciar.
- */
-const mode = computed(() =>
-  $userdata.get(KEYS.MODULES.STOPWATCH.MODE, "up") === "down" ? "down" : "up"
-);
-const targetSeconds = computed(() =>
-  Math.max(0, Number($userdata.get(KEYS.MODULES.STOPWATCH.TARGET_SECONDS, 600)) || 0)
-);
-const showSeconds = computed(
-  () => $userdata.get(KEYS.MODULES.STOPWATCH.SHOW_SECONDS, true) !== false
-);
-const overtime = computed(
-  () => $userdata.get(KEYS.MODULES.STOPWATCH.COUNT_OVERTIME, true) !== false
-);
-const warningSeconds = computed(() =>
-  Math.max(0, Number($userdata.get(KEYS.MODULES.STOPWATCH.WARNING_SECONDS, 60)) || 0)
-);
-const flashBorders = computed(
-  () => $userdata.get(KEYS.MODULES.STOPWATCH.FLASH_BORDERS, true) !== false
-);
+const lapsNewestFirst = computed(() => [...laps.value].reverse());
 
-const running = ref(false);
-const run = ref({ baseMs: 0, startedAt: null });
-const now = ref(Date.now());
-/** A contagem regressiva já bateu no zero nesta rodada (bipe dado). */
-const reachedEnd = ref(false);
-let timer = null;
-
-const elapsed = computed(() => elapsedMs(run.value, now.value));
-const seconds = computed(() =>
-  shownSeconds(mode.value, targetSeconds.value, elapsed.value, overtime.value)
-);
-const display = computed(() =>
-  formatStopwatch(seconds.value, showSeconds.value, mode.value === "down")
-);
-const alert = computed(() =>
-  stopwatchAlert(
-    mode.value,
-    seconds.value,
-    warningSeconds.value,
-    reachedEnd.value,
-    // Começou = está contando ou já contou algo (pausado no meio ainda avisa).
-    running.value || elapsed.value > 0
-  )
-);
-const progress = computed(() => stopwatchProgress(targetSeconds.value, elapsed.value));
-const targetLabel = computed(() => formatStopwatch(targetSeconds.value, true));
-const endsAt = computed(() =>
-  running.value && mode.value === "down" && seconds.value > 0
-    ? endsAtLabel(now.value, seconds.value)
-    : ""
-);
-
-/*
- * Cor do estado: "Cor do aviso" e "Cor do alerta" da Formatação. O número, a
- * barra e a moldura (na tela e no telão) usam a mesma, para nunca ficarem
- * com cores diferentes entre si.
- */
-const alertColor = computed(() =>
-  alert.value === "danger"
-    ? alertStyle.value?.color
-    : alert.value === "warning"
-      ? warningStyle.value?.color
-      : undefined
-);
-
-const projectionActive = ref(true);
-
-function emitProjection() {
-  projection.emit({
-    text: projectionActive.value ? display.value : "",
-    active: projectionActive.value,
-    color: projectionActive.value ? alertColor.value : undefined,
-    alert: projectionActive.value && flashBorders.value && alert.value ? alert.value : undefined,
-  });
+function formatLap(item) {
+  return formatStopwatch(item.shown, true);
 }
 
-watch([display, alert, flashBorders, alertColor, projectionActive], emitProjection, {
-  immediate: true,
-});
-
-function tick() {
-  now.value = Date.now();
-  if (mode.value !== "down" || reachedEnd.value) return;
-  const done = Math.floor(elapsed.value / 1000);
-  if (done < targetSeconds.value) return;
-  reachedEnd.value = true;
-  playAlarm();
-  // Sem tempo excedido a contagem termina aqui, como sempre foi.
-  if (!overtime.value) pause();
+/** Reiniciar zera tempo e voltas — confirma antes, como o zerar das voltas. */
+function confirmReset() {
+  $alert.yesno(
+    {
+      title: "modules.stopwatch.alerts.reset_title",
+      text: "modules.stopwatch.alerts.reset_text",
+      destructive: true,
+    },
+    (resp) => {
+      if (resp === "yes") resetAll();
+    }
+  );
 }
 
-/*
- * Desligar o excedido com a contagem já passada do zero precisa parar o
- * relógio: `tick` não pausa mais depois de `reachedEnd`, e o botão ficaria em
- * "Pausar" com o display congelado em 00:00.
- */
-watch(overtime, (on) => {
-  if (!on && reachedEnd.value && running.value) pause();
-});
-
-function toggle() {
-  if (running.value) pause();
-  else start();
+function confirmClearLaps() {
+  $alert.yesno(
+    {
+      title: "modules.stopwatch.alerts.clear_laps_title",
+      text: "modules.stopwatch.alerts.clear_laps_text",
+      destructive: true,
+    },
+    (resp) => {
+      if (resp === "yes") clearLaps();
+    }
+  );
 }
 
-function start() {
-  if (running.value) return;
-  // Regressivo que já terminou recomeça do início, não do zero parado.
-  if (mode.value === "down" && reachedEnd.value && !overtime.value) resetCount();
-  run.value = { baseMs: run.value.baseMs, startedAt: Date.now() };
-  running.value = true;
-  $userdata.set(KEYS.MODULES.STOPWATCH.RUNNING, true);
-  clearInterval(timer);
-  timer = setInterval(tick, TICK_MS);
-  tick();
-}
-
-function pause() {
-  if (run.value.startedAt !== null) {
-    run.value = { baseMs: elapsedMs(run.value, Date.now()), startedAt: null };
-  }
-  running.value = false;
-  $userdata.set(KEYS.MODULES.STOPWATCH.RUNNING, false);
-  clearInterval(timer);
-  timer = null;
-  now.value = Date.now();
-}
-
-function resetCount() {
-  run.value = { baseMs: 0, startedAt: running.value ? Date.now() : null };
-  reachedEnd.value = false;
-  now.value = Date.now();
-}
-
-function reset() {
-  pause();
-  resetCount();
-}
-
-function setMode(value) {
-  if (value === mode.value) return;
-  $userdata.set(KEYS.MODULES.STOPWATCH.MODE, value);
-}
-
-function setWarning(seconds) {
-  $userdata.set(KEYS.MODULES.STOPWATCH.WARNING_SECONDS, String(seconds));
+/** Ação da ribbon (Tempo): "hh:mm:ss" → segundos. */
+function setTimeFromPayload(payload) {
+  const value = payload?.url;
+  if (!value) return;
+  const parts = value.split(":").map(Number);
+  if (parts.length !== 3 || parts.some((p) => isNaN(p))) return;
+  const [h, m, s] = parts;
+  if (h < 0 || h > 99 || m < 0 || m > 59 || s < 0 || s > 59) return;
+  const total = h * 3600 + m * 60 + s;
+  setTarget(total);
 }
 
 /** Personalizado, 30 s e os minutos; "Não" fica no fim para desligar o aviso. */
@@ -356,104 +274,89 @@ const dockLabels = computed(() => ({
   customPlaceholder: tm("warning.custom_placeholder"),
 }));
 
-/** Marca a próxima mudança de meta como extensão, não como recomeço. */
-let extendTo = null;
-
-function clampTarget(total) {
-  return Math.max(0, Math.min(Number(total) || 0, 99 * 3600));
-}
-
-function setTarget(total) {
-  const next = clampTarget(total);
-  extendTo = null;
-  if (next === targetSeconds.value) {
-    reset();
-    return;
-  }
-  $userdata.set(KEYS.MODULES.STOPWATCH.TARGET_SECONDS, next);
-}
-
-function extendTarget(seconds) {
-  const next = clampTarget(targetSeconds.value + seconds);
-  if (next === targetSeconds.value) return;
-  extendTo = next;
-  $userdata.set(KEYS.MODULES.STOPWATCH.TARGET_SECONDS, next);
-}
-
-/*
- * +1 min durante a contagem dá mais tempo a quem está falando sem recomeçar:
- * a meta cresce e a contagem continua de onde está, pausada ou correndo.
- */
-function addMinute() {
-  extendTarget(60);
-}
-
-// Trocar o modo ou a meta (ribbon, presets, controle remoto) zera — exceto o
-// +1 min, que só estende.
-watch(mode, () => reset());
-watch(targetSeconds, (next) => {
-  const isExtension = extendTo !== null && next === extendTo;
-  extendTo = null;
-
-  if (isExtension) {
-    // `seconds` já reflete a meta nova: se voltou a sobrar tempo, sai do vermelho.
-    if (seconds.value > 0) reachedEnd.value = false;
-    return;
-  }
-
-  reset();
-});
-
-function setTimeFromPayload(payload) {
-  const value = payload?.url;
-  if (!value) return;
-  const parts = value.split(":").map(Number);
-  if (parts.length !== 3 || parts.some((p) => isNaN(p))) return;
-  const [h, m, s] = parts;
-  if (h < 0 || h > 99 || m < 0 || m > 59 || s < 0 || s > 59) return;
-  const total = h * 3600 + m * 60 + s;
-  if (total === targetSeconds.value) reset();
-  else setTarget(total);
-}
-
-function close() {
-  if (!projectionActive.value && !running.value) return;
-  projectionActive.value = false;
-  reset();
-  emitProjection();
-}
-
-/*
- * O X da aba fecha por Modules.close(); o ModuleContainer traduz a mudança de
- * visibilidade no evento `show`, sem o módulo precisar ler AppData.
- */
-function onModuleShow(visible) {
-  if (!visible) {
-    close();
-    return;
-  }
-  projectionActive.value = true;
-  emitProjection();
-}
-
 let screenPoll = null;
 onMounted(() => {
-  // O app pode ter sido fechado com a contagem rodando: a chave ficava "true" e
-  // o botão da ribbon abria em "Pausar" com nada contando.
-  $userdata.set(KEYS.MODULES.STOPWATCH.RUNNING, false);
+  ensureStopwatchLoaded();
   void screen.refresh();
   screenPoll = setInterval(() => void screen.refresh(), 2000);
 });
 
 onBeforeUnmount(() => {
-  projection.emit({ active: false, text: "" });
-  clearInterval(timer);
+  // O cronômetro continua no estado compartilhado; só a prévia/consulta some.
   clearInterval(screenPoll);
-  $userdata.set(KEYS.MODULES.STOPWATCH.RUNNING, false);
+  screenPoll = null;
 });
 </script>
 
 <style scoped>
+.sw-laps {
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+  height: 100%;
+  min-height: 0;
+  padding: var(--lj-space-3);
+  gap: var(--lj-space-2);
+}
+
+.sw-laps__header {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  min-height: var(--lj-ui-h-md);
+}
+
+.sw-laps__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-semibold, 600);
+  color: var(--lj-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sw-laps__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-1);
+  overflow: auto;
+  min-height: 0;
+}
+
+.sw-laps__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-2) var(--lj-space-3);
+  border-radius: var(--lj-radius-md);
+  background: var(--lj-surface-bg-active);
+}
+
+.sw-laps__index {
+  font-size: var(--lj-text-xs);
+  color: var(--lj-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sw-laps__time {
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.sw-laps__empty {
+  margin: 0;
+  padding: var(--lj-space-2);
+  font-size: var(--lj-text-xs);
+  color: var(--lj-text-muted);
+}
+
 .sw-layout {
   display: flex;
   flex-direction: column;

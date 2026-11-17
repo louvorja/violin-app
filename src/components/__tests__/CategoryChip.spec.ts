@@ -78,6 +78,45 @@ describe("CategoryChip", () => {
     expect(wrapper.emitted("edit")).toHaveLength(1);
   });
 
+  it("oferece adicionar todos os itens da categoria quando ela não está vazia", async () => {
+    const wrapper = montar({
+      addItemLabel: "Adicionar item",
+      addAllLabel: "Adicionar tudo à playlist",
+      count: 2,
+      editable: false,
+    });
+
+    await wrapper.find(".lj-category-chip").trigger("contextmenu");
+    await nextTick();
+
+    const menus = document.body.querySelectorAll(".lj-category-chip__menu");
+    const menu = menus[menus.length - 1];
+    const items = menu.querySelectorAll(".lj-menu__item");
+    expect(items).toHaveLength(2);
+    expect(items[0].textContent).toContain("Adicionar tudo à playlist");
+
+    (items[0] as HTMLElement).click();
+    await nextTick();
+    expect(wrapper.emitted("add-all")).toHaveLength(1);
+  });
+
+  it("esconde adicionar tudo quando a categoria está vazia", async () => {
+    const wrapper = montar({
+      addItemLabel: "Adicionar item",
+      addAllLabel: "Adicionar tudo à playlist",
+      count: 0,
+      editable: false,
+    });
+
+    await wrapper.find(".lj-category-chip").trigger("contextmenu");
+    await nextTick();
+
+    const menus = document.body.querySelectorAll(".lj-category-chip__menu");
+    const menu = menus[menus.length - 1];
+    expect(menu.querySelectorAll(".lj-menu__item")).toHaveLength(1);
+    expect(menu.textContent).not.toContain("Adicionar tudo à playlist");
+  });
+
   it("não desenha botão de adicionar no chip", () => {
     const wrapper = montar();
 

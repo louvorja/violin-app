@@ -59,6 +59,8 @@ export interface SearchMusicItem extends MusicItem {
 export interface OnlineVideoPlaylistItem {
   url: string;
   title: string;
+  /** Canal/categoria para o subtítulo do Player. */
+  subtitle?: string;
   videoId?: string;
   itemKey?: string;
 }

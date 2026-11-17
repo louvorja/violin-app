@@ -161,6 +161,16 @@ export const BROADCAST_TYPE = Object.freeze({
    *  Media.close e outros donos; limpa também caches de replay. */
   MEDIA_CLOSE: "media_close",
 
+  /** Estado do player de mídia do desktop (o que estiver em reprodução).
+   *  Payload: snapshot de `useMedia().snapshot()` — título, origem, posição,
+   *  duração e capacidades. Relayado aos clientes SSE (`media_state`). */
+  MEDIA_STATE: "media_state",
+
+  /** Estado do cronômetro (tempo, modo, voltas).
+   *  Payload: snapshot de `modules/stopwatch/state.ts`. Relayado aos clientes
+   *  SSE (`stopwatch_state`). */
+  STOPWATCH_STATE: "stopwatch_state",
+
   /** Projeção de arquivo (imagem/vídeo/PDF) vindo de liturgia ou outro módulo.
    *  Payload: { url, type, playback_id, title?, page?, totalPages? }
    *  Emitido por: liturgy (arquivo). Recebido por: Projection. */

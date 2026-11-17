@@ -1,7 +1,7 @@
 "use strict";
 
 const fs = require("fs");
-const catalogRules = import("../../../config/musicCatalog.mjs");
+const { musicCatalogRules: catalogRules } = require("./musicCatalogLoader.js");
 
 const MAX_CATALOGS = 2;
 

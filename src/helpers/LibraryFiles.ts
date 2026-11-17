@@ -280,7 +280,8 @@ export async function openDesktopLibraryFile(
 ): Promise<{ size: number; mime: string; open: () => Promise<ReadableStream<Uint8Array>> } | null> {
   const desktop = api()?.libraryFiles;
   if (!Platform.isDesktop || !desktop?.openRead || !isOpfsRel(rel)) return null;
-  const opened = await desktop.openRead(rel).catch(() => null);
+  // Propaga erros reais de leitura/permissão; somente arquivo ausente (ENOENT -> null) retorna null.
+  const opened = await desktop.openRead(rel);
   if (!opened) return null;
   let closed = false;
   const closeOnce = () => {

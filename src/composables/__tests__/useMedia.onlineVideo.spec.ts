@@ -1032,15 +1032,6 @@ describe("posse do palco durante a abertura do vídeo", () => {
     );
   });
 
-  it("vídeo sem player (timer): a tela toca sozinha, sem marca de relógio", async () => {
-    storage();
-    const payload = { url: "louvorja://local/timer.mp4", type: "video" as const, title: "Timer" };
-    expect(await media.projectFile(payload)).toBe(true);
-    const sent = h.send.mock.calls.find((c: unknown[]) => c[0] === BROADCAST_TYPE.FILE_PROJECTION)?.[1] as { clock?: string };
-    expect(sent.clock).toBeUndefined();
-    expect(openAudio).not.toHaveBeenCalled();
-  });
-
   it("PDF válido mantém cache de reabertura e projeta sem abrir player de áudio", async () => {
     storage();
     const payload = { url: "blob:pdf", type: "pdf" as const, title: "Leitura", page: 1 };

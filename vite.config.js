@@ -28,17 +28,22 @@ export default async ({ mode }) => {
   // updater API available at runtime.
   const loadedEnv = loadEnv(mode, process.cwd());
   const appVersion =
-    normalizeAppVersion(loadedEnv.VITE_APP_VERSION) || normalizeAppVersion(packageVersion);
+    normalizeAppVersion(process.env.VITE_APP_VERSION || loadedEnv.VITE_APP_VERSION) ||
+    normalizeAppVersion(packageVersion);
   if (!appVersion) throw new Error("package.json precisa de uma versão SemVer válida.");
   // O singleton do posthog-js não expõe a versão da biblioteca em runtime.
   // Injeta a versão exata do pacote no bundle para que o diagnóstico e os
   // eventos identifiquem a combinação que realmente foi distribuída.
   const posthogSdkVersion = String(
-    loadedEnv.VITE_POSTHOG_SDK_VERSION || posthogSdkPackageVersion || "unknown"
+    process.env.VITE_POSTHOG_SDK_VERSION ||
+      loadedEnv.VITE_POSTHOG_SDK_VERSION ||
+      posthogSdkPackageVersion ||
+      "unknown"
   );
+  // Variáveis explícitas de processo/CLI prevalecem sobre `.env` local.
   process.env = {
-    ...process.env,
     ...loadedEnv,
+    ...process.env,
     VITE_APP_VERSION: appVersion,
     VITE_POSTHOG_SDK_VERSION: posthogSdkVersion,
   };

@@ -341,6 +341,7 @@ export const KEYS = {
       SHOW_TITLE_FIRST_SLIDE: `${OPTIONS_SLIDE}.show_title_first_slide`,
       SHOW_PROJECTION_PROGRESS_BAR: `${OPTIONS_SLIDE}.show_projection_progress_bar`,
       CUSTOM_TEXT_FORMAT: `${OPTIONS_SLIDE}.custom_text_format`,
+      TEXT_CASE: `${OPTIONS_SLIDE}.text_case`,
       TITLE_COLOR: `${OPTIONS_SLIDE}.title_color`,
       TEXT_COLOR: `${OPTIONS_SLIDE}.text_color`,
       REPEAT_COLOR: `${OPTIONS_SLIDE}.repeat_color`,

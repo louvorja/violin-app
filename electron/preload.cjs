@@ -32,7 +32,7 @@ const HTTP_RENDERER_RESPONSE_CHANNEL = "http:renderer-response";
  * pessoais. O `preloadIpcContract.spec` cobre a lista de prefixos justamente
  * para o próximo esquecimento falhar no teste e não em produção.
  */
-const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos|custom-music|music-album|background-sound|volume|media-library|draw|presenter):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const HTTP_RENDERER_REQUEST_ID_RE = /^(slides|announcements|libras|online-videos|custom-music|music-album|background-sound|volume|media-library|draw|presenter|media|stopwatch):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 contextBridge.exposeInMainWorld("louvorjaApi", {
   /** Resolve o caminho real de um File arrastado/selecionado (Electron 32+). */
@@ -603,6 +603,9 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       ipcRenderer.invoke("libraryFiles:commitRestore", restoreToken, rels),
     rollbackRestore: (restoreToken, committed) =>
       ipcRenderer.invoke("libraryFiles:rollbackRestore", restoreToken, committed),
+    markRestoreCommitted: (restoreToken) =>
+      ipcRenderer.invoke("libraryFiles:markRestoreCommitted", restoreToken),
+    listPendingRestores: () => ipcRenderer.invoke("libraryFiles:listPendingRestores"),
     cleanupRestore: (restoreToken) =>
       ipcRenderer.invoke("libraryFiles:cleanupRestore", restoreToken),
     remove: (rel) => ipcRenderer.invoke("libraryFiles:remove", rel),
@@ -891,6 +894,8 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
       "http:media-library",
       "http:draw",
       "http:presenter",
+      "http:media",
+      "http:stopwatch",
     ];
     const handlers = events.map((evt) => {
       const handler = (_e, data) => cb(evt, data);

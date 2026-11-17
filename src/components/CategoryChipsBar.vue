@@ -40,11 +40,13 @@
         :active="selectedIds.has(category.id)"
         :drop-target="dropTargetId === category.id"
         :add-item-label="addItemLabel"
+        :add-all-label="addAllLabel"
         :edit-label="editLabel"
         :play-label="playLabel"
         :show-play="showPlayFor(category.id)"
         @select="emit('select', category.id)"
         @add="emit('add', category.id)"
+        @add-all="emit('add-all', category.id)"
         @edit="emit('edit', category.id)"
         @play="emit('play', category.id)"
         @dragover="emit('dragover', $event, category.id)"
@@ -62,10 +64,12 @@
         :drop-target="dropTargetId === uncategorizedId"
         :editable="false"
         :add-item-label="addItemLabel"
+        :add-all-label="addAllLabel"
         :play-label="playLabel"
         :show-play="showPlayFor(uncategorizedId)"
         @select="emit('select', uncategorizedId)"
         @add="emit('add', uncategorizedId)"
+        @add-all="emit('add-all', uncategorizedId)"
         @play="emit('play', uncategorizedId)"
         @dragover="emit('dragover', $event, uncategorizedId)"
         @dragleave="emit('dragleave', $event, uncategorizedId)"
@@ -108,6 +112,7 @@ const props = withDefaults(
     countFor: (_id: string) => number;
     dropTargetId?: string | null;
     addItemLabel: string;
+    addAllLabel?: string;
     editLabel: string;
     playLabel?: string;
     playable?: (_id: string) => boolean;
@@ -121,6 +126,7 @@ const props = withDefaults(
   {
     uncategorizedId: "",
     dropTargetId: null,
+    addAllLabel: "",
     playLabel: "",
     dragging: false,
   }
@@ -131,6 +137,7 @@ const emit = defineEmits<{
   "update:sortMode": [value: ItemSortMode];
   select: [id: string];
   add: [id: string];
+  "add-all": [id: string];
   edit: [id: string];
   play: [id: string];
   dragover: [event: DragEvent, id: string];

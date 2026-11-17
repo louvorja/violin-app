@@ -312,13 +312,18 @@ export function useTimerEndAction(moduleId: string, keys: TimerEndActionKeys) {
           return;
         }
         if (data.type !== "image" && data.type !== "pdf" && data.type !== "video") return;
+        const isVideo = data.type === "video";
         const payload = {
           url: data.url,
           type: data.type as "image" | "pdf" | "video",
           title: "Timer",
           fadeDuration: 500,
         };
-        void Media.projectFile(payload).catch(() => {});
+        // Vídeo ao fim do timer toca com áudio pelo player principal (que dirige a projeção
+        // via VIDEO_STATE sem religar autoplay geral); imagem preserva áudio já em curso.
+        void Media.projectFile(payload, isVideo ? data.url : undefined, {
+          stopExistingAudio: isVideo,
+        }).catch(() => {});
         return;
       }
       case MediaEnum.ONLINE_VIDEO: {

@@ -921,7 +921,12 @@ function _create(): AudioPlayback {
     if (!Number.isFinite(time) || time < 0) return;
     const d = isNaN(el.duration) || !isFinite(el.duration) ? duration.value : el.duration;
     if (!Number.isFinite(d) || d <= 0) return;
-    el.currentTime = _posicaoSegura(time, d);
+    const target = _posicaoSegura(time, d);
+    el.currentTime = target;
+    // `el.currentTime` já aponta para o alvo, mas o ref só acompanha no próximo
+    // `timeupdate`/tick do relógio (~100 ms).
+    currentTime.value = target;
+    progress.value = d <= 0 ? 0 : (target / d) * 100;
   }
 
   function advanceTime(delta: number): void {

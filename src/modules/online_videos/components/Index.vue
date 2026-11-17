@@ -234,6 +234,7 @@ function startVideoSequence(name: string, list: OnlineVideo[]): void {
     unique.map((video) => ({
       url: buildEmbedUrl(video.video_id),
       title: video.title,
+      subtitle: channelTitleForVideo(video),
       videoId: video.video_id,
       itemKey: video.video_id,
     }))
@@ -340,6 +341,17 @@ function extractYoutubeId(url: string): string | null {
   return m ? m[1] : null;
 }
 
+/** Nome do canal dono do vídeo (playlist → canal). */
+function channelTitleForVideo(video: OnlineVideo): string {
+  const playlist = (apiData.value?.playlists ?? []).find(
+    (p) => p.playlist_id === video.playlist_id
+  );
+  if (!playlist) return "";
+  return (
+    (apiData.value?.channels ?? []).find((c) => c.channel_id === playlist.channel_id)?.title || ""
+  );
+}
+
 function buildEmbedUrl(videoId: string): string {
   return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&controls=0`;
 }
@@ -354,7 +366,12 @@ function releaseIfNotPlaying(id: string, opened: boolean): void {
 async function projectVideo(video: OnlineVideo): Promise<void> {
   projectingId.value = video.video_id;
   $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, true);
-  const opened = await Media.openYouTube(buildEmbedUrl(video.video_id), video.title);
+  const channel = channelTitleForVideo(video);
+  const opened = await Media.openYouTube(
+    buildEmbedUrl(video.video_id),
+    video.title,
+    channel ? { subtitle: channel } : undefined
+  );
   releaseIfNotPlaying(video.video_id, opened);
 }
 

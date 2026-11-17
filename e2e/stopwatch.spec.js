@@ -15,6 +15,15 @@ async function openStopwatch(page) {
   await expect(page.getByTestId("stopwatch-display")).toBeVisible();
 }
 
+/**
+ * Avança grandes janelas com `fastForward` e executa os últimos 2 s com
+ * `runFor`, evitando disparar mais de mil ticks intermediários no CI lento.
+ */
+async function advanceClock(page, ms) {
+  if (ms > 2_000) await page.clock.fastForward(ms - 2_000);
+  await page.clock.runFor(Math.min(ms, 2_000));
+}
+
 test("regressivo mostra a meta, avisa em amarelo e passa do zero em vermelho", async ({
   page,
   context,
@@ -40,13 +49,13 @@ test("regressivo mostra a meta, avisa em amarelo e passa do zero em vermelho", a
 
   await page.bringToFront();
   await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
-  await page.clock.runFor(5 * 60_000 - 30_000);
+  await advanceClock(page, 5 * 60_000 - 30_000);
   await expect(display).toHaveText("00:30");
   await expect(stage).toHaveAttribute("data-alert", "warning");
   await expect(page.getByTestId("stopwatch-frame")).toBeVisible();
   await expect(projection.getByTestId("module-projection-alert-warning")).toBeAttached();
 
-  await page.clock.runFor(42_000);
+  await advanceClock(page, 42_000);
   await expect(display).toHaveText("-00:12");
   await expect(stage).toHaveAttribute("data-alert", "danger");
   await expect(projection.locator(".module-projection__text")).toHaveText("-00:12");
@@ -60,6 +69,8 @@ test("regressivo mostra a meta, avisa em amarelo e passa do zero em vermelho", a
   // O resto não depende de segundos; solto, o clique não espera a animação parar.
   await page.clock.resume();
   await page.getByTestId("ribbon-btn-stopwatch_reset").click();
+  // Reiniciar zera tempo e voltas, então pede confirmação.
+  await page.getByRole("alertdialog").getByRole("button", { name: "Sim" }).click();
   await expect(display).toHaveText("06:00");
   await expect(stage).toHaveAttribute("data-alert", "none");
   await expect(projection.locator(".module-projection__alert")).toHaveCount(0);
@@ -81,7 +92,7 @@ test("pausar e +1 min estende sem perder o tempo contado", async ({ page }) => {
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
 
   await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
-  await page.clock.runFor(60_000);
+  await advanceClock(page, 60_000);
   await expect(display).toHaveText("04:00");
 
   await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
@@ -97,7 +108,7 @@ test("preset durante a contagem recomeça do zero", async ({ page }) => {
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
 
   await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
-  await page.clock.runFor(60_000);
+  await advanceClock(page, 60_000);
   await expect(display).toHaveText("04:00");
 
   await page.getByTestId("stopwatch-preset-30").click();
@@ -113,7 +124,7 @@ test("desligar tempo excedido no excedido para e mostra 00:00", async ({ page })
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
 
   await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
-  await page.clock.runFor(5 * 60_000 + 5_000);
+  await advanceClock(page, 5 * 60_000 + 5_000);
   await expect(display).toHaveText("-00:05");
 
   await page.getByText("Contar tempo excedido").click();
@@ -121,26 +132,32 @@ test("desligar tempo excedido no excedido para e mostra 00:00", async ({ page })
   await expect(page.getByTestId("ribbon-btn-stopwatch_toggle")).toContainText("Iniciar");
 });
 
-test("fechar a aba no X para a contagem e tira a borda do telão", async ({ page, context }) => {
+test("fechar a aba no X mantém a contagem e o telão no ar", async ({ page, context }) => {
   await openStopwatch(page);
   await page.getByRole("tab", { name: "Regressivo" }).click();
   await page.getByTestId("stopwatch-preset-5").click();
   const projection = await context.newPage();
   await projection.goto("/projection/module?module=stopwatch");
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
   await page.bringToFront();
   await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
-  await page.clock.runFor(5 * 60_000 + 5_000);
+  await advanceClock(page, 5 * 60_000 + 5_000);
   await expect(projection.getByTestId("module-projection-alert-danger")).toBeAttached();
 
+  /*
+   * O estado vive fora do módulo (singleton do renderer), justamente para o
+   * controle remoto operar com a janela fechada. Fechar a aba, então, não zera
+   * a contagem nem tira o telão do ar — só some a prévia.
+   */
   await page.locator(".subtab-close").first().click();
-  await expect(projection.locator(".module-projection__alert")).toHaveCount(0);
-  await expect(projection.locator(".module-projection__text")).toHaveCount(0);
+  await expect(projection.locator(".module-projection__alert")).toHaveCount(1);
+  await expect(projection.locator(".module-projection__text")).toHaveText("-00:05");
 
   await page.locator("#ribbon-tab-utilities").click();
   await page.locator('[data-testid="ribbon-btn-stopwatch"]').click();
-  await expect(page.getByTestId("stopwatch-display")).toHaveText("05:00");
-  await expect(page.getByTestId("ribbon-btn-stopwatch_toggle")).toContainText("Iniciar");
-  await expect(projection.locator(".module-projection__text")).toHaveText("05:00");
+  await expect(page.getByTestId("stopwatch-display")).toHaveText("-00:05");
+  await expect(page.getByTestId("ribbon-btn-stopwatch_toggle")).toContainText("Pausar");
+  await expect(projection.locator(".module-projection__text")).toHaveText("-00:05");
 });
 
 test("cores do aviso e do alerta da Formatação valem no número e na moldura, na tela e no telão", async ({
@@ -157,6 +174,7 @@ test("cores do aviso e do alerta da Formatação valem no número e na moldura, 
   await page.getByTestId("stopwatch-preset-5").click();
   const projection = await context.newPage();
   await projection.goto("/projection/module?module=stopwatch");
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
   await page.bringToFront();
   await page.getByTestId("ribbon-btn-stopwatch_toggle").click();
 
@@ -164,7 +182,7 @@ test("cores do aviso e do alerta da Formatação valem no número e na moldura, 
   const frame = (locator) =>
     locator.evaluate((el) => getComputedStyle(el).getPropertyValue("--frame-color").trim());
 
-  await page.clock.runFor(5 * 60_000 - 30_000);
+  await advanceClock(page, 5 * 60_000 - 30_000);
   await expect.poll(() => color(page.getByTestId("stopwatch-display"))).toBe("rgb(34, 197, 94)");
   await expect.poll(() => frame(page.getByTestId("stopwatch-frame"))).toBe("#22C55E");
   const projectionWarning = projection.getByTestId("module-projection-alert-warning");
@@ -173,7 +191,7 @@ test("cores do aviso e do alerta da Formatação valem no número e na moldura, 
     .poll(() => color(projection.locator(".module-projection__text")))
     .toBe("rgb(34, 197, 94)");
 
-  await page.clock.runFor(40_000);
+  await advanceClock(page, 40_000);
   await expect.poll(() => color(page.getByTestId("stopwatch-display"))).toBe("rgb(142, 68, 173)");
   await expect.poll(() => frame(page.getByTestId("stopwatch-frame"))).toBe("#8E44AD");
   await expect

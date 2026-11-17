@@ -212,6 +212,44 @@ function _absForStaging(restoreToken, phase, rel) {
   return abs;
 }
 
+function _stagingJournalPath(restoreToken) {
+  return path.join(_stagingDir(restoreToken), "journal.json");
+}
+
+async function _writeJournalAtomic(restoreToken, payload) {
+  const dir = _stagingDir(restoreToken);
+  await fs.ensureDir(dir);
+  const journalPath = _stagingJournalPath(restoreToken);
+  const tmp = `${journalPath}.tmp-${crypto.randomUUID()}`;
+  try {
+    await fs.writeJson(tmp, payload, { spaces: 0, mode: 0o600 });
+    await fs.move(tmp, journalPath, { overwrite: true });
+  } catch (error) {
+    await _removeTemp(tmp);
+    throw error;
+  }
+}
+
+async function _readJournal(restoreToken) {
+  try {
+    const data = await fs.readJson(_stagingJournalPath(restoreToken));
+    if (
+      !data ||
+      data.token !== restoreToken ||
+      !["committing-files", "committing-db", "committed"].includes(data.status) ||
+      !Array.isArray(data.files)
+    ) {
+      return null;
+    }
+    const files = data.files.filter(
+      (item) => item && typeof item.rel === "string" && isManagedRel(item.rel) && typeof item.existed === "boolean"
+    );
+    return { token: data.token, status: data.status, files };
+  } catch {
+    return null;
+  }
+}
+
 async function _rollbackCommitted(restoreToken, committed) {
   const shared = _isSharedCollection();
   for (let i = committed.length - 1; i >= 0; i--) {
@@ -654,43 +692,68 @@ function registerIpc(ipcMain, deps = {}) {
     storageAccess.assertWritable("media");
     _stagingDir(restoreToken);
     const list = Array.isArray(rels) ? rels : [];
+    const planned = [];
+    for (const rel of list) {
+      if (!isManagedRel(rel)) throw new Error("Caminho inválido na restauração");
+      const normalizedRel = rel.replace(/\\/g, "/");
+      const stagedAbs = _absForStaging(restoreToken, "restore", normalizedRel);
+      let stagedStat;
+      try {
+        stagedStat = await fs.lstat(stagedAbs);
+      } catch (error) {
+        if (error.code === "ENOENT") continue;
+        throw error;
+      }
+      if (stagedStat.isSymbolicLink() || !stagedStat.isFile()) {
+        throw new Error("Arquivo de staging inválido");
+      }
+      const targetAbs = _absForRel(normalizedRel);
+      let existed = false;
+      try {
+        const targetStat = await fs.lstat(targetAbs);
+        if (targetStat.isSymbolicLink() || !targetStat.isFile()) {
+          throw new Error("Destino inválido na restauração");
+        }
+        existed = true;
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+      planned.push({ rel: normalizedRel, existed, stagedAbs, targetAbs });
+    }
+
+    const journalFiles = planned.map(({ rel, existed }) => ({ rel, existed }));
+    if (planned.length) {
+      await _writeJournalAtomic(restoreToken, {
+        token: restoreToken,
+        status: "committing-files",
+        files: journalFiles,
+      });
+    }
+
     const committed = [];
     try {
-      for (const rel of list) {
-        if (!isManagedRel(rel)) throw new Error("Caminho inválido na restauração");
-        const stagedAbs = _absForStaging(restoreToken, "restore", rel);
-        let stagedStat;
-        try {
-          stagedStat = await fs.lstat(stagedAbs);
-        } catch (error) {
-          if (error.code === "ENOENT") continue;
-          throw error;
-        }
-        if (stagedStat.isSymbolicLink() || !stagedStat.isFile()) {
-          throw new Error("Arquivo de staging inválido");
-        }
-        const targetAbs = _absForRel(rel);
-        const rollbackAbs = _absForStaging(restoreToken, "rollback", rel);
-        let existed = false;
-        try {
-          const targetStat = await fs.lstat(targetAbs);
-          if (targetStat.isSymbolicLink() || !targetStat.isFile()) {
-            throw new Error("Destino inválido na restauração");
-          }
-          existed = true;
+      const shared = _isSharedCollection();
+      for (const item of planned) {
+        if (item.existed) {
+          const rollbackAbs = _absForStaging(restoreToken, "rollback", item.rel);
           await fs.ensureDir(path.dirname(rollbackAbs));
-          await fs.move(targetAbs, rollbackAbs, { overwrite: true });
-        } catch (error) {
-          if (error.code !== "ENOENT") throw error;
+          await fs.move(item.targetAbs, rollbackAbs, { overwrite: true });
         }
-        committed.push({ rel: rel.replace(/\\/g, "/"), existed });
-        const shared = _isSharedCollection();
-        await _ensureTargetDir(path.dirname(targetAbs), shared);
-        await _preparePublishedFile(stagedAbs, shared);
-        await fs.move(stagedAbs, targetAbs, { overwrite: true });
+        committed.push({ rel: item.rel, existed: item.existed });
+        await _ensureTargetDir(path.dirname(item.targetAbs), shared);
+        await _preparePublishedFile(item.stagedAbs, shared);
+        await fs.move(item.stagedAbs, item.targetAbs, { overwrite: true });
+      }
+      if (planned.length) {
+        await _writeJournalAtomic(restoreToken, {
+          token: restoreToken,
+          status: "committing-db",
+          files: journalFiles,
+        });
       }
     } catch (error) {
       await _rollbackCommitted(restoreToken, committed).catch(() => {});
+      await fs.remove(_stagingDir(restoreToken)).catch(() => {});
       throw error;
     }
     return { committed };
@@ -698,10 +761,42 @@ function registerIpc(ipcMain, deps = {}) {
 
   ipcMain.handle("libraryFiles:rollbackRestore", async (_event, restoreToken, committed) => {
     storageAccess.assertWritable("media");
-    const list = Array.isArray(committed) ? committed : [];
+    const explicitList = Array.isArray(committed) && committed.length > 0 ? committed : null;
+    const journal = explicitList ? null : await _readJournal(restoreToken);
+    const list = explicitList || journal?.files || [];
     await _rollbackCommitted(restoreToken, list);
     await fs.remove(_stagingDir(restoreToken)).catch(() => {});
     return { ok: true };
+  });
+
+  ipcMain.handle("libraryFiles:markRestoreCommitted", async (_event, restoreToken) => {
+    storageAccess.assertWritable("media");
+    const journal = await _readJournal(restoreToken);
+    if (!journal) return { ok: false };
+    await _writeJournalAtomic(restoreToken, { ...journal, status: "committed" });
+    return { ok: true };
+  });
+
+  ipcMain.handle("libraryFiles:listPendingRestores", async () => {
+    try {
+      storageAccess.assertWritable("media");
+    } catch {
+      return [];
+    }
+    const stagingRoot = path.join(paths.filesDir(), ".staging");
+    let entries;
+    try {
+      entries = await fs.readdir(stagingRoot, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    const out = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !STAGE_TOKEN_RE.test(entry.name)) continue;
+      const journal = await _readJournal(entry.name);
+      out.push({ token: entry.name, journal });
+    }
+    return out;
   });
 
   ipcMain.handle("libraryFiles:cleanupRestore", async (_event, restoreToken) => {
