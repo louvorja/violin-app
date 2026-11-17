@@ -12,8 +12,12 @@ const paths = require("../../paths.js");
 const { safeSend } = require("../../safeWebContents.js");
 const { joinDentroDe } = require("../../mediaRoots.js");
 
+/** Extensões de apresentação — a mesma fonte do renderer e de `main/pptx`. */
+const PRESENTATION_EXT = require("../../../shared/presentationExtensions.json");
 /** PowerPoint enviado pelo celular: o PC converte (fontes + slides) antes de pôr na Biblioteca. */
-const PPT_UPLOAD_EXT = ["pptx", "ppsx", "pptm", "ppt", "pps", "odp"];
+const PPT_UPLOAD_EXT = PRESENTATION_EXT.powerPoint;
+/** Macro não vem do celular: não há quem confirme a execução aqui. */
+const PPT_MACRO_EXT = new Set(PRESENTATION_EXT.macroEnabled);
 
 function register(app, ctx) {
   const {
@@ -661,6 +665,15 @@ function register(app, ctx) {
     if (!fileName || !ext) {
       return res.status(400).json({
         error: "X-File-Name inválido ou extensão não suportada",
+        valid: MEDIA_LIBRARY_EXT,
+      });
+    }
+    if (PPT_MACRO_EXT.has(ext)) {
+      // Abrir um PowerPoint com macros executa o que estiver lá dentro. No PC o
+      // operador confirma; o celular não tem como — o arquivo volta como erro.
+      return res.status(415).json({
+        error: "PowerPoint com macros não pode vir do celular. Envie em .pptx ou .ppsx.",
+        macroEnabled: true,
         valid: MEDIA_LIBRARY_EXT,
       });
     }

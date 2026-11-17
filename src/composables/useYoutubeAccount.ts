@@ -18,6 +18,8 @@ export function useYoutubeAccount(enabled: () => boolean) {
     busy.value = true;
     try {
       loggedIn.value = (await action()).loggedIn;
+    } catch {
+      // O IPC pode falhar (janela fechada no meio): mantém o estado anterior.
     } finally {
       busy.value = false;
     }

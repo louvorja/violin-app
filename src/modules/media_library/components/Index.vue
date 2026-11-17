@@ -420,7 +420,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from "vue";
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, onDeactivated, watch } from "vue";
 import { useViewport } from "@/composables/useViewport";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
@@ -475,6 +475,7 @@ import {
   PPT_ACCEPT,
   applyProgress,
   isFontFileName,
+  isMacroEnabledName,
   isPowerPointName,
   parseFeatures,
   missingFonts,
@@ -524,6 +525,8 @@ interface MediaFile {
     features?: PptxFeatures;
     /** Este PC pode apresentar com o próprio PowerPoint. */
     nativeAvailable?: boolean;
+    /** O arquivo pode conter macros: o operador já confirmou ao importar. */
+    macroEnabled?: boolean;
   };
   /** Ordem manual usada pelo seletor "Personalizada". */
   order?: number;
@@ -1294,6 +1297,24 @@ const importacao = ref<PptxImportState | null>(null);
 /** Última importação, para "Tentar de novo" depois de autorizar o macOS. */
 let retryImportacao: (() => void) | null = null;
 
+/** PowerPoints com macros já confirmados nesta sessão (uma vez por arquivo). */
+const macrosConfirmados = new Set<string>();
+
+function confirmarMacros(name: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    $alert.yesno(
+      {
+        title: tm("pptx.macro_title"),
+        text: tm("pptx.macro_text", { name }),
+        confirmText: tm("pptx.macro_confirm"),
+        destructive: true,
+        translate: false,
+      },
+      (resp?: string) => resolve(resp === "yes")
+    );
+  });
+}
+
 /**
  * Converte o .pptx num PDF fiel e guarda o PDF na biblioteca, com o nome do
  * arquivo original. A conversão roda no main (fontes + PowerPoint/LibreOffice)
@@ -1313,6 +1334,16 @@ async function importPowerPoint(
   if (!Platform.isDesktop || !api || !filePath) {
     $alert.error({ text: tm("pptx.desktop_only"), translate: false });
     return null;
+  }
+  // Arquivo com macros: avisa uma vez. No "Gerar de novo" o item guarda que o
+  // operador já confirmou esse arquivo.
+  if (
+    isMacroEnabledName(name) &&
+    !substituir?.pptx?.macroEnabled &&
+    !macrosConfirmados.has(filePath)
+  ) {
+    if (!(await confirmarMacros(name))) return null;
+    macrosConfirmados.add(filePath);
   }
   const taskId = "pptx-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
   backgroundTasks.registerTask(taskId, tm("pptx.task", { name }));
@@ -1360,6 +1391,7 @@ async function importPowerPoint(
       fonts: result.fonts,
       features: result.features,
       nativeAvailable: result.nativeAvailable,
+      macroEnabled: isMacroEnabledName(name),
     };
     // IndexedDB não aceita Proxy do Vue: grava uma cópia simples.
     const pptxPlano = () => JSON.parse(JSON.stringify(pptx)) as NonNullable<MediaFile["pptx"]>;
@@ -1592,6 +1624,8 @@ function aoEstadoNativo(st: PptxNativeState): void {
  * para quem está falando saber onde está e o que vem depois.
  */
 let retornoNativoId: string | undefined;
+/** Cada espera do retorno guarda seu número; sair da tela invalida todos. */
+let retornoNativoSeq = 0;
 /** Quando o PA do LouvorJA fechou para o PowerPoint entrar. */
 let paFechadoEm = 0;
 /** O que o retorno precisa para abrir o PDF (sem a página, que muda). */
@@ -1617,6 +1651,10 @@ function enviarRetornoNativo(): void {
 async function abrirRetornoNativo(file: MediaFile, pagina: number): Promise<void> {
   if (!($userdata.get(KEYS.OPTIONS.FILE_PROJECTION.SHOW_RETURN, false) as boolean)) return;
   const id = newFileProjectionId();
+  // Fechar a Biblioteca (ou sair da aba) cancela as esperas: a janela de
+  // retorno não pode nascer depois, órfã.
+  const seq = ++retornoNativoSeq;
+  const cancelado = () => seq !== retornoNativoSeq;
   retornoNativoId = id;
   // Mesmo playback_id: o nosso próprio listener reconhece e não "adota" de novo.
   currentPdfPlaybackId = id;
@@ -1636,12 +1674,16 @@ async function abrirRetornoNativo(file: MediaFile, pagina: number): Promise<void
   const desdeOFechamento = Date.now() - paFechadoEm;
   if (desdeOFechamento < 2600) await new Promise((r) => setTimeout(r, 2600 - desdeOFechamento));
   for (const espera of [0, 1200]) {
+    if (cancelado()) return;
     if (espera) await new Promise((r) => setTimeout(r, espera));
+    if (cancelado()) return;
     if (retornoNativoId !== id || (!nativoAtivo.value && !nativoAbrindo.value)) return;
     const aberto = await isProjectionOpen(PROJECTION_TYPE.FILE_RETURN);
+    if (cancelado()) return;
     if (!aberto) {
       console.info("[pptx] abrindo o retorno do modo nativo", { espera });
       await openMediaWindow("return", "file");
+      if (cancelado()) return;
       // O retorno nasce com o foco; as setas (e o passador) têm que continuar
       // chegando aqui, que é quem as manda ao PowerPoint.
       window.focus();
@@ -2614,6 +2656,7 @@ const aoMudarBiblioteca = () => void recarregarDoCelular();
 window.addEventListener("lj:media-library-changed", aoMudarBiblioteca);
 
 onBeforeUnmount(() => {
+  retornoNativoSeq++;
   window.removeEventListener("lj:media-library-changed", aoMudarBiblioteca);
   pararEscutaNativo?.();
   _cancelarFilaMiniaturas();
@@ -2622,6 +2665,11 @@ onBeforeUnmount(() => {
   }
   createdObjectUrls.clear();
   stop();
+});
+
+// A aba saiu da tela (KeepAlive): o retorno nativo não abre depois disso.
+onDeactivated(() => {
+  retornoNativoSeq++;
 });
 </script>
 

@@ -26,7 +26,7 @@
         ref="fileInput"
         class="lj-u-sr-only"
         type="file"
-        accept="image/*,video/*,audio/*,.pdf,.heic,.heif,.pptx,.ppsx,.pptm,.ppt,.pps,.odp"
+        :accept="acceptPhone"
         @change="onFilePicked"
       />
     </div>
@@ -369,7 +369,11 @@ import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from
 import { useI18n } from "vue-i18n";
 import { apiFetch, isTokenInvalid, postApi } from "@/helpers/ApiClient";
 import { httpErrorMessage } from "@/helpers/httpErrorMessage";
+import { PPT_PHONE_ACCEPT } from "@/constants/FileTypes";
 import $alert from "@/helpers/Alert";
+
+/** O celular não envia PowerPoint com macros: lá não há quem confirme. */
+const acceptPhone = `image/*,video/*,audio/*,.pdf,.heic,.heif,${PPT_PHONE_ACCEPT}`;
 
 /** Item da biblioteca (metadados — os bytes ficam no desktop). */
 interface MediaItem {
@@ -1016,16 +1020,17 @@ async function pollPending(): Promise<void> {
     const data = (await res.json()) as { uploads?: PhoneUpload[] };
     const byId = new Map((data.uploads ?? []).map((u) => [u.id, u]));
     let ficouPronto = false;
-    pending.value = pending.value.map((old) => {
+    pending.value = pending.value.flatMap((old) => {
       const now = byId.get(old.id);
-      if (!now) return old;
+      // O PC não conhece mais este envio (expirou, app reiniciou): some da lista.
+      if (!now) return [];
       if (old.status === "converting" && now.status === "done") {
         ficouPronto = true;
         snack(t("remote_control.media_library.ready", { name: now.name }), "success");
         // Sai da lista depois de uns segundos: o item já está na Biblioteca.
         setTimeout(() => dismissPending(now.id), 4000);
       }
-      return { ...old, ...now };
+      return [{ ...old, ...now }];
     });
     if (ficouPronto) await loadLibrary();
     if (!pending.value.some((u) => u.status === "converting")) stopPolling();

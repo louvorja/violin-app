@@ -38,6 +38,9 @@ vi.mock("@/helpers/Platform", () => ({
 }));
 vi.mock("@/helpers/AppData", () => ({ default: { get: (k: string) => appdata[k] } }));
 vi.mock("@/helpers/IndexedDB", () => ({ default: { getAll: async () => [] } }));
+vi.mock("@/helpers/Telemetry", () => ({
+  default: { track: vi.fn(), captureException: vi.fn(), markStart: vi.fn(), markCancel: vi.fn() },
+}));
 vi.mock("../composables/useLiveContent", () => ({ useLiveContent: () => live }));
 vi.mock("../composables/usePdfDeck", () => ({
   usePdfDeck: () => ({
@@ -170,5 +173,18 @@ describe("celular: Iniciar e Parar do modo apresentação", () => {
     respostas.length = 0;
     await handlePresenterHttp({ requestId: "c", action: "live-image", width: 640 });
     expect(respostas).toEqual([{ status: "error" }]);
+  });
+
+  it("ação desconhecida responde erro em vez de deixar o celular esperando", async () => {
+    respostas.length = 0;
+    await handlePresenterHttp({ requestId: "d", action: "nao_existe" } as never);
+    expect(respostas).toEqual([{ status: "error", error: "unknown_action" }]);
+  });
+
+  it("exceção numa ação vira resposta de erro", async () => {
+    startOutputs.mockRejectedValueOnce(new Error("falhou"));
+    respostas.length = 0;
+    await handlePresenterHttp({ requestId: "e", action: "start" });
+    expect(respostas).toEqual([{ status: "error", error: "internal" }]);
   });
 });

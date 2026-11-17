@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { PPT_EXT, PPT_MACRO_EXT, PPT_PHONE_EXT, isMacroEnabledName } from "@/constants/FileTypes";
+import presentationExtensions from "../../../../electron/shared/presentationExtensions.json";
 import {
   PPT_ACCEPT,
   applyProgress,
@@ -20,6 +22,23 @@ describe("pptxImport", () => {
     expect(isPowerPointName("pptx")).toBe(false);
     expect(isPowerPointName("")).toBe(false);
     expect(PPT_ACCEPT).toContain(".pptx");
+  });
+
+  it("as extensões vêm da mesma lista do main", () => {
+    expect([...PPT_EXT]).toEqual(presentationExtensions.powerPoint);
+    expect([...PPT_MACRO_EXT]).toEqual(presentationExtensions.macroEnabled);
+    expect(PPT_ACCEPT).toContain(".pptm");
+    // Do celular só chega o que não pode executar macro.
+    expect([...PPT_PHONE_EXT]).toEqual(["pptx", "ppsx", "odp"]);
+  });
+
+  it("reconhece apresentações que podem conter macros", () => {
+    expect(isMacroEnabledName("Culto.pptm")).toBe(true);
+    expect(isMacroEnabledName("Culto.PPT")).toBe(true);
+    expect(isMacroEnabledName("Culto.pps")).toBe(true);
+    expect(isMacroEnabledName("Culto.pptx")).toBe(false);
+    expect(isMacroEnabledName("Culto.ppsx")).toBe(false);
+    expect(isMacroEnabledName("Culto.odp")).toBe(false);
   });
 
   it("aceita só resposta de sucesso com caminho de PDF", () => {

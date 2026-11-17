@@ -1,4 +1,5 @@
 import Platform from "@/helpers/Platform";
+import Telemetry from "@/helpers/Telemetry";
 import { usePdfDeck } from "./composables/usePdfDeck";
 import { useLiveContent } from "./composables/useLiveContent";
 import { usePptxNative } from "./composables/usePptxNative";
@@ -200,6 +201,21 @@ function revOf(url: string | null): string {
 }
 
 export async function handlePresenterHttp(data: PresenterRequest): Promise<void> {
+  try {
+    await _handlePresenterHttp(data);
+  } catch (error) {
+    // Sem isto, uma exceção deixava o celular esperando até o timeout da rota.
+    const message = String((error as Error)?.message || error).slice(0, 300);
+    console.warn("[http:presenter]", data?.action, message);
+    Telemetry.captureException(error, {
+      source: "presenter_http",
+      action: String(data?.action || ""),
+    });
+    respond(data?.requestId, { status: "error", error: "internal" });
+  }
+}
+
+async function _handlePresenterHttp(data: PresenterRequest): Promise<void> {
   const deck = usePdfDeck();
   const live = useLiveContent();
   const native = usePptxNative();
@@ -351,6 +367,10 @@ export async function handlePresenterHttp(data: PresenterRequest): Promise<void>
           if (deck.active.value && Number.isInteger(data.page)) deck.goTo(Number(data.page));
           return;
       }
+      return;
     }
+    default:
+      // Ação que este app não conhece: responde em vez de deixar o celular esperando.
+      respond(data?.requestId, { status: "error", error: "unknown_action" });
   }
 }

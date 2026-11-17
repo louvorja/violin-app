@@ -23,6 +23,21 @@ const { execFile } = require("child_process");
 const WIN_CLOUD_ATTRS = 0x1000 | 0x40000 | 0x400000;
 const READ_CHUNK = 1024 * 1024;
 const MAX_PATHS = 2000;
+/** Um PowerShell por pasta é caro: teto e concorrência para não abrir 30 processos. */
+const MAX_WIN_DIRS = 20;
+const WIN_DIR_CONCURRENCY = 3;
+
+/** `Promise.all` com teto de concorrência (preserva a ordem dos resultados). */
+async function mapLimit(items, limit, run) {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      await run(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+}
 
 const WIN_SCRIPT = [
   "$ErrorActionPreference = 'SilentlyContinue'",
@@ -91,15 +106,24 @@ function createCloudFiles(deps = {}) {
         if (!byDir.has(dir)) byDir.set(dir, []);
         byDir.get(dir).push(p);
       }
-      await Promise.all(
-        [...byDir].map(async ([dir, files]) => {
-          const listing = await listWindowsDir(dir);
-          for (const f of files) {
-            const state = listing.get(path.basename(f));
-            if (state) out[f] = state;
-          }
-        })
-      );
+      /*
+       * Um PowerShell por pasta custa caro (processo + módulo): as bibliotecas
+       * raramente passam disto e as raras pastas extras ficam como "na nuvem",
+       * que é o estado conservador — o operador vê o botão de baixar.
+       */
+      const dirs = [...byDir].slice(0, MAX_WIN_DIRS);
+      await mapLimit(dirs, WIN_DIR_CONCURRENCY, async ([dir, files]) => {
+        const listing = await listWindowsDir(dir);
+        for (const f of files) {
+          const state = listing.get(path.basename(f));
+          if (state) out[f] = state;
+          else out[f] = "cloud";
+        }
+      });
+      for (const [dir, files] of [...byDir].slice(MAX_WIN_DIRS)) {
+        void dir;
+        for (const f of files) out[f] = "cloud";
+      }
       return out;
     }
     await Promise.all(

@@ -715,4 +715,17 @@ describe("POST /api/media-library/upload", () => {
     );
     expect(desconhecido.code).toBe(404);
   });
+
+  it("PowerPoint com macros é recusado no upload do celular", async () => {
+    const media = path.join(mocks.root, "private", "library", "media");
+    const antes = new Set(await fs.readdir(media).catch(() => []));
+    for (const name of ["culto.pptm", "culto.ppt", "culto.pps"]) {
+      const res = await callUpload([Buffer.from("PPT")], { "x-file-name": name }, COM_PERMISSAO);
+      expect(res.code).toBe(415);
+      expect(res.body.macroEnabled).toBe(true);
+      expect(res.body.error).toContain(".pptx");
+    }
+    // Nem os bytes chegaram ao disco.
+    expect((await fs.readdir(media).catch(() => [])).filter((f) => !antes.has(f))).toEqual([]);
+  });
 });

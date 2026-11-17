@@ -43,9 +43,10 @@ const {
 } = require("./converters.js");
 const { NativeShow } = require("./nativeShow.js");
 
-/** Extensões aceitas. Só as baseadas em ZIP (OOXML) têm leitura de fontes. */
-const PPT_EXT = [".pptx", ".ppsx", ".pptm", ".ppt", ".pps", ".odp"];
-const OOXML_EXT = [".pptx", ".ppsx", ".pptm"];
+/** Extensões aceitas (fonte única em `electron/shared/presentationExtensions.json`). */
+const PRESENTATION_EXT = require("../../shared/presentationExtensions.json");
+const PPT_EXT = PRESENTATION_EXT.powerPoint.map((e) => `.${e}`);
+const OOXML_EXT = PRESENTATION_EXT.ooxml.map((e) => `.${e}`);
 const MAX_BYTES = 1024 * 1024 * 1024; // 1 GB — apresentação com vídeo pesado
 /**
  * Acima disto a leitura do ZIP (JSZip) fica caríssima: o arquivo é tratado

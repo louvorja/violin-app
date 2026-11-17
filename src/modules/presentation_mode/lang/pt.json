@@ -397,6 +397,11 @@
     "added": "Adicionado a \"{name}\".",
     "grid_hint": "Clique para mandar ao ar · Próximo/Anterior e o passador andam pela lista"
   },
+  "tab": {
+    "close_title": "Fechar a aba?",
+    "close_text": "A apresentação continua no ar nas telas. A aba pode ser reaberta pelo indicador “no ar”, no rodapé.",
+    "close_confirm": "Fechar a aba"
+  },
   "pptx": {
     "converting": "Convertendo \"{name}\" pelo PowerPoint…",
     "failed": "Não deu para converter \"{name}\" pelo PowerPoint. Abra o arquivo no PowerPoint e exporte como PDF (Arquivo → Exportar → PDF).",
@@ -412,6 +417,9 @@
     "native_black": "Tela preta",
     "native_end": "Encerrar {app}",
     "native_failed": "Não foi possível apresentar com o {app}: {message}",
+    "macro_title": "PowerPoint com macros",
+    "macro_text": "\"{name}\" pode conter macros, que executam comandos neste computador. Só abra se o arquivo vier de alguém de confiança.",
+    "macro_confirm": "Apresentar mesmo assim",
     "native_hint_plain": "Sem animações nem vídeos: os slides no ar já mostram tudo.",
     "feat_animations": "animações em {count} slide(s)",
     "feat_videos": "{count} vídeo(s)",

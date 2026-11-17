@@ -58,12 +58,15 @@ function install(): void {
       page.value = 1;
       total.value = 0;
       thumbs.clear();
-      void doc.value?.cleanup();
+      void doc.value?.cleanup().catch(() => {});
       doc.value = null;
       if (!next) return;
       try {
         const loaded = await loadPdfDocument({ url: next });
-        if (seq !== loadSeq) return void loaded.cleanup();
+        if (seq !== loadSeq) {
+          void loaded.cleanup().catch(() => {});
+          return;
+        }
         doc.value = loaded;
         total.value = loaded.numPages;
         try {

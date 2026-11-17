@@ -88,7 +88,9 @@ function byName(a: LibraryEntry, b: LibraryEntry): number {
 }
 
 export async function readFolder(dir: string): Promise<LibraryEntry[] | null> {
-  const result = await Platform.listDir(dir);
+  // `listDir` rejeita quando o IPC falha: a grade mostra "pasta indisponível"
+  // em vez de derrubar o render.
+  const result = await Platform.listDir(dir).catch(() => null);
   if (!result?.ok) return null;
   return (result.entries as LibraryEntry[])
     .filter((e) => e.isDir || fileKind(e.ext) !== null)

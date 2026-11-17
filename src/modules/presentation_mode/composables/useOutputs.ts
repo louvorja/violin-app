@@ -166,6 +166,8 @@ function _publish(): void {
   const allOn = _on.value.main && (_on.value.stage || !_stageMonitor);
   $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_START, idle && !allOn);
   $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_STOP, idle && _presenting.value);
+  // O shell mostra "Apresentação no ar" mesmo com a aba fechada.
+  $appdata.set(KEYS.MODULES.PRESENTATION_MODE.ON_AIR, _presenting.value);
   $appdata.set(KEYS.MODULES.PRESENTATION_MODE.CAN_CLEAR, _presenting.value && !_cleared.value);
 }
 

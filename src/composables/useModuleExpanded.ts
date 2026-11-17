@@ -2,6 +2,7 @@ import { computed, type ComputedRef } from "vue";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import { moduleShell } from "@/config/modules";
+import { KEYS } from "@/constants/UserDataKeys";
 
 /**
  * Módulos que podem ocupar a área do ribbon e das abas de módulo — os que
@@ -34,7 +35,7 @@ export function useShellExpanded(): {
   activeModule: ComputedRef<string | null>;
   isExpanded: ComputedRef<boolean>;
 } {
-  const activeModule = computed(() => $appdata.get<string | null>("active_module", null));
+  const activeModule = computed(() => $appdata.get<string | null>(KEYS.SHELL.ACTIVE_MODULE, null));
   const isExpanded = computed(() => isModuleExpanded(activeModule.value));
   return { activeModule, isExpanded };
 }

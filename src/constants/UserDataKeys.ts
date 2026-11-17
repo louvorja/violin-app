@@ -122,6 +122,8 @@ export const KEYS = {
       CAN_START: `${MODULES_PRESENTATION_MODE}.can_start`,
       /** AppData: há saída aberta para fechar. */
       CAN_STOP: `${MODULES_PRESENTATION_MODE}.can_stop`,
+      /** AppData: as telas de projeção estão abertas (indicador "no ar" do shell). */
+      ON_AIR: `${MODULES_PRESENTATION_MODE}.on_air`,
       /** AppData: há saída aberta e a tela ainda não está limpa. */
       CAN_CLEAR: `${MODULES_PRESENTATION_MODE}.can_clear`,
       /** AppData: há conteúdo no ar para tirar (música, versículo, arquivo...). */

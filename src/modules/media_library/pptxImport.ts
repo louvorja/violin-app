@@ -9,20 +9,8 @@
  * Funções puras (sem Vue) para poderem ser testadas sozinhas.
  */
 
-/** Extensões de apresentação aceitas pela biblioteca. */
-export const PPT_EXT = ["pptx", "ppsx", "pptm", "ppt", "pps", "odp"];
-
-/** Valor do `accept` do `<input type="file">` para apresentações. */
-export const PPT_ACCEPT = PPT_EXT.map((e) => "." + e).join(",");
-
-/** O nome de arquivo é uma apresentação? */
-export function isPowerPointName(name: string | undefined | null): boolean {
-  const ext = String(name || "")
-    .split(".")
-    .pop()
-    ?.toLowerCase();
-  return !!ext && String(name).includes(".") && PPT_EXT.includes(ext);
-}
+/** Extensões de apresentação aceitas pela biblioteca (fonte única em `electron/shared/`). */
+export { PPT_EXT, PPT_ACCEPT, isPowerPointName, isMacroEnabledName } from "@/constants/FileTypes";
 
 /** Arquivo de fonte que pode ser arrastado: .ttf, .otf ou o .zip do DaFont. */
 export function isFontFileName(name: string | undefined | null): boolean {

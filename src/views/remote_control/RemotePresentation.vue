@@ -480,7 +480,7 @@ const currentSrc = computed(() => (state.value.page ? slideUrl(state.value.page,
 /** A imagem no ar (arquivo de imagem), reduzida pelo PC: o celular não abre os endereços de lá. */
 const liveImageSrc = computed(() =>
   state.value.live?.image
-    ? `/api/presenter/live-image?w=960&v=${state.value.live.image}&${q()}`
+    ? `/api/presenter/live-image?w=960&v=${encodeURIComponent(state.value.live.image)}&${q()}`
     : ""
 );
 /** O tipo do que está no ar, em palavras, quando não é um arquivo de slides. */
@@ -510,9 +510,10 @@ async function refresh(): Promise<void> {
     const next = (await res.json()) as PresenterState;
     const changed = next.page !== state.value.page || next.rev !== state.value.rev;
     state.value = next;
+    // A cada estado: sem `overlay` (monitor voltou/não veio), o aviso sai.
+    noDisplay.value = next.overlay ? next.overlay.display === false : false;
     if (next.overlay) {
       board.value = next.overlay.board;
-      noDisplay.value = next.overlay.display === false;
     }
     if (changed && mode.value === "draw") void loadStrokes();
   } catch {
@@ -791,9 +792,11 @@ function onDown(e: PointerEvent): void {
     if (zoomOn.value && canZoom.value) {
       // Amplia primeiro: o laser já sai no lugar certo do slide ampliado.
       laserAt.value = { x, y };
-      zoomPending = zoomAt(x, y).then(() =>
-        sendLaser(laserAt.value?.x ?? x, laserAt.value?.y ?? y)
-      );
+      zoomPending = zoomAt(x, y)
+        .then(() => sendLaser(laserAt.value?.x ?? x, laserAt.value?.y ?? y))
+        .finally(() => {
+          zoomPending = null;
+        });
     } else {
       sendLaser(x, y);
     }

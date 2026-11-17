@@ -1,9 +1,11 @@
 import { computed, ref } from "vue";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
+import $alert from "@/helpers/Alert";
 import $snackbar from "@/helpers/Snackbar";
 import Telemetry from "@/helpers/Telemetry";
 import { KEYS } from "@/constants/UserDataKeys";
+import { isMacroEnabledName } from "@/constants/FileTypes";
 import { i18nAtual } from "@/i18n";
 
 /**
@@ -28,6 +30,8 @@ let installed = false;
 let lastStep = { action: "", at: 0 };
 /** Quem quer saber quando a apresentação chegou ao fim pelo passador. */
 const finishedListeners = new Set<() => void>();
+/** PowerPoints com macros já confirmados nesta sessão (uma vez por arquivo). */
+const macrosConfirmados = new Set<string>();
 
 function api() {
   return (Platform.api as LouvorjaApi | null)?.pptx ?? null;
@@ -78,11 +82,32 @@ function install(): void {
   void refresh();
 }
 
+/** Arquivo com macros: confirma uma vez antes de o PowerPoint abri-lo. */
+function confirmarMacros(pptxPath: string): Promise<boolean> {
+  const name = pptxPath.split(/[\\/]/).filter(Boolean).pop() || pptxPath;
+  return new Promise((resolve) => {
+    $alert.yesno(
+      {
+        title: tm("macro_title"),
+        text: tm("macro_text", { name }),
+        confirmText: tm("macro_confirm"),
+        destructive: true,
+        translate: false,
+      },
+      (resp?: string) => resolve(resp === "yes")
+    );
+  });
+}
+
 async function start(pptxPath: string, startIndex = 0): Promise<boolean> {
   const a = api();
   if (!a || opening.value) return false;
   opening.value = true;
   try {
+    if (isMacroEnabledName(pptxPath) && !macrosConfirmados.has(pptxPath)) {
+      if (!(await confirmarMacros(pptxPath))) return false;
+      macrosConfirmados.add(pptxPath);
+    }
     const r = await a.nativeStart(pptxPath, Math.max(0, startIndex), engine());
     if (!r.ok) {
       Telemetry.track("presentation_pptx_native_failed", { code: r.code });
@@ -109,15 +134,15 @@ async function nav(action: "next" | "prev" | "goto" | "black", index?: number): 
     if (lastStep.action === action && now - lastStep.at < 350) return;
     lastStep = { action, at: now };
   }
-  const r = await a.nativeNav(action, index);
-  if (r.ok) apply(r.state);
+  const r = await a.nativeNav(action, index).catch(() => null);
+  if (r?.ok) apply(r.state);
 }
 
 async function end(): Promise<void> {
   const a = api();
   if (!a) return;
-  const r = await a.nativeEnd();
-  apply(r.ok ? r.state : { active: false });
+  const r = await a.nativeEnd().catch(() => null);
+  apply(r?.ok ? r.state : { active: false });
 }
 
 export function usePptxNative() {

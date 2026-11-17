@@ -245,6 +245,8 @@ import { LjButton, LjIcon } from "@/components/ui";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
+import $alert from "@/helpers/Alert";
+import { setModuleCloseGuard } from "@/helpers/Modules";
 import Telemetry from "@/helpers/Telemetry";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
@@ -374,13 +376,38 @@ const folders = useFolderItems();
 const playerMute = usePlayerMute();
 onBeforeUnmount(stage.reset);
 
+/**
+ * Fechar a aba não desliga as telas: o operador confirma e a apresentação
+ * segue no ar, com o indicador do shell para voltar ou parar.
+ */
+let offCloseGuard: (() => void) | null = null;
+
+function confirmarFechamento(): Promise<boolean> {
+  return new Promise((resolve) => {
+    $alert.yesno(
+      {
+        title: tm("tab.close_title"),
+        text: tm("tab.close_text"),
+        confirmText: tm("tab.close_confirm"),
+        translate: false,
+      },
+      (resp?: string) => resolve(resp === "yes")
+    );
+  });
+}
+
 onMounted(() => {
   void ensureLoaded();
   // A trava vale para o culto em andamento, não para a próxima abertura.
   if (outputLocked.value) setOutputLocked(false);
   // Telas abertas mostrando algo que ninguém controla (o app recarregou): voltam ao fundo.
   void resetOrphanScreens();
+  offCloseGuard = setModuleCloseGuard(moduleId, () => {
+    if (!screenOn.value.main && !screenOn.value.stage && !onAir.value) return true;
+    return confirmarFechamento();
+  });
 });
+onBeforeUnmount(() => offCloseGuard?.());
 
 const expanded = computed(() => isModuleExpanded(moduleId));
 /** Ribbon → Exibição → Mostrar programa: o palco fica com a largura da coluna. */

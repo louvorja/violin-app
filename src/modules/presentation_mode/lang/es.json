@@ -397,6 +397,11 @@
     "added": "Agregado a \"{name}\".",
     "grid_hint": "Clic para enviar al aire · Siguiente/Anterior y el control recorren la lista"
   },
+  "tab": {
+    "close_title": "¿Cerrar la pestaña?",
+    "close_text": "La presentación sigue al aire en las pantallas. Puedes reabrir la pestaña desde el indicador «al aire», en el pie.",
+    "close_confirm": "Cerrar la pestaña"
+  },
   "pptx": {
     "converting": "Convirtiendo \"{name}\" con PowerPoint…",
     "failed": "No se pudo convertir \"{name}\" con PowerPoint. Abre el archivo en PowerPoint y expórtalo como PDF (Archivo → Exportar → PDF).",
@@ -412,6 +417,9 @@
     "native_black": "Pantalla negra",
     "native_end": "Cerrar {app}",
     "native_failed": "No se pudo presentar con {app}: {message}",
+    "macro_title": "PowerPoint con macros",
+    "macro_text": "\"{name}\" puede contener macros, que ejecutan comandos en esta computadora. Ábrelo solo si el archivo viene de alguien de confianza.",
+    "macro_confirm": "Presentar de todos modos",
     "native_hint_plain": "Sin animaciones ni videos: las diapositivas al aire ya muestran todo.",
     "feat_animations": "animaciones en {count} diapositiva(s)",
     "feat_videos": "{count} video(s)",

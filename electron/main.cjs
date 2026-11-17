@@ -90,6 +90,8 @@ const splash = require("./main/splash.js");
 const storage = require("./main/storage.js");
 const docStore = require("./main/docStore.js");
 const fileBrowser = require("./main/fileBrowser.js");
+const fileAccess = require("./main/fileAccess.js");
+const PRESENTATION_EXT = require("./shared/presentationExtensions.json");
 const cloudFiles = require("./main/cloudFiles.js").createCloudFiles();
 const seriesFile = require("./main/seriesFile.js");
 const fileActions = require("./main/fileActions.js");
@@ -1685,6 +1687,47 @@ function _walkSet(obj, path, value) {
 let _userDataMain = userStore.read("user_data") || {};
 
 /*
+ * Allowlist do IPC de arquivos (fileAccess.js): só as pastas que o operador
+ * escolheu — bibliotecas do Modo apresentação, pasta da igreja e as pastas do
+ * próprio app — podem ser listadas/alteradas pelo renderer. As raízes são
+ * (re)registradas quando a preferência muda; ficam valendo por esta sessão.
+ */
+let _fileRootsSignature = "";
+async function _ensureFileRoots() {
+  const prefs = _userDataMain?.modules?.presentation_mode || {};
+  const folders = Array.isArray(prefs.library_folders) ? prefs.library_folders : [];
+  const list = [
+    paths.dataDir(),
+    paths.privateMediaDir(),
+    paths.mediaDir(),
+    paths.videosDir(),
+    paths.canvaDir(),
+    paths.videoWorkDir(),
+    prefs.church_folder,
+    ...folders.map((f) => (f && typeof f === "object" ? f.path : null)),
+  ].filter((p) => typeof p === "string" && p.length > 0);
+  const signature = list.join("\n");
+  if (signature === _fileRootsSignature) return;
+  _fileRootsSignature = signature;
+  await Promise.all(list.map((p) => fileAccess.allowRoot(p)));
+}
+
+/** Confere a allowlist (registrando as raízes configuradas antes). */
+async function _fileAllowed(target) {
+  await _ensureFileRoots();
+  return fileAccess.isAllowed(target);
+}
+
+/** A mesma checagem para uma lista de caminhos (estado na nuvem, downloads). */
+async function _filesAllowed(targets) {
+  await _ensureFileRoots();
+  const list = Array.isArray(targets) ? targets : [];
+  const allowed = [];
+  for (const p of list) if (await fileAccess.isAllowed(p)) allowed.push(p);
+  return allowed;
+}
+
+/*
  * Estado das janelas COMUNS (operador e principal no Windows), em
  * `options.windows.<feature>` — o espelho de `KEYS.OPTIONS.WINDOWS` em
  * `src/constants/UserDataKeys.ts`. Guarda modo (maximizada), tamanho e posição
@@ -2805,28 +2848,54 @@ ipcMain.handle("storage:readDir", async (_e, dirPath) => {
 });
 
 /** Um nível de uma pasta, com tamanho e data — navegador de arquivos do Modo apresentação. */
-ipcMain.handle("files:listDir", (_e, dirPath) => fileBrowser.listDir(dirPath));
+ipcMain.handle("files:listDir", async (_e, dirPath) => {
+  if (!(await _fileAllowed(dirPath))) return { ok: false, error: "forbidden" };
+  return fileBrowser.listDir(dirPath);
+});
 // Pastas na nuvem (OneDrive, Google Drive, iCloud...): o que ainda não baixou, e baixar.
-ipcMain.handle("files:cloudStates", (_e, paths) => cloudFiles.states(paths));
-ipcMain.handle("files:cloudDownload", (event, filePath) =>
-  cloudFiles.download(filePath, (percent) => {
+ipcMain.handle("files:cloudStates", async (_e, pathsList) => {
+  const allowed = await _filesAllowed(pathsList);
+  return allowed.length ? cloudFiles.states(allowed) : {};
+});
+ipcMain.handle("files:cloudDownload", async (event, filePath) => {
+  if (!(await _fileAllowed(filePath))) return { ok: false, error: "forbidden" };
+  return cloudFiles.download(filePath, (percent) => {
     if (!event.sender.isDestroyed()) event.sender.send("files:cloudProgress", { path: filePath, percent });
-  })
-);
+  });
+});
 // Histórico de uma série de vídeos, gravado na própria pasta (nome de arquivo fixo).
-ipcMain.handle("files:seriesRead", (_e, dirPath) => seriesFile.read(dirPath));
-ipcMain.handle("files:seriesApply", (_e, dirPath, op) => seriesFile.apply(dirPath, op));
+ipcMain.handle("files:seriesRead", async (_e, dirPath) => {
+  if (!(await _fileAllowed(dirPath))) return { ok: false, error: "forbidden" };
+  return seriesFile.read(dirPath);
+});
+ipcMain.handle("files:seriesApply", async (_e, dirPath, op) => {
+  if (!(await _fileAllowed(dirPath))) return { ok: false, error: "forbidden" };
+  return seriesFile.apply(dirPath, op);
+});
 // Cópias em conflito do sincronizador: "merge" ou o nome da versão escolhida.
-ipcMain.handle("files:seriesResolve", (_e, dirPath, choice) => seriesFile.resolve(dirPath, choice));
+ipcMain.handle("files:seriesResolve", async (_e, dirPath, choice) => {
+  if (!(await _fileAllowed(dirPath))) return { ok: false, error: "forbidden" };
+  return seriesFile.resolve(dirPath, choice);
+});
 // Ações de arquivo da biblioteca do Modo apresentação (só arquivos, nunca pastas).
-ipcMain.handle("files:rename", (_e, filePath, newName) =>
-  fileActions.rename(filePath, newName, {
+ipcMain.handle("files:rename", async (_e, filePath, newName) => {
+  if (!(await _fileAllowed(filePath))) return { ok: false, error: "forbidden" };
+  return fileActions.rename(filePath, newName, {
     renameInSeries: (dir, from, to) => seriesFile.apply(dir, { type: "rename", from, to }),
-  })
-);
-ipcMain.handle("files:setHidden", (_e, filePath, hidden) => fileActions.setHidden(filePath, hidden));
-ipcMain.handle("files:trash", (_e, filePath) => fileActions.trash(filePath, shell));
-ipcMain.handle("files:reveal", (_e, filePath) => fileActions.reveal(filePath, shell));
+  });
+});
+ipcMain.handle("files:setHidden", async (_e, filePath, hidden) => {
+  if (!(await _fileAllowed(filePath))) return { ok: false, error: "forbidden" };
+  return fileActions.setHidden(filePath, hidden);
+});
+ipcMain.handle("files:trash", async (_e, filePath) => {
+  if (!(await _fileAllowed(filePath))) return { ok: false, error: "forbidden" };
+  return fileActions.trash(filePath, shell);
+});
+ipcMain.handle("files:reveal", async (_e, filePath) => {
+  if (!(await _fileAllowed(filePath))) return { ok: false, error: "forbidden" };
+  return fileActions.reveal(filePath, shell);
+});
 // Pasta da igreja: programas e modelos do Modo apresentação numa pasta compartilhada.
 const CHURCH_OPS = {
   stat: churchFolder.stat,
@@ -2836,9 +2905,14 @@ const CHURCH_OPS = {
   conflicts: churchFolder.conflicts,
   resolve: churchFolder.resolve,
 };
-ipcMain.handle("files:church", (_e, op, ...args) =>
-  Object.prototype.hasOwnProperty.call(CHURCH_OPS, op) ? CHURCH_OPS[op](...args) : { ok: false, error: "invalid" }
-);
+ipcMain.handle("files:church", async (_e, op, ...args) => {
+  if (!Object.prototype.hasOwnProperty.call(CHURCH_OPS, op)) return { ok: false, error: "invalid" };
+  // A raiz vem do renderer; só a pasta configurada em Preferências vale.
+  const configured = _userDataMain?.modules?.presentation_mode?.church_folder;
+  if (!(await fileAccess.isSamePath(args[0], configured))) return { ok: false, error: "forbidden" };
+  await _ensureFileRoots();
+  return CHURCH_OPS[op](...args);
+});
 ipcMain.handle("files:computerName", () => churchFolder.computerName());
 /*
  * PowerPoint → PDF para o modo apresentação. Passa pelo mesmo caminho da
@@ -2925,6 +2999,8 @@ ipcMain.handle("storage:chooseDir", async (event) => {
     title: "Escolher pasta para mídia",
   });
   if (result.canceled || !result.filePaths?.length) return null;
+  // Escolha do operador: vira raiz permitida para o resto da sessão.
+  void fileAccess.allowRoot(result.filePaths[0]);
   return result.filePaths[0];
 });
 
@@ -2942,7 +3018,7 @@ ipcMain.handle("storage:chooseFile", async (event, kind) => {
           filters: [
             {
               name: "Imagens, áudios, vídeos, PDF e PowerPoint",
-              extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif", "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus", "mp4", "webm", "mkv", "mov", "avi", "m4v", "pdf", "pptx", "ppsx", "pptm", "ppt", "pps", "odp"],
+              extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif", "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus", "mp4", "webm", "mkv", "mov", "avi", "m4v", "pdf", ...PRESENTATION_EXT.powerPoint],
             },
             { name: "Todos os arquivos", extensions: ["*"] },
           ],
@@ -2960,6 +3036,7 @@ ipcMain.handle("storage:chooseFile", async (event, kind) => {
         : {}),
   });
   if (result.canceled || !result.filePaths?.length) return null;
+  void fileAccess.allowRoot(path.dirname(result.filePaths[0]));
   return result.filePaths[0];
 });
 
@@ -2975,6 +3052,7 @@ ipcMain.handle("storage:chooseImage", async (event) => {
     title: "Selecionar imagem de fundo",
   });
   if (result.canceled || !result.filePaths?.length) return null;
+  void fileAccess.allowRoot(path.dirname(result.filePaths[0]));
   return result.filePaths[0];
 });
 

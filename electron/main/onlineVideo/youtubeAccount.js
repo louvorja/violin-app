@@ -97,7 +97,8 @@ function createYoutubeAccount(deps) {
     const cookies = await deps.session().cookies.get({});
     const relevant = cookies.filter((c) => COOKIE_DOMAIN_RE.test(String(c.domain || "").replace(/^\./, "")));
     if (!isLoggedIn(relevant)) {
-      await fs.remove(cookiesFile);
+      // Sessão em memória vazia (login fechado sem entrar) não apaga os cookies
+      // de uma sessão anterior: só o `logout()` explícito faz isso.
       return false;
     }
     await fs.ensureDir(path.dirname(cookiesFile));
@@ -129,6 +130,12 @@ function createYoutubeAccount(deps) {
       webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false },
     });
     const win = loginWindow;
+    // A janela é só do login: navegar para fora de Google/YouTube a fecha no
+    // próprio fluxo em vez de deixar o operador num site qualquer.
+    const LOGIN_HOST_RE = /^https:\/\/([a-z0-9-]+\.)*(google\.com|youtube\.com)(\/|$)/i;
+    win.webContents.on("will-navigate", (event, url) => {
+      if (!LOGIN_HOST_RE.test(String(url || ""))) event.preventDefault();
+    });
     // Entrou e o Google devolveu para o YouTube: os cookies estão prontos.
     win.webContents.on("did-navigate", (_e, url) => {
       if (!/^https:\/\/(www\.|m\.)?youtube\.com\//i.test(url)) return;

@@ -3111,7 +3111,9 @@ $storage.hydrate().then(async () => {
         if (e?.repeat) return;
         // Sem aba e nada no ar, a janela: o mesmo que o botão de fechar (com
         // projeção aberta, ela só sai da frente).
-        if (!Modules.closeActiveTab()) void Platform.api?.window?.close?.();
+        void (async () => {
+          if (!(await Modules.requestCloseActiveTab())) void Platform.api?.window?.close?.();
+        })();
       },
       {
         context: "global",

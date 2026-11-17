@@ -49,11 +49,23 @@ interface OverrideState {
 const state = reactive<OverrideState>({ active: false });
 const videoEl = ref<HTMLVideoElement | null>(null);
 
+/**
+ * O Broadcast é interno, mas o payload não é confiável por decreto: só
+ * `louvorja:` (arquivo local), `blob:`, `https:` e `data:image/` para imagem.
+ */
+function safeUrl(url: unknown, type: OverrideState["type"]): string {
+  const text = typeof url === "string" ? url.trim() : "";
+  if (!text) return "";
+  if (/^data:image\//i.test(text)) return type === "image" ? text : "";
+  if (/^(louvorja:|blob:|https:)/i.test(text)) return text;
+  return "";
+}
+
 useBroadcastListener(BROADCAST_TYPE.RETURN_OVERRIDE, (payload) => {
   const p = (payload ?? {}) as OverrideState;
   state.active = p.active === true;
   state.type = p.type;
-  state.url = p.url;
+  state.url = safeUrl(p.url, p.type);
   state.id = p.id;
 });
 

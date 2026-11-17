@@ -3,6 +3,7 @@ import Platform from "@/helpers/Platform";
 import $snackbar from "@/helpers/Snackbar";
 import Telemetry from "@/helpers/Telemetry";
 import { i18nAtual } from "@/i18n";
+import { isPowerPointName } from "@/constants/FileTypes";
 
 /**
  * PowerPoint no culto: o PowerPoint instalado no computador converte o arquivo
@@ -10,8 +11,6 @@ import { i18nAtual } from "@/i18n";
  * outro. Pedir a conversão antes — ao ver o arquivo no palco — deixa o envio
  * instantâneo na hora do culto.
  */
-
-const PPT_EXT = ["ppt", "pptx", "pps", "ppsx", "pptm", "ppsm"];
 
 /**
  * Ligado: a conversão agora é a mesma da Biblioteca de Mídia (`main/pptx`):
@@ -178,7 +177,7 @@ function chaveDoErro(error: string | undefined): "unsupported" | "mac_permission
 }
 
 export function isPowerPoint(path: string): boolean {
-  return PPT_EXT.includes(path.split(".").pop()?.toLowerCase() ?? "");
+  return isPowerPointName(path);
 }
 
 function tm(key: string, params?: Record<string, unknown>): string {

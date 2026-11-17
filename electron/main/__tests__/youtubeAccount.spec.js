@@ -104,4 +104,42 @@ describe("youtubeAccount", () => {
     win.close();
     expect(await done).toEqual({ loggedIn: false });
   });
+
+  it("fechar a janela sem entrar não apaga os cookies de uma sessão anterior", async () => {
+    const cookiesFile = path.join(dir, "youtube-cookies.txt");
+    fs.writeFileSync(cookiesFile, toNetscape([cookie("SAPISID", ".youtube.com")]));
+    // Sessão em memória vazia = app recém-aberto; o arquivo da execução anterior vale.
+    const session = { cookies: { get: async () => [] }, clearStorageData: async () => {}, setUserAgent: () => {} };
+    const win = fakeWindow();
+    const account = createYoutubeAccount({ session: () => session, cookiesFile, createWindow: () => win });
+    const done = account.login();
+    win.close();
+    expect(await done).toEqual({ loggedIn: true });
+    expect(fs.existsSync(cookiesFile)).toBe(true);
+  });
+
+  it("a janela de login não navega para fora de Google/YouTube", () => {
+    const win = fakeWindow();
+    const session = { cookies: { get: async () => [] } };
+    const account = createYoutubeAccount({
+      session: () => session,
+      cookiesFile: path.join(dir, "c.txt"),
+      createWindow: () => win,
+    });
+    void account.login();
+    const navigate = (url) => {
+      const event = {
+        prevented: false,
+        preventDefault() {
+          this.prevented = true;
+        },
+      };
+      win.webContents.emit("will-navigate", event, url);
+      return event.prevented;
+    };
+    expect(navigate("https://accounts.google.com/signin/v2")).toBe(false);
+    expect(navigate("https://www.youtube.com/")).toBe(false);
+    expect(navigate("https://evil.example/phishing")).toBe(true);
+    win.close();
+  });
 });

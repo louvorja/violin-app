@@ -390,13 +390,19 @@ async function commitRename(entry: LibraryEntry): Promise<void> {
     return;
   }
   committing = true;
-  const result = await lib.rename(entry, name);
-  committing = false;
-  if (result.ok) {
-    renaming.value = null;
-    return;
+  try {
+    const result = await lib.rename(entry, name);
+    if (result.ok) {
+      renaming.value = null;
+      return;
+    }
+    $snackbar.error(tm(`file_actions.errors.${result.error ?? "unwritable"}`));
+  } catch {
+    $snackbar.error(tm("file_actions.errors.unwritable"));
+  } finally {
+    // Um erro inesperado do disco não pode deixar o campo travado para sempre.
+    committing = false;
   }
-  $snackbar.error(tm(`file_actions.errors.${result.error ?? "unwritable"}`));
 }
 
 const trashing = ref<LibraryEntry | null>(null);
@@ -406,11 +412,16 @@ async function confirmTrash(): Promise<void> {
   const entry = trashing.value;
   if (!entry) return;
   trashBusy.value = true;
-  const ok = await lib.trash(entry);
-  trashBusy.value = false;
-  trashing.value = null;
-  if (ok) $snackbar.info(tm("file_actions.trashed", { name: entry.name }));
-  else $snackbar.error(tm("file_actions.errors.trash_failed"));
+  try {
+    const ok = await lib.trash(entry);
+    if (ok) $snackbar.info(tm("file_actions.trashed", { name: entry.name }));
+    else $snackbar.error(tm("file_actions.errors.trash_failed"));
+  } catch {
+    $snackbar.error(tm("file_actions.errors.trash_failed"));
+  } finally {
+    trashBusy.value = false;
+    trashing.value = null;
+  }
 }
 
 /* ─── Momentos do programa: destino de fotos, vídeos e PDFs ─── */

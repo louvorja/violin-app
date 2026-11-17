@@ -40,6 +40,20 @@ describe("cloudFiles", () => {
     expect(calls).toEqual([dir]);
   });
 
+  it("Windows: no máximo 20 pastas por consulta; o resto fica como nuvem", async () => {
+    const calls = [];
+    const execImpl = (_cmd, _args, opts, cb) => {
+      calls.push(opts.env.LJ_DIR);
+      setTimeout(() => cb(null, "32\tx.mp4\n"), 1);
+    };
+    const cloud = createCloudFiles({ platform: "win32", execImpl });
+    const paths = Array.from({ length: 25 }, (_, i) => path.join(dir, `d${i}`, "x.mp4"));
+    const out = await cloud.states(paths);
+    expect(calls).toHaveLength(20);
+    expect(out[paths[0]]).toBe("local");
+    expect(out[paths[24]]).toBe("cloud");
+  });
+
   it("macOS: arquivo comum é local; caminho relativo ou inexistente fica de fora", async () => {
     const file = path.join(dir, "video.mp4");
     fs.writeFileSync(file, Buffer.alloc(10_000, 1));
