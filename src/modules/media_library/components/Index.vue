@@ -1300,12 +1300,13 @@ let retryImportacao: (() => void) | null = null;
 /** PowerPoints com macros já confirmados nesta sessão (uma vez por arquivo). */
 const macrosConfirmados = new Set<string>();
 
-function confirmarMacros(name: string): Promise<boolean> {
+function confirmarMacros(): Promise<boolean> {
   return new Promise((resolve) => {
     $alert.yesno(
       {
         title: tm("pptx.macro_title"),
-        text: tm("pptx.macro_text", { name }),
+        // Sem o nome do arquivo: o diálogo pinta o texto com v-html.
+        text: tm("pptx.macro_text"),
         confirmText: tm("pptx.macro_confirm"),
         destructive: true,
         translate: false,
@@ -1342,7 +1343,7 @@ async function importPowerPoint(
     !substituir?.pptx?.macroEnabled &&
     !macrosConfirmados.has(filePath)
   ) {
-    if (!(await confirmarMacros(name))) return null;
+    if (!(await confirmarMacros())) return null;
     macrosConfirmados.add(filePath);
   }
   const taskId = "pptx-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);

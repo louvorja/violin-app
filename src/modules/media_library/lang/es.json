@@ -94,7 +94,7 @@
     "stale_fonts": "PowerPoint tenía otra presentación abierta y puede no haber usado las fuentes recién instaladas. Cierra PowerPoint y agrega el archivo de nuevo.",
     "failed": "No se pudo abrir el PowerPoint: {message}",
     "macro_title": "PowerPoint con macros",
-    "macro_text": "\"{name}\" puede contener macros, que ejecutan comandos en esta computadora. Ábrelo solo si el archivo viene de alguien de confianza.",
+    "macro_text": "Este archivo puede contener macros, que ejecutan comandos en esta computadora. Ábrelo solo si viene de alguien de confianza.",
     "macro_confirm": "Abrir de todos modos",
     "permission_denied": "macOS bloqueó el acceso de LouvorJA a la carpeta de PowerPoint. Abre Ajustes del Sistema → Privacidad y Seguridad → Archivos y carpetas, busca LouvorJA Violin y permite el acceso a Microsoft PowerPoint. Después haz clic en “Intentar de nuevo”.",
     "permission_fallback": "macOS bloqueó PowerPoint, así que las diapositivas se generaron con LibreOffice. Para usar la fidelidad de PowerPoint, autoriza el acceso en Ajustes → Privacidad y Seguridad → Archivos y carpetas y genera de nuevo.",

@@ -418,7 +418,7 @@
     "native_end": "Cerrar {app}",
     "native_failed": "No se pudo presentar con {app}: {message}",
     "macro_title": "PowerPoint con macros",
-    "macro_text": "\"{name}\" puede contener macros, que ejecutan comandos en esta computadora. Ábrelo solo si el archivo viene de alguien de confianza.",
+    "macro_text": "Este archivo puede contener macros, que ejecutan comandos en esta computadora. Preséntalo solo si viene de alguien de confianza.",
     "macro_confirm": "Presentar de todos modos",
     "native_hint_plain": "Sin animaciones ni videos: las diapositivas al aire ya muestran todo.",
     "feat_animations": "animaciones en {count} diapositiva(s)",

@@ -83,13 +83,13 @@ function install(): void {
 }
 
 /** Arquivo com macros: confirma uma vez antes de o PowerPoint abri-lo. */
-function confirmarMacros(pptxPath: string): Promise<boolean> {
-  const name = pptxPath.split(/[\\/]/).filter(Boolean).pop() || pptxPath;
+function confirmarMacros(): Promise<boolean> {
   return new Promise((resolve) => {
     $alert.yesno(
       {
         title: tm("macro_title"),
-        text: tm("macro_text", { name }),
+        // Sem o nome do arquivo: o diálogo pinta o texto com v-html.
+        text: tm("macro_text"),
         confirmText: tm("macro_confirm"),
         destructive: true,
         translate: false,
@@ -105,7 +105,7 @@ async function start(pptxPath: string, startIndex = 0): Promise<boolean> {
   opening.value = true;
   try {
     if (isMacroEnabledName(pptxPath) && !macrosConfirmados.has(pptxPath)) {
-      if (!(await confirmarMacros(pptxPath))) return false;
+      if (!(await confirmarMacros())) return false;
       macrosConfirmados.add(pptxPath);
     }
     const r = await a.nativeStart(pptxPath, Math.max(0, startIndex), engine());
