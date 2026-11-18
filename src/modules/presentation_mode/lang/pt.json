@@ -302,6 +302,12 @@
     "next_chapter": "Próximo capítulo",
     "version": "Versão",
     "pick_book": "Escolha um livro para ver os capítulos.",
+    "pick_book_short": "Escolha um livro",
+    "pick_chapter": "Escolha um capítulo para ler os versículos.",
+    "chapter_number": "Nº",
+    "go_to_chapter": "Ir para o capítulo",
+    "verse_number": "Vers.",
+    "go_to_verse": "Ir para o versículo",
     "hint": "Clique para ver no palco · Shift ou Ctrl para vários versículos · duplo clique projeta"
   },
   "online": {

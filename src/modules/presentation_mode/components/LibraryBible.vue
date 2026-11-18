@@ -27,18 +27,47 @@
       </div>
     </nav>
 
+    <nav
+      class="pm-bible__chapters"
+      :aria-label="tm('bible.chapters')"
+      data-testid="pm-bible-chapters"
+    >
+      <div class="pm-bible__chapters-head">
+        <span class="pm-bible__chapters-label">{{ tm("bible.chapters") }}</span>
+        <div class="pm-bible__chapter-input">
+          <LjInput
+            ref="chapterInput"
+            size="sm"
+            :model-value="chapterQuery"
+            inputmode="numeric"
+            maxlength="3"
+            data-testid="pm-bible-jump-input"
+            :placeholder="tm('bible.chapter_number')"
+            :aria-label="tm('bible.go_to_chapter')"
+            @update:model-value="onChapterInput"
+            @keydown.enter.prevent="goToTypedChapter"
+          />
+        </div>
+      </div>
+      <div v-if="book" ref="chapterList" class="pm-bible__chapter-list">
+        <button
+          v-for="n in book.chapters"
+          :key="n"
+          type="button"
+          class="pm-chapter"
+          :class="{ 'pm-chapter--active': n === chapter?.chapter }"
+          :aria-current="n === chapter?.chapter ? 'page' : undefined"
+          :data-testid="`pm-bible-chapter-${n}`"
+          @click="openChapter(n)"
+        >
+          {{ n }}
+        </button>
+      </div>
+      <p v-else class="pm-bible__chapters-empty">{{ tm("bible.pick_book_short") }}</p>
+    </nav>
+
     <div class="pm-bible__main">
       <header class="pm-bible__head">
-        <LjButton
-          v-if="chapter"
-          size="sm"
-          variant="ghost"
-          icon-only
-          :icon="ICONS.UI.ARROW_LEFT"
-          :title="tm('bible.chapters')"
-          data-testid="pm-bible-back"
-          @click="bible.closeChapter()"
-        />
         <span class="pm-bible__title">{{ title }}</span>
         <template v-if="chapter">
           <LjButton
@@ -59,6 +88,20 @@
             :disabled="chapter.chapter >= (book?.chapters ?? 0)"
             @click="openChapter(chapter.chapter + 1)"
           />
+          <div class="pm-bible__verse-input">
+            <LjInput
+              ref="verseInput"
+              size="sm"
+              :model-value="verseQuery"
+              inputmode="numeric"
+              maxlength="3"
+              data-testid="pm-bible-verse-jump"
+              :placeholder="tm('bible.verse_number')"
+              :aria-label="tm('bible.go_to_verse')"
+              @update:model-value="onVerseInput"
+              @keydown.enter.prevent="goToTypedVerse"
+            />
+          </div>
         </template>
         <div class="pm-bible__version">
           <LjSelect
@@ -121,19 +164,7 @@
         </li>
       </ol>
 
-      <div v-else-if="book" class="pm-chapters" data-testid="pm-bible-chapters">
-        <button
-          v-for="n in book.chapters"
-          :key="n"
-          type="button"
-          class="pm-chapter"
-          :data-testid="`pm-bible-chapter-${n}`"
-          @click="openChapter(n)"
-        >
-          {{ n }}
-        </button>
-      </div>
-
+      <p v-else-if="book" class="pm-bible__note">{{ tm("bible.pick_chapter") }}</p>
       <p v-else class="pm-bible__note">{{ tm("bible.pick_book") }}</p>
       <p v-if="chapter && !bible.loading.value" class="pm-bible__hint">{{ tm("bible.hint") }}</p>
     </div>
@@ -141,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { LjButton, LjIcon, LjInput, LjSelect, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -204,10 +235,130 @@ const liveVerses = computed(() => {
 
 const selected = ref<number[]>([]);
 let anchor: number | null = null;
+
+/** Número digitado no cabeçalho dos versículos. */
+const verseQuery = ref("");
+/** Só para limpar na hora o caractere inválido que o input ainda mostraria. */
+const verseInput = ref<{ el?: () => HTMLInputElement | null } | null>(null);
+let verseTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearVerseTimer(): void {
+  if (verseTimer) clearTimeout(verseTimer);
+  verseTimer = null;
+}
+
 watch(chapter, () => {
   selected.value = [];
   anchor = null;
+  clearVerseTimer();
+  verseQuery.value = "";
 });
+watch(selected, (sel) => {
+  verseQuery.value = sel.length ? String(sel[0]) : "";
+});
+
+/** A coluna de capítulos acompanha o livro e o capítulo abertos. */
+const chapterList = ref<HTMLElement | null>(null);
+/** Número digitado no topo da coluna; abre o capítulo sozinho depois que a digitação assenta. */
+const chapterQuery = ref(chapter.value?.chapter ? String(chapter.value.chapter) : "");
+/** Só para limpar na hora o caractere inválido que o input ainda mostraria. */
+const chapterInput = ref<{ el?: () => HTMLInputElement | null } | null>(null);
+let jumpTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearJumpTimer(): void {
+  if (jumpTimer) clearTimeout(jumpTimer);
+  jumpTimer = null;
+}
+
+async function scrollActiveChapter(): Promise<void> {
+  await nextTick();
+  chapterList.value?.querySelector(".pm-chapter--active")?.scrollIntoView?.({ block: "nearest" });
+}
+
+async function scrollToChapter(n: number): Promise<void> {
+  await nextTick();
+  chapterList.value
+    ?.querySelector(`[data-testid="pm-bible-chapter-${n}"]`)
+    ?.scrollIntoView?.({ block: "nearest" });
+}
+
+function goToTypedChapter(): void {
+  clearJumpTimer();
+  const n = Number(chapterQuery.value);
+  const total = book.value?.chapters ?? 0;
+  if (!Number.isInteger(n) || n < 1 || n > total || !book.value) return;
+  void bible.openChapter(book.value.id_bible_book, n);
+  void scrollToChapter(n);
+}
+
+function onChapterInput(value: string): void {
+  const digits = String(value ?? "")
+    .replace(/\D/g, "")
+    .slice(0, 3);
+  chapterQuery.value = digits;
+  // Valor igual ao anterior não re-renderiza: tira o caractere inválido do DOM.
+  const el = chapterInput.value?.el?.();
+  if (el && el.value !== digits) el.value = digits;
+  clearJumpTimer();
+  if (digits) jumpTimer = setTimeout(goToTypedChapter, 400);
+}
+
+/** Seleciona o versículo como um clique faria, sem passar pela seleção múltipla. */
+function selectVerse(n: number): void {
+  if (!chapter.value) return;
+  selected.value = [n];
+  anchor = n;
+  emit("preview", { type: "bible", ref: bibleRefOf(chapter.value, [n]) });
+}
+
+async function scrollToVerse(n: number): Promise<void> {
+  await nextTick();
+  list.value
+    ?.querySelector(`[data-testid="pm-verse-${n}"]`)
+    ?.scrollIntoView?.({ block: "nearest" });
+}
+
+function goToTypedVerse(): void {
+  clearVerseTimer();
+  const n = Number(verseQuery.value);
+  if (!chapter.value || !numbers.value.includes(n)) return;
+  selectVerse(n);
+  void scrollToVerse(n);
+}
+
+function onVerseInput(value: string): void {
+  const digits = String(value ?? "")
+    .replace(/\D/g, "")
+    .slice(0, 3);
+  verseQuery.value = digits;
+  const el = verseInput.value?.el?.();
+  if (el && el.value !== digits) el.value = digits;
+  clearVerseTimer();
+  if (digits) verseTimer = setTimeout(goToTypedVerse, 400);
+}
+
+onBeforeUnmount(() => {
+  clearJumpTimer();
+  clearVerseTimer();
+});
+
+watch(
+  () => book.value?.id_bible_book,
+  async () => {
+    clearJumpTimer();
+    chapterQuery.value = "";
+    await nextTick();
+    if (chapterList.value) chapterList.value.scrollTop = 0;
+  }
+);
+watch(
+  () => chapter.value?.chapter,
+  (n) => {
+    if (!n) return;
+    chapterQuery.value = String(n);
+    void scrollActiveChapter();
+  }
+);
 
 /** Próximo/Anterior nas saídas: a seleção acompanha o versículo no ar e a lista rola até ele. */
 const list = ref<HTMLElement | null>(null);
@@ -224,6 +375,9 @@ watch(
 
 function select(n: number, event: MouseEvent): void {
   if (!chapter.value) return;
+  // Clique vale mais que um número ainda sendo digitado nos saltos.
+  clearJumpTimer();
+  clearVerseTimer();
   if (event.shiftKey && anchor !== null) {
     const [from, to] = anchor < n ? [anchor, n] : [n, anchor];
     selected.value = numbers.value.filter((v) => v >= from && v <= to);
@@ -251,10 +405,17 @@ function play(n: number): void {
 }
 
 function openChapter(n: number): void {
+  // Um número ainda sendo digitado não pode abrir por cima do capítulo clicado.
+  clearJumpTimer();
+  clearVerseTimer();
   if (book.value) void bible.openChapter(book.value.id_bible_book, n);
 }
 
-onMounted(() => void bible.ensureLoaded(locale.value));
+onMounted(async () => {
+  await bible.ensureLoaded(locale.value);
+  // O capítulo pode já estar aberto de uma visita anterior: a coluna nasce nele.
+  void scrollActiveChapter();
+});
 watch(locale, (l) => void bible.ensureLoaded(l));
 </script>
 
@@ -263,7 +424,7 @@ watch(locale, (l) => void bible.ensureLoaded(l));
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
+  grid-template-columns: 168px 160px minmax(0, 1fr);
 }
 
 .pm-bible__books {
@@ -366,6 +527,20 @@ watch(locale, (l) => void bible.ensureLoaded(l));
   flex-shrink: 0;
 }
 
+/* Salto direto para um versículo, ao lado das setas de capítulo. */
+.pm-bible__verse-input {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.pm-bible__verse-input :deep(.lj-input) {
+  width: 100%;
+}
+
+.pm-bible__verse-input :deep(.lj-input__field) {
+  text-align: center;
+}
+
 .pm-bible__note {
   margin: auto;
   padding: var(--lj-space-4);
@@ -381,18 +556,76 @@ watch(locale, (l) => void bible.ensureLoaded(l));
   color: var(--lj-text-subtle);
 }
 
-.pm-chapters {
+/* Coluna fixa dos capítulos do livro escolhido: fica à vista também quando os
+   versículos estão abertos. */
+.pm-bible__chapters {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--lj-surface-border);
+}
+
+.pm-bible__chapters-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-bottom: 1px solid var(--lj-surface-border);
+}
+
+.pm-bible__chapters-label {
+  min-width: 0;
+  color: var(--lj-text-subtle);
+  font-size: 10px;
+  font-weight: var(--lj-weight-semibold);
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Três dígitos no máximo: o input não pode roubar o espaço do rótulo. */
+.pm-bible__chapter-input {
+  width: 50px;
+  flex-shrink: 0;
+}
+
+.pm-bible__chapter-input :deep(.lj-input) {
+  width: 100%;
+  height: 22px;
+  padding-inline: 2px;
+}
+
+.pm-bible__chapter-input :deep(.lj-input__field) {
+  text-align: center;
+}
+
+.pm-bible__chapter-list {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: 8px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-content: start;
+  gap: 3px;
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.pm-bible__chapters-empty {
+  margin: 0;
+  padding: 8px 5px;
+  color: var(--lj-text-subtle);
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
 }
 
 .pm-chapter {
+  width: 100%;
+  min-width: 0;
   height: 30px;
   padding: 0;
   border: 1px solid var(--lj-surface-border);
@@ -409,6 +642,12 @@ watch(locale, (l) => void bible.ensureLoaded(l));
 .pm-chapter:focus-visible {
   outline: none;
   border-color: var(--lj-live-select);
+}
+
+.pm-chapter--active {
+  border-color: var(--lj-orange);
+  background: var(--lj-live-active-bg);
+  font-weight: var(--lj-weight-semibold);
 }
 
 .pm-verses {
