@@ -42,7 +42,7 @@
         @new-session="openNewSession"
         @duplicate-item="duplicateItem"
         @remove-item="(id: string) => confirmRemoveItem(id)"
-        @import="importFromLiturgy"
+        @import="openLiturgyPicker"
         @save="saveAsLiturgy"
         @settings="settingsDialogOpen = true"
       >
@@ -236,6 +236,13 @@
       :planned-start="program.plannedStart"
       @save="setPlannedStart"
     />
+
+    <LiturgyLoadDialog
+      v-model="liturgyLoadOpen"
+      :title="tm('alerts.import_title')"
+      :option-extra="liturgyExtra"
+      @picked="onLiturgyPicked"
+    />
   </ModuleContainer>
 </template>
 
@@ -247,16 +254,20 @@ import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import $alert from "@/helpers/Alert";
 import { setModuleCloseGuard } from "@/helpers/Modules";
+import ModuleManager from "@/helpers/ModuleManager";
+import $liturgy from "@/helpers/Liturgy";
 import Telemetry from "@/helpers/Telemetry";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import { isModuleExpanded, toggleModuleExpanded } from "@/composables/useModuleExpanded";
 import type { ProgramItem } from "@/types/Presentation";
+import type { LiturgyOptionExtra, LiturgyPick } from "@/types/LiturgyLibrary";
 import ProgramPanel from "./ProgramPanel.vue";
 import ProgramItemDialog from "./ProgramItemDialog.vue";
 import ProgramSessionDialog from "./ProgramSessionDialog.vue";
 import ProgramSettingsDialog from "./ProgramSettingsDialog.vue";
+import LiturgyLoadDialog from "@/modules/liturgy/components/LiturgyLoadDialog.vue";
 import OutputsPanel from "./OutputsPanel.vue";
 import StageSlides from "./StageSlides.vue";
 import StageVisor from "./StageVisor.vue";
@@ -347,11 +358,12 @@ import { useProgramEditing } from "../composables/useProgramEditing";
 import { module as manifest } from "../manifest";
 
 const moduleId = ModuleEnum.PRESENTATION_MODE;
-const { tm } = useModuleI18n(moduleId);
+const { tm, locale } = useModuleI18n(moduleId);
 /** O `$alert` traduz na hora de pintar: recebe a chave, não o texto. */
 const alertKey = (key: string) => `modules.${moduleId}.${key}`;
 
 const {
+  date,
   program,
   selectedItemId,
   ensureLoaded,
@@ -370,7 +382,7 @@ const {
 } = useProgram();
 const { execute, executeChild, projectPath, projectCanva, projectPdf, sendBible } =
   useProgramExecution();
-const { importFromLiturgy, saveAsLiturgy } = useProgramLiturgy();
+const { importFromLibrary, saveAsLiturgy } = useProgramLiturgy();
 const stage = useStage();
 const folders = useFolderItems();
 const playerMute = usePlayerMute();
@@ -1027,6 +1039,40 @@ const {
 
 const settingsDialogOpen = ref(false);
 
+/* ─── Importar liturgia: o mesmo seletor do módulo Liturgia ─── */
+
+const liturgyLoadOpen = ref(false);
+
+/** A liturgia do dia da semana já montada no módulo (mesmo sem salvar). */
+const liturgyExtra = computed<LiturgyOptionExtra | null>(() => {
+  const [y, m, d] = date.value.split("-").map(Number);
+  const day = new Date(y, m - 1, d);
+  if (Number.isNaN(day.getTime())) return null;
+  const items = $liturgy.list(day.getDay());
+  if (!items.length) return null;
+  const label = day.toLocaleDateString(locale.value, {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+  });
+  return {
+    name: tm("alerts.import_day_name"),
+    subtitle: label,
+    items,
+  };
+});
+
+function openLiturgyPicker(): void {
+  // As traduções do módulo Liturgia chegam com a primeira chave; adianta para
+  // o diálogo não piscar chaves cruas. Falhar aqui não impede o seletor.
+  void ModuleManager.ensureTranslations(ModuleEnum.LITURGY).catch(() => {});
+  liturgyLoadOpen.value = true;
+}
+
+function onLiturgyPicked(pick: LiturgyPick): void {
+  void importFromLibrary(pick);
+}
+
 // Todas as ações do ribbon contextual chegam aqui; as sem handler são ignoradas.
 const libraryTab = ref<LibraryTab>("files");
 
@@ -1036,7 +1082,7 @@ const RIBBON_HANDLERS: Record<string, () => void> = {
   new_item: openNewItem,
   duplicate: duplicateSelected,
   delete_item: () => confirmRemoveItem(selectedItemId.value),
-  import_liturgy: importFromLiturgy,
+  import_liturgy: openLiturgyPicker,
   save_program: saveAsLiturgy,
   start: () => void startOutputs(),
   stop: () => void stopOutputs(),

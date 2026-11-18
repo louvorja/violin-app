@@ -14,3 +14,19 @@ export interface LiturgyLibraryItem {
   updatedAt: string;
   createdAt: string;
 }
+
+/** O que o seletor devolve: uma liturgia da biblioteca ou a do dia (não salva). */
+export interface LiturgyPick {
+  /** `null`: a liturgia do dia da semana, que não está na biblioteca. */
+  id: string | null;
+  name: string;
+  items: LiturgyItem[];
+  binding: LiturgyBinding | null;
+}
+
+/** Opção extra mostrada acima da biblioteca (a liturgia do dia ainda não salva). */
+export interface LiturgyOptionExtra {
+  name: string;
+  subtitle?: string;
+  items: LiturgyItem[];
+}

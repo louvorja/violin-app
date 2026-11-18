@@ -131,6 +131,19 @@ async function refreshConflicts(date: string): Promise<void> {
   if (sync.conflicts.length) sync.state = "conflict";
 }
 
+/**
+ * Lê o programa de uma data **sem** trocar a data aberta, mexer no estado de
+ * sincronização ou resetar a execução ao vivo. Usado para avisar antes de uma
+ * importação trocar o programa de outro dia.
+ */
+export async function peekProgram(date: string): Promise<Program | null> {
+  const cached = await $docs.get<Program>(TABLE, date).catch(() => undefined);
+  if (!rootOf()) return cached ?? null;
+  const res = await churchFiles.read<ChurchProgramFile>("program", date);
+  if (!res.ok || !res.doc || !validFile(res.doc)) return cached ?? null;
+  return fromFile(res.doc.program);
+}
+
 export async function loadProgram(date: string): Promise<Program | undefined> {
   await flushProgram();
   _date = date;

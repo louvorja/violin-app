@@ -77,6 +77,7 @@ import {
   flushProgram,
   hasPendingConflict,
   loadProgram,
+  peekProgram,
   resolveConflict,
   saveProgram,
   sync,
@@ -215,6 +216,29 @@ describe("programStore", () => {
     await resolveConflict("local", program("daqui"));
     expect(hasPendingConflict()).toBe(false);
     expect(sync.state).toBe("saved");
+  });
+
+  it("lê o programa de outra data sem trocar a data aberta", async () => {
+    otherSaves("da igreja");
+    await loadProgram("2026-10-10");
+
+    m.files.set("program/2026-10-11", {
+      doc: {
+        version: 1,
+        savedBy: "PC da igreja",
+        savedAt: "2026-10-11T08:00:00Z",
+        program: { ...program("amanhã"), id: "2026-10-11", date: "2026-10-11" },
+      },
+      mtime: ++m.clock,
+    });
+    const peeked = await peekProgram("2026-10-11");
+    expect(peeked?.date).toBe("2026-10-11");
+    expect(peeked?.sessions[0].items[0].title).toBe("amanhã");
+
+    // A data aberta continua 10/10: salvar o programa dele ainda vai para o arquivo dele.
+    saveProgram(program("continua no dia 10"));
+    await flushProgram();
+    expect(onDisk()?.program.sessions[0].items[0].title).toBe("continua no dia 10");
   });
 
   it("cópias em conflito do OneDrive: escolher uma delas a torna o arquivo", async () => {
