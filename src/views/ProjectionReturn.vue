@@ -1,5 +1,7 @@
 <template>
   <OverlayRenderer />
+  <ReturnOverride />
+  <ProjectionClearScreen />
   <div
     class="return-root"
     :class="{ 'return-root--ready': ready }"
@@ -83,6 +85,8 @@ import { useSlideStyle } from "@/composables/useSlideStyle";
 import { useFitText } from "@/composables/useFitText";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
+import ReturnOverride from "@/components/ReturnOverride.vue";
 
 const { t } = useI18n();
 const {

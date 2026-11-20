@@ -33,6 +33,25 @@ export interface LiturgyItem {
   linked_overlay_id?: string;
 }
 
+/**
+ * O que um item da liturgia projeta: a classificação que a tela da liturgia e
+ * o programa do Modo apresentação compartilham. Sai de `kindOf` em
+ * `@/modules/liturgy/item`.
+ */
+export type LiturgyItemKind =
+  | "music"
+  | "video"
+  | "online_video"
+  | "image"
+  | "audio"
+  | "file"
+  | "presentation"
+  | "announcements"
+  | "note"
+  | "site"
+  | "overlay"
+  | "scheduled";
+
 export interface LiturgyMusicItem {
   id_music: number | string;
   name: string;

@@ -1,0 +1,6 @@
+{
+  "$comment": "Fonte única das extensões de apresentação: main (Electron) e renderer leem daqui. `macroEnabled` pede confirmação do operador antes de abrir/converter; o upload do celular recusa (não há quem confirme). `ooxml` é o que dá para ler como ZIP (fontes/recursos).",
+  "powerPoint": ["ppt", "pptx", "pps", "ppsx", "pptm", "ppsm", "odp"],
+  "macroEnabled": ["ppt", "pps", "pptm", "ppsm"],
+  "ooxml": ["pptx", "ppsx", "pptm", "ppsm"]
+}

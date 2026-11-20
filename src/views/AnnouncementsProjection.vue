@@ -13,12 +13,14 @@
 <template>
   <OverlayRenderer />
   <AnnouncementsLayer :on-stop="fecharJanela" />
+  <ProjectionClearScreen />
 </template>
 
 <script setup lang="ts">
 import { useProjectionCloseNotice } from "@/composables/useProjectionCloseNotice";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 import OverlayRenderer from "@/components/OverlayRenderer.vue";
+import ProjectionClearScreen from "@/components/ProjectionClearScreen.vue";
 import AnnouncementsLayer from "@/modules/announcements/components/ProjectionLayer.vue";
 
 /**

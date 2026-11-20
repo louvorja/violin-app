@@ -137,6 +137,13 @@ export const CONTRIBUTORS: ContributorsCategory[] = [
         whatsapp: "5541988875184",
       },
       {
+        name: "Elias Matheus Oliveira",
+        description: [ROLE_CONTRIBUTOR[RoleContribuitorEnum.desktop]],
+        email: "eliasmatheus@hotmail.com",
+        github: "eliasmatheus",
+        linkedin: "eliasmatheus",
+      },
+      {
         name: "Henry Ávila",
         description: [ROLE_CONTRIBUTOR[RoleContribuitorEnum.delphi]],
         github: "henryavila",

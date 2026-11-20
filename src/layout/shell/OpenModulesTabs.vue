@@ -97,7 +97,7 @@ function focus(id) {
   $modules.open(id);
 }
 function close(id) {
-  $modules.close(id);
+  void $modules.requestClose(id);
 }
 </script>
 

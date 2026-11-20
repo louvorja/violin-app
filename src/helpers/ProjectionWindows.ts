@@ -340,10 +340,29 @@ export async function openMediaWindow(
     if (target.open) break;
   }
   const placeable = target.open || explicit || kind === "operator";
+  // Tela desligada pelo operador (Modo apresentação): só o pedido explícito abre.
+  const screens = _screens?.();
+  if (
+    screens &&
+    !explicit &&
+    ((kind === "projection" && !screens.main) || (kind === "return" && !screens.stage))
+  ) {
+    return;
+  }
 
   if (kind === "return" && media !== "music") {
     if (placeable || (await isWindowOpen(PROJECTION_TYPE.RETURN)))
       await _close(PROJECTION_TYPE.RETURN);
+    /*
+     * Arquivo e vídeo on-line usam a mesma rota de retorno com chaves
+     * diferentes: a do outro, se ficou aberta, seria uma segunda janela de
+     * retorno no mesmo monitor — dois "retornos" com o vídeo anterior por baixo.
+     */
+    const sibling =
+      plan.feature === PROJECTION_TYPE.FILE_RETURN
+        ? PROJECTION_TYPE.ONLINE_VIDEO_RETURN
+        : PROJECTION_TYPE.FILE_RETURN;
+    if (await isWindowOpen(sibling)) await _close(sibling);
   }
   if (!placeable) return;
   /*
@@ -390,9 +409,50 @@ async function _openOperatorIfEnabled(): Promise<void> {
  * abertura da projeção dona dele, que é quem liga a própria opção.
  */
 async function _wantsMediaReturn(optionOn: boolean): Promise<boolean> {
+  // Modo apresentação controlando as telas: o retorno segue a tela ligada lá.
+  const screens = _screens?.();
+  if (screens) return screens.stage;
   if (optionOn) return true;
   if (await isWindowOpen(PROJECTION_TYPE.RETURN)) await _close(PROJECTION_TYPE.RETURN);
   return false;
+}
+
+/**
+ * Telas ligadas pelo operador, quando um módulo as controla (Modo apresentação
+ * com a aba à vista): a tela principal e o retorno de palco acompanham todo
+ * conteúdo se ligadas, e nada abre sozinho nelas se desligadas. `null`: ninguém
+ * controla — valem as opções de cada player, como sempre.
+ *
+ * Sem isto, trocar a música por um vídeo fechava o retorno da música e o do
+ * vídeo só abria com a opção do player ligada: o palco ficava sem nada.
+ */
+export interface PresentationScreens {
+  main: boolean;
+  stage: boolean;
+}
+let _screens: (() => PresentationScreens | null) | null = null;
+export function controlPresentationScreens(
+  provider: (() => PresentationScreens | null) | null
+): void {
+  _screens = provider;
+}
+
+/**
+ * Há uma apresentação com telas ligadas (Modo apresentação), em qualquer aba?
+ * Então o fim natural de uma mídia não encerra a apresentação: as telas ficam
+ * abertas, no fundo configurado, à espera do próximo conteúdo — como o
+ * "Tirar do ar". Sem apresentação ligada, o fim da mídia fecha as janelas.
+ */
+let _keepScreens: (() => boolean) | null = null;
+export function keepPresentationScreens(provider: (() => boolean) | null): void {
+  _keepScreens = provider;
+}
+export function presentationKeepsScreens(): boolean {
+  try {
+    return !!_keepScreens?.();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -410,11 +470,11 @@ async function _openProjectionWindows(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
   await openMediaWindow("projection", "music");
-  if ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean)
+  const screens = _screens?.();
+  if (screens ? screens.stage : ($userdata.get(KEYS.OPTIONS.OPEN_RETURN, false) as boolean)) {
     await openMediaWindow("return", "music");
-  /* Mesma regra do arquivo e do vídeo: retorno de outra projeção vira órfão aqui. */ else if (
-    await isWindowOpen(PROJECTION_TYPE.RETURN)
-  )
+  } else if (!screens && (await isWindowOpen(PROJECTION_TYPE.RETURN)))
+  /* Mesma regra do arquivo e do vídeo: retorno de outra projeção vira órfão aqui. */
     await _close(PROJECTION_TYPE.RETURN);
   await _openOperatorIfEnabled();
 }
@@ -752,11 +812,14 @@ export async function openBibleWindow(): Promise<void> {
 
   let bible = await _target(PROJECTION_TYPE.BIBLE);
   if (!bible.open) bible = await _target(PROJECTION_TYPE.MUSIC);
-  const openReturn = $userdata.get(KEYS.MODULES.BIBLE.SHOW_RETURN, false) as boolean;
+  const screens = _screens?.();
+  const openReturn = screens
+    ? screens.stage
+    : ($userdata.get(KEYS.MODULES.BIBLE.SHOW_RETURN, false) as boolean);
   const fullscreen = $userdata.get(KEYS.OPTIONS.FULLSCREEN, true) as boolean;
   const alwaysOnTop = $userdata.get(KEYS.OPTIONS.ALWAYS_ON_TOP, true) as boolean;
 
-  if (bible.open) {
+  if (bible.open && (!screens || screens.main)) {
     await _open(
       PROJECTION_URL.BIBLE,
       PROJECTION_TYPE.BIBLE,

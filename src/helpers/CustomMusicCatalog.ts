@@ -70,8 +70,12 @@ export async function loadCustomMusicCatalog(): Promise<SearchMusicItem[]> {
  */
 export async function playCustomSong(
   song: CustomSong,
-  action?: MusicActionEnum | string
+  action?: MusicActionEnum | string,
+  options?: { minimized?: boolean }
 ): Promise<boolean> {
+  // Sem opções, a chamada fica como sempre foi: só quem tem o próprio palco as passa.
+  const openSong = (mode: MusicActionEnum | string) =>
+    options ? Media.openCustomSong(song, mode, options) : Media.openCustomSong(song, mode);
   switch (action) {
     case MusicActionEnum.AUDIO_ONLY:
       await Media.openCustomAudio(song, MusicActionEnum.AUDIO);
@@ -80,20 +84,20 @@ export async function playCustomSong(
       await Media.openCustomAudio(song, MusicActionEnum.INSTRUMENTAL);
       return false;
     case undefined:
-      return Media.openCustomSong(
-        song,
+      return openSong(
         hasSung(song) || !hasPlayback(song) ? MusicActionEnum.AUDIO : MusicActionEnum.INSTRUMENTAL
       );
     default:
-      return Media.openCustomSong(song, action);
+      return openSong(action);
   }
 }
 
 /** Executa pelo UUID, relendo o documento: a lista em tela pode estar desatualizada. */
 export async function openCustomMusic(
   customSongId: string,
-  action?: MusicActionEnum | string
+  action?: MusicActionEnum | string,
+  options?: { minimized?: boolean }
 ): Promise<boolean> {
   const song = await getSong(customSongId);
-  return song ? playCustomSong(song, action) : false;
+  return song ? playCustomSong(song, action, options) : false;
 }

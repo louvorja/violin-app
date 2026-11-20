@@ -165,6 +165,19 @@ function getPreferred(featureId) {
 }
 
 /**
+ * O telão onde um arquivo aparece: o monitor de "Projetar arquivos" e, sem
+ * ele, o das músicas — a mesma ordem da janela de projeção de arquivo
+ * (`mediaWindowPlan` em src/helpers/ProjectionWindows.ts). Quem desenha por
+ * cima dela (laser, lousa) ou a substitui (PowerPoint com animações) precisa
+ * achar o mesmo monitor, senão diz "sem telão" com a TV mostrando o slide.
+ *
+ * @returns {Electron.Display|null}
+ */
+function getFileProjectionDisplay() {
+  return getPreferred("file_projection") || getPreferred("musicas");
+}
+
+/**
  * Como `getPreferred`, mas cai no monitor principal quando não resolve.
  * Use apenas onde uma janela precisa abrir de qualquer jeito.
  *
@@ -295,6 +308,7 @@ module.exports = {
   configure,
   resolveFeature,
   getPreferred,
+  getFileProjectionDisplay,
   getPreferredOrPrimary,
   setPreferred,
   getPrefs,

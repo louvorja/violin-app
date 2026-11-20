@@ -153,7 +153,8 @@ async function close() {
       return;
     }
   }
-  Modules.close(moduleId.value);
+  // `requestClose` consulta a guarda do módulo (apresentação no ar).
+  if (!(await Modules.requestClose(moduleId.value))) return;
   emit("close");
 }
 

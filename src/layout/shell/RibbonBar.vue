@@ -47,6 +47,7 @@
     </template>
 
     <div
+      v-show="!isShellExpanded"
       id="ribbon-tabpanel"
       ref="corpoRibbon"
       class="ribbon-body"
@@ -92,6 +93,7 @@
                   :route="btn.route"
                   :icon-color="resolveBtnColor(btn)"
                   :label="$t(btn.label)"
+                  :active-label="btn.labelActive ? $t(btn.labelActive) : undefined"
                   :size="btn.size || 'large'"
                   :testid="`ribbon-btn-${btn.id}`"
                 />
@@ -104,7 +106,7 @@
                   :shortcut="btn.shortcut ? formatShortcut(btn.shortcut) : undefined"
                   :size="btn.size || 'large'"
                   :active="isButtonActive(btn)"
-                  :disabled="btn.disabled"
+                  :disabled="isBtnDisabled(btn)"
                   :testid="`ribbon-btn-${btn.id}`"
                   @click="executeButton(btn)"
                   @pointerenter="onButtonIntent(btn)"
@@ -264,7 +266,7 @@
                   :shortcut="btn.shortcut ? formatShortcut(btn.shortcut) : undefined"
                   :size="btn.size || 'small'"
                   :active="isButtonActive(btn)"
-                  :disabled="btn.disabled"
+                  :disabled="isBtnDisabled(btn)"
                   :testid="`ribbon-btn-${btn.id}`"
                   @click="executeButton(btn)"
                 />
@@ -317,6 +319,7 @@ import RibbonTabs from "@/components/RibbonTabs.vue";
 import { useViewport } from "@/composables/useViewport";
 import { LjSlider, LjSwitch } from "@/components/ui";
 import { prefetchModule } from "@/helpers/ModulePrefetch";
+import { setModuleExpanded, useShellExpanded } from "@/composables/useModuleExpanded";
 import { ensureContrastOnDark } from "@/helpers/ColorContrast";
 
 const { t } = useI18n();
@@ -573,6 +576,21 @@ watch(
     })
 );
 const isContextualActive: ComputedRef<boolean> = computed(() => !!activePageObj.value?.contextual);
+
+// Com o módulo expandido o corpo some, mas as abas do ribbon continuam
+// clicáveis. Escolher outra página é pedir o ribbon de volta: sem isso o
+// clique trocaria um corpo que ninguém vê.
+const { activeModule, isExpanded: isShellExpanded } = useShellExpanded();
+watch(
+  () => ribbonStore.activePage,
+  (pageId: string) => {
+    const moduleId = activeModule.value;
+    if (!isShellExpanded.value || !moduleId) return;
+    const page = modules.find((p: RibbonPage) => p.id === pageId);
+    if (page?.contextual && (page.activeOnModules || []).includes(moduleId)) return;
+    setModuleExpanded(moduleId, false);
+  }
+);
 const visiblePages: ComputedRef<RibbonPage[]> = computed(() => ribbonStore.visiblePages);
 
 function selectContextualPageForModule(moduleId: string | null): void {
@@ -676,6 +694,11 @@ const EDITOR_ACTIONS = new Set<string>([
   "editor_view_4_3",
   "editor_view_16_9",
 ]);
+
+function isBtnDisabled(btn: RibbonButton): boolean {
+  if (btn.disabled) return true;
+  return !!btn.enabledWhen && $appdata.get<boolean>(btn.enabledWhen, false) !== true;
+}
 
 function resolveBtnIcon(btn: RibbonButton): string {
   if (btn.stateBinding) {
@@ -812,6 +835,7 @@ function executeButton(btn: RibbonButton): void {
       "background_sound",
       "background_projection",
       "scheduled_items",
+      "presentation_mode",
     ];
     const pattern = new RegExp(`^(${actions.join("|")})_(.+)$`);
     const m = btn.action.match(pattern);

@@ -153,7 +153,7 @@
 
     <LiturgySaveDialog v-model="saveDialog" :items="safeItems" @saved="onLiturgySaved" />
     <LiturgyExportDialog v-model="exportDialog" :counts="exportCounts" @confirm="confirmExport" />
-    <LiturgyLoadDialog v-model="loadDialog" :items="safeItems" @loaded="onLiturgyLoaded" />
+    <LiturgyLoadDialog v-model="loadDialog" @picked="onLiturgyPicked" />
     <LiturgyManageDialog v-model="manageDialog" @managed="onLiturgyManaged" />
 
     <MusicSpotlight
@@ -182,7 +182,7 @@ import LiturgyNotesPanel from "./LiturgyNotesPanel.vue";
 import LiturgyItemForm from "./LiturgyItemForm.vue";
 import LiturgySchedules from "./LiturgySchedules.vue";
 import $alert, { escapeHtml } from "@/helpers/Alert";
-import type { LiturgyLibraryItem } from "@/types/LiturgyLibrary";
+import type { LiturgyLibraryItem, LiturgyPick } from "@/types/LiturgyLibrary";
 import $snackbar from "@/helpers/Snackbar";
 import $liturgy from "@/helpers/Liturgy";
 import $appdata from "@/helpers/AppData";
@@ -618,6 +618,13 @@ async function onLiturgyLoaded() {
   await updateAppDataLiturgyInfo(safeItems.value, $liturgy.getCurrentLiturgyId());
 }
 
+/** O seletor devolveu a liturgia escolhida: ela entra no dia ativo do módulo. */
+function onLiturgyPicked(pick: LiturgyPick): void {
+  $liturgy.set(pick.items, $liturgy.getActiveDay());
+  if (pick.id) $liturgy.setCurrentLiturgyId(pick.id);
+  void onLiturgyLoaded();
+}
+
 async function onLiturgyManaged() {
   const id = $liturgy.getCurrentLiturgyId();
   if (id) $liturgy.setDayLiturgyId(activeDay.value, id);
@@ -685,9 +692,7 @@ function doCopyLiturgy() {
   }
   const sourceLabel = dayLabels.value[source];
   const targetLabel = dayLabels.value[target];
-  const confirmText = t("copy.confirm_text")
-    .replace("{source}", sourceLabel)
-    .replace("{target}", targetLabel);
+  const confirmText = t("copy.confirm_text", { source: sourceLabel, target: targetLabel });
   $alert.yesno({ title: t("copy.confirm_title"), text: confirmText }, (btn?: string) => {
     if (btn !== "yes") return;
     const items = $liturgy.list(source);
@@ -698,7 +703,7 @@ function doCopyLiturgy() {
 
 function clearDayDialog() {
   const dayLabel = dayLabels.value[activeDay.value];
-  const confirmText = t("clear.confirm_text").replace("{day}", dayLabel);
+  const confirmText = t("clear.confirm_text", { day: dayLabel });
   $alert.yesno({ title: t("clear.confirm_title"), text: confirmText }, (btn?: string) => {
     if (btn !== "yes") return;
     $liturgy.clear(activeDay.value);

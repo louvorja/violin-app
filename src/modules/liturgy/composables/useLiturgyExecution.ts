@@ -45,6 +45,7 @@ import {
 } from "@/helpers/LiturgyFiles";
 import { canLinkOverlay, youtubeVideoId } from "../overlayLink";
 import { ativarOverlayVinculado, prepararExecucao } from "../linkedOverlay";
+import { isYoutube } from "../item";
 
 interface MediaLibraryRecord {
   path?: string;
@@ -110,11 +111,6 @@ export function useLiturgyExecution() {
 
   /** Instância compartilhada com o módulo Som de Fundo (mesmo player). */
   const $bgSound = useBackgroundSound();
-
-  function isYoutube(url: string | undefined | null): boolean {
-    if (!url) return false;
-    return /youtu\.?be/i.test(url);
-  }
 
   /* ============== Item execution ============== */
   async function executeItem(item: LiturgyItem): Promise<void> {
@@ -419,8 +415,11 @@ export function useLiturgyExecution() {
     }
   }
 
-  /** Anúncios: envia os slides selecionados (na ordem) para a projeção. */
-  async function executeAnnouncements(item: LiturgyItem): Promise<boolean> {
+  /**
+   * Anúncios: envia os slides selecionados (na ordem) para a projeção.
+   * `startIndex`: começa por um deles (o modo apresentação manda o anúncio clicado).
+   */
+  async function executeAnnouncements(item: LiturgyItem, startIndex = 0): Promise<boolean> {
     const announcementToken = beginAnnouncementIntent();
     try {
       const all = await loadAnnouncements<{
@@ -456,7 +455,7 @@ export function useLiturgyExecution() {
           videoMime: a.videoMime,
           style: a.style,
         })),
-        index: 0,
+        index: Math.min(Math.max(0, startIndex), selected.length - 1),
       };
       $broadcast.send(BROADCAST_TYPE.ANNOUNCEMENTS_INTENT, payload);
       if (
@@ -467,7 +466,7 @@ export function useLiturgyExecution() {
       $appdata.set(KEYS.MODULES.MEDIA.IS_PLAYING, true);
       // Ativa a barra de controles global.
       const fp = useFileProjection();
-      fp.start("announcements", selected[0]?.nome || "", selected.length, 0);
+      fp.start("announcements", selected[payload.index]?.nome || "", selected.length, payload.index);
       const opened = await openAnnouncementsWindow();
       return (
         opened &&
@@ -854,5 +853,6 @@ export function useLiturgyExecution() {
     openUrl,
     openFile,
     isYoutube,
+    executeAnnouncements,
   };
 }

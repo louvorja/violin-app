@@ -89,11 +89,19 @@ const fileOpen = require("./main/fileOpen.js");
 const splash = require("./main/splash.js");
 const storage = require("./main/storage.js");
 const docStore = require("./main/docStore.js");
+const fileBrowser = require("./main/fileBrowser.js");
+const fileAccess = require("./main/fileAccess.js");
+const PRESENTATION_EXT = require("./shared/presentationExtensions.json");
+const cloudFiles = require("./main/cloudFiles.js").createCloudFiles();
+const seriesFile = require("./main/seriesFile.js");
+const fileActions = require("./main/fileActions.js");
+const churchFolder = require("./main/churchFolder.js");
 const mediaVariants = require("./main/mediaVariants.js");
 const mediaResolver = require("./main/mediaResolver.js");
 const classicLibrary = require("./main/classicLibrary.js");
 const netHealth = require("./main/netHealth.js");
 const canva = require("./main/canva/index.js");
+const pptx = require("./main/pptx/index.js");
 const { ehPaginaDeLogin, hostCanva } = require("./main/windowRoute.js");
 
 // Aberto por um terminal que depois foi fechado, o stdout vira um pipe morto:
@@ -1679,6 +1687,47 @@ function _walkSet(obj, path, value) {
 let _userDataMain = userStore.read("user_data") || {};
 
 /*
+ * Allowlist do IPC de arquivos (fileAccess.js): só as pastas que o operador
+ * escolheu — bibliotecas do Modo apresentação, pasta da igreja e as pastas do
+ * próprio app — podem ser listadas/alteradas pelo renderer. As raízes são
+ * (re)registradas quando a preferência muda; ficam valendo por esta sessão.
+ */
+let _fileRootsSignature = "";
+async function _ensureFileRoots() {
+  const prefs = _userDataMain?.modules?.presentation_mode || {};
+  const folders = Array.isArray(prefs.library_folders) ? prefs.library_folders : [];
+  const list = [
+    paths.dataDir(),
+    paths.privateMediaDir(),
+    paths.mediaDir(),
+    paths.videosDir(),
+    paths.canvaDir(),
+    paths.videoWorkDir(),
+    prefs.church_folder,
+    ...folders.map((f) => (f && typeof f === "object" ? f.path : null)),
+  ].filter((p) => typeof p === "string" && p.length > 0);
+  const signature = list.join("\n");
+  if (signature === _fileRootsSignature) return;
+  _fileRootsSignature = signature;
+  await Promise.all(list.map((p) => fileAccess.allowRoot(p)));
+}
+
+/** Confere a allowlist (registrando as raízes configuradas antes). */
+async function _fileAllowed(target) {
+  await _ensureFileRoots();
+  return fileAccess.isAllowed(target);
+}
+
+/** A mesma checagem para uma lista de caminhos (estado na nuvem, downloads). */
+async function _filesAllowed(targets) {
+  await _ensureFileRoots();
+  const list = Array.isArray(targets) ? targets : [];
+  const allowed = [];
+  for (const p of list) if (await fileAccess.isAllowed(p)) allowed.push(p);
+  return allowed;
+}
+
+/*
  * Estado das janelas COMUNS (operador e principal no Windows), em
  * `options.windows.<feature>` — o espelho de `KEYS.OPTIONS.WINDOWS` em
  * `src/constants/UserDataKeys.ts`. Guarda modo (maximizada), tamanho e posição
@@ -2531,6 +2580,152 @@ ipcMain.handle("canva:clearCachedPdf", (_event, payload) => {
 ipcMain.handle("canva:clearCachedPdfs", () => canva.clearCachedPdfs());
 
 // ---------------------------------------------------------------------------
+// IPC: PowerPoint fiel — .pptx vira PDF desenhado pelo próprio PowerPoint
+// (ou LibreOffice) depois de instalar as fontes que faltam. O PDF entra na
+// Biblioteca de Mídia e segue pela projeção de arquivo (telão e retorno).
+// ---------------------------------------------------------------------------
+
+/** Conversor disponível neste computador (PowerPoint, LibreOffice ou nenhum). */
+/** Programa escolhido em Opções → Player de Áudio/Vídeo (validado: só os três valores). */
+function _pptxEngine(payload) {
+  const e = payload && typeof payload === "object" ? payload.engine : undefined;
+  return e === "powerpoint" || e === "libreoffice" ? e : "auto";
+}
+
+/**
+ * Número da tela do PA na contagem do LibreOffice (1 = primeira). Ele põe a
+ * principal primeiro e segue a ordem do sistema — a mesma do Electron.
+ */
+function _telaLibreOffice(display) {
+  const todas = screen.getAllDisplays();
+  const principal = screen.getPrimaryDisplay();
+  const ordem = [principal, ...todas.filter((x) => x.id !== principal.id)];
+  // Pela posição, não pelo id: com dois monitores iguais, `connected()` troca o id
+  // de um deles e ele não seria achado na lista do sistema. Dois monitores não
+  // ocupam o mesmo lugar na área de trabalho.
+  const b = display && display.bounds;
+  const i = b
+    ? ordem.findIndex(
+        (x) => x.bounds.x === b.x && x.bounds.y === b.y && x.bounds.width === b.width && x.bounds.height === b.height
+      )
+    : -1;
+  return i >= 0 ? i + 1 : 0;
+}
+
+ipcMain.handle("pptx:status", (_event, payload) => pptx.status(_pptxEngine(payload)));
+
+/**
+ * Abre o painel onde o macOS 27 deixa autorizar o acesso ao container do
+ * PowerPoint. Sem argumentos: o renderer não escolhe URL nem painel.
+ */
+ipcMain.handle("pptx:openPermissionSettings", () => {
+  if (process.platform !== "darwin") return { ok: false };
+  void shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders");
+  return { ok: true };
+});
+
+/**
+ * Converte e devolve o caminho do PDF. Fica pendente durante a conversão
+ * (segundos a alguns minutos); o andamento chega por `pptx:progress`.
+ * O caminho é validado no `pptx/index.js` (extensão, existência, tamanho).
+ */
+/*
+ * Modo nativo: o próprio PowerPoint apresenta no monitor do PA (animações,
+ * vídeos e áudios). O LouvorJA só manda os comandos e repassa o estado.
+ */
+pptx.onNativeState((state) => {
+  for (const w of BrowserWindow.getAllWindows()) safeSend(w, "pptx:native-state", state);
+});
+
+ipcMain.handle("pptx:features", (_event, payload) => {
+  const filePath = payload && typeof payload === "object" ? payload.path : undefined;
+  if (typeof filePath !== "string") return { ok: false, code: "invalid_file", message: "Arquivo inválido." };
+  return pptx.features(filePath);
+});
+
+ipcMain.handle("pptx:nativeStart", async (event, payload) => {
+  const filePath = payload && typeof payload === "object" ? payload.path : undefined;
+  if (typeof filePath !== "string") return { ok: false, code: "invalid_file", message: "Arquivo inválido." };
+  const startIndex = Number.isInteger(payload.startIndex) ? payload.startIndex : 0;
+  // Monitor do PA: o mesmo da projeção de arquivo (e, sem ele, o das músicas,
+  // como a janela do slide). Sem nenhum, não abre na tela do operador.
+  const d = displays.getFileProjectionDisplay();
+  if (!d) {
+    return {
+      ok: false,
+      code: "no_display",
+      message: "Escolha o monitor de projeção em Opções → Player de Áudio/Vídeo → Projetar arquivos em.",
+    };
+  }
+  const sender = event.sender;
+  const r = await pptx.nativeStart(filePath, {
+    bounds: d.bounds,
+    display: _telaLibreOffice(d),
+    engine: _pptxEngine(payload),
+    startIndex,
+    onProgress: (p) => safeSend(sender, "pptx:progress", { path: filePath, ...p }),
+  });
+  // A apresentação foi ativada (para a barra de tarefas sair de cima do PA);
+  // o foco volta para o operador, que segue mandando pelo LouvorJA.
+  if (r && r.ok) {
+    const win = BrowserWindow.fromWebContents(sender);
+    if (win && !win.isDestroyed()) setTimeout(() => !win.isDestroyed() && win.focus(), 400);
+  }
+  return r;
+});
+
+ipcMain.handle("pptx:nativeNav", (_event, payload) => {
+  const action = payload && typeof payload === "object" ? payload.action : undefined;
+  const index = payload && typeof payload === "object" ? payload.index : undefined;
+  if (typeof action !== "string") return { ok: false, code: "invalid_action", message: "Ação inválida." };
+  return pptx.nativeNav(action, Number.isInteger(index) ? index : undefined);
+});
+
+ipcMain.handle("pptx:nativeEnd", () => pptx.nativeEnd());
+ipcMain.handle("pptx:nativeState", () => pptx.nativeState());
+
+app.on("will-quit", () => pptx.disposeNative());
+
+/**
+ * "Instalar fonte…" do painel do PowerPoint. O arquivo é escolhido no diálogo
+ * nativo AQUI — nenhum caminho vem do renderer.
+ */
+ipcMain.handle("pptx:installFonts", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const result = await dialog.showOpenDialog(win, {
+    title: "Instalar fonte",
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "Fontes (.ttf, .otf ou .zip)", extensions: ["ttf", "otf", "zip"] }],
+  });
+  if (result.canceled || !result.filePaths?.length) return { ok: false, code: "canceled", message: "" };
+  return pptx.installFontFiles(result.filePaths);
+});
+
+/**
+ * Fontes ARRASTADAS para a Biblioteca de Mídia (.ttf, .otf ou o .zip do
+ * DaFont). O caminho vem do renderer, então o `installFontFiles` aceita só
+ * essas extensões, confere que é arquivo e limita o tamanho.
+ */
+ipcMain.handle("pptx:installFontPaths", (_event, payload) => {
+  const paths = payload && typeof payload === "object" ? payload.paths : undefined;
+  if (!Array.isArray(paths)) return { ok: false, code: "no_fonts", message: "Nenhum arquivo." };
+  return pptx.installFontFiles(paths);
+});
+
+ipcMain.handle("pptx:convert", (event, payload) => {
+  const filePath = payload && typeof payload === "object" ? payload.path : undefined;
+  if (typeof filePath !== "string") {
+    return { ok: false, code: "invalid_file", message: "Arquivo inválido." };
+  }
+  const sender = event.sender;
+  return pptx.convert(filePath, {
+    force: payload.force === true,
+    engine: _pptxEngine(payload),
+    onProgress: (p) => safeSend(sender, "pptx:progress", { path: filePath, ...p }),
+  });
+});
+
+// ---------------------------------------------------------------------------
 // IPC: Storage (S2) — visibilidade e gerenciamento da pasta de mídia + cache
 // ---------------------------------------------------------------------------
 
@@ -2652,6 +2847,151 @@ ipcMain.handle("storage:readDir", async (_e, dirPath) => {
   return walk(dirPath);
 });
 
+/** Um nível de uma pasta, com tamanho e data — navegador de arquivos do Modo apresentação. */
+ipcMain.handle("files:listDir", async (_e, dirPath) => {
+  if (!(await _fileAllowed(dirPath))) return { ok: false, error: "forbidden" };
+  return fileBrowser.listDir(dirPath);
+});
+// Pastas na nuvem (OneDrive, Google Drive, iCloud...): o que ainda não baixou, e baixar.
+ipcMain.handle("files:cloudStates", async (_e, pathsList) => {
+  const allowed = await _filesAllowed(pathsList);
+  return allowed.length ? cloudFiles.states(allowed) : {};
+});
+ipcMain.handle("files:cloudDownload", async (event, filePath) => {
+  if (!(await _fileAllowed(filePath))) return { ok: false, error: "forbidden" };
+  return cloudFiles.download(filePath, (percent) => {
+    if (!event.sender.isDestroyed()) event.sender.send("files:cloudProgress", { path: filePath, percent });
+  });
+});
+// Histórico de uma série de vídeos, gravado na própria pasta (nome de arquivo fixo).
+ipcMain.handle("files:seriesRead", async (_e, dirPath) => {
+  if (!(await _fileAllowed(dirPath))) return { ok: false, error: "forbidden" };
+  return seriesFile.read(dirPath);
+});
+ipcMain.handle("files:seriesApply", async (_e, dirPath, op) => {
+  if (!(await _fileAllowed(dirPath))) return { ok: false, error: "forbidden" };
+  return seriesFile.apply(dirPath, op);
+});
+// Cópias em conflito do sincronizador: "merge" ou o nome da versão escolhida.
+ipcMain.handle("files:seriesResolve", async (_e, dirPath, choice) => {
+  if (!(await _fileAllowed(dirPath))) return { ok: false, error: "forbidden" };
+  return seriesFile.resolve(dirPath, choice);
+});
+// Ações de arquivo da biblioteca do Modo apresentação (só arquivos, nunca pastas).
+ipcMain.handle("files:rename", async (_e, filePath, newName) => {
+  if (!(await _fileAllowed(filePath))) return { ok: false, error: "forbidden" };
+  return fileActions.rename(filePath, newName, {
+    renameInSeries: (dir, from, to) => seriesFile.apply(dir, { type: "rename", from, to }),
+  });
+});
+ipcMain.handle("files:setHidden", async (_e, filePath, hidden) => {
+  if (!(await _fileAllowed(filePath))) return { ok: false, error: "forbidden" };
+  return fileActions.setHidden(filePath, hidden);
+});
+ipcMain.handle("files:trash", async (_e, filePath) => {
+  if (!(await _fileAllowed(filePath))) return { ok: false, error: "forbidden" };
+  return fileActions.trash(filePath, shell);
+});
+ipcMain.handle("files:reveal", async (_e, filePath) => {
+  if (!(await _fileAllowed(filePath))) return { ok: false, error: "forbidden" };
+  return fileActions.reveal(filePath, shell);
+});
+// Pasta da igreja: programas e modelos do Modo apresentação numa pasta compartilhada.
+const CHURCH_OPS = {
+  stat: churchFolder.stat,
+  read: churchFolder.read,
+  write: churchFolder.write,
+  list: churchFolder.list,
+  conflicts: churchFolder.conflicts,
+  resolve: churchFolder.resolve,
+};
+ipcMain.handle("files:church", async (_e, op, ...args) => {
+  if (!Object.prototype.hasOwnProperty.call(CHURCH_OPS, op)) return { ok: false, error: "invalid" };
+  // A raiz vem do renderer; só a pasta configurada em Preferências vale.
+  const configured = _userDataMain?.modules?.presentation_mode?.church_folder;
+  if (!(await fileAccess.isSamePath(args[0], configured))) return { ok: false, error: "forbidden" };
+  await _ensureFileRoots();
+  return CHURCH_OPS[op](...args);
+});
+ipcMain.handle("files:computerName", () => churchFolder.computerName());
+/*
+ * PowerPoint → PDF para o modo apresentação. Passa pelo mesmo caminho da
+ * Biblioteca de Mídia (`main/pptx`, docs/pptx.md): instala as fontes que faltam
+ * (embutidas, Google Fonts), o próprio PowerPoint desenha cada slide como imagem
+ * — o PDF "de texto" do PowerPoint desconfigurava os títulos no pdf.js — e, sem
+ * PowerPoint, o LibreOffice. O programa é o escolhido em Opções. A resposta
+ * mantém o contrato do módulo: `{ ok, pdf, cached }` ou `{ ok: false, error }`.
+ */
+ipcMain.handle("files:convertPresentation", async (event, filePath, opts) => {
+  if (typeof filePath !== "string" || !path.isAbsolute(filePath)) return { ok: false, error: "invalid_path" };
+  const sender = event.sender;
+  const force = !!(opts && typeof opts === "object" && opts.force === true);
+  const engine = _pptxEngine({ engine: _userDataMain?.options?.file_projection?.presentation_engine });
+  try {
+    const r = await pptx.convert(filePath, {
+      engine,
+      force,
+      onProgress: (p) => safeSend(sender, "pptx:progress", { path: filePath, ...p }),
+    });
+    if (r && r.ok) {
+      const faltando = (r.fonts || [])
+        .filter((f) => f.status === "missing" || f.status === "unmatched")
+        .map((f) => f.name);
+      // "Gerar de novo" grava no mesmo arquivo: a tela e a grade guardariam o PDF
+      // antigo pelo endereço. Uma cópia com nome novo obriga as duas a recarregar.
+      const pdf = force ? await _pptxCopiaNova(r.path) : r.path;
+      return {
+        ok: true,
+        pdf,
+        cached: !!r.cached,
+        converter: r.converter,
+        missingFonts: faltando,
+        fonts: r.fonts || [],
+        staleFonts: !!r.staleFonts,
+        fontsError: r.fontsError || "",
+        permissionFallback: !!r.permissionFallback,
+        features: r.features || null,
+      };
+    }
+    const code = r?.code;
+    const erro =
+      code === "no_converter"
+        ? "unsupported"
+        : code === "not_found"
+          ? "not_found"
+          : code === "mac_permission"
+            ? "mac_permission"
+            : "conversion_failed";
+    return { ok: false, error: erro, message: r?.message || "" };
+  } catch (e) {
+    return { ok: false, error: "conversion_failed", message: String(e?.message || e).slice(0, 300) };
+  }
+});
+
+/**
+ * `<base>.pdf` → `<base>.r<tempo>.pdf`. Das cópias anteriores do mesmo arquivo,
+ * a mais nova fica: é a que pode estar no ar agora, e a tela lê o PDF aos
+ * pedaços — apagá-la no meio do culto deixaria páginas sem desenhar.
+ */
+async function _pptxCopiaNova(pdf) {
+  const dir = path.dirname(pdf);
+  const base = path.basename(pdf, ".pdf");
+  const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const copia = new RegExp(`^${esc}\\.r([0-9a-z]+)\\.pdf$`);
+  try {
+    const antigas = (await fs.readdir(dir))
+      .map((nome) => ({ nome, m: copia.exec(nome) }))
+      .filter((x) => x.m)
+      .sort((a, b) => parseInt(b.m[1], 36) - parseInt(a.m[1], 36));
+    for (const { nome } of antigas.slice(1)) await fs.unlink(path.join(dir, nome)).catch(() => {});
+    const novo = path.join(dir, `${base}.r${Date.now().toString(36)}.pdf`);
+    await fs.copyFile(pdf, novo);
+    return novo;
+  } catch {
+    return pdf;
+  }
+}
+
 ipcMain.handle("storage:chooseDir", async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const result = await dialog.showOpenDialog(win, {
@@ -2659,6 +2999,8 @@ ipcMain.handle("storage:chooseDir", async (event) => {
     title: "Escolher pasta para mídia",
   });
   if (result.canceled || !result.filePaths?.length) return null;
+  // Escolha do operador: vira raiz permitida para o resto da sessão.
+  void fileAccess.allowRoot(result.filePaths[0]);
   return result.filePaths[0];
 });
 
@@ -2675,8 +3017,8 @@ ipcMain.handle("storage:chooseFile", async (event, kind) => {
       ? {
           filters: [
             {
-              name: "Imagens, áudios, vídeos e PDF",
-              extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif", "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus", "mp4", "webm", "mkv", "mov", "avi", "m4v", "pdf"],
+              name: "Imagens, áudios, vídeos, PDF e PowerPoint",
+              extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif", "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus", "mp4", "webm", "mkv", "mov", "avi", "m4v", "pdf", ...PRESENTATION_EXT.powerPoint],
             },
             { name: "Todos os arquivos", extensions: ["*"] },
           ],
@@ -2694,6 +3036,7 @@ ipcMain.handle("storage:chooseFile", async (event, kind) => {
         : {}),
   });
   if (result.canceled || !result.filePaths?.length) return null;
+  void fileAccess.allowRoot(path.dirname(result.filePaths[0]));
   return result.filePaths[0];
 });
 
@@ -2709,6 +3052,7 @@ ipcMain.handle("storage:chooseImage", async (event) => {
     title: "Selecionar imagem de fundo",
   });
   if (result.canceled || !result.filePaths?.length) return null;
+  void fileAccess.allowRoot(path.dirname(result.filePaths[0]));
   return result.filePaths[0];
 });
 

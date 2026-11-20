@@ -33,6 +33,27 @@ o arquivo ativo. `PdfPageRenderQueue` serializa páginas no mesmo canvas. A matr
 completa e os limites testados estão em
 [`architecture-refactor-final-report.md`](architecture-refactor-final-report.md).
 
+O **Modo apresentação** (`src/modules/presentation_mode`) é a mesa de operação do
+culto: programa por data à esquerda (documento no `DocStore`), palco com prévia e
+controles no centro, biblioteca embaixo (Arquivos, Mídia com o Online, Áudio,
+Músicas, Bíblia) e as saídas à direita — liga/desliga por tela, miniaturas que
+refletem as telas reais, "Tirar do ar" e "Limpar tela" (`projection_clear`). Ele
+não tem projeção própria: manda cada conteúdo pelos contratos existentes (música,
+Bíblia, `file_projection`, vídeo on-line, anúncios). O que é exclusivo do retorno
+de palco vai por `return_override`, com o som tocado na janela principal. Reproduzir
+não é apresentar: sem a apresentação ligada, o conteúdo fica na prévia e o som
+toca com aviso. Uma camada visual e uma de áudio; um vídeo por vez.
+
+Com uma **pasta da igreja** configurada (preferência de cada computador, em geral
+uma pasta do OneDrive), o programa de cada data e os modelos de culto ficam em
+`<pasta>/LouvorJA/programas/AAAA-MM-DD.json` e `<pasta>/LouvorJA/modelos/`, gravados
+pelo main (`electron/main/churchFolder.js`) com escrita atômica e `expectMtime` — uma
+gravação nunca passa por cima do que outro computador salvou depois da leitura.
+Caminhos dentro da pasta viajam como `igreja:<relativo>`, porque o mesmo OneDrive
+mora em endereços diferentes no Mac e no Windows. Cópias em conflito do
+sincronizador e edições simultâneas viram uma escolha de versão para o operador.
+Sem a pasta, o programa continua no DocStore deste computador.
+
 ---
 
 ## Atualização web/PWA
@@ -963,6 +984,8 @@ Canal único `BroadcastChannel("louvorja")`. Duas finalidades:
 | `request_libras_state`        | LibrasOverlay                                          | main.js                                           |
 | `overlay_config_changed`      | Shell (estado canônico); módulo (invalidação de slots) | OverlayRenderer                                   |
 | `request_overlay_state`       | OverlayRenderer                                        | Shell (visibilidade) e leitura local dos slots    |
+| `projection_clear`            | presentation_mode                                      | Views de projeção e retorno (cobre com o fundo)   |
+| `return_override`             | presentation_mode, Esc                                 | Views de retorno (conteúdo só no retorno)         |
 
 ---
 
@@ -2300,12 +2323,26 @@ Todos os endpoints POST exigem `Content-Type: application/json`.
 
 ### Player e Cronômetro (mídia em reprodução + voltas)
 
-Duas features novas do controle remoto, anunciadas em `features` no `/api/ping`
-(`["player", "stopwatch"]`) — um **app remoto** novo conectado a um desktop
-antigo esconde os módulos. O `RemoteControl.vue` (web servido pelo próprio
-desktop) não filtra por `features`: a página e o servidor são da mesma versão,
-então um desktop antigo simplesmente não serve as abas novas. Quem consome
-`features` é o app remoto (KMP/iOS):
+O `/api/ping` anuncia em `features` **todos os módulos do controle remoto**
+implementados por esta versão (fonte única em
+`../electron/main/httpServer/remoteRoutes/remoteFeatures.js`):
+
+```
+announcements, presenter, bible, media_library, stopwatch, liturgy, music,
+player, projection, slides, background_sound, draw, online_videos, chat
+```
+
+São os mesmos ids do catálogo do app (`RemoteTab.feature` /
+`RemoteModule.feature`). `chat` é a única entrada que **não** é um card da tela
+Módulos: é a aba Chat (só existe no modo Violin), e o app continua decidindo a
+aba pela permissão `chat` + modo — o id fica na lista para o contrato de
+funcionalidades ficar completo. A aba **Atalhos** (teclado) não entra: é
+exclusivamente uma permissão. O app usa a lista para decidir os cards: **sem a
+lista** (desktop antigo ou sem pareamento) mostra todos; **com a lista**, mostra
+só os anunciados — assim um desktop futuro que não implemente um módulo pode
+simplesmente omiti-lo. O `RemoteControl.vue` (web servido pelo próprio desktop)
+não filtra por `features`: a página e o servidor são da mesma versão. Quem
+consome `features` é o app remoto (KMP/iOS).
 
 - **Player** (`/api/media`, permission `player`): estado do painel de mídia do
   desktop (arquivo, música, Biblioteca ou YouTube), em segundos, com título,

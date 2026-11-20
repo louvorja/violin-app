@@ -23,6 +23,21 @@ import Telemetry from "@/helpers/Telemetry";
 // Diálogos do player, não abas — mesmo com `show`.
 const NOT_TABS = new Set(["media", "lyric", "album"]);
 
+/**
+ * Guardas de fechamento por módulo. O módulo registra um (ex.: a apresentação
+ * no ar) e o X da aba / Ctrl+W pedem confirmação antes de sair. Fechar a aba
+ * não desliga a projeção: as telas seguem no ar.
+ */
+const _closeGuards = new Map();
+
+/** Um módulo pede licença antes de a aba fechar. Devolve o cancelamento. */
+export function setModuleCloseGuard(id, guard) {
+  _closeGuards.set(id, guard);
+  return () => {
+    if (_closeGuards.get(id) === guard) _closeGuards.delete(id);
+  };
+}
+
 /** Música, letra, arquivo, vídeo ou som no ar: o Ctrl+W sem aba não encerra o programa. */
 function _somethingOnAir() {
   return (
@@ -94,6 +109,28 @@ export default {
   },
 
   /**
+   * Pede para fechar: com guarda (a apresentação no ar), espera a resposta do
+   * operador. `false` = o fechamento foi cancelado.
+   * @param {string} id
+   * @returns {Promise<boolean>}
+   */
+  async requestClose(id) {
+    if (!this.check(id)) return false;
+    const guard = _closeGuards.get(id);
+    if (guard) {
+      let ok = false;
+      try {
+        ok = (await guard()) !== false;
+      } catch {
+        ok = false;
+      }
+      if (!ok) return false;
+    }
+    this.close(id);
+    return true;
+  },
+
+  /**
    * Fecha um módulo (não importa se popup ou embedded).
    * @param {string} id
    */
@@ -134,6 +171,19 @@ export default {
     if (tabs.length === 0) return _somethingOnAir();
     const active = $appdata.get("active_module");
     if (tabs.some((m) => m.id === active)) this.close(active);
+    return true;
+  },
+
+  /**
+   * O Ctrl+W com guarda: pergunta antes de fechar a aba da apresentação no ar.
+   * Devolve `false` só quando não sobrou aba e nada está no ar.
+   * @returns {Promise<boolean>}
+   */
+  async requestCloseActiveTab() {
+    const tabs = this.tabs();
+    if (tabs.length === 0) return _somethingOnAir();
+    const active = $appdata.get("active_module");
+    if (tabs.some((m) => m.id === active)) await this.requestClose(active);
     return true;
   },
 
