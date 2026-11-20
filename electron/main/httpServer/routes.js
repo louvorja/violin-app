@@ -26,6 +26,7 @@ const { safeSend } = require("../safeWebContents.js");
 const transmissionRoutes = require("./transmissionRoutes.js");
 const remoteRoutes = require("./remoteRoutes");
 const presenterRoutes = require("./presenterRoutes.js");
+const { REMOTE_FEATURES } = require("./remoteRoutes/remoteFeatures.js");
 const { createPresenterOverlay } = require("../presenterOverlay.js");
 
 /**
@@ -604,10 +605,11 @@ function setupRoutes(
       version: typeof getAppVersion === "function" ? getAppVersion() : "",
       authorized: info.authorized === true,
       permissions: Array.isArray(info.permissions) ? info.permissions : [],
-      // Features implementadas nesta versão. O app remoto esconde módulos que
-      // o desktop antigo não conhece (ex.: Player/Cronômetro no Violin 2.0).
+      // Módulos do controle remoto implementados nesta versão. O app remoto
+      // usa os mesmos ids para exibir os cards: sem esta lista (desktop antigo
+      // ou sem pareamento) mostra todos; com a lista, mostra só os anunciados.
       // O controle web é servido por esta mesma versão e não precisa filtrar.
-      features: ["player", "stopwatch"],
+      features: REMOTE_FEATURES,
     });
   });
 

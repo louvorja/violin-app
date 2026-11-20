@@ -2323,12 +2323,26 @@ Todos os endpoints POST exigem `Content-Type: application/json`.
 
 ### Player e Cronômetro (mídia em reprodução + voltas)
 
-Duas features novas do controle remoto, anunciadas em `features` no `/api/ping`
-(`["player", "stopwatch"]`) — um **app remoto** novo conectado a um desktop
-antigo esconde os módulos. O `RemoteControl.vue` (web servido pelo próprio
-desktop) não filtra por `features`: a página e o servidor são da mesma versão,
-então um desktop antigo simplesmente não serve as abas novas. Quem consome
-`features` é o app remoto (KMP/iOS):
+O `/api/ping` anuncia em `features` **todos os módulos do controle remoto**
+implementados por esta versão (fonte única em
+`../electron/main/httpServer/remoteRoutes/remoteFeatures.js`):
+
+```
+announcements, presenter, bible, media_library, stopwatch, liturgy, music,
+player, projection, slides, background_sound, draw, online_videos, chat
+```
+
+São os mesmos ids do catálogo do app (`RemoteTab.feature` /
+`RemoteModule.feature`). `chat` é a única entrada que **não** é um card da tela
+Módulos: é a aba Chat (só existe no modo Violin), e o app continua decidindo a
+aba pela permissão `chat` + modo — o id fica na lista para o contrato de
+funcionalidades ficar completo. A aba **Atalhos** (teclado) não entra: é
+exclusivamente uma permissão. O app usa a lista para decidir os cards: **sem a
+lista** (desktop antigo ou sem pareamento) mostra todos; **com a lista**, mostra
+só os anunciados — assim um desktop futuro que não implemente um módulo pode
+simplesmente omiti-lo. O `RemoteControl.vue` (web servido pelo próprio desktop)
+não filtra por `features`: a página e o servidor são da mesma versão. Quem
+consome `features` é o app remoto (KMP/iOS).
 
 - **Player** (`/api/media`, permission `player`): estado do painel de mídia do
   desktop (arquivo, música, Biblioteca ou YouTube), em segundos, com título,
