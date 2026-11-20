@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { register } = require("../httpServer/presenterRoutes.js");
+const { register } = require("../httpServer/remoteRoutes/presenterRoutes.js");
 
 /** Express de mentira: guarda os handlers e chama um por vez. */
 function fakeApp() {
@@ -145,7 +145,7 @@ describe("presenterRoutes", () => {
   });
 
   it("lista da Biblioteca só passa com o formato esperado", () => {
-    const { isFilesResponse } = require("../httpServer/presenterRoutes.js");
+    const { isFilesResponse } = require("../httpServer/remoteRoutes/presenterRoutes.js");
     expect(isFilesResponse({ status: "ok", items: [{ id: "a", name: "Culto", kind: "pptx" }] })).toBe(true);
     expect(isFilesResponse({ status: "ok", items: [{ id: "a", name: "Culto", kind: "exe" }] })).toBe(false);
     expect(isFilesResponse({ status: "ok", items: [{ id: 1, name: "Culto", kind: "pdf" }] })).toBe(false);
@@ -182,7 +182,7 @@ describe("presenterRoutes", () => {
   });
 
   it("estado com o que está no ar além do PDF passa; texto grande demais não", () => {
-    const { isStateResponse } = require("../httpServer/presenterRoutes.js");
+    const { isStateResponse } = require("../httpServer/remoteRoutes/presenterRoutes.js");
     const base = { status: "ok", title: "Vinde", page: 0, total: 0, aspect: 1.77, rev: "" };
     const live = { text: "Vinde, povo do Senhor", page: 2, total: 14, image: "" };
     expect(isStateResponse(base)).toBe(true);

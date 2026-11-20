@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { createPresenterOverlay } = require("../presenterOverlay.js");
-const { isStateResponse } = require("../httpServer/presenterRoutes.js");
+const { isStateResponse } = require("../httpServer/remoteRoutes/presenterRoutes.js");
 
 /** BrowserWindow de mentira: guarda o JavaScript que o overlay mandou rodar. */
 function fakeWindow() {

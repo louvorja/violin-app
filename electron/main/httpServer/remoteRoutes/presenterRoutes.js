@@ -14,7 +14,7 @@
  * os slides pelo celular pode também apontar e desenhar.
  */
 
-const { safeSend } = require("../safeWebContents.js");
+const { safeSend } = require("../../safeWebContents.js");
 
 const NAV_ACTIONS = new Set(["next", "prev", "first", "last", "goto", "black"]);
 const SLIDE_MAX_BYTES = 4 * 1024 * 1024;

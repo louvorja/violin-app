@@ -25,7 +25,7 @@ const devices = require("../devices.js");
 const { safeSend } = require("../safeWebContents.js");
 const transmissionRoutes = require("./transmissionRoutes.js");
 const remoteRoutes = require("./remoteRoutes");
-const presenterRoutes = require("./presenterRoutes.js");
+const presenterRoutes = require("./remoteRoutes/presenterRoutes.js");
 const { REMOTE_FEATURES } = require("./remoteRoutes/remoteFeatures.js");
 const { createPresenterOverlay } = require("../presenterOverlay.js");
 
