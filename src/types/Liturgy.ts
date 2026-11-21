@@ -1,6 +1,8 @@
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { AlbumItem } from "@/types/Album";
 
+import type { BiblePassage } from "./Bible";
+
 export interface LiturgyItem {
   id: string;
   tipo: LiturgyItemTypeEnum;
@@ -31,6 +33,8 @@ export interface LiturgyItem {
   overlay_action?: "activate" | "deactivate";
   /** Overlay vinculado — ativado automaticamente ao executar o item. */
   linked_overlay_id?: string;
+  /** Trecho bíblico do item (tipo Bíblia). */
+  bible?: BiblePassage;
 }
 
 /**
@@ -50,7 +54,8 @@ export type LiturgyItemKind =
   | "note"
   | "site"
   | "overlay"
-  | "scheduled";
+  | "scheduled"
+  | "bible";
 
 export interface LiturgyMusicItem {
   id_music: number | string;

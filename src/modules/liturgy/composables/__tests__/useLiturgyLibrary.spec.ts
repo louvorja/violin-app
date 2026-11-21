@@ -257,3 +257,91 @@ describe("parseJaImport", () => {
     expect(prepararAgenda(parsed.items)[0]).toMatchObject({ time: "19:00", time_mode: "manual" });
   });
 });
+
+describe("Bíblia no import JSON", () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  it("preserva o trecho válido e descarta um trecho que não dá para projetar", () => {
+    const library = useLiturgyLibrary();
+    const parsed = library.parseImport(
+      JSON.stringify({
+        name: "Culto",
+        items: [
+          {
+            tipo: "biblia",
+            item: "João 3:16 (NVI)",
+            bible: {
+              reference: "João 3:16 (NVI)",
+              text: "Porque Deus amou o mundo…",
+              book_id: 43,
+              chapter: 3,
+              verses: [16],
+              version_id: 1,
+            },
+          },
+          {
+            tipo: "biblia",
+            item: "Sem trecho",
+            bible: { reference: "?", text: "?", book_id: 0, chapter: 0, verses: [] },
+          },
+        ],
+      })
+    )!;
+
+    expect(parsed.items[0].tipo).toBe(LiturgyItemTypeEnum.BIBLIA);
+    expect(parsed.items[0].bible).toMatchObject({ book_id: 43, chapter: 3, verses: [16] });
+    // Sem trecho projetável, o item deixa de ser Bíblia em vez de falhar no ar.
+    expect(parsed.items[1].tipo).toBe(LiturgyItemTypeEnum.ANOTACAO);
+    expect(parsed.items[1].bible).toBeUndefined();
+  });
+
+  it("usa a referência como nome e só mantém bible no tipo Bíblia", () => {
+    const passage = {
+      reference: "João 3:16 (NVI)",
+      text: "Porque Deus amou o mundo…",
+      book_id: 43,
+      chapter: 3,
+      verses: [16],
+      version_id: 1,
+    };
+    const library = useLiturgyLibrary();
+    const parsed = library.parseImport(
+      JSON.stringify({
+        name: "Culto",
+        items: [
+          { tipo: "biblia", item: "", bible: passage },
+          { tipo: "anotacao", item: "Aviso", bible: passage },
+        ],
+      })
+    )!;
+
+    expect(parsed.items[0].item).toBe("João 3:16 (NVI)");
+    expect(parsed.items[0].bible).toMatchObject({ book_id: 43 });
+    expect(parsed.items[1].bible).toBeUndefined();
+  });
+
+  it("rejeita texto acima do limite e rebaixa o item para anotação", () => {
+    const library = useLiturgyLibrary();
+    const parsed = library.parseImport(
+      JSON.stringify({
+        name: "Culto",
+        items: [
+          {
+            tipo: "biblia",
+            item: "Longo",
+            bible: {
+              reference: "João 3:16",
+              text: "x".repeat(100_001),
+              book_id: 43,
+              chapter: 3,
+              verses: [16],
+            },
+          },
+        ],
+      })
+    )!;
+
+    expect(parsed.items[0].tipo).toBe(LiturgyItemTypeEnum.ANOTACAO);
+    expect(parsed.items[0].bible).toBeUndefined();
+  });
+});

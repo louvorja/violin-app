@@ -4,6 +4,7 @@ import $liturgy, { toLocalDate } from "@/helpers/Liturgy";
 import { DB_TABLE } from "@/constants/DbTables";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { LiturgyItem } from "@/types/Liturgy";
+import type { BiblePassage } from "@/types/Bible";
 import type { LiturgyLibraryItem } from "@/types/LiturgyLibrary";
 import { agendaParaPersistir, lerHorario } from "../agenda";
 
@@ -29,6 +30,50 @@ export const WEEKDAY_KEYS = [
   "saturday",
 ] as const;
 
+/** Limites do contrato de projeção: o JSON externo não decide o tamanho da tela. */
+const MAX_BIBLE_TEXT = 100_000;
+const MAX_BIBLE_REFERENCE = 4_096;
+const MAX_BIBLE_VERSES = 200;
+
+/** Trecho bíblico vindo de arquivo: só entra se der para projetar sem surpresa. */
+function _normalizeBiblePassage(raw: unknown): BiblePassage | undefined {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  if (Array.isArray(r.verses) && r.verses.length > MAX_BIBLE_VERSES) return undefined;
+  const bookId = Number(r.book_id);
+  const chapter = Number(r.chapter);
+  const versionId = Number(r.version_id);
+  const verses = Array.isArray(r.verses)
+    ? [...new Set(r.verses.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0))].sort(
+        (a, b) => a - b
+      )
+    : [];
+  if (
+    !Number.isSafeInteger(bookId) ||
+    bookId <= 0 ||
+    !Number.isSafeInteger(chapter) ||
+    chapter <= 0 ||
+    !verses.length ||
+    typeof r.reference !== "string" ||
+    r.reference.length > MAX_BIBLE_REFERENCE ||
+    !r.reference.trim() ||
+    typeof r.text !== "string" ||
+    r.text.length > MAX_BIBLE_TEXT ||
+    !r.text.trim() ||
+    verses.length > MAX_BIBLE_VERSES
+  ) {
+    return undefined;
+  }
+  return {
+    reference: r.reference,
+    text: r.text,
+    book_id: bookId,
+    chapter,
+    verses,
+    ...(Number.isSafeInteger(versionId) && versionId > 0 ? { version_id: versionId } : {}),
+  };
+}
+
 /**
  * Normaliza um item de liturgia importado (JSON externo) para um `LiturgyItem`
  * válido. Itens não-objeto são rejeitados (retorna null); itens com campos
@@ -40,18 +85,31 @@ function _normalizeLiturgyItem(raw: unknown): LiturgyItem | null {
   const r = raw as Record<string, unknown>;
 
   const tipoRaw = typeof r.tipo === "string" ? r.tipo : "";
-  const tipo = LiturgyItemTypeEnum.fromString(tipoRaw) ?? LiturgyItemTypeEnum.ANOTACAO;
+  const declarado = LiturgyItemTypeEnum.fromString(tipoRaw) ?? LiturgyItemTypeEnum.ANOTACAO;
 
   const id =
     typeof r.id === "string" && r.id !== ""
       ? r.id
       : (crypto.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
 
+  const passage = _normalizeBiblePassage(r.bible);
+  // Um item "biblia" sem trecho projetável não é Bíblia: vira anotação, em vez
+  // de falhar na hora de ir ao ar. O contrário também vale: `bible` só fica no
+  // tipo Bíblia.
+  const tipo =
+    declarado === LiturgyItemTypeEnum.BIBLIA && !passage
+      ? LiturgyItemTypeEnum.ANOTACAO
+      : declarado;
+  const bible = tipo === LiturgyItemTypeEnum.BIBLIA ? passage : undefined;
+  const declaredItem = typeof r.item === "string" ? r.item : "";
+  const item =
+    declaredItem.trim() !== "" || !bible ? declaredItem : bible.reference;
+
   return {
     id,
     tipo,
     subtipo: typeof r.subtipo === "string" ? r.subtipo : "",
-    item: typeof r.item === "string" ? r.item : "",
+    item,
     subitem: typeof r.subitem === "string" ? r.subitem : "",
     cor: typeof r.cor === "string" && r.cor !== "" ? r.cor : DEFAULT_COLOR,
     duration: Number(r.duration) || 0,
@@ -82,6 +140,7 @@ function _normalizeLiturgyItem(raw: unknown): LiturgyItem | null {
       ? { overlay_action: r.overlay_action }
       : {}),
     ...(typeof r.linked_overlay_id === "string" ? { linked_overlay_id: r.linked_overlay_id } : {}),
+    ...(bible ? { bible } : {}),
   };
 }
 

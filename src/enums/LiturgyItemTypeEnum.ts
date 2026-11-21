@@ -11,6 +11,7 @@ export enum LiturgyItemTypeEnum {
   BG_SOUND = "som-de-fundo",
   ANUNCIOS = "anuncios",
   OVERLAY = "overlay",
+  BIBLIA = "biblia",
 }
 
 const LEGACY_MAP: Record<string, LiturgyItemTypeEnum> = {

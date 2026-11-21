@@ -60,6 +60,8 @@ export function kindOf(item: LiturgyItem): LiturgyItemKind {
       return "overlay";
     case LiturgyItemTypeEnum.ITENS_AGENDADOS:
       return "scheduled";
+    case LiturgyItemTypeEnum.BIBLIA:
+      return "bible";
     default:
       return "note";
   }

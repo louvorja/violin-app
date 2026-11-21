@@ -1,11 +1,6 @@
-import $userdata from "@/helpers/UserData";
 import $snackbar from "@/helpers/Snackbar";
 import { i18nAtual } from "@/i18n";
-import Broadcast from "@/helpers/Broadcast";
-import ProjectionWindows from "@/helpers/ProjectionWindows";
 import Telemetry from "@/helpers/Telemetry";
-import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
-import { KEYS } from "@/constants/UserDataKeys";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import { LITURGY_VERSION_ACTION } from "@/config/MusicAction";
@@ -17,8 +12,7 @@ import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
 import { newItem } from "@/modules/liturgy/item";
 import { applyOverride, isMusicMode, type MusicMode } from "../program/musicModes";
 import { currentMusicOverride } from "./useMusicOverride";
-import { nextVerseOf } from "../program/bible";
-import { useBibleLibrary } from "./useBibleLibrary";
+import { projectBiblePassage } from "@/helpers/BibleProjection";
 import { isPowerPoint, powerPointAsPdf } from "./usePowerPoint";
 import { useCloudFiles } from "./useCloudFiles";
 import { isUrl } from "../program/paths";
@@ -95,35 +89,10 @@ function playMusicOnStage(source: LiturgyItem, chosen?: MusicMode): boolean {
  */
 export function useProgramExecution() {
   const { executeItem, executeAnnouncements } = useLiturgyExecution();
-  const bible = useBibleLibrary();
   const cloud = useCloudFiles();
 
-  /**
-   * O versículo vai ao ar na hora. O retorno de palco mostra o seguinte quando o
-   * capítulo já foi lido — esperar o banco atrasaria a projeção; o capítulo é
-   * lido em seguida, para os próximos passos.
-   */
-  async function projectBible(ref: ProgramBibleRef): Promise<void> {
-    $userdata.set(KEYS.MODULES.BIBLE.IS_PLAYING, true);
-    await ProjectionWindows.openBibleWindow();
-    const chapter = bible.cachedChapterOf(ref);
-    const next = chapter ? nextVerseOf(chapter, ref.verses) : null;
-    Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
-      text: ref.text,
-      reference: ref.reference,
-      book_id: ref.book_id,
-      chapter: ref.chapter,
-      verses: ref.verses,
-      version_id: ref.version_id,
-      next_text: next?.text ?? "",
-      next_reference: next?.reference ?? "",
-      active: true,
-    });
-    if (!chapter) void bible.chapterOf(ref);
-  }
-
   function sendBible(ref: ProgramBibleRef): void {
-    void projectBible(ref).catch((error: unknown) => {
+    void projectBiblePassage(ref).catch((error: unknown) => {
       Telemetry.captureException(error, { source: "presentation_mode.execute.bible" });
     });
   }
@@ -135,7 +104,15 @@ export function useProgramExecution() {
   function execute(item: ProgramItem, mode?: MusicMode): boolean {
     if (item.children?.length) return false;
     if (item.bible) {
-      sendBible(item.bible);
+      /*
+       * Item que veio da liturgia passa pelo mesmo caminho dela: assim o overlay
+       * vinculado, a preparação do palco e o estado da Bíblia são os mesmos.
+       */
+      if (item.source?.tipo === LiturgyItemTypeEnum.BIBLIA) {
+        void executeItem({ ...item.source, bible: item.bible });
+      } else {
+        sendBible(item.bible);
+      }
       return true;
     }
     if (item.source) {

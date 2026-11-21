@@ -61,7 +61,7 @@ isYoutube(url)
 ```
 
 `LiturgyItemKind` fica em `src/types/Liturgy.ts`, e `ProgramItemKind` passa
-a ser `LiturgyItemKind | "bible" | "moment" | "folder"`.
+a ser `LiturgyItemKind | "moment" | "folder"`.
 
 Nada muda de comportamento: o código foi movido do programa para a
 liturgia, e `useLiturgyExecution` usa o mesmo `isYoutube`. Os testes da

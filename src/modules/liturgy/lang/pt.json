@@ -65,7 +65,8 @@
     "projecao-de-fundo": "Projeção de Fundo",
     "som-de-fundo": "Som de Fundo",
     "anuncios": "Anúncios",
-    "overlay": "Sobreposição"
+    "overlay": "Sobreposição",
+    "biblia": "Bíblia"
   },
   "inputs": {
     "type": "Tipo",
@@ -108,7 +109,16 @@
     "projection_select": "Projeção de Fundo",
     "projection_search_btn": "Pesquisar projeções…",
     "sound_select": "Som de fundo",
-    "sound_search_btn": "Pesquisar sons…"
+    "sound_search_btn": "Pesquisar sons…",
+    "bible_version": "Versão da Bíblia",
+    "bible_version_pick": "Selecione a versão",
+    "bible_verse": "Versículo",
+    "bible_pick": "Escolher versículo",
+    "bible_change": "Alterar versículo",
+    "bible_none": "Nenhum versículo escolhido",
+    "bible_remove": "Remover versículo",
+    "bible_version_failed": "A versão escolhida não está baixada. Escolha o versículo de novo.",
+    "bible_version_missing": "Versão não baixada"
   },
   "data": {
     "empty": "Liturgia vazia",
@@ -203,6 +213,7 @@
     "choose_type": "Escolha o tipo de item!",
     "set_name": "Defina o nome do item!",
     "choose_scheduled": "Escolha a categoria de itens agendados!",
+    "choose_verse": "Escolha o versículo!",
     "remove_confirm": "Deseja realmente excluir este item?",
     "clear_confirm": "Deseja limpar toda a liturgia?",
     "remove_done_confirm": "Apagar todos os itens selecionados (marcados)?",

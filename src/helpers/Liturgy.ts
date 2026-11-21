@@ -97,6 +97,7 @@ function iconForItem(item: LiturgyItem): string {
     [LiturgyItemTypeEnum.ITENS_AGENDADOS]: ICONS.CALENDAR.MULTISELECT,
     [LiturgyItemTypeEnum.BLOCO]: ICONS.UI.DASHBOARD,
     [LiturgyItemTypeEnum.OVERLAY]: ICONS.UI.LAYERS,
+    [LiturgyItemTypeEnum.BIBLIA]: ICONS.MODULES.BIBLE,
   };
   return map[item.tipo] || ICONS.UI.DOT;
 }

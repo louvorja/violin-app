@@ -50,6 +50,16 @@ export interface BibleSearchResult {
   bookId?: number
 }
 
+/** Um trecho bíblico escolhido para ser projetado. */
+export interface BiblePassage {
+  reference: string
+  text: string
+  book_id: number
+  chapter: number
+  verses: number[]
+  version_id?: number
+}
+
 export interface ActiveBibleState {
   active: boolean
   reference: string

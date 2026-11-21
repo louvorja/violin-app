@@ -46,6 +46,7 @@ import {
 import { canLinkOverlay, youtubeVideoId } from "../overlayLink";
 import { ativarOverlayVinculado, prepararExecucao } from "../linkedOverlay";
 import { isYoutube } from "../item";
+import { projectBiblePassage } from "@/helpers/BibleProjection";
 
 interface MediaLibraryRecord {
   path?: string;
@@ -172,6 +173,15 @@ export function useLiturgyExecution() {
           break;
         case LiturgyItemTypeEnum.OVERLAY:
           await toggleOverlay(item);
+          break;
+        case LiturgyItemTypeEnum.BIBLIA:
+          if (item.bible) {
+            await projectBiblePassage(item.bible);
+            projected = true;
+          } else {
+            reportMissingResource("execute_bible", "bible_passage");
+            $alert.error({ text: chaveLiturgia("dialog.choose_verse") });
+          }
           break;
       }
       if (projected) await ativarOverlayVinculado(item);

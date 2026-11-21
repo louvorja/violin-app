@@ -47,6 +47,24 @@ describe("importar liturgia", () => {
     expect(news.children?.map((c) => c.ref)).toEqual(["an1", "an3"]);
   });
 
+  it("item Bíblia leva o trecho e o título da referência", () => {
+    const bible = {
+      reference: "João 3:16 (NVI)",
+      text: "Porque Deus amou o mundo…",
+      book_id: 43,
+      chapter: 3,
+      verses: [16],
+      version_id: 1,
+    };
+    const item = newItem(T.BIBLIA, { id: "bv", item: "João 3:16 (NVI)", bible, duration: 1 });
+    const result = importLiturgy([item], { newId: ids(), defaultSessionLabel: "Geral", announcements });
+
+    const programItem = result.sessions[0].items[0];
+    expect(programItem.kind).toBe("bible");
+    expect(programItem.title).toBe("João 3:16 (NVI)");
+    expect(programItem.bible).toEqual(bible);
+  });
+
   it("anúncios sem seleção trazem todos", () => {
     const item = newItem(T.ANUNCIOS, { id: "x", item: "Todos" });
     const result = importLiturgy([item], { newId: ids(), defaultSessionLabel: "Geral", announcements });
@@ -92,13 +110,64 @@ describe("salvar programa como liturgia", () => {
     ],
   };
 
+  it("item Bíblia conserva a cor e o overlay do item de origem", () => {
+    const passage = {
+      reference: "João 3:16 (NVI)",
+      text: "Porque Deus amou o mundo…",
+      book_id: 43,
+      chapter: 3,
+      verses: [16],
+      version_id: 1,
+    };
+    const source = newItem(T.BIBLIA, {
+      id: "orig",
+      item: "Leitura",
+      cor: "#112233",
+      linked_overlay_id: "overlay-1",
+      bible: passage,
+    });
+    const withSource: Program = {
+      ...program,
+      sessions: [
+        {
+          id: "s1",
+          label: "Palavra",
+          items: [
+            {
+              id: "i1",
+              kind: "bible",
+              title: "Leitura",
+              plannedMinutes: 1,
+              bible: passage,
+              source,
+            },
+          ],
+        },
+      ],
+    };
+
+    const items = programToLiturgy(withSource, ids());
+    expect(items[1]).toMatchObject({
+      tipo: T.BIBLIA,
+      cor: "#112233",
+      linked_overlay_id: "overlay-1",
+      bible: passage,
+      item: "Leitura",
+      subitem: "João 3:16 (NVI)",
+    });
+  });
+
   it("cada sessão vira bloco com horário e os itens voltam ao tipo de origem", () => {
     const items = programToLiturgy(program, ids());
-    expect(items.map((i) => i.tipo)).toEqual([T.BLOCO, T.MUSICA, T.BLOCO, T.ANOTACAO]);
+    expect(items.map((i) => i.tipo)).toEqual([T.BLOCO, T.MUSICA, T.BLOCO, T.BIBLIA]);
     expect(items[0]).toMatchObject({ item: "Abertura", time: "09:00" });
     expect(items[2]).toMatchObject({ item: "Palavra", time: "09:06" });
     expect(items[1]).toMatchObject({ item: "Bendito Louvor", id_music: 7, duration: 6, blocoId: items[0].id });
-    expect(items[3]).toMatchObject({ item: "Leitura bíblica", subitem: "Porque Deus amou…" });
+    expect(items[3]).toMatchObject({
+      item: "Leitura bíblica",
+      subitem: "João 3:16",
+      bible: { book_id: 43, chapter: 3, verses: [16] },
+    });
     expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
   });
 });

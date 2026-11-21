@@ -61,11 +61,12 @@ export function importLiturgy(items: LiturgyItem[], opts: ImportOptions): Import
     const programItem: ProgramItem = {
       id: opts.newId(),
       kind,
-      title: item.item || "",
+      title: item.item || (kind === "bible" ? item.bible?.reference ?? "" : ""),
       subtitle: item.subitem || undefined,
       plannedMinutes: Math.max(0, Number(item.duration) || 0),
       source: { ...item, time: undefined },
     };
+    if (kind === "bible" && item.bible) programItem.bible = item.bible;
     if (kind === "announcements") programItem.children = announcementChildren(item, opts);
     current.items.push(programItem);
   }
@@ -92,18 +93,25 @@ export function programToLiturgy(program: Program, newId: () => string): Liturgy
       })
     );
     for (const item of session.items) {
+      // O `source` guarda cor, vínculo de overlay e demais escolhas do operador;
+      // a Bíblia sobrescreve só o que ela própria define.
       const base = item.source
         ? { ...item.source }
         : newItem(LiturgyItemTypeEnum.ANOTACAO, {
             id: "",
             subitem: item.bible?.text ?? item.notes ?? "",
           });
+      if (item.kind === "bible" && item.bible) {
+        base.tipo = LiturgyItemTypeEnum.BIBLIA;
+        base.bible = item.bible;
+        base.subitem = item.bible.reference;
+      }
       result.push({
         ...base,
         id: newId(),
         blocoId,
-        item: item.title,
-        subitem: item.bible ? base.subitem : (item.subtitle ?? base.subitem),
+        item: item.title || item.bible?.reference || "",
+        subitem: item.bible ? item.bible.reference : (item.subtitle ?? base.subitem),
         duration: item.plannedMinutes,
         time: undefined,
         checked: undefined,

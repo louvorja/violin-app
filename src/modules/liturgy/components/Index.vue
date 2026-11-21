@@ -99,6 +99,7 @@
       :edit-index="editIndex"
       :form="form"
       :form-errors="formErrors"
+      :is-auto-item-title="isAutoItemTitle"
       :file-importing="fileImporting"
       :colors="colors"
       :musics-list="formMusicsList"
@@ -258,6 +259,7 @@ const {
   editIndex,
   form,
   formErrors,
+  isAutoItemTitle,
   fileImporting,
   isDraggingOver,
   items,

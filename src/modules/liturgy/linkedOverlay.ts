@@ -83,6 +83,7 @@ export function itemAssumePalco(item: LiturgyItem | null | undefined, modo?: str
     case LiturgyItemTypeEnum.BG_PROJECTION:
     case LiturgyItemTypeEnum.SITE:
     case LiturgyItemTypeEnum.ANUNCIOS:
+    case LiturgyItemTypeEnum.BIBLIA:
       return true;
     default:
       return false;

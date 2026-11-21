@@ -52,6 +52,7 @@ import { syncFromIdb as syncDevicesFromIdb } from "@/composables/useDevices";
 import Path from "@/helpers/Path";
 import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
 import { activateBackgroundProjection } from "@/helpers/BackgroundProjectionPlayback";
+import { projectBiblePassage } from "@/helpers/BibleProjection";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
 import { musicCommandSessionRejectionReason } from "@/presentation/MusicPresentationPacket";
@@ -143,6 +144,27 @@ const isAuxiliaryRenderer = AUXILIARY_ROUTE_PREFIXES.some((prefix) => {
   const route = initialRoutePath();
   return route === prefix || route.startsWith(`${prefix}/`);
 });
+
+/**
+ * Encerra a projeção bíblica a partir da janela principal.
+ *
+ * A ação da ribbon só tem quem a escute quando o módulo Bíblia está aberto.
+ * Uma projeção iniciada pela Liturgia ou pelo Spotlight precisa fechar do
+ * mesmo jeito, então o estado e as janelas são resolvidos aqui.
+ */
+async function stopBibleProjection() {
+  try {
+    UserData.set(KEYS.MODULES.BIBLE.IS_PLAYING, false);
+    Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
+      text: "",
+      reference: "",
+      active: false,
+    });
+    await ProjectionWindows.closeBibleWindows();
+  } catch (error) {
+    console.warn("[bible] falha ao encerrar a projeção:", error?.message || error);
+  }
+}
 
 /**
  * Controlador de projeção do Sorteio. Só a janela principal abre/fecha a
@@ -1974,6 +1996,12 @@ $storage.hydrate().then(async () => {
                     }
                     break;
                   }
+                  case "biblia": {
+                    if (!litItem.bible) break;
+                    await projectBiblePassage(litItem.bible);
+                    projected = true;
+                    break;
+                  }
                   default:
                     console.warn("[http] liturgy-execute: tipo desconhecido", litItem.tipo);
                 }
@@ -2602,6 +2630,7 @@ $storage.hydrate().then(async () => {
         case "http:projections-close": {
           Media.close(true);
           Broadcast.send(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, { action: "stop" });
+          void stopBibleProjection();
           const fp = useFileProjection();
           if (fp.isProjecting.value) {
             fp.stopProjection();
@@ -3007,9 +3036,24 @@ $storage.hydrate().then(async () => {
           const escClosesProjection = UserData.get(KEYS.MODULES.BIBLE.ESC_CLOSES_PROJECTION, false);
           const lastVerse = Broadcast.getLastPayload(BROADCAST_TYPE.BIBLE_VERSE);
           const hasVerse = !!(lastVerse && lastVerse.text);
+          const closeBible = escClosesProjection || !hasVerse;
           Broadcast.send(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, {
-            action: escClosesProjection || !hasVerse ? "stop" : "clear",
+            action: closeBible ? "stop" : "clear",
           });
+          /*
+           * O módulo Bíblia só responde à ribbon enquanto está aberto. Fechar
+           * ou limpar o versículo também aqui cobre a projeção aberta pela
+           * Liturgia/Spotlight, que não passa por ele.
+           */
+          if (UserData.get(KEYS.MODULES.BIBLE.IS_PLAYING, false) === true) {
+            if (closeBible) void stopBibleProjection();
+            else
+              Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
+                text: "",
+                reference: "",
+                active: true,
+              });
+          }
 
           // Módulos genéricos (counter, timer, etc.)
           const moduleIds = [

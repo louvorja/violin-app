@@ -1,4 +1,5 @@
 import type { LiturgyItem, LiturgyItemKind } from "@/types/Liturgy";
+import type { BiblePassage } from "@/types/Bible";
 
 /**
  * O que um item projeta. Decide o ícone e o palco. Os tipos da liturgia mais
@@ -6,21 +7,13 @@ import type { LiturgyItem, LiturgyItemKind } from "@/types/Liturgy";
  */
 export type ProgramItemKind =
   | LiturgyItemKind
-  | "bible"
   /** Momento do culto com uma lista de fotos, vídeos e PDFs (anúncios, missionário…). */
   | "moment"
   /** Pasta da biblioteca (comum ou série): o conteúdo é o que estiver nela na hora. */
   | "folder";
 
-/** Versículo escolhido pelo BibleSpotlight — a liturgia não tem tipo Bíblia. */
-export interface ProgramBibleRef {
-  reference: string;
-  text: string;
-  book_id: number;
-  chapter: number;
-  verses: number[];
-  version_id?: number;
-}
+/** Versículo escolhido pelo BibleSpotlight. */
+export type ProgramBibleRef = BiblePassage;
 
 export interface ProgramSubItem {
   id: string;
