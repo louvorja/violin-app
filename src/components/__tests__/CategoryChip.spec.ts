@@ -117,6 +117,19 @@ describe("CategoryChip", () => {
     expect(menu.textContent).not.toContain("Adicionar tudo à playlist");
   });
 
+  it("não abre o menu quando showMenu é false", async () => {
+    const wrapper = montar({ showMenu: false, addItemLabel: "Adicionar item" });
+    const before = document.body.querySelectorAll(".lj-category-chip__menu").length;
+
+    await wrapper.find(".lj-category-chip").trigger("contextmenu", {
+      clientX: 20,
+      clientY: 20,
+    });
+    await nextTick();
+
+    expect(document.body.querySelectorAll(".lj-category-chip__menu").length).toBe(before);
+  });
+
   it("não desenha botão de adicionar no chip", () => {
     const wrapper = montar();
 

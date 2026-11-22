@@ -73,6 +73,7 @@
       "
     />
     <LibraryBible v-else-if="tab === 'bible'" :live="liveBible" v-bind="relay" />
+    <LibraryBackgroundSound v-else-if="tab === 'background_sound'" @add="relay.onAdd" />
     <LibraryFiles
       v-else
       :key="tab"
@@ -98,6 +99,11 @@ const TABS = [
   { id: "media", label: "library.media", icon: ICONS.MEDIA.IMAGE_MULTIPLE },
   { id: "media_library", label: "library.media_library", icon: ICONS.MODULES.MEDIA_LIBRARY },
   { id: "audio", label: "library.audio", icon: ICONS.MEDIA.AUDIO_VIDEO },
+  {
+    id: "background_sound",
+    label: "library.background_sound",
+    icon: ICONS.MODULES.BACKGROUND_SOUND,
+  },
   { id: "musics", label: "library.musics", icon: ICONS.MUSIC.MUSIC },
   { id: "bible", label: "library.bible", icon: ICONS.MODULES.BIBLE },
 ] as const;
@@ -111,6 +117,7 @@ import { ref } from "vue";
 import LibraryFiles from "./LibraryFiles.vue";
 import LibraryMusic from "./LibraryMusic.vue";
 import LibraryBible from "./LibraryBible.vue";
+import LibraryBackgroundSound from "./LibraryBackgroundSound.vue";
 import LibraryMedia from "./LibraryMedia.vue";
 import LibraryNativeMedia from "./LibraryNativeMedia.vue";
 import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";

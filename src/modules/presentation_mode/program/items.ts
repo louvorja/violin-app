@@ -51,6 +51,29 @@ export function fileItem(entry: LibraryEntry, meta: MediaMeta | null): ProgramIt
   };
 }
 
+/** Som de fundo como item do programa: o motor da liturgia o toca pelo `ref_id`. */
+export function backgroundSoundItem(
+  sound: { id: string; name: string; fileName?: string },
+  subtitle?: string
+): ProgramItem {
+  const title =
+    sound.name || (sound.fileName || "").replace(/\.[^.]+$/, "") || sound.id;
+  return {
+    id: newId(),
+    kind: "audio",
+    title,
+    subtitle,
+    plannedMinutes: 5,
+    source: newItem(LiturgyItemTypeEnum.BG_SOUND, {
+      id: newId(),
+      ref_id: sound.id,
+      item: title,
+      subitem: title,
+      subtipo: "audio",
+    }),
+  };
+}
+
 /** Pasta da biblioteca como item: comum (o operador escolhe na hora) ou série (passa o próximo). */
 export function folderItem(path: string, title: string): ProgramItem {
   return { id: newId(), kind: "folder", title, folder: path, plannedMinutes: 5 };
