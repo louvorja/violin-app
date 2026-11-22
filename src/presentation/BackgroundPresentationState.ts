@@ -4,6 +4,8 @@ export interface BackgroundPresentationState {
   type?: "image" | "video";
   url?: string;
   title?: string;
+  /** Registro da biblioteca que está no ar, para a aba destacar o card certo. */
+  id?: string;
 }
 
 let lastEpoch = 0;
@@ -21,7 +23,8 @@ export function readBackgroundState(value: unknown): BackgroundPresentationState
   if (!raw.active) return { active: false, epoch: raw.epoch as number };
   if ((raw.type !== "image" && raw.type !== "video") ||
       typeof raw.url !== "string" || !raw.url || raw.url.length > 8_192 ||
-      (raw.title !== undefined && (typeof raw.title !== "string" || raw.title.length > 1_000)))
+      (raw.title !== undefined && (typeof raw.title !== "string" || raw.title.length > 1_000)) ||
+      (raw.id !== undefined && (typeof raw.id !== "string" || raw.id.length > 128)))
     return null;
   return {
     active: true,
@@ -29,6 +32,7 @@ export function readBackgroundState(value: unknown): BackgroundPresentationState
     type: raw.type,
     url: raw.url,
     title: typeof raw.title === "string" ? raw.title : "",
+    ...(typeof raw.id === "string" ? { id: raw.id } : {}),
   };
 }
 

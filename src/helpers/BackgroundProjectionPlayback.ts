@@ -9,7 +9,10 @@
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
-import { openBackgroundProjectionWindows } from "@/helpers/ProjectionWindows";
+import {
+  closeBackgroundProjectionWindows,
+  openBackgroundProjectionWindows,
+} from "@/helpers/ProjectionWindows";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { nextBackgroundEpoch } from "@/presentation/BackgroundPresentationState";
@@ -53,6 +56,7 @@ export async function activateBackgroundProjection(
     url,
     type,
     title,
+    id: file.id,
   };
 
   const wasActive =
@@ -68,4 +72,39 @@ export async function activateBackgroundProjection(
   if (!wasActive) await openBackgroundProjectionWindows();
   $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, payload);
   return true;
+}
+
+/**
+ * Encerra a Projeção de Fundo: desliga o estado, limpa o cache e fecha as
+ * janelas. É o "Encerrar projeção" da biblioteca e o "Parar" do módulo.
+ */
+export async function stopBackgroundProjection(): Promise<void> {
+  $userdata.set(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false);
+  try {
+    localStorage.removeItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
+  } catch {
+    /* cache opcional */
+  }
+  $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
+    active: false,
+    epoch: nextBackgroundEpoch(),
+  });
+  $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE, {});
+  await closeBackgroundProjectionWindows();
+}
+
+/**
+ * Limpa a mídia da Projeção de Fundo, mantendo as janelas abertas — o mesmo
+ * "Limpar" da ribbon do módulo.
+ */
+export function clearBackgroundProjection(): void {
+  try {
+    localStorage.removeItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
+  } catch {
+    /* cache opcional */
+  }
+  $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
+    active: false,
+    epoch: nextBackgroundEpoch(),
+  });
 }

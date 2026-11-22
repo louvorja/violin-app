@@ -20,6 +20,8 @@ describe("item da liturgia", () => {
     expect(kindOf(newItem(T.VIDEO_ONLINE))).toBe("online_video");
     expect(kindOf(newItem(T.MEDIA_LIBRARY, { subtipo: "pdf" }))).toBe("presentation");
     expect(kindOf(newItem(T.BG_SOUND))).toBe("audio");
+    expect(kindOf(newItem(T.BG_PROJECTION, { subtipo: "image" }))).toBe("image");
+    expect(kindOf(newItem(T.BG_PROJECTION, { subtipo: "video" }))).toBe("video");
     expect(kindOf(newItem(T.ANUNCIOS))).toBe("announcements");
     expect(kindOf(newItem(T.OVERLAY))).toBe("overlay");
     expect(kindOf(newItem(T.ITENS_AGENDADOS))).toBe("scheduled");

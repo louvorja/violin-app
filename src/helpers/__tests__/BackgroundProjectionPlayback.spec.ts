@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   set: vi.fn(),
   send: vi.fn(),
   open: vi.fn(async () => {}),
+  close: vi.fn(async () => {}),
 }));
 
 vi.mock("@/helpers/UserData", () => ({
@@ -20,11 +21,14 @@ vi.mock("@/helpers/Broadcast", () => ({
 }));
 vi.mock("@/helpers/ProjectionWindows", () => ({
   openBackgroundProjectionWindows: mocks.open,
+  closeBackgroundProjectionWindows: mocks.close,
 }));
 
 import {
   activateBackgroundProjection,
+  clearBackgroundProjection,
   resolveBackgroundProjectionUrl,
+  stopBackgroundProjection,
 } from "../BackgroundProjectionPlayback";
 
 beforeEach(() => {
@@ -52,6 +56,7 @@ describe("BackgroundProjectionPlayback", () => {
         url: "blob:fundo",
         type: "image",
         title: "Fundo do culto",
+        id: "bg-1",
       })
     );
   });
@@ -94,5 +99,40 @@ describe("BackgroundProjectionPlayback", () => {
 
     expect(url).toMatch(/^blob:/);
     URL.revokeObjectURL(url);
+  });
+
+  it("encerra a projeção desligando o estado, limpando o cache e fechando as janelas", async () => {
+    localStorage.setItem(
+      KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION,
+      JSON.stringify({ active: true, epoch: 1, type: "image", url: "blob:x" })
+    );
+
+    await stopBackgroundProjection();
+
+    expect(mocks.set).toHaveBeenCalledWith(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false);
+    expect(localStorage.getItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION)).toBeNull();
+    expect(mocks.send).toHaveBeenCalledWith(
+      BROADCAST_TYPE.BACKGROUND_PROJECTION,
+      expect.objectContaining({ active: false })
+    );
+    expect(mocks.send).toHaveBeenCalledWith(BROADCAST_TYPE.MEDIA_CLOSE, {});
+    expect(mocks.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("limpa a mídia mantendo as janelas abertas", () => {
+    localStorage.setItem(
+      KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION,
+      JSON.stringify({ active: true, epoch: 1, type: "image", url: "blob:x" })
+    );
+
+    clearBackgroundProjection();
+
+    expect(mocks.set).not.toHaveBeenCalled();
+    expect(localStorage.getItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION)).toBeNull();
+    expect(mocks.send).toHaveBeenCalledWith(
+      BROADCAST_TYPE.BACKGROUND_PROJECTION,
+      expect.objectContaining({ active: false })
+    );
+    expect(mocks.close).not.toHaveBeenCalled();
   });
 });

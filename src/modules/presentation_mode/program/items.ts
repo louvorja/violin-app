@@ -74,6 +74,28 @@ export function backgroundSoundItem(
   };
 }
 
+/** Projeção de fundo como item do programa: o motor da liturgia a ativa pelo `ref_id`. */
+export function backgroundProjectionItem(
+  file: { id: string; name: string; type: "image" | "video" },
+  subtitle?: string
+): ProgramItem {
+  const title = (file.name || "").trim() || file.id;
+  return {
+    id: newId(),
+    kind: file.type === "video" ? "video" : "image",
+    title,
+    subtitle,
+    plannedMinutes: file.type === "video" ? 5 : 1,
+    source: newItem(LiturgyItemTypeEnum.BG_PROJECTION, {
+      id: newId(),
+      ref_id: file.id,
+      item: title,
+      subitem: title,
+      subtipo: file.type,
+    }),
+  };
+}
+
 /** Pasta da biblioteca como item: comum (o operador escolhe na hora) ou série (passa o próximo). */
 export function folderItem(path: string, title: string): ProgramItem {
   return { id: newId(), kind: "folder", title, folder: path, plannedMinutes: 5 };

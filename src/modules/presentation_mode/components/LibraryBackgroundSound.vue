@@ -173,6 +173,7 @@ import Strings from "@/helpers/Strings";
 import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
+import { useHorizontalWheel } from "@/composables/useHorizontalWheel";
 import type { ProgramItem } from "@/types/Presentation";
 import { backgroundSoundItem } from "../program/items";
 import {
@@ -250,28 +251,7 @@ function chipIconType(category: { icon?: string; iconType?: "icon" | "image" }):
 }
 
 const filtersEl = ref<HTMLElement | null>(null);
-
-/** Roda vertical vira rolagem lateral na faixa de chips. */
-function onFiltersWheel(event: WheelEvent): void {
-  const el = filtersEl.value;
-  if (!el || el.scrollWidth <= el.clientWidth) return;
-  if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-
-  const factor =
-    event.deltaMode === WheelEvent.DOM_DELTA_LINE
-      ? 16
-      : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-        ? el.clientWidth
-        : 1;
-  const delta = event.deltaY * factor;
-  if (!delta) return;
-
-  const max = el.scrollWidth - el.clientWidth;
-  const next = Math.max(0, Math.min(max, el.scrollLeft + delta));
-  if (next === el.scrollLeft) return;
-  event.preventDefault();
-  el.scrollLeft = next;
-}
+const { onWheel: onFiltersWheel } = useHorizontalWheel(filtersEl);
 
 function toggle(record: BackgroundSoundRecord): void {
   if (currentId.value === record.id) {

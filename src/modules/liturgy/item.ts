@@ -54,6 +54,8 @@ export function kindOf(item: LiturgyItem): LiturgyItemKind {
       return "file";
     case LiturgyItemTypeEnum.BG_SOUND:
       return "audio";
+    case LiturgyItemTypeEnum.BG_PROJECTION:
+      return item.subtipo === "video" ? "video" : "image";
     case LiturgyItemTypeEnum.ANUNCIOS:
       return "announcements";
     case LiturgyItemTypeEnum.OVERLAY:
