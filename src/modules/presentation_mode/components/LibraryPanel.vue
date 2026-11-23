@@ -14,21 +14,43 @@
       @dblclick="emit('toggle-height')"
     />
     <header class="pm-library__tabs">
-      <div class="pm-library__tablist" role="tablist">
-        <button
-          v-for="libTab in TABS"
-          :key="libTab.id"
-          type="button"
-          role="tab"
-          :aria-selected="tab === libTab.id"
-          class="pm-library__tab"
-          :class="{ 'pm-library__tab--active': tab === libTab.id }"
-          :data-testid="`pm-library-tab-${libTab.id}`"
-          @click="tab = libTab.id"
+      <div
+        ref="tablistEl"
+        class="pm-library__tablist"
+        :class="{ 'pm-library__tablist--dragging': draggingTabs }"
+        role="tablist"
+        @wheel="onTabsWheel"
+      >
+        <draggable
+          :model-value="orderedTabs"
+          item-key="id"
+          tag="div"
+          class="pm-library__tablist-inner"
+          direction="horizontal"
+          :animation="150"
+          :delay="180"
+          :delay-on-touch-only="true"
+          :touch-start-threshold="10"
+          ghost-class="pm-library__tab--ghost"
+          @start="onTabsDragStart"
+          @end="onTabsDragEnd"
+          @update:model-value="onTabsReorder"
         >
-          <LjIcon :icon="libTab.icon" :size="15" />
-          {{ tm(libTab.label) }}
-        </button>
+          <template #item="{ element: libTab }">
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="tab === libTab.id"
+              class="pm-library__tab"
+              :class="{ 'pm-library__tab--active': tab === libTab.id }"
+              :data-testid="`pm-library-tab-${libTab.id}`"
+              @click="selectTab(libTab.id)"
+            >
+              <LjIcon :icon="libTab.icon" :size="15" />
+              {{ tm(libTab.label) }}
+            </button>
+          </template>
+        </draggable>
       </div>
       <div class="pm-library__tools">
         <LjButton
@@ -119,7 +141,8 @@ export const LIBRARY_TABS: LibraryTab[] = TABS.map((t) => t.id);
 </script>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import draggable from "vuedraggable";
 import LibraryFiles from "./LibraryFiles.vue";
 import LibraryMusic from "./LibraryMusic.vue";
 import LibraryBible from "./LibraryBible.vue";
@@ -132,6 +155,8 @@ import type { Playable, PlayOptions } from "../program/playable";
 import { LjButton, LjIcon } from "@/components/ui";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { useModuleI18n } from "@/composables/useModuleI18n";
+import $userdata from "@/helpers/UserData";
+import { KEYS } from "@/constants/UserDataKeys";
 import type { LibraryEntry } from "../composables/useFileLibrary";
 import { useVerticalResize } from "../composables/useVerticalResize";
 
@@ -177,7 +202,122 @@ const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 /** Controlada de fora: o ribbon também troca a aba. */
 const tab = defineModel<LibraryTab>("tab", { default: "files" });
 
+type LibraryTabDef = (typeof TABS)[number];
+
+/** Ordem salva + abas novas no fim; ids antigos/duplicados são descartados. */
+function normalizeTabOrder(value: unknown): LibraryTabDef[] {
+  const byId = new Map<string, LibraryTabDef>(
+    TABS.map((item): [string, LibraryTabDef] => [item.id, item])
+  );
+  const seen = new Set<string>();
+  const ordered: LibraryTabDef[] = [];
+  if (Array.isArray(value)) {
+    for (const raw of value) {
+      if (typeof raw !== "string" || seen.has(raw)) continue;
+      const item = byId.get(raw);
+      if (!item) continue;
+      ordered.push(item);
+      seen.add(raw);
+    }
+  }
+  for (const item of TABS) {
+    if (!seen.has(item.id)) ordered.push(item);
+  }
+  return ordered;
+}
+
+const orderedTabs = ref<LibraryTabDef[]>(
+  normalizeTabOrder($userdata.get<string[]>(KEYS.MODULES.PRESENTATION_MODE.LIBRARY_TAB_ORDER, []))
+);
+
+const draggingTabs = ref(false);
+let suppressNextTabClick = false;
+let suppressTabClickTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearSuppressTimer(): void {
+  if (!suppressTabClickTimer) return;
+  clearTimeout(suppressTabClickTimer);
+  suppressTabClickTimer = null;
+}
+
+function onTabsDragStart(): void {
+  draggingTabs.value = true;
+  // Marca já no início: o clique sintetizado depois do drop não é uma troca
+  // de aba, e o `@end` pode ser emitido no próximo tick.
+  suppressNextTabClick = true;
+  clearSuppressTimer();
+}
+
+function onTabsDragEnd(): void {
+  draggingTabs.value = false;
+  clearSuppressTimer();
+  // Se o navegador não emitir o clique após o arraste, libera a seguir.
+  suppressTabClickTimer = setTimeout(() => {
+    suppressNextTabClick = false;
+    suppressTabClickTimer = null;
+  }, 250);
+}
+
+function selectTab(id: LibraryTab): void {
+  if (suppressNextTabClick) {
+    suppressNextTabClick = false;
+    clearSuppressTimer();
+    return;
+  }
+  tab.value = id;
+}
+
+function onTabsReorder(value: LibraryTabDef[]): void {
+  orderedTabs.value = normalizeTabOrder(value.map((item) => item.id));
+  $userdata.set(
+    KEYS.MODULES.PRESENTATION_MODE.LIBRARY_TAB_ORDER,
+    orderedTabs.value.map((item) => item.id)
+  );
+}
+
 const root = ref<HTMLElement | null>(null);
+const tablistEl = ref<HTMLElement | null>(null);
+
+/** Roda vertical vira rolagem lateral na faixa de abas. */
+function onTabsWheel(event: WheelEvent): void {
+  const el = tablistEl.value;
+  if (!el || el.scrollWidth <= el.clientWidth) return;
+  if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+
+  const factor =
+    event.deltaMode === WheelEvent.DOM_DELTA_LINE
+      ? 16
+      : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+        ? el.clientWidth
+        : 1;
+  const delta = event.deltaY * factor;
+  if (!delta) return;
+
+  const max = el.scrollWidth - el.clientWidth;
+  const next = Math.max(0, Math.min(max, el.scrollLeft + delta));
+  if (next === el.scrollLeft) return;
+  event.preventDefault();
+  el.scrollLeft = next;
+}
+
+/** O ribbon troca a aba mesmo quando ela está fora da faixa visível. */
+function revealActiveTab(): void {
+  const list = tablistEl.value;
+  if (!list) return;
+  const active = list.querySelector<HTMLElement>(`[data-testid="pm-library-tab-${tab.value}"]`);
+  if (!active) return;
+
+  const listRect = list.getBoundingClientRect();
+  const activeRect = active.getBoundingClientRect();
+  if (activeRect.left < listRect.left) list.scrollLeft += activeRect.left - listRect.left;
+  else if (activeRect.right > listRect.right) list.scrollLeft += activeRect.right - listRect.right;
+}
+
+watch(tab, () => void nextTick(revealActiveTab));
+onMounted(() => void nextTick(revealActiveTab));
+onActivated(() => void nextTick(revealActiveTab));
+onBeforeUnmount(clearSuppressTimer);
+
 const resize = useVerticalResize({
   root,
   height: () => props.height,
@@ -232,7 +372,17 @@ const resize = useVerticalResize({
   min-width: 0;
   display: flex;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
+}
+
+.pm-library__tablist-inner {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.pm-library__tab--ghost {
+  opacity: 0.4;
 }
 
 .pm-library__tab {
@@ -246,7 +396,11 @@ const resize = useVerticalResize({
   background: transparent;
   color: var(--lj-text-muted);
   font-size: 12px;
-  cursor: pointer;
+  cursor: grab;
+}
+
+.pm-library__tablist--dragging .pm-library__tab {
+  cursor: grabbing;
 }
 
 .pm-library__tab--active {

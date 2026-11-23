@@ -140,6 +140,8 @@ export const KEYS = {
       LIBRARY_FULL_WIDTH: `${MODULES_PRESENTATION_MODE}.library_full_width`,
       /** UserData: altura da biblioteca em px, ajustada arrastando a borda. */
       LIBRARY_HEIGHT: `${MODULES_PRESENTATION_MODE}.library_height`,
+      /** UserData: ordem das abas da biblioteca — array de ids. */
+      LIBRARY_TAB_ORDER: `${MODULES_PRESENTATION_MODE}.library_tab_order`,
       /** UserData: largura (px) da coluna do programa, à esquerda. */
       PROGRAM_WIDTH: `${MODULES_PRESENTATION_MODE}.program_width`,
       /** UserData: largura (px) da coluna das saídas, à direita. */
