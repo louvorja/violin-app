@@ -2561,7 +2561,15 @@ aberto** e sem mexer na projeção.
   remoto inicia tudo com `POST { action: "play-default" }` — este action é o
   único com resposta (via `requestRenderer`): **idempotente** (padrão já
   tocando → `200` sem reiniciar; pausado no próprio padrão → retoma) e `404`
-  com `"Nenhum som padrão configurado"` quando não há ponteiro.
+  com `"Nenhum som padrão configurado"` quando não há ponteiro. O botão
+  **Tocar** da guia do módulo, sem faixa carregada, chama a mesma função
+  (`playDefaultBackgroundSound`, em `helpers/BackgroundSoundPlayback.ts`) e
+  avisa por snackbar quando não há padrão.
+- **Fade e ações da guia**: "Parar" e "Tocar/Pausar" do operador são
+  `stopWithFade`/`toggleWithFade` do player, que leem a duração configurada
+  (`fadeInMs`/`fadeOutMs`) — rodapé e módulo chamam os mesmos; o corte seco é
+  `stop(0)`. Os nomes das ações da guia vivem em
+  `modules/background_sound/ribbonActions.ts`, usados pelo manifesto e pela tela.
 - **Limitações**: o web não tem sinal de "modo clássico" (a aba fica visível;
   no Delphi o player de som de fundo não é o da projeção) e no Android cada
   pressão vale **1 ponto** (tecla é consumida no `dispatchKeyEvent`, uma vez

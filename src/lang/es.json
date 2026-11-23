@@ -1624,6 +1624,13 @@
     "opening": "Abriendo",
     "opening_cancel": "Cancelar apertura",
     "playing_youtube": "Reproduciendo de YouTube",
+    "background_sound": {
+      "repeat": "Repetir sonido",
+      "play": "Reproducir",
+      "pause": "Pausar",
+      "stop": "Detener",
+      "stop_immediately": "Detener inmediatamente"
+    },
     "player": {
       "first": "Primera diapositiva",
       "forward": "Siguiente",

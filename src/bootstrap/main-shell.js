@@ -47,7 +47,10 @@ import { useFileProjection } from "@/composables/useFileProjection";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { syncFromIdb as syncDevicesFromIdb } from "@/composables/useDevices";
 import Path from "@/helpers/Path";
-import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
+import {
+  playBackgroundSoundRecord,
+  playDefaultBackgroundSound,
+} from "@/helpers/BackgroundSoundPlayback";
 import { activateBackgroundProjection } from "@/helpers/BackgroundProjectionPlayback";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
@@ -296,26 +299,6 @@ async function safeIdbAll(table) {
   } catch {
     return [];
   }
-}
-
-/**
- * Toca um som no player single do desktop (funciona sem o módulo aberto).
- *
- * O caminho vem de `resolveBackgroundSoundPath`: **URL nova a cada toque** —
- * o player revoga a URL ativa em `playFile`/`stop`/`cleanup`, então cache de
- * blob URL causava replay de URL revogada ("não funciona mais" na segunda
- * vez). Ver KDoc do helper.
- */
-function playBackgroundSound(bg, file) {
-  const path = resolveBackgroundSoundPath(file);
-  // Registro sem bytes e sem path (corrompido): tocar com src vazio setaria
-  // `currentFile` mesmo com o play falhando e os próximos toques virariam
-  // resume() contra src morto — a mesma armadilha do bug da URL revogada.
-  if (!path) {
-    console.warn("[http:background-sound] som sem caminho reproduzível:", file?.id);
-    return;
-  }
-  bg.playFile({ ...file, path }, bg.fadeInMs.value);
 }
 
 /** Catálogo remoto de vídeos online (já cacheado pelo desktop em camadas). */
@@ -2222,7 +2205,7 @@ $storage.hydrate().then(async () => {
             if (data.action === "play") {
               const files = await safeIdbAll(DB_TABLE.BACKGROUND_SOUND_LIBRARY);
               const file = files.find((candidate) => String(candidate.id) === String(data.id));
-              if (file) playBackgroundSound(bg, file);
+              if (file) playBackgroundSoundRecord(file);
               else console.warn("[http:background-sound] som não encontrado:", data.id);
             } else if (data.action === "pause") {
               bg.pause();
@@ -2231,29 +2214,11 @@ $storage.hydrate().then(async () => {
             } else if (data.action === "stop") {
               bg.stop(0);
             } else if (data.action === "play-default") {
-              const defaultId = String(
-                UserData.get(KEYS.MODULES.BACKGROUND_SOUND.DEFAULT_ID, "") || ""
-              );
-              const record = defaultId
-                ? await $idb.get(DB_TABLE.BACKGROUND_SOUND_LIBRARY, defaultId)
-                : null;
-              if (!record) {
+              // Mesma função do botão "Tocar" da guia do módulo.
+              const outcome = await playDefaultBackgroundSound();
+              if (outcome === "missing") {
                 respond({ status: "error", error: "Nenhum som padrão configurado" });
-              } else if (
-                bg.isPlaying.value &&
-                String(bg.currentFile.value?.id) === String(record.id)
-              ) {
-                // Idempotente: o padrão já está tocando — não reinicia.
-                respond({ status: "ok" });
-              } else if (
-                bg.currentFile.value &&
-                String(bg.currentFile.value.id) === String(record.id)
-              ) {
-                // Pausado no próprio padrão: continua de onde parou.
-                bg.resume();
-                respond({ status: "ok" });
               } else {
-                playBackgroundSound(bg, record);
                 respond({ status: "ok" });
               }
             }
