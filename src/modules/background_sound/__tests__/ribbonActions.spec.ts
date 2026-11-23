@@ -17,7 +17,7 @@ import {
 function handlers(): RibbonActionHandlers {
   return Object.fromEntries(
     Object.values(RIBBON_ACTION).map((action) => [action, vi.fn()])
-  ) as RibbonActionHandlers;
+  ) as unknown as RibbonActionHandlers;
 }
 
 /** O que a RibbonBar entrega ao módulo: o `action` do botão sem o prefixo `<módulo>_`. */
