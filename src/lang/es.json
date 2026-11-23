@@ -854,7 +854,7 @@
       "save_locations": "Guardar cambios",
       "locations_unavailable": "No se pudieron cargar las carpetas de almacenamiento.",
       "shared_hint": "Esta carpeta la usa más de un perfil. La limpieza automática queda desactivada para conservar los archivos de los otros usuarios.",
-      "read_only_hint": "Carpeta disponible solo para lectura en esta sesión. Otro usuario puede estar escribiendo en ella o tu cuenta no tiene permiso para escribir.",
+      "read_only_hint": "Carpeta disponible solo para lectura por ahora. Otro usuario puede estar escribiendo en ella o tu cuenta no tiene permiso para escribir. La escritura vuelve sola cuando la carpeta quede libre.",
       "cancel_pending": "Cancelar cambio programado",
       "apply_failed": "No se completó el cambio de carpetas. Se conservaron las ubicaciones actuales.",
       "file_count": "{count} arch.",

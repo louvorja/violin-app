@@ -854,7 +854,7 @@
       "save_locations": "Salvar alterações",
       "locations_unavailable": "Não foi possível carregar as pastas de armazenamento.",
       "shared_hint": "Esta pasta é usada por mais de um perfil. A limpeza automática fica desativada para preservar os arquivos dos outros usuários.",
-      "read_only_hint": "Pasta disponível somente para leitura nesta sessão. Outro usuário pode estar gravando nela, ou sua conta não tem permissão para gravar.",
+      "read_only_hint": "Pasta disponível somente para leitura no momento. Outro usuário pode estar gravando nela, ou sua conta não tem permissão para gravar. A gravação volta sozinha quando a pasta ficar livre.",
       "cancel_pending": "Cancelar alteração agendada",
       "apply_failed": "A alteração de pastas não foi concluída. Os caminhos atuais foram mantidos.",
       "file_count": "{count} arq.",

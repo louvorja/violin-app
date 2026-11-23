@@ -321,9 +321,16 @@ Blob/ArrayBuffer: deve permanecer privado até uma futura separação lógica po
 coleção. A migração ajusta caminhos de anexos privados sem serializar os binários
 em JSON. Não trate o ZIP de exportação como cópia integral do perfil.
 
-`storageAccess` concede uma única escrita por raiz de mídia. Outras contas leem
-os arquivos prontos; para adquirir escrita após a saída da outra conta, reiniciam
-o app. Limpeza de coleções compartilhadas fica desativada. Vídeos em streaming
+`storageAccess` concede uma única escrita por raiz de mídia: a trava é a pasta
+`.louvorja-writer.lock`, renovada a cada 10 s e abandonada depois de 120 s sem
+renovação (contrato compartilhado com versões anteriores — não mude os números).
+Outras contas leem os arquivos prontos, e a sessão que abriu somente leitura tenta
+de novo a cada 15 s: passa a gravar sozinha quando a outra conta sai, sem
+reiniciar. A renovação é assíncrona de propósito — I/O síncrono periódico no main
+parava a projeção em disco lento. `.louvorja-writer.json` registra o dono para que
+a trava de um processo morto neste computador seja retomada na hora, e perder a
+trava deixa a sessão somente leitura em vez de encerrar o app. Limpeza de coleções
+compartilhadas fica desativada. Vídeos em streaming
 podem usar o diretório temporário privado mesmo com a coleção somente leitura.
 O acervo Classic é uma fonte opcional separada, somente leitura, com cópia
 explícita para o acervo próprio sem remover os originais.
