@@ -7,8 +7,9 @@ Sistema de apresentação de letras de músicas e conteúdo bíblico para uso em
 ## Fluxo de branches e releases (`dev` → `main`)
 
 - **`dev` (pré-`main`):** é a branch padrão de integração contínua. Todo desenvolvimento diário, correções, funcionalidades, pull requests e pushes rotineiros devem ir para `dev` (ou a partir de branches abertas contra `dev`).
-- **`main` (somente versões):** `main` é bloqueada para commits diretos do dia a dia e reservada **exclusivamente para publicação de novas versões (releases)**. Como o workflow `.github/workflows/deploy.yaml` publica o site/PWA direto a partir de `main`, nada sem versão fechada deve entrar ali.
-- **Processo de release:** quando uma versão for ser publicada, integre `dev` em `main` conforme `docs/releasing.md` (commit de versão + tag anotada `v<versão>`, publicando o rascunho no GitHub antes de expor a nova versão em `main`) e mantenha `dev` sincronizada após a release.
+- **Betas ficam na `dev`:** uma versão com sufixo (`-beta.N`, `-preview.N`…) é cortada inteira na `dev` — commit de versão, tag anotada e release de prévia — e **não vai para a `main`**. A tag basta para o workflow de release gerar os instaladores, e o app desktop acha a beta pela release do GitHub, não pela `main`.
+- **`main` (somente versões estáveis):** `main` é bloqueada para commits diretos do dia a dia e reservada **exclusivamente para a publicação de versões estáveis**. O workflow `.github/workflows/deploy.yaml` publica o site/PWA direto a partir de `main`, para todos os usuários e sem canal de prévia: qualquer push ali, inclusive o de uma beta, vira produção web em minutos.
+- **Processo de release:** para uma versão estável, integre `dev` em `main` conforme `docs/releasing.md` (commit de versão + tag anotada `v<versão>`, publicando o rascunho no GitHub antes de expor a nova versão em `main`) e mantenha `dev` sincronizada após a release. Para uma beta, siga o mesmo roteiro parando antes do push na `main`.
 
 ## Stack
 
