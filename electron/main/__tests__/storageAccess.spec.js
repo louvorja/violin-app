@@ -13,7 +13,9 @@ const HOST = crypto.createHash("sha256").update(os.hostname()).digest("hex").sli
 let root, media, videos;
 /** O batimento e a nova tentativa fazem I/O de verdade: os timers são falsos, o disco não. */
 async function until(check) {
-  for (let turn = 0; turn < 2000; turn++) {
+  // Pelo relógio de verdade: num disco lento a resposta leva mais que um punhado de voltas do loop.
+  const deadline = performance.now() + 5000;
+  while (performance.now() < deadline) {
     if (check()) return;
     await new Promise((resolve) => setImmediate(resolve));
   }
