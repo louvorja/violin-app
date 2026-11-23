@@ -9,7 +9,15 @@ const playOnlineVideoSequence = vi.fn();
 const idbPut = vi.fn(async () => {});
 const snackbarShow = vi.fn();
 const alertError = vi.fn();
-const openYouTube = vi.fn(async () => true);
+// O palco de verdade muda de época a cada abertura e a cada fechamento, venha de onde vier.
+const stageEpoch = ref(0);
+const openYouTube = vi.fn(async () => {
+  stageEpoch.value++;
+  return true;
+});
+const closeMedia = vi.fn(() => {
+  stageEpoch.value++;
+});
 const viewModePref = ref<string>("grid");
 
 const savedVideos = [
@@ -84,7 +92,7 @@ vi.mock("@/composables/useBroadcastListener", () => ({
 }));
 
 vi.mock("@/composables/useMedia", () => ({
-  default: { openYouTube, close: vi.fn() },
+  default: { openYouTube, close: closeMedia, stageEpoch: () => stageEpoch.value },
 }));
 
 vi.mock("@/helpers/IndexedDB", () => ({
@@ -316,6 +324,40 @@ describe("custom_online_videos — categorias visíveis e Tocar Todas (#51, #67)
     });
     expect(idbPut).not.toHaveBeenCalled();
     expect(wrapper.findAll(".cv-grid-card")).toHaveLength(2);
+  });
+
+  it("o Parar Projeção some quando o vídeo avulso é fechado pelo player (#83)", async () => {
+    const wrapper = mountView();
+    await flush();
+    const stopButton = () => wrapper.findAll("button").find((b) => b.text() === "stop");
+
+    expect(stopButton()).toBeUndefined();
+    await wrapper.find(".cv-grid-card").trigger("click");
+    await flush();
+    expect(stopButton()).toBeDefined();
+    expect(wrapper.find(".cv-grid-card--active").exists()).toBe(true);
+
+    // O "X" do player fecha a mídia sem passar por esta tela.
+    closeMedia();
+    await flush();
+
+    expect(stopButton()).toBeUndefined();
+    expect(wrapper.find(".cv-grid-card--active").exists()).toBe(false);
+  });
+
+  it("o Parar Projeção desta tela fecha a mídia e some", async () => {
+    const wrapper = mountView();
+    await flush();
+    const stopButton = () => wrapper.findAll("button").find((b) => b.text() === "stop");
+    closeMedia.mockClear();
+
+    await wrapper.find(".cv-grid-card").trigger("click");
+    await flush();
+    await stopButton()!.trigger("click");
+    await flush();
+
+    expect(closeMedia).toHaveBeenCalledWith(true);
+    expect(stopButton()).toBeUndefined();
   });
 
   it("alterna entre miniatura e lista conforme preferência global em Configurações", async () => {

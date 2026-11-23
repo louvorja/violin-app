@@ -1,4 +1,4 @@
-import { shallowRef, watch } from "vue";
+import { ref, shallowRef, watch } from "vue";
 import $dev from "@/helpers/Dev";
 import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
@@ -534,6 +534,12 @@ let _ytOwnsDownload = false;
 let _ytStarting: string | null = null;
 const _videoWindowOpenings = new Set<Promise<void>>();
 let _stageEpoch = 0;
+// Espelho reativo de `_stageEpoch`: a tela que pôs algo no palco precisa saber quando ele mudou de dono.
+const _stageEpochSignal = ref(0);
+function _nextStageEpoch(): number {
+  _stageEpochSignal.value = ++_stageEpoch;
+  return _stageEpoch;
+}
 let _stageWindowTransition: Promise<void> = Promise.resolve();
 const VIDEO_WINDOW_RELEASE_WAIT_MS = 2500;
 // O vídeo do YouTube que o operador acabou de pedir, do clique até o som estar pronto (ou ele desistir). Enquanto o
@@ -1662,6 +1668,14 @@ const _self = {
     return () => stageEpoch === _stageEpoch;
   },
 
+  /**
+   * Reativo: muda quando outra mídia assume o palco ou ele é fechado. Trocas
+   * internas da mesma mídia (player embutido ↔ arquivo) o preservam.
+   */
+  stageEpoch(): number {
+    return _stageEpochSignal.value;
+  },
+
   /** ID da tentativa atual para os módulos que orquestram a reprodução. */
   getActivePlaybackId(): string | null {
     return _activePlayback?.playback_id || null;
@@ -1792,7 +1806,7 @@ const _self = {
       return false;
     }
 
-    const stageEpoch = ++_stageEpoch;
+    const stageEpoch = _nextStageEpoch();
     _dropPendingDownload();
     _opening.value = null;
     await _releaseFileVideoStage(stageEpoch);
@@ -2239,7 +2253,7 @@ const _self = {
       return false;
     }
     _closeAlbumForPresentation();
-    const stageEpoch = ++_stageEpoch;
+    const stageEpoch = _nextStageEpoch();
     _dropPendingDownload();
     _opening.value = null;
     await _releaseFileVideoStage(stageEpoch);
@@ -2488,7 +2502,7 @@ const _self = {
   },
 
   stop(): void {
-    ++_stageEpoch;
+    _nextStageEpoch();
     _dropPendingDownload();
     _opening.value = null;
     if (_ytUnlisten) {
@@ -2531,7 +2545,7 @@ const _self = {
   },
 
   closeProjectionStage(): Promise<void> {
-    const stageEpoch = ++_stageEpoch;
+    const stageEpoch = _nextStageEpoch();
     return _queueStageWindows(stageEpoch, closeProjectionWindows);
   },
 
@@ -2564,7 +2578,7 @@ const _self = {
     };
     const effectiveVideoAudioUrl =
       projection.type === "video" ? videoAudioUrl || projection.url : undefined;
-    const stageEpoch = ++_stageEpoch;
+    const stageEpoch = _nextStageEpoch();
     /* Antes de qualquer janela ler o arquivo: a partir do registro, o protocolo
        só entrega áudio já conferido (ver AudioPacketScan). */
     const audioChecked =
@@ -2645,7 +2659,7 @@ const _self = {
     // e trocas internas entre player embutido e arquivo (`preserveStageEpoch`) mantêm a fila.
     if (force && !preserveStageEpoch) _playlistOnClose?.();
     if (force && !preserveStageEpoch) {
-      ++_stageEpoch;
+      _nextStageEpoch();
       _opening.value = null;
       _closeFileWindowsAfterPendingOpen(_stageEpoch);
     }
@@ -2774,7 +2788,7 @@ const _self = {
     PlayerKeyboard.claim();
     params = _openParams(params);
     _closeAlbumForPresentation();
-    const stageEpoch = preserveProjectionStage ? _stageEpoch : ++_stageEpoch;
+    const stageEpoch = preserveProjectionStage ? _stageEpoch : _nextStageEpoch();
     if (!preserveProjectionStage) {
       _dropPendingDownload();
       _opening.value = null;
@@ -2992,7 +3006,7 @@ const _self = {
     const id = OnlineVideo.videoIdFromUrl(url);
     // Dois cliques no mesmo vídeo enquanto ele abre partilham a tentativa em
     // curso; um segundo vídeo de fato revoga a primeira tentativa.
-    const stageEpoch = _opening.value?.id === id ? _stageEpoch : ++_stageEpoch;
+    const stageEpoch = _opening.value?.id === id ? _stageEpoch : _nextStageEpoch();
     if (_ytFallbackDiagnostics?.from_stage_epoch !== stageEpoch) _ytFallbackDiagnostics = null;
     const opening = { id, title };
     _opening.value = opening;
@@ -3065,7 +3079,7 @@ const _self = {
     expectedStageEpoch?: number
   ): Promise<void> {
     PlayerKeyboard.claim();
-    const stageEpoch = expectedStageEpoch ?? ++_stageEpoch;
+    const stageEpoch = expectedStageEpoch ?? _nextStageEpoch();
     if (stageEpoch !== _stageEpoch) return;
     const fallbackOrigin =
       expectedStageEpoch !== undefined && _ytFallbackDiagnostics?.from_stage_epoch === stageEpoch

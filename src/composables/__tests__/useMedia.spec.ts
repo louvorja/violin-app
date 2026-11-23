@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
+import { watch } from "vue";
 import $appdata from "@/helpers/AppData";
 import $alert from "@/helpers/Alert";
 import Broadcast from "@/helpers/Broadcast";
@@ -95,6 +96,22 @@ describe("Media — preparações externas", () => {
     const projection = media.projectFile({ url: "blob:new", type: "image", title: "Nova" });
     expect(beforeProjection()).toBe(false);
     await projection;
+  });
+
+  it("a época do palco é reativa: fechar a mídia avisa a tela que a projetou", async () => {
+    const seen: number[] = [];
+    const stopWatching = watch(() => media.stageEpoch(), (epoch) => seen.push(epoch), {
+      flush: "sync",
+    });
+    const before = media.stageEpoch();
+
+    expect(await media.open(null as unknown as number)).toBe(false);
+    expect(media.stageEpoch()).toBe(before);
+    await media.close(true);
+
+    expect(media.stageEpoch()).toBeGreaterThan(before);
+    expect(seen).toEqual([media.stageEpoch()]);
+    stopWatching();
   });
 
   it("uma solicitação inválida não interrompe a preparação atual", async () => {

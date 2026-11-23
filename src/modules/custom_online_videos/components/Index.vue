@@ -344,7 +344,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from "vue";
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryManagerDialog.vue";
@@ -354,6 +354,7 @@ import OnlineVideoDownloadBadge from "@/components/OnlineVideoDownloadBadge.vue"
 import OnlineVideoDownloadsBar from "@/components/OnlineVideoDownloadsBar.vue";
 import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
 import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
+import { useOnlineVideoStage } from "@/composables/useOnlineVideoStage";
 import { createVideoTitleEnrichment } from "../helpers/VideoTitleEnrichment";
 import { fetchYoutubeTitle, prepare as prepareOnlineVideo } from "@/helpers/OnlineVideo";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
@@ -421,6 +422,8 @@ const t = (key: string, named?: Record<string, unknown>): string =>
   moduleContainer.value?.t?.(key, named) || key;
 const downloads = useOnlineVideoDownloads();
 const playlistPlayback = usePlaylistPlayback();
+const stage = useOnlineVideoStage(() => playlistPlayback.currentSong.value);
+const projectingId = stage.projectingId;
 
 const videos = ref<VideoItem[]>([]);
 const videoTitles = createVideoTitleEnrichment<VideoItem>({
@@ -432,7 +435,6 @@ const viewMode = computed<"grid" | "list">(() =>
   $userdata.get<string>(KEYS.OPTIONS.ONLINE_VIDEO_VIEW_MODE, "grid") === "list" ? "list" : "grid"
 );
 const search = ref<string>("");
-const projectingId = ref<string>("");
 const thumbUrls = reactive<Record<string, string>>({});
 const dialogOpen = ref<boolean>(false);
 const editingId = ref<string | null>(null);
@@ -880,15 +882,10 @@ async function projectVideo(v: VideoItem): Promise<void> {
     $alert.error({ text: "modules.custom_online_videos.invalid_url" });
     return;
   }
-  projectingId.value = v.id;
   const category = categoryName(v.categoryId);
-  const opened = await Media.openYouTube(
-    embedUrl,
-    v.name,
-    category ? { subtitle: category } : undefined
+  const opened = await stage.project(v.id, () =>
+    Media.openYouTube(embedUrl, v.name, category ? { subtitle: category } : undefined)
   );
-  // Cancelado ou impossível de tocar: sai do destaque, salvo se outro vídeo já o substituiu.
-  if (!opened && projectingId.value === v.id) projectingId.value = "";
   const ytId = extractYoutubeId(v.url);
   if (opened && ytId) void downloads.adopt([ytId]);
 }
@@ -899,8 +896,7 @@ function stopIfProjecting(v: VideoItem): void {
 }
 
 async function stopProjection(): Promise<void> {
-  projectingId.value = "";
-  Media.close(true);
+  stage.stop();
 }
 
 function startVideoSequence(label: string, list: VideoItem[]): void {
@@ -941,24 +937,13 @@ function playCategoryVideos(categoryId: string): void {
   startVideoSequence(label, list);
 }
 
-watch(
-  () => playlistPlayback.currentSong.value,
-  (song) => {
-    const key = song?.onlineVideo?.itemKey;
-    if (key) projectingId.value = key;
-    else if (!song && projectingId.value) projectingId.value = "";
-  }
-);
-
 async function projectUrl(rawUrl: string): Promise<void> {
   const embedUrl = buildEmbedUrl(rawUrl);
   if (!embedUrl) {
     $alert.error({ text: "modules.custom_online_videos.invalid_url" });
     return;
   }
-  projectingId.value = "__url__";
-  const opened = await Media.openYouTube(embedUrl, rawUrl);
-  if (!opened && projectingId.value === "__url__") projectingId.value = "";
+  await stage.project("__url__", () => Media.openYouTube(embedUrl, rawUrl));
 }
 
 useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => {
