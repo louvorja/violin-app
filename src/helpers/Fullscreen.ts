@@ -1,4 +1,4 @@
-import { nextTick, watch, type Ref } from "vue";
+import { computed, shallowRef, type Ref, type ShallowRef, type WritableComputedRef } from "vue";
 
 // Mesmo critério do vue-fullscreen: sem a API (iPhone) ele usa o modo "só página".
 export function fullscreenApiAvailable(): boolean {
@@ -7,31 +7,31 @@ export function fullscreenApiAvailable(): boolean {
   return !!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled);
 }
 
-export interface FullscreenComponentLike {
-  isFullscreen?: boolean;
-  request?: () => Promise<void> | void;
+export interface FullscreenStage {
+  /** `ref` do `<Fullscreen>`. */
+  stage: ShallowRef<unknown>;
+  /** `v-model` do `<Fullscreen>`. */
+  model: WritableComputedRef<boolean>;
 }
 
 /**
- * Garante entrada em tela cheia quando `<Fullscreen>` monta já com `v-model=true`
- * (ex.: player minimizado reaberto pelo botão de tela cheia).
+ * `v-model` do `<Fullscreen>` com exatamente um pedido de tela cheia por ativação.
+ *
+ * O componente do vue-fullscreen só pede tela cheia quando o `v-model` MUDA: montado
+ * já com `true` (player minimizado reaberto pelo botão de tela cheia) ele não pede
+ * nada. Aqui o `true` só chega a ele depois de montado, e a mudança dispara o pedido
+ * dele mesmo, ainda dentro do gesto do usuário.
+ *
+ * Pedir por fora, além dele, fazia dois pedidos a cada clique: o primeiro consome o
+ * gesto e o navegador recusa o segundo ("Permissions check failed").
  */
-export function watchDeferredFullscreenRequest(
-  active: Readonly<Ref<boolean | undefined>>,
-  stage: Readonly<Ref<FullscreenComponentLike | null>>,
-  onRejected: () => void
-): void {
-  watch(
-    [active, stage],
-    async ([isActive, comp]) => {
-      if (!isActive || !comp || comp.isFullscreen) return;
-      await nextTick();
-      try {
-        await comp.request?.();
-      } catch {
-        onRejected();
-      }
+export function useFullscreenStage(active: Ref<boolean | undefined>): FullscreenStage {
+  const stage = shallowRef<unknown>(null);
+  const model = computed<boolean>({
+    get: () => !!active.value && stage.value != null,
+    set: (value) => {
+      active.value = value;
     },
-    { flush: "post" }
-  );
+  });
+  return { stage, model };
 }

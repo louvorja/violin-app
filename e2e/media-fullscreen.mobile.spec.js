@@ -149,3 +149,83 @@ test("Tela cheia nativa de slides preserva mobile e desktop", async ({ browser, 
     }
   }
 });
+
+test("Tela cheia nativa faz um único pedido por clique e desfaz o pedido recusado", async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "A API nativa é coberta em Chromium.");
+  // Um gesto vale por 5 s; o caso recusado espera ele vencer, por aparelho.
+  test.setTimeout(60_000);
+  for (const device of [devices["Pixel 7"], devices["Desktop Chrome"]]) {
+    const context = await browser.newContext({
+      ...device,
+      serviceWorkers: "block",
+      bypassCSP: true,
+    });
+    const page = await context.newPage();
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.addInitScript(() => {
+      window.__fullscreenRequests = [];
+      const request = Element.prototype.requestFullscreen;
+      Element.prototype.requestFullscreen = function (...args) {
+        const entry = { result: "pending" };
+        window.__fullscreenRequests.push(entry);
+        const promise = request.apply(this, args);
+        promise.then(
+          () => (entry.result = "entered"),
+          () => (entry.result = "refused")
+        );
+        return promise;
+      };
+    });
+    const requests = () => page.evaluate(() => window.__fullscreenRequests.map((r) => r.result));
+    const reset = () => page.evaluate(() => (window.__fullscreenRequests.length = 0));
+    const enter = page.getByRole("button", { name: "Tela cheia", exact: true });
+    try {
+      await openSlides(page, !device.hasTouch);
+
+      // Janela aberta: o helper pedia de novo logo depois do componente, e o
+      // navegador recusava o segundo pedido ("Permissions check failed").
+      await enter.click();
+      await expectFullscreenStage(page);
+      await expect.poll(requests).toEqual(["entered"]);
+      await exitFullscreen(page, !!device.hasTouch);
+
+      // Player minimizado: o `<Fullscreen>` monta já com a tela cheia pedida.
+      await reset();
+      await page.locator(".lj-window [title='Minimizar']").first().click();
+      await expect(page.locator(".media-preview")).toHaveCount(0);
+      await enter.click();
+      await expectFullscreenStage(page);
+      await expect.poll(requests).toEqual(["entered"]);
+      await exitFullscreen(page, !!device.hasTouch);
+      expect(errors).toEqual([]);
+
+      // Fora de um gesto o navegador recusa. Se o flag ficasse ligado, o clique
+      // seguinte não mudaria nada e a tela cheia não entraria mais.
+      await reset();
+      // Cada `evaluate` do Playwright conta como gesto: o clique sai de dentro da página,
+      // depois de esse gesto vencer.
+      const gesture = await enter.evaluate(
+        (button) =>
+          new Promise((resolve) =>
+            setTimeout(() => {
+              resolve(navigator.userActivation.isActive);
+              button.click();
+            }, 5500)
+          )
+      );
+      expect(gesture).toBe(false);
+      await expect.poll(requests).toEqual(["refused"]);
+      await expect(page.locator(".media-preview.fullscreen")).toHaveCount(0);
+      await reset();
+      await enter.click();
+      await expectFullscreenStage(page);
+      await expect.poll(requests).toEqual(["entered"]);
+    } finally {
+      await context.close();
+    }
+  }
+});

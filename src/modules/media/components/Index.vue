@@ -46,7 +46,7 @@
         <Fullscreen
           v-if="!isYouTube"
           ref="fullscreenStage"
-          v-model="fullscreen"
+          v-model="fullscreenModel"
           class="media-preview"
           :class="{ 'media-preview--page-fullscreen': pageOnlyFullscreen }"
           :style="{ height: preview_height + 'px' }"
@@ -144,7 +144,7 @@ import LSlide from "@/components/Slide.vue";
 import LPlayer from "@/components/Player.vue";
 import LFullscreenPlayer from "@/components/FullscreenPlayer.vue";
 import YouTubeStage from "./YouTubeStage.vue";
-import { fullscreenApiAvailable, watchDeferredFullscreenRequest } from "@/helpers/Fullscreen";
+import { fullscreenApiAvailable, useFullscreenStage } from "@/helpers/Fullscreen";
 import { LjButton, LjChip, LjPopover, LjProgress, LjSwitch, LjTooltip } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import Modules from "@/helpers/Modules";
@@ -251,12 +251,11 @@ watch(
   { immediate: true }
 );
 
-const fullscreenStage = ref(null);
 const fullscreen = computed({
   get: () => module_.value.config?.fullscreen,
   set: (value) => Media.fullscreen(value),
 });
-watchDeferredFullscreenRequest(fullscreen, fullscreenStage, () => Media.fullscreen(false));
+const { stage: fullscreenStage, model: fullscreenModel } = useFullscreenStage(fullscreen);
 
 const fade_audio = computed({
   get: () => UserData.get("modules.media.fade_audio"),
@@ -307,7 +306,8 @@ function resize(data) {
 // Mantém o flag config.fullscreen sincronizado com o estado REAL do browser.
 // Sem isso, quando o requestFullscreen() não entrava de fato (ex.: chamado fora
 // de um gesto do usuário) o flag ficava true e o <l-fullscreen-player> aparecia
-// como overlay duplicado sobre o player do rodapé.
+// como overlay duplicado sobre o player do rodapé. O pedido recusado não gera
+// `fullscreenchange`: chega por `fullscreenerror`.
 function _syncFullscreenFlag() {
   // Sem a API a tela cheia é o modo "só página" do vue-fullscreen, que nunca
   // tem `fullscreenElement`: o flag é a única verdade.
@@ -321,6 +321,7 @@ function _syncFullscreenFlag() {
 onMounted(() => {
   mediaMounted = true;
   document.addEventListener("fullscreenchange", _syncFullscreenFlag);
+  document.addEventListener("fullscreenerror", _syncFullscreenFlag);
   // Não manter polling quando a mídia aberta é apenas áudio ou YouTube.
   updateVideoSyncTimer();
   // Sync inicial — corrige flag herdado de sessão anterior se já estiver torto.
@@ -330,6 +331,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   mediaMounted = false;
   document.removeEventListener("fullscreenchange", _syncFullscreenFlag);
+  document.removeEventListener("fullscreenerror", _syncFullscreenFlag);
   stopVideoSyncTimer();
 });
 </script>
