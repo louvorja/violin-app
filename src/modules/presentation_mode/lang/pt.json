@@ -766,6 +766,8 @@
     "uncategorized": "Sem categoria",
     "empty": "A Biblioteca de Mídia está vazia. Fotos, vídeos e PDFs adicionados lá aparecem aqui.",
     "empty_category": "Nada nesta categoria.",
+    "search": "Buscar na Biblioteca de Mídia…",
+    "no_results": "Nenhum item encontrado.",
     "open": "Abrir a Biblioteca de Mídia",
     "manage": "Gerenciar",
     "refresh": "Atualizar",

@@ -94,10 +94,10 @@ function mount() {
             @click="$emit('update:modelValue', tab.value)"
           >{{ tab.label }}</button></div>`,
         },
-        CategoryChip: {
-          props: ["categoryId", "name", "count", "active", "showMenu", "icon", "iconType"],
+        CategoryListItem: {
+          props: ["categoryId", "name", "count", "active", "icon", "iconType", "color"],
           template:
-            '<button class="pm-bgp__filter" :data-category-id="categoryId" :data-show-menu="String(showMenu)" :data-icon="icon" :data-icon-type="iconType">{{ name }}</button>',
+            '<button class="pm-category-item" :data-category-id="categoryId" :data-icon="icon" :data-icon-type="iconType" :data-active="String(active)">{{ name }}<span>{{ count }}</span></button>',
         },
       },
     },
@@ -290,25 +290,24 @@ describe("LibraryBackgroundProjection", () => {
     );
     expect(categoryIcon.attributes("src")).toBe("blob:categoria");
 
-    const chip = wrapper.find('.pm-bgp__filter[data-category-id="c1"]');
+    const chip = wrapper.find('.pm-category-item[data-category-id="c1"]');
     expect(chip.attributes("data-icon")).toBe("blob:categoria");
     expect(chip.attributes("data-icon-type")).toBe("image");
   });
 
-  it("mantém busca e chips na mesma linha e rola com a roda", async () => {
+  it("coloca busca e chips na lateral e mantém o filtro de mídia no conteúdo", async () => {
     const wrapper = mount();
     await flushPromises();
 
-    expect(wrapper.find(".pm-bgp__head .pm-bgp__filter").exists()).toBe(true);
-    expect(wrapper.find(".pm-bgp__filter").attributes("data-show-menu")).toBe("false");
+    const main = wrapper.find(".pm-bgp__main");
+    expect(main.exists()).toBe(true);
+    expect(main.element.firstElementChild?.className).toContain("pm-bgp__side");
+    expect(main.element.lastElementChild?.className).toContain("pm-bgp__content");
 
-    const chips = wrapper.find(".pm-bgp__chips").element as HTMLElement;
-    Object.defineProperty(chips, "scrollWidth", { value: 600, configurable: true });
-    Object.defineProperty(chips, "clientWidth", { value: 200, configurable: true });
-    Object.defineProperty(chips, "scrollLeft", { value: 0, writable: true, configurable: true });
-
-    await wrapper.find(".pm-bgp__chips").trigger("wheel", { deltaY: 120, deltaMode: 0 });
-    expect(chips.scrollLeft).toBe(120);
+    expect(wrapper.find(".pm-bgp__side .pm-bgp__search").exists()).toBe(true);
+    expect(wrapper.find(".pm-bgp__side .pm-bgp__chips").exists()).toBe(true);
+    expect(wrapper.find(".pm-bgp__side .pm-category-item").exists()).toBe(true);
+    expect(wrapper.find(".pm-bgp__content .pm-bgp__toolbar").exists()).toBe(true);
   });
 
   it("filtra pela busca e pelo tipo de mídia", async () => {

@@ -2,6 +2,7 @@ import { computed, ref } from "vue";
 import $idb from "@/helpers/IndexedDB";
 import Telemetry from "@/helpers/Telemetry";
 import { DB_TABLE } from "@/constants/DbTables";
+import { blobOf } from "@/helpers/Bytes";
 
 /**
  * A biblioteca do módulo Som de Fundo vista do Modo apresentação: categorias e
@@ -32,6 +33,9 @@ export interface BackgroundSoundCategory {
   icon?: string;
   iconType?: "icon" | "image";
   color?: string;
+  /** Bytes do ícone enviado pelo usuário; sobrevivem ao blob URL da sessão. */
+  iconData?: Blob | ArrayBuffer | Uint8Array | null;
+  iconMime?: string | null;
 }
 
 /** Filtro: todas, uma categoria, ou as sem categoria (id ""). */
@@ -50,6 +54,30 @@ const _categories = ref<BackgroundSoundCategory[]>([]);
 const _filter = ref<string>(BACKGROUND_SOUND_ALL);
 const _loading = ref(false);
 const _loaded = ref(false);
+const _categoryIconUrls = new Map<string, string>();
+
+function disposeCategoryIcons(): void {
+  for (const url of _categoryIconUrls.values()) {
+    if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+  }
+  _categoryIconUrls.clear();
+}
+
+/** Ícone de imagem da categoria, recriando o blob a partir dos bytes persistidos. */
+function categoryImageOf(category: BackgroundSoundCategory): string {
+  if (category.iconType !== "image") return "";
+  if (category.iconData) {
+    const cached = _categoryIconUrls.get(category.id);
+    if (cached) return cached;
+    const blob = blobOf(category.iconData, category.iconMime || "image/png");
+    if (!blob) return "";
+    const url = URL.createObjectURL(blob);
+    _categoryIconUrls.set(category.id, url);
+    return url;
+  }
+  const raw = (category.icon || "").trim();
+  return /^(data:image\/|https?:\/\/|blob:)/i.test(raw) ? raw : "";
+}
 
 async function load(): Promise<void> {
   if (_loading.value) return;
@@ -59,6 +87,9 @@ async function load(): Promise<void> {
       $idb.getAll<BackgroundSoundRecord>(DB_TABLE.BACKGROUND_SOUND_LIBRARY),
       $idb.getAll<BackgroundSoundCategory>(DB_TABLE.BACKGROUND_SOUND_CATEGORY),
     ]);
+    // A troca dos registros e a limpeza das URLs acontecem no mesmo tick; o
+    // render seguinte recria só os ícones das categorias que continuam.
+    disposeCategoryIcons();
     _records.value = [...records].sort(
       (a, b) =>
         (a.order ?? 0) - (b.order ?? 0) ||
@@ -75,6 +106,7 @@ async function load(): Promise<void> {
     }
   } catch (error) {
     Telemetry.captureException(error, { source: "presentation_mode.background_sound.load" });
+    disposeCategoryIcons();
     _records.value = [];
     _categories.value = [];
   } finally {
@@ -116,7 +148,9 @@ export function useBackgroundSoundLibrary() {
     hasUncategorized,
     countOf,
     categoryOf,
+    categoryImageOf,
     load,
+    disposeCategoryIcons,
     displayName: backgroundSoundName,
   };
 }

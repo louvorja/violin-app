@@ -4,48 +4,56 @@
   </div>
 
   <div v-else class="pm-native" data-testid="pm-library-native">
-    <nav class="pm-folders" :aria-label="tm('native.categories')">
-      <button
-        type="button"
-        class="pm-folder"
-        :class="{ 'pm-folder--active': native.filter.value === ALL }"
-        data-testid="pm-native-all"
-        @click="native.filter.value = ALL"
-      >
-        <LjIcon :icon="ICONS.MODULES.MEDIA_LIBRARY" :size="15" />
-        <span class="pm-folder__label">{{ tm("library.all") }}</span>
-        <span class="pm-folder__count">{{ native.countOf(ALL) }}</span>
-      </button>
-      <button
-        v-for="category in native.categories.value"
-        :key="category.id"
-        type="button"
-        class="pm-folder"
-        :class="{ 'pm-folder--active': native.filter.value === category.id }"
-        :title="category.name"
-        :data-testid="`pm-native-category-${category.id}`"
-        @click="native.filter.value = category.id"
-      >
-        <!-- A cor que a categoria tem na Biblioteca de Mídia. -->
-        <span class="pm-native__swatch" :style="{ color: category.color || undefined }">
-          <LjIcon :icon="ICONS.UI.FOLDER" :size="15" />
-        </span>
-        <span class="pm-folder__label">{{ category.name }}</span>
-        <span class="pm-folder__count">{{ native.countOf(category.id) }}</span>
-      </button>
-      <button
-        v-if="native.hasUncategorized.value"
-        type="button"
-        class="pm-folder"
-        :class="{ 'pm-folder--active': native.filter.value === '' }"
-        data-testid="pm-native-uncategorized"
-        @click="native.filter.value = ''"
-      >
-        <LjIcon :icon="ICONS.UI.FOLDER_OPEN" :size="15" />
-        <span class="pm-folder__label">{{ tm("native.uncategorized") }}</span>
-        <span class="pm-folder__count">{{ native.countOf("") }}</span>
-      </button>
-    </nav>
+    <aside class="pm-native__side">
+      <div class="pm-native__search">
+        <LjInput
+          v-model="search"
+          size="sm"
+          :icon="ICONS.ACTIONS.SEARCH"
+          :placeholder="t('components.ui.search_placeholder')"
+          clearable
+          data-testid="pm-native-search"
+        />
+      </div>
+      <nav class="pm-folders" :aria-label="tm('native.categories')">
+        <CategoryListItem
+          category-id="*"
+          :name="tm('library.all')"
+          :icon="ICONS.MODULES.MEDIA_LIBRARY"
+          icon-type="icon"
+          color="var(--lj-orange)"
+          :count="native.countOf(ALL)"
+          :active="native.filter.value === ALL"
+          data-testid="pm-native-all"
+          @select="native.filter.value = ALL"
+        />
+        <CategoryListItem
+          v-for="category in native.categories.value"
+          :key="category.id"
+          :category-id="category.id"
+          :name="category.name"
+          :icon="categoryIcon(category)"
+          :icon-type="categoryIconType(category)"
+          :color="category.color || 'var(--lj-orange)'"
+          :count="native.countOf(category.id)"
+          :active="native.filter.value === category.id"
+          :data-testid="`pm-native-category-${category.id}`"
+          @select="native.filter.value = category.id"
+        />
+        <CategoryListItem
+          v-if="native.hasUncategorized.value"
+          category-id=""
+          :name="tm('native.uncategorized')"
+          :icon="ICONS.UI.FOLDER_OPEN"
+          icon-type="icon"
+          color="var(--lj-orange)"
+          :count="native.countOf('')"
+          :active="native.filter.value === ''"
+          data-testid="pm-native-uncategorized"
+          @select="native.filter.value = ''"
+        />
+      </nav>
+    </aside>
 
     <div class="pm-files">
       <p v-if="native.loading.value && !native.loaded.value" class="pm-files__empty">
@@ -57,10 +65,13 @@
           {{ tm("native.open") }}
         </LjButton>
       </div>
+      <div v-else-if="!visibleEntries.length" class="pm-files__empty">
+        <p>{{ tm("native.no_results") }}</p>
+      </div>
       <FileGrid
         v-else
         data-testid="pm-native-grid"
-        :entries="native.entries.value"
+        :entries="visibleEntries"
         :selected-path="selectedPath"
         :live-path="livePath"
         :return-path="returnPath"
@@ -116,16 +127,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onMounted, ref } from "vue";
+import { computed, onActivated, onBeforeUnmount, onMounted, ref } from "vue";
 import FileGrid from "./FileGrid.vue";
-import { LjButton, LjEmpty, LjIcon } from "@/components/ui";
+import CategoryListItem from "./CategoryListItem.vue";
+import { LjButton, LjEmpty, LjIcon, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import Modules from "@/helpers/Modules";
+import Strings from "@/helpers/Strings";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import type { ProgramItem } from "@/types/Presentation";
 import type { LibraryEntry } from "../composables/useFileLibrary";
-import { ALL, useNativeMediaLibrary } from "../composables/useNativeMediaLibrary";
+import {
+  ALL,
+  useNativeMediaLibrary,
+  type NativeMediaCategory,
+} from "../composables/useNativeMediaLibrary";
 import type { Playable, PlayOptions } from "../program/playable";
 
 /**
@@ -147,6 +164,13 @@ const emit = defineEmits<{
 const { t, tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const native = useNativeMediaLibrary();
 const selectedPath = ref<string | null>(null);
+const search = ref("");
+
+const visibleEntries = computed(() => {
+  const query = Strings.fold(search.value.trim());
+  if (!query) return native.entries.value;
+  return native.entries.value.filter((entry) => Strings.fold(entry.name).includes(query));
+});
 
 const filePlayable = (entry: LibraryEntry): Playable => ({ type: "file", entry });
 
@@ -156,8 +180,19 @@ function onSelect(entry: LibraryEntry): void {
 }
 
 const countLabel = computed(() =>
-  t(`modules.${ModuleEnum.PRESENTATION_MODE}.library.items_count`, native.entries.value.length)
+  t(`modules.${ModuleEnum.PRESENTATION_MODE}.library.items_count`, visibleEntries.value.length)
 );
+
+/** Ícone próprio da categoria; pasta só quando ela não tem ícone nenhum. */
+function categoryIcon(category: NativeMediaCategory): string {
+  const image = native.categoryImageOf(category);
+  if (image) return image;
+  return category.iconType === "image" ? ICONS.MEDIA.IMAGE : category.icon || ICONS.UI.FOLDER;
+}
+
+function categoryIconType(category: NativeMediaCategory): "icon" | "image" {
+  return native.categoryImageOf(category) ? "image" : "icon";
+}
 
 function openNativeLibrary(): void {
   Modules.open(ModuleEnum.MEDIA_LIBRARY);
@@ -170,6 +205,7 @@ onMounted(() => {
 onActivated(() => {
   if (native.supported && native.loaded.value) void native.load();
 });
+onBeforeUnmount(() => native.disposeCategoryIcons());
 </script>
 
 <style scoped>
@@ -184,71 +220,32 @@ onActivated(() => {
   grid-template-columns: 168px minmax(0, 1fr);
 }
 
-/* A barra de categorias é a mesma lista de pastas da aba Arquivos. */
-.pm-folders {
+/* A barra de categorias usa a mesma linha de filtro das abas de fundo. */
+.pm-native__side {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
   border-right: 1px solid var(--lj-surface-border);
 }
 
-.pm-folder {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 27px;
+.pm-native__search {
   flex-shrink: 0;
-  padding: 0 8px 0 9px;
-  border: none;
-  border-left: 3px solid transparent;
-  background: transparent;
-  color: var(--lj-text);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms var(--lj-ease);
+  padding: var(--lj-space-2) var(--lj-space-3) 0;
 }
 
-.pm-folder:hover {
-  background: var(--lj-hover-bg);
-}
-
-.pm-folder :deep(svg) {
-  flex-shrink: 0;
-  color: var(--lj-orange);
-}
-
-/* A cor da categoria vence o laranja das pastas. */
-.pm-native__swatch {
-  display: inline-flex;
-  color: var(--lj-orange);
-}
-
-.pm-native__swatch :deep(svg) {
-  color: inherit;
-}
-
-.pm-folder--active {
-  background: var(--lj-live-active-bg);
-  border-left-color: var(--lj-orange);
-}
-
-.pm-folder__label {
-  flex: 1;
+.pm-native__search :deep(.lj-input) {
+  width: 100%;
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.pm-folder__count {
-  flex-shrink: 0;
-  font-family: var(--lj-font-mono);
-  font-size: 10px;
-  color: var(--lj-text-subtle);
+.pm-folders {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--lj-space-2) 0;
+  scrollbar-width: none;
 }
 
 .pm-files {

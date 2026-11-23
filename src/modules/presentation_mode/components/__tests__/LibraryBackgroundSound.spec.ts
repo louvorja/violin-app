@@ -49,10 +49,10 @@ function mount() {
           props: ["embedded"],
           template: '<div data-testid="pm-bgs-player" :data-embedded="String(embedded)" />',
         },
-        CategoryChip: {
-          props: ["categoryId", "name", "count", "active", "showMenu"],
+        CategoryListItem: {
+          props: ["categoryId", "name", "count", "active", "icon", "iconType", "color"],
           template:
-            '<button class="pm-bgs__filter" :data-category-id="categoryId" :data-show-menu="String(showMenu)">{{ name }}</button>',
+            '<button class="pm-category-item" :data-category-id="categoryId" :data-icon="icon" :data-icon-type="iconType" :data-active="String(active)">{{ name }}<span>{{ count }}</span></button>',
         },
       },
     },
@@ -89,29 +89,44 @@ describe("LibraryBackgroundSound", () => {
     );
   });
 
-  it("mantém os chips de categoria na mesma linha da busca", async () => {
+  it("coloca busca e chips na lateral, antes do conteúdo", async () => {
     const wrapper = mount();
     await flushPromises();
 
-    expect(wrapper.find(".pm-bgs__head .pm-bgs__filter").exists()).toBe(true);
-    expect(wrapper.find(".pm-bgs__filters").element.parentElement?.className).toContain(
-      "pm-bgs__head"
-    );
-    expect(wrapper.find(".pm-bgs__filter").attributes("data-show-menu")).toBe("false");
+    const main = wrapper.find(".pm-bgs__main");
+    expect(main.exists()).toBe(true);
+    expect(main.element.firstElementChild?.className).toContain("pm-bgs__side");
+    expect(main.element.lastElementChild?.className).toContain("pm-bgs__content");
+    expect(wrapper.find(".pm-bgs__content .pm-bgs__body").exists()).toBe(true);
+
+    expect(wrapper.find(".pm-bgs__side .pm-bgs__search").exists()).toBe(true);
+    expect(wrapper.find(".pm-bgs__side .pm-bgs__chips").exists()).toBe(true);
+    expect(wrapper.find(".pm-bgs__side .pm-category-item").exists()).toBe(true);
   });
 
-  it("roda o mouse converte o eixo vertical em rolagem lateral dos chips", async () => {
+  it("usa a imagem enviada da categoria na lateral", async () => {
+    getAll.mockImplementation(async (table: string) => {
+      if (table === DB_TABLE.BACKGROUND_SOUND_LIBRARY) return records;
+      if (table === DB_TABLE.BACKGROUND_SOUND_CATEGORY) {
+        return [
+          {
+            id: "c1",
+            name: "Natureza",
+            color: "#3a7",
+            iconType: "image",
+            icon: "data:image/png;base64,AA==",
+          },
+        ];
+      }
+      return [];
+    });
+
     const wrapper = mount();
     await flushPromises();
 
-    const filters = wrapper.find(".pm-bgs__filters").element as HTMLElement;
-    Object.defineProperty(filters, "scrollWidth", { value: 600, configurable: true });
-    Object.defineProperty(filters, "clientWidth", { value: 200, configurable: true });
-    Object.defineProperty(filters, "scrollLeft", { value: 0, writable: true, configurable: true });
-
-    await wrapper.find(".pm-bgs__filters").trigger("wheel", { deltaY: 120, deltaMode: 0 });
-
-    expect(filters.scrollLeft).toBe(120);
+    const row = wrapper.find('.pm-category-item[data-category-id="c1"]');
+    expect(row.attributes("data-icon")).toBe("data:image/png;base64,AA==");
+    expect(row.attributes("data-icon-type")).toBe("image");
   });
 
   it("colore o card com a categoria e mostra o nome dela", async () => {

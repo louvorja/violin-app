@@ -55,6 +55,45 @@ describe("biblioteca de som de fundo", () => {
     await bgs.load();
     expect(bgs.filter.value).toBe(BACKGROUND_SOUND_ALL);
   });
+
+  it("recria o ícone da categoria a partir dos bytes e revoga no descarte", async () => {
+    const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:categoria");
+    const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const bgs = useBackgroundSoundLibrary();
+    await bgs.load();
+
+    const category = {
+      id: "c9",
+      name: "Com imagem",
+      iconType: "image" as const,
+      icon: "blob:antigo",
+      iconData: new ArrayBuffer(4),
+      iconMime: "image/png",
+    };
+
+    expect(bgs.categoryImageOf(category)).toBe("blob:categoria");
+    expect(bgs.categoryImageOf(category)).toBe("blob:categoria");
+    expect(create).toHaveBeenCalledTimes(1);
+
+    bgs.disposeCategoryIcons();
+    expect(revoke).toHaveBeenCalledWith("blob:categoria");
+
+    create.mockRestore();
+    revoke.mockRestore();
+  });
+
+  it("aceita ícone de imagem em data URL e ignora nome de ícone comum", () => {
+    const bgs = useBackgroundSoundLibrary();
+    expect(
+      bgs.categoryImageOf({
+        id: "c10",
+        name: "Data",
+        iconType: "image",
+        icon: "data:image/png;base64,AA==",
+      })
+    ).toBe("data:image/png;base64,AA==");
+    expect(bgs.categoryImageOf({ id: "c11", name: "Ícone", icon: "leaf" })).toBe("");
+  });
 });
 
 describe("nome exibido do som", () => {

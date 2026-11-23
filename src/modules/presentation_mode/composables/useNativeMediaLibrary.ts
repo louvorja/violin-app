@@ -3,6 +3,7 @@ import $idb from "@/helpers/IndexedDB";
 import Platform from "@/helpers/Platform";
 import Telemetry from "@/helpers/Telemetry";
 import { DB_TABLE } from "@/constants/DbTables";
+import { blobOf } from "@/helpers/Bytes";
 import type { LibraryEntry } from "./useFileLibrary";
 
 /**
@@ -29,7 +30,12 @@ export interface NativeMediaRecord {
 export interface NativeMediaCategory {
   id: string;
   name: string;
+  icon?: string;
+  iconType?: "icon" | "image";
   color?: string;
+  /** Bytes do ícone enviado pelo usuário; sobrevivem ao blob URL da sessão. */
+  iconData?: Blob | ArrayBuffer | Uint8Array | null;
+  iconMime?: string | null;
 }
 
 /** Filtro: todas, uma categoria, ou as sem categoria (id ""). */
@@ -52,6 +58,30 @@ const _categories = ref<NativeMediaCategory[]>([]);
 const _loading = ref(false);
 const _loaded = ref(false);
 const _filter = ref<string>(ALL);
+const _categoryIconUrls = new Map<string, string>();
+
+function disposeCategoryIcons(): void {
+  for (const url of _categoryIconUrls.values()) {
+    if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+  }
+  _categoryIconUrls.clear();
+}
+
+/** Ícone de imagem da categoria, recriando o blob a partir dos bytes persistidos. */
+function categoryImageOf(category: NativeMediaCategory): string {
+  if (category.iconType !== "image") return "";
+  if (category.iconData) {
+    const cached = _categoryIconUrls.get(category.id);
+    if (cached) return cached;
+    const blob = blobOf(category.iconData, category.iconMime || "image/png");
+    if (!blob) return "";
+    const url = URL.createObjectURL(blob);
+    _categoryIconUrls.set(category.id, url);
+    return url;
+  }
+  const raw = (category.icon || "").trim();
+  return /^(data:image\/|https?:\/\/|blob:)/i.test(raw) ? raw : "";
+}
 
 async function load(): Promise<void> {
   if (_loading.value) return;
@@ -61,6 +91,9 @@ async function load(): Promise<void> {
       $idb.getAll<NativeMediaRecord>(DB_TABLE.MEDIA_LIBRARY),
       $idb.getAll<NativeMediaCategory>(DB_TABLE.MEDIA_LIBRARY_CATEGORY),
     ]);
+    // A troca das categorias e a limpeza das URLs antigas entram no mesmo tick;
+    // o render seguinte recria só os ícones que continuam valendo.
+    disposeCategoryIcons();
     // A ordem da própria Biblioteca: o mais recente primeiro; categorias por nome.
     _records.value = [...records].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     _categories.value = [...categories].sort((a, b) => a.name.localeCompare(b.name));
@@ -69,6 +102,7 @@ async function load(): Promise<void> {
       _filter.value = ALL;
   } catch (e) {
     Telemetry.captureException(e, { source: "presentation_mode.native_library.load" });
+    disposeCategoryIcons();
     _records.value = [];
     _categories.value = [];
   } finally {
@@ -105,6 +139,8 @@ export function useNativeMediaLibrary() {
     unavailable,
     hasUncategorized,
     countOf,
+    categoryImageOf,
     load,
+    disposeCategoryIcons,
   };
 }

@@ -79,6 +79,45 @@ describe("useNativeMediaLibrary", () => {
     expect(lib.countOf(ALL)).toBe(1);
   });
 
+  it("recria o ícone da categoria a partir dos bytes e revoga no descarte", async () => {
+    const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:categoria");
+    const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const lib = useNativeMediaLibrary();
+    await lib.load();
+
+    const category = {
+      id: "c9",
+      name: "Com imagem",
+      iconType: "image" as const,
+      icon: "blob:antigo",
+      iconData: new ArrayBuffer(4),
+      iconMime: "image/png",
+    };
+
+    expect(lib.categoryImageOf(category)).toBe("blob:categoria");
+    expect(lib.categoryImageOf(category)).toBe("blob:categoria");
+    expect(create).toHaveBeenCalledTimes(1);
+
+    lib.disposeCategoryIcons();
+    expect(revoke).toHaveBeenCalledWith("blob:categoria");
+
+    create.mockRestore();
+    revoke.mockRestore();
+  });
+
+  it("aceita ícone de imagem em data URL e ignora nome de ícone comum", () => {
+    const lib = useNativeMediaLibrary();
+    expect(
+      lib.categoryImageOf({
+        id: "c10",
+        name: "Data",
+        iconType: "image",
+        icon: "data:image/png;base64,AA==",
+      })
+    ).toBe("data:image/png;base64,AA==");
+    expect(lib.categoryImageOf({ id: "c11", name: "Ícone", icon: "leaf" })).toBe("");
+  });
+
   it("categoria apagada na Biblioteca: o filtro volta para todas", async () => {
     db.categories = [{ id: "c1", name: "Anúncios" }];
     db.records = [rec("a", "/m/a.jpg", "c1")];

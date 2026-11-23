@@ -1,173 +1,167 @@
 <template>
   <div class="pm-bgp" data-testid="pm-library-background-projection">
-    <header class="pm-bgp__head">
-      <div class="pm-bgp__search">
-        <LjInput
-          v-model="search"
-          size="sm"
-          :icon="ICONS.ACTIONS.SEARCH"
-          :placeholder="tm('library.background_projection_search')"
-          clearable
-          data-testid="pm-bgp-search"
-        />
-      </div>
-      <div
-        ref="filtersEl"
-        class="pm-bgp__chips"
-        role="group"
-        :aria-label="tm('library.background_projection_categories')"
-        @wheel="onFiltersWheel"
-      >
-        <CategoryChip
-          category-id="*"
-          :name="tm('library.all')"
-          :icon="ICONS.MEDIA.IMAGE_MULTIPLE"
-          icon-type="icon"
-          color="var(--lj-text-subtle)"
-          :count="bgp.records.value.length"
-          :active="bgp.filter.value === BACKGROUND_PROJECTION_ALL"
-          :show-menu="false"
-          @select="bgp.filter.value = BACKGROUND_PROJECTION_ALL"
-        />
-        <CategoryChip
-          v-for="category in bgp.categories.value"
-          :key="category.id"
-          :category-id="category.id"
-          :name="category.name"
-          :icon="chipIcon(category)"
-          :icon-type="chipIconType(category)"
-          :color="category.color || 'var(--lj-text-subtle)'"
-          :count="bgp.countOf(category.id)"
-          :active="bgp.filter.value === category.id"
-          :show-menu="false"
-          @select="bgp.filter.value = category.id"
-        />
-        <CategoryChip
-          v-if="bgp.hasUncategorized.value"
-          category-id=""
-          :name="tm('library.background_projection_uncategorized')"
-          :icon="ICONS.MEDIA.IMAGE_MULTIPLE"
-          icon-type="icon"
-          color="#607d8b"
-          :count="bgp.countOf(BACKGROUND_PROJECTION_UNCATEGORIZED)"
-          :active="bgp.filter.value === BACKGROUND_PROJECTION_UNCATEGORIZED"
-          :show-menu="false"
-          @select="bgp.filter.value = BACKGROUND_PROJECTION_UNCATEGORIZED"
-        />
-      </div>
-    </header>
-
-    <div class="pm-bgp__toolbar">
-      <LjTabs
-        :model-value="mediaFilter"
-        :tabs="mediaTabs"
-        :aria-label="tm('library.background_projection')"
-        @update:model-value="mediaFilter = $event as MediaFilter"
-      />
-    </div>
-
-    <div class="pm-bgp__body">
-      <p v-if="bgp.loading.value && !bgp.loaded.value" class="pm-bgp__empty">
-        {{ tm("library.loading") }}
-      </p>
-      <LjEmpty
-        v-else-if="!bgp.records.value.length"
-        :icon="ICONS.MEDIA.IMAGE_MULTIPLE"
-        :title="tm('library.background_projection_empty')"
-      />
-      <p v-else-if="!visibleCards.length" class="pm-bgp__empty">
-        {{ tm("library.background_projection_no_results") }}
-      </p>
-      <div v-else class="pm-bgp__grid">
+    <div class="pm-bgp__main">
+      <aside class="pm-bgp__side" :aria-label="tm('library.background_projection_categories')">
+        <div class="pm-bgp__search">
+          <LjInput
+            v-model="search"
+            size="sm"
+            :icon="ICONS.ACTIONS.SEARCH"
+            :placeholder="t('components.ui.search_placeholder')"
+            clearable
+            data-testid="pm-bgp-search"
+          />
+        </div>
         <div
-          v-for="card in visibleCards"
-          :key="card.file.id"
-          class="pm-bgp__card"
-          :class="{ 'pm-bgp__card--active': isActive(card.file.id) }"
-          :style="{ '--pm-bgp-card-color': card.color }"
-          role="button"
-          tabindex="0"
-          :data-testid="`pm-bgp-card-${card.file.id}`"
-          :title="bgp.displayName(card.file)"
-          :aria-label="bgp.displayName(card.file)"
-          @click="activate(card.file)"
-          @keydown.enter.prevent="activate(card.file)"
-          @keydown.space.prevent="activate(card.file)"
+          class="pm-bgp__chips"
+          role="group"
+          :aria-label="tm('library.background_projection_categories')"
         >
-          <span class="pm-bgp__thumb">
-            <img
-              v-if="card.thumb"
-              :src="card.thumb"
-              class="pm-bgp__thumb-img"
-              :alt="bgp.displayName(card.file)"
-              loading="lazy"
-            />
-            <LjIcon
-              v-else
-              :icon="card.file.type === 'video' ? ICONS.MEDIA.VIDEO_FILE : ICONS.MEDIA.IMAGE"
-              :size="28"
-            />
-            <span v-if="isActive(card.file.id)" class="pm-bgp__live">
-              {{ tm("library.background_projection_live") }}
-            </span>
-          </span>
-          <span class="pm-bgp__info">
-            <span class="pm-bgp__name">
-              <span v-if="card.file.type === 'video'">
-                <LjIcon :icon="ICONS.MEDIA.VIDEO" :size="13" />
+          <CategoryListItem
+            category-id="*"
+            :name="tm('library.all')"
+            :icon="ICONS.MODULES.BACKGROUND_PROJECTION"
+            icon-type="icon"
+            color="var(--lj-orange)"
+            :count="bgp.records.value.length"
+            :active="bgp.filter.value === BACKGROUND_PROJECTION_ALL"
+            @select="bgp.filter.value = BACKGROUND_PROJECTION_ALL"
+          />
+          <CategoryListItem
+            v-for="category in bgp.categories.value"
+            :key="category.id"
+            :category-id="category.id"
+            :name="category.name"
+            :icon="chipIcon(category)"
+            :icon-type="chipIconType(category)"
+            :color="category.color || 'var(--lj-orange)'"
+            :count="bgp.countOf(category.id)"
+            :active="bgp.filter.value === category.id"
+            @select="bgp.filter.value = category.id"
+          />
+          <CategoryListItem
+            v-if="bgp.hasUncategorized.value"
+            category-id=""
+            :name="tm('library.background_projection_uncategorized')"
+            :icon="ICONS.CATEGORY.FOLDER"
+            icon-type="icon"
+            color="var(--lj-orange)"
+            :count="bgp.countOf(BACKGROUND_PROJECTION_UNCATEGORIZED)"
+            :active="bgp.filter.value === BACKGROUND_PROJECTION_UNCATEGORIZED"
+            @select="bgp.filter.value = BACKGROUND_PROJECTION_UNCATEGORIZED"
+          />
+        </div>
+      </aside>
+
+      <div class="pm-bgp__content">
+        <div class="pm-bgp__toolbar">
+          <LjTabs
+            :model-value="mediaFilter"
+            :tabs="mediaTabs"
+            :aria-label="tm('library.background_projection')"
+            @update:model-value="mediaFilter = $event as MediaFilter"
+          />
+        </div>
+
+        <div class="pm-bgp__body">
+          <p v-if="bgp.loading.value && !bgp.loaded.value" class="pm-bgp__empty">
+            {{ tm("library.loading") }}
+          </p>
+          <LjEmpty
+            v-else-if="!bgp.records.value.length"
+            :icon="ICONS.MEDIA.IMAGE_MULTIPLE"
+            :title="tm('library.background_projection_empty')"
+          />
+          <p v-else-if="!visibleCards.length" class="pm-bgp__empty">
+            {{ tm("library.background_projection_no_results") }}
+          </p>
+          <div v-else class="pm-bgp__grid">
+            <div
+              v-for="card in visibleCards"
+              :key="card.file.id"
+              class="pm-bgp__card"
+              :class="{ 'pm-bgp__card--active': isActive(card.file.id) }"
+              :style="{ '--pm-bgp-card-color': card.color }"
+              role="button"
+              tabindex="0"
+              :data-testid="`pm-bgp-card-${card.file.id}`"
+              :title="bgp.displayName(card.file)"
+              :aria-label="bgp.displayName(card.file)"
+              @click="activate(card.file)"
+              @keydown.enter.prevent="activate(card.file)"
+              @keydown.space.prevent="activate(card.file)"
+            >
+              <span class="pm-bgp__thumb">
+                <img
+                  v-if="card.thumb"
+                  :src="card.thumb"
+                  class="pm-bgp__thumb-img"
+                  :alt="bgp.displayName(card.file)"
+                  loading="lazy"
+                />
+                <LjIcon
+                  v-else
+                  :icon="card.file.type === 'video' ? ICONS.MEDIA.VIDEO_FILE : ICONS.MEDIA.IMAGE"
+                  :size="28"
+                />
+                <span v-if="card.file.type === 'video'" class="pm-bgp__play-badge">
+                  <LjIcon :icon="ICONS.PLAYER.PLAY" :size="13" />
+                </span>
+                <span v-if="isActive(card.file.id)" class="pm-bgp__live">
+                  {{ tm("library.background_projection_live") }}
+                </span>
               </span>
-              <span v-if="card.file.type === 'image'">
-                <LjIcon :icon="ICONS.MEDIA.IMAGE" :size="13" />
+              <span class="pm-bgp__info">
+                <span class="pm-bgp__name">{{ bgp.displayName(card.file) }}</span>
+                <span class="pm-bgp__category">
+                  <img
+                    v-if="card.iconType === 'image'"
+                    :src="card.icon"
+                    class="pm-bgp__category-icon"
+                    alt=""
+                  />
+                  <LjIcon
+                    v-else
+                    :icon="card.icon"
+                    :size="12"
+                    :style="{ color: card.color }"
+                    class="pm-bgp__category-icon"
+                  />
+                  <span class="pm-bgp__category-name">{{ card.categoryName }}</span>
+                </span>
               </span>
-              {{ bgp.displayName(card.file) }}
-            </span>
-            <span class="pm-bgp__category">
-              <img
-                v-if="card.iconType === 'image'"
-                :src="card.icon"
-                class="pm-bgp__category-icon"
-                alt=""
+              <LjButton
+                size="sm"
+                variant="ghost"
+                icon-only
+                :icon="ICONS.ACTIONS.ADD"
+                :title="tm('library.add_to_program')"
+                :aria-label="tm('library.add_to_program')"
+                :data-testid="`pm-bgp-add-${card.file.id}`"
+                @click.stop="add(card.file)"
+                @keydown.stop
               />
-              <LjIcon
-                v-else
-                :icon="card.icon"
-                :size="12"
-                :style="{ color: card.color }"
-                class="pm-bgp__category-icon"
-              />
-              <span class="pm-bgp__category-name">{{ card.categoryName }}</span>
-            </span>
-          </span>
+            </div>
+          </div>
+        </div>
+
+        <footer class="pm-bgp__foot">
+          <LjIcon :icon="ICONS.MODULES.BACKGROUND_PROJECTION" :size="12" />
+          <span>{{ countLabel }}</span>
+          <span class="pm-bgp__spacer" />
           <LjButton
             size="sm"
             variant="ghost"
-            icon-only
-            :icon="ICONS.ACTIONS.ADD"
-            :title="tm('library.add_to_program')"
-            :aria-label="tm('library.add_to_program')"
-            :data-testid="`pm-bgp-add-${card.file.id}`"
-            @click.stop="add(card.file)"
-            @keydown.stop
-          />
-        </div>
+            :icon="ICONS.UI.OPEN_IN_NEW"
+            :title="tm('library.background_projection_manage')"
+            data-testid="pm-bgp-manage"
+            @click="openModule"
+          >
+            {{ tm("library.background_projection_manage") }}
+          </LjButton>
+        </footer>
       </div>
     </div>
-
-    <footer class="pm-bgp__foot">
-      <LjIcon :icon="ICONS.MODULES.BACKGROUND_PROJECTION" :size="12" />
-      <span>{{ countLabel }}</span>
-      <span class="pm-bgp__spacer" />
-      <LjButton
-        size="sm"
-        variant="ghost"
-        :icon="ICONS.UI.OPEN_IN_NEW"
-        :title="tm('library.background_projection_manage')"
-        data-testid="pm-bgp-manage"
-        @click="openModule"
-      >
-        {{ tm("library.background_projection_manage") }}
-      </LjButton>
-    </footer>
 
     <Transition name="pm-bgp-bar">
       <div v-if="isProjectionOpen" class="pm-bgp__bar" data-testid="pm-bgp-bar">
@@ -213,7 +207,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onMounted, ref } from "vue";
 import { LjButton, LjEmpty, LjIcon, LjInput, LjTabs, type LjTab } from "@/components/ui";
-import CategoryChip from "@/components/CategoryChip.vue";
+import CategoryListItem from "./CategoryListItem.vue";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import Modules from "@/helpers/Modules";
@@ -222,7 +216,6 @@ import Strings from "@/helpers/Strings";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useModuleI18n } from "@/composables/useModuleI18n";
-import { useHorizontalWheel } from "@/composables/useHorizontalWheel";
 import {
   activateBackgroundProjection,
   clearBackgroundProjection,
@@ -267,9 +260,6 @@ const { t, tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const bgp = useBackgroundProjectionLibrary();
 const search = ref("");
 const mediaFilter = ref<MediaFilter>("all");
-const filtersEl = ref<HTMLElement | null>(null);
-const { onWheel: onFiltersWheel } = useHorizontalWheel(filtersEl);
-
 const isProjectionOpen = computed(
   () => $userdata.get<boolean>(KEYS.MODULES.BACKGROUND_PROJECTION.IS_PLAYING, false) === true
 );
@@ -418,42 +408,57 @@ onBeforeUnmount(() => bgp.disposeThumbs());
   overflow: hidden;
 }
 
-.pm-bgp__head {
+.pm-bgp__main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+}
+
+.pm-bgp__side {
   display: flex;
-  align-items: center;
-  gap: var(--lj-space-3);
-  min-height: 38px;
-  padding: var(--lj-space-2) var(--lj-space-4);
-  border-bottom: 1px solid var(--lj-surface-border);
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--lj-surface-border);
 }
 
 .pm-bgp__search {
-  flex: 0 1 170px;
-  min-width: 160px;
+  flex-shrink: 0;
+  padding: var(--lj-space-2) var(--lj-space-3) 0;
+}
+
+.pm-bgp__search :deep(.lj-input) {
+  width: 100%;
+  min-width: 0;
 }
 
 .pm-bgp__chips {
   display: flex;
-  flex: 1;
-  min-width: 0;
-  gap: var(--lj-space-2);
-  overflow-x: auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--lj-space-2) 0;
   scrollbar-width: none;
 }
 
-.pm-bgp__chips :deep(.lj-category-chip) {
-  flex-shrink: 0;
+.pm-bgp__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
 .pm-bgp__toolbar {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   padding: var(--lj-space-1) var(--lj-space-4);
   border-bottom: 1px solid var(--lj-surface-border);
 }
 
 .pm-bgp__body {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   padding: var(--lj-space-3) var(--lj-space-4);
@@ -640,13 +645,8 @@ onBeforeUnmount(() => bgp.disposeThumbs());
 }
 
 @media (max-width: 560px) {
-  .pm-bgp__head {
-    flex-wrap: wrap;
-  }
-
-  .pm-bgp__search,
-  .pm-bgp__chips {
-    flex: 1 1 100%;
+  .pm-bgp__main {
+    grid-template-columns: 148px minmax(0, 1fr);
   }
 
   .pm-bgp__bar {
