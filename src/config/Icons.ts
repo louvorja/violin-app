@@ -150,6 +150,16 @@ export const ICONS = {
     PHOTO: "photo",
     MESSAGE: "message-2",
     NOTES: "notes",
+    /* Pastas: alternativa neutra aos ícones temáticos. */
+    FOLDER: "folder",
+    FOLDER_OPEN: "folder-open",
+    FOLDER_PLUS: "folder-plus",
+    FOLDER_HEART: "folder-heart",
+    FOLDER_STAR: "folder-star",
+    FOLDER_CHECK: "folder-check",
+    FOLDER_SEARCH: "folder-search",
+    FOLDER_COG: "folder-cog",
+    FOLDERS: "folders",
     /* Marcas do projeto (src/assets/icons) — mesmas de ICONS.CUSTOM. */
     AVT: "avt",
     AVT_COLOR: "avt-color",
