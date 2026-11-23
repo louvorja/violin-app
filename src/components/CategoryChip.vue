@@ -135,6 +135,10 @@ defineEmits<{
   opacity: 0.55;
   outline: none;
   white-space: nowrap;
+  /* O toque longo abre o menu do chip: com o nome selecionável, o Android
+     selecionava a palavra e cobria esse menu com a barra de copiar. */
+  -webkit-user-select: none;
+  user-select: none;
   transition:
     background var(--lj-transition-fast),
     opacity var(--lj-transition-fast);

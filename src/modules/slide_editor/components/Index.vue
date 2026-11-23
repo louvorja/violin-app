@@ -2394,9 +2394,14 @@ function replicateText(scope) {
     outline-offset: 2px;
   }
 
-  .se-workspace--mobile .se-slide-list-add,
-  .se-workspace--mobile .se-player-play {
+  .se-workspace--mobile .se-slide-list-add {
     min-height: 44px;
+  }
+
+  /* Redondo: crescer só a altura deixava o botão oval. */
+  .se-workspace--mobile .se-player-play {
+    width: 44px;
+    height: 44px;
   }
 
   .se-workspace--mobile .se-preview-stage {
