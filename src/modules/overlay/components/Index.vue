@@ -171,7 +171,7 @@ const enabled = computed(
 const localSlots = reactive<OverlaySlot[]>([]);
 const editingSlot = ref<OverlaySlot | null>(null);
 const previewImageCache = reactive<Record<string, string>>({});
-const { mirrorText } = useModuleMirror(() =>
+const { mirrorText, mirrorColor } = useModuleMirror(() =>
   localSlots.filter((slot) => slot.type === "module_mirror").map((slot) => slot.source_module)
 );
 
@@ -327,7 +327,7 @@ function previewSlotStyle(slot: OverlaySlot): Record<string, string> {
 }
 
 function previewTextStyle(slot: OverlaySlot): Record<string, string> {
-  return overlayTextStyle(slot, STAGE_UNITS);
+  return overlayTextStyle(slot, STAGE_UNITS, mirrorColor);
 }
 
 function previewImageStyle(slot: OverlaySlot): Record<string, string> {

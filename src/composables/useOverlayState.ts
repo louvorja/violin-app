@@ -7,7 +7,12 @@ import { readAllSlots, getImage, resolveImageUrl } from "@/helpers/Overlay";
 import $userdata from "@/helpers/UserData";
 import { OVERLAY_STYLE_DEFAULTS, type OverlaySlot } from "@/types/Overlay";
 import { KEYS } from "@/constants/UserDataKeys";
-import { overlaySlotStyle, overlayImageStyle, overlayTextStyle } from "@/helpers/OverlayStyle";
+import {
+  VIEWPORT_UNITS,
+  overlaySlotStyle,
+  overlayImageStyle,
+  overlayTextStyle,
+} from "@/helpers/OverlayStyle";
 import { OverlayVisibilityGate } from "@/presentation/OverlayVisibilityState";
 
 interface OverlayStateReturn {
@@ -81,7 +86,7 @@ export function useOverlayState(): OverlayStateReturn {
     return slots.value.filter((s) => s.enabled).sort((a, b) => a.order - b.order);
   });
 
-  const { mirrorText } = useModuleMirror(() =>
+  const { mirrorText, mirrorColor } = useModuleMirror(() =>
     activeSlots.value.filter((s) => s.type === "module_mirror").map((s) => s.source_module)
   );
 
@@ -133,7 +138,7 @@ export function useOverlayState(): OverlayStateReturn {
     slotImage,
     slotStyle: overlaySlotStyle,
     imageStyle: (slot) => overlayImageStyle(slot),
-    textStyle: (slot) => overlayTextStyle(slot),
+    textStyle: (slot) => overlayTextStyle(slot, VIEWPORT_UNITS, mirrorColor),
     animationClass,
     animationExitClass,
   };
