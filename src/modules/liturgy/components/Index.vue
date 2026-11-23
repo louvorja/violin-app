@@ -156,13 +156,7 @@
     <LiturgyLoadDialog v-model="loadDialog" :items="safeItems" @loaded="onLiturgyLoaded" />
     <LiturgyManageDialog v-model="manageDialog" @managed="onLiturgyManaged" />
 
-    <MusicSpotlight
-      v-model="chooseMusicSearchOpen"
-      mode="pick"
-      :musics-list="spotlightMusicsList"
-      :on-music-action="onChooseLaterMusicAction"
-      @pick="onChooseLaterMusicPicked"
-    />
+    <LiturgyMusicChooser ref="musicChooser" @chosen="onChooseLaterMusicChosen" />
   </div>
 </template>
 
@@ -188,11 +182,7 @@ import $liturgy from "@/helpers/Liturgy";
 import $appdata from "@/helpers/AppData";
 import type { LiturgyItem } from "@/types/Liturgy";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
-import MusicSpotlight from "@/components/MusicSpotlight.vue";
-import { SearchMusicItem } from "@/types/Music";
-import { musicTitle } from "@root/config/musicCatalog.mjs";
-import { ACTION_LITURGY_VERSION } from "@/config/MusicAction";
-import type { MusicActionEnum } from "@/enums/MusicActionEnum";
+import LiturgyMusicChooser from "./LiturgyMusicChooser.vue";
 import LiturgySaveDialog from "./LiturgySaveDialog.vue";
 import LiturgyExportDialog from "./LiturgyExportDialog.vue";
 import LiturgyLoadDialog from "./LiturgyLoadDialog.vue";
@@ -213,9 +203,7 @@ const isActive = computed(() => $appdata.get("active_module") === "liturgy");
 
 const persist = useLiturgyPersistence();
 const litItems = useLiturgyItems(persist.activeDay, persist.scheduledCategories);
-const chooseMusicSearchOpen = ref(false);
-const chooseLaterItem = ref<LiturgyItem | null>(null);
-const chooseLaterMode = ref("sung");
+const musicChooser = ref<InstanceType<typeof LiturgyMusicChooser> | null>(null);
 const mobilePane = ref<"timeline" | "notes">("timeline");
 
 const {
@@ -294,22 +282,13 @@ const {
   overlaySlots,
 } = litItems;
 
-const musicsForSpotlight = computed<SearchMusicItem[]>(
-  () => musicsList.value as unknown as SearchMusicItem[]
-);
-
 // Preparar o catálogo custava centenas de milissegundos ao abrir a Liturgia num
-// computador fraco, só porque a lista ia como propriedade do formulário e da busca
-// fechados. Ela passa a ir na primeira abertura de cada um e fica, para o
-// fechamento não esvaziar o campo durante a animação.
+// computador fraco, só porque a lista ia como propriedade do formulário fechado.
+// Ela passa a ir na primeira abertura e fica, para o fechamento não esvaziar o
+// campo durante a animação.
 const formMusicsReady = ref(false);
-const spotlightMusicsReady = ref(false);
 watch(dialog, (open) => open && (formMusicsReady.value = true), { immediate: true });
-watch(chooseMusicSearchOpen, (open) => open && (spotlightMusicsReady.value = true));
 const formMusicsList = computed(() => (formMusicsReady.value ? musicsList.value : []));
-const spotlightMusicsList = computed(() =>
-  spotlightMusicsReady.value ? musicsForSpotlight.value : []
-);
 
 const blocoItems = computed(() => items.value.filter((i) => i.tipo === LiturgyItemTypeEnum.BLOCO));
 
@@ -317,10 +296,8 @@ const openItemDialogRoot = () => openItemDialog();
 const isChooseLaterMusic = (item: LiturgyItem) =>
   item.tipo === "musica" && (item.escolha || !item.id_music);
 
-async function openChooseLaterSearch(item: LiturgyItem, mode = "sung") {
-  chooseLaterItem.value = item;
-  chooseLaterMode.value = mode;
-  chooseMusicSearchOpen.value = true;
+function openChooseLaterSearch(item: LiturgyItem, mode = "sung") {
+  musicChooser.value?.choose(item, mode);
 }
 
 function markItemOnAccess(item: LiturgyItem): void {
@@ -329,28 +306,7 @@ function markItemOnAccess(item: LiturgyItem): void {
   if (current && !isChecked(current)) toggleChecked(current);
 }
 
-function onChooseLaterMusicAction(music: SearchMusicItem, action: MusicActionEnum) {
-  onChooseLaterMusicPicked(music, ACTION_LITURGY_VERSION[action] ?? chooseLaterMode.value);
-}
-
-function onChooseLaterMusicPicked(music: SearchMusicItem, mode = chooseLaterMode.value) {
-  const item = chooseLaterItem.value;
-  const id = Number(music.id_music);
-  if (!item || !Number.isFinite(id)) return;
-
-  const hasInstrumental = !!music.has_instrumental_music;
-  const musica = {
-    item: music.name,
-    subitem: musicTitle(music, t("data.music_prefix")),
-    musica: id,
-    id_music: id,
-    escolha: false,
-    subtipo: hasInstrumental ? "ja" : "div",
-    has_instrumental_music: hasInstrumental,
-  };
-
-  chooseLaterItem.value = null;
-  const executable = { ...item, ...musica };
+function onChooseLaterMusicChosen(executable: LiturgyItem, mode: string, item: LiturgyItem) {
   playMusic(executable, mode);
   markItemOnAccess(item);
 }

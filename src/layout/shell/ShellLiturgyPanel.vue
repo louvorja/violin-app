@@ -94,12 +94,7 @@
       </ul>
     </div>
 
-    <MusicSpotlight
-      v-model="escolhaAberta"
-      mode="pick"
-      :on-music-action="onVersaoEscolhida"
-      @pick="onMusicaEscolhida"
-    />
+    <LiturgyMusicChooser ref="seletorDeMusica" @chosen="onMusicaEscolhida" />
   </aside>
 </template>
 
@@ -108,8 +103,7 @@ import { LjButton, LjEmpty, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import MusicSpotlight from "@/components/MusicSpotlight.vue";
-import { ACTION_LITURGY_VERSION } from "@/config/MusicAction";
+import LiturgyMusicChooser from "@/modules/liturgy/components/LiturgyMusicChooser.vue";
 import $liturgy from "@/helpers/Liturgy";
 import $userdata from "@/helpers/UserData";
 import $modules from "@/helpers/Modules";
@@ -148,8 +142,7 @@ const effectiveCollapsed = computed(() => (isCompact.value ? !mobileOpen.value :
 watch(isCompact, () => {
   mobileOpen.value = false;
 });
-const escolhaAberta = ref(false);
-const itemEmEscolha = ref(null);
+const seletorDeMusica = ref(null);
 
 // Mesma preparação da tela cheia: os itens agrupados sob o bloco e com a
 // hora calculada. Sem ela o painel mostrava outra ordem e nenhum horário.
@@ -217,8 +210,7 @@ function marcar(item) {
 
 function executar(item) {
   if (precisaEscolherMusica(item)) {
-    itemEmEscolha.value = item;
-    escolhaAberta.value = true;
+    seletorDeMusica.value?.choose(item);
     return;
   }
   executeItem(item);
@@ -230,17 +222,9 @@ function executar(item) {
  * intenção ("um hino aqui"), e qual hino foi cantado neste domingo é decisão do
  * culto — quem quiser fixar edita o item na tela do módulo.
  */
-function onMusicaEscolhida(music, versao = "sung") {
-  const item = itemEmEscolha.value;
-  itemEmEscolha.value = null;
-  const id = Number(music.id_music);
-  if (!item || !Number.isFinite(id)) return;
-  playMusic({ ...item, id_music: id, musica: id, escolha: false }, versao);
+function onMusicaEscolhida(executavel, versao, item) {
+  playMusic(executavel, versao);
   marcar(item);
-}
-
-function onVersaoEscolhida(music, action) {
-  onMusicaEscolhida(music, ACTION_LITURGY_VERSION[action] ?? "sung");
 }
 
 onMounted(() => {

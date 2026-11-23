@@ -142,6 +142,8 @@ import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { KEYS } from "@/constants/UserDataKeys";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import type { LiturgyItem } from "@/types/Liturgy";
+import type { SearchMusicItem } from "@/types/Music";
+import { chosenMusicItem } from "../../chosenMusic";
 import { DB_TABLE } from "@/constants/DbTables";
 import $alert from "@/helpers/Alert";
 import { fetchWithTimeout } from "@/helpers/Http";
@@ -673,6 +675,29 @@ describe("liturgia — vínculo de sobreposição", () => {
     expect(mocks.openCustomSong).toHaveBeenCalledWith(customSong, mode);
     expect(mocks.openMusic).not.toHaveBeenCalled();
     expect(mocks.openCustomAudio).not.toHaveBeenCalled();
+  });
+
+  it("música personalizada escolhida na hora do culto toca pelo UUID", async () => {
+    mocks.getCustomSong.mockResolvedValue(customSong);
+    const naHora = {
+      id: "music-choose",
+      tipo: LiturgyItemTypeEnum.MUSICA,
+      item: "Louvor especial",
+      musica: -1,
+      subtipo: "escolha",
+      escolha: true,
+    } as LiturgyItem;
+    const executable = chosenMusicItem(naHora, {
+      id_music: -2,
+      name: "Canção personalizada",
+      custom_song_id: "custom-1",
+    } as SearchMusicItem);
+    const { playMusic } = useLiturgyExecution();
+
+    expect(await playMusic(executable!, "sung")).toBe(true);
+    expect(mocks.getCustomSong).toHaveBeenCalledWith("custom-1");
+    expect(mocks.openCustomSong).toHaveBeenCalledWith(customSong, "audio");
+    expect(mocks.openMusic).not.toHaveBeenCalled();
   });
 });
 
