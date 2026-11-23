@@ -1,0 +1,3 @@
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||"01a1e74e-910a-0000-5959-71ffb6f5ef33";var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="0b9c651d-1de3-5dcc-bf37-6b0e2df7bfbd")}catch(e){}}();import{$ as n,D as s}from"./IndexedDB-BwtAs__y.js";const a=s.SETTINGS;async function i(t){return n.get(a,t)}async function o(t){await n.put(a,t)}export{i as g,o as s};
+
+//# chunkId=0b9c651d-1de3-5dcc-bf37-6b0e2df7bfbd
