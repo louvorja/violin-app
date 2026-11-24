@@ -7,6 +7,8 @@ import Telemetry from "@/helpers/Telemetry";
 import { resolveMediaReference } from "@/helpers/MediaUrl";
 import { i18nAtual } from "@/i18n";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
+import { downloadAvailable, videoIdFromUrl } from "@/helpers/OnlineVideo";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { Music } from "@/types/Music";
 import type { Program, ProgramItem } from "@/types/Presentation";
@@ -34,6 +36,16 @@ interface SongNeed {
   mode: "sung" | "pb";
 }
 
+interface VideoNeed {
+  item: ProgramItem;
+  /** ID do YouTube; é a chave do arquivo no cache de vídeos. */
+  videoId: string;
+  /** URL original do programa. */
+  url: string;
+  /** Nome do vídeo para a tarefa de download. */
+  title: string;
+}
+
 /** Textos da tarefa em segundo plano. */
 function tm(key: string, params?: Record<string, unknown>): string {
   const t = i18nAtual()?.global?.t as ((..._args: unknown[]) => unknown) | undefined;
@@ -47,6 +59,7 @@ const state = reactive({
   checkedAt: 0,
   pending: [] as ProgramItem[],
   songs: [] as SongNeed[],
+  videos: [] as VideoNeed[],
   cloud: [] as string[],
   /** Caminho na nuvem → título do item do programa que o usa. */
   cloudOwners: {} as Record<string, string>,
@@ -69,6 +82,38 @@ function songUrls(item: ProgramItem, music: Music): { mode: "sung" | "pb"; url: 
     { mode: "sung", url: sung },
     { mode: "pb", url: pb },
   ];
+}
+
+async function videosToDownload(program: Program): Promise<VideoNeed[]> {
+  if (!downloadAvailable()) return [];
+
+  const candidates = new Map<string, VideoNeed>();
+  for (const item of program.sessions.flatMap((s) => s.items)) {
+    if (item.source?.tipo !== LiturgyItemTypeEnum.VIDEO_ONLINE) continue;
+    const url = String(item.source.url || item.source.subitem || "");
+    const videoId = videoIdFromUrl(url);
+    if (!videoId || candidates.has(videoId)) continue;
+    const subitem = String(item.source.subitem || "").replace(/^URL:\s*/i, "").trim();
+    // Na liturgia o `item` é o título do momento; o nome real do vídeo fica no
+    // `subitem`. Nos itens da coletânea é o contrário.
+    const title =
+      (subitem && !isUrl(subitem) ? subitem : "") ||
+      item.source.item?.trim() ||
+      item.title ||
+      videoId;
+    candidates.set(videoId, { item, videoId, url, title });
+  }
+  if (!candidates.size) return [];
+
+  const downloads = useOnlineVideoDownloads();
+  try {
+    await downloads.refresh();
+  } catch {
+    /* segue com o estado em memória; o download confere o disco de novo */
+  }
+  return [...candidates.values()].filter(
+    (need) => downloads.stateOf(need.videoId) !== "downloaded"
+  );
 }
 
 async function songsToDownload(program: Program): Promise<SongNeed[]> {
@@ -144,6 +189,7 @@ async function check(program: Program): Promise<void> {
 
     state.pending = pendingItems(program);
     state.songs = await songsToDownload(program);
+    state.videos = await videosToDownload(program);
     const owners = new Map<string, string>();
     for (const item of program.sessions.flatMap((s) => s.items)) {
       if (
@@ -183,17 +229,18 @@ async function check(program: Program): Promise<void> {
 let _prepareId = 0;
 
 /**
- * Prepara o programa: primeiro os arquivos que só existem na nuvem, depois os
- * hinos. Tudo acompanha em "Processos em segundo plano" — inclusive quando a
- * janela é fechada — e o cancelamento da tarefa para o laço.
+ * Prepara o programa: nuvem, hinos e vídeos online. Tudo acompanha em
+ * "Processos em segundo plano" — inclusive quando a janela é fechada — e o
+ * cancelamento da tarefa para o laço.
  */
 function _startPrepare(program: Program, label: string): boolean {
   if (state.preparing) return false;
   state.preparing = true;
 
   const songs = [...state.songs];
+  const videos = [...state.videos];
   const cloudPaths = [...state.cloud];
-  const total = cloudPaths.length + songs.length;
+  const total = cloudPaths.length + songs.length + videos.length;
   const taskId = `pm-readiness-${++_prepareId}`;
   const tasks = useBackgroundTasks();
   let done = 0;
@@ -238,6 +285,21 @@ function _startPrepare(program: Program, label: string): boolean {
         done++;
         step(tm("readiness.step_songs"));
       }
+      if (!cancelled && videos.length) step(tm("readiness.step_videos"));
+      const videoDownloads = useOnlineVideoDownloads();
+      for (const need of videos) {
+        if (cancelled) break;
+        try {
+          await videoDownloads.download(need.videoId, need.title, {
+            keep: true,
+            quiet: true,
+          });
+        } catch (e) {
+          Telemetry.captureException(e, { source: "presentation_readiness_video" });
+        }
+        done++;
+        step(tm("readiness.step_videos"));
+      }
       if (cancelled) {
         tasks.cancelTask(taskId);
         return;
@@ -246,6 +308,7 @@ function _startPrepare(program: Program, label: string): boolean {
       Telemetry.track("presentation_readiness_prepared", {
         songs: songs.length,
         cloud: cloudPaths.length,
+        videos: videos.length,
       });
     } finally {
       state.preparing = false;
@@ -265,6 +328,7 @@ const problems = computed(
   () =>
     state.pending.length +
     state.songs.length +
+    state.videos.length +
     state.cloud.length +
     state.missing.length +
     state.empty.length +

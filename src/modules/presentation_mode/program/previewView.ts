@@ -1,5 +1,5 @@
 import $path from "@/helpers/Path";
-import { youtubeThumb } from "@/helpers/OnlineVideo";
+import { videoIdFromUrl, youtubeThumb } from "@/helpers/OnlineVideo";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { ProgramItem } from "@/types/Presentation";
 import type { PreviewView } from "../components/StagePreview.vue";
@@ -19,6 +19,18 @@ export function programView(item: ProgramItem): PreviewView {
   const src = item.source;
   if (src?.tipo === LiturgyItemTypeEnum.MUSICA && src.id_music && src.id_music > 0 && !src.escolha) {
     return { kind: "song", title: item.title, icon: KIND_ICONS.music, playable: true, songId: src.id_music, needsMode: needsModeChoice(item) };
+  }
+  if (src?.tipo === LiturgyItemTypeEnum.VIDEO_ONLINE) {
+    const videoId = videoIdFromUrl(src.url || src.subitem);
+    if (videoId) {
+      return {
+        kind: "image",
+        title: item.title,
+        icon: KIND_ICONS.online_video,
+        playable: true,
+        url: youtubeThumb(videoId),
+      };
+    }
   }
   // Música personalizada: sem grade de slides na prévia, mas a versão em aberto também se escolhe aqui.
   if (needsModeChoice(item)) {

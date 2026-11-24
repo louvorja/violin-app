@@ -5,6 +5,10 @@ const crypto = require("node:crypto");
 const lockfile = require("proper-lockfile");
 const leases = new Map();
 const MARKER = ".louvorja-collection.json";
+/** Mesmo prazo do proper-lockfile; o retry espera ele vencer para tentar de novo. */
+const LOCK_STALE_MS = 120000;
+const RETRY_COOLDOWN_MS = 5000;
+const RETRY_DELAY_MS = LOCK_STALE_MS + 1500;
 
 function readMarker(root, kind) {
   const file = path.join(root, MARKER);
@@ -25,7 +29,7 @@ function updateMarker(root, kind, shared) {
   const releaseMetadata = lockfile.lockSync(path.join(fs.realpathSync(root), ".louvorja-metadata"), {
     // proper-lockfile indexa leases pelo primeiro argumento, não por lockfilePath.
     // O identificador de metadados não pode substituir o lease do escritor.
-    realpath: false, lockfilePath: path.join(root, ".louvorja-metadata.lock"), stale: 120000,
+    realpath: false, lockfilePath: path.join(root, ".louvorja-metadata.lock"), stale: LOCK_STALE_MS,
   });
   const file = path.join(root, MARKER);
   const temporary = path.join(root, `.louvorja-marker-${crypto.randomUUID()}.tmp`);
@@ -81,7 +85,7 @@ function acquire(root) {
   let writtenMtime = null;
   const releaseLock = lockfile.lockSync(root, {
     realpath: true, lockfilePath: path.join(root, ".louvorja-writer.lock"),
-    stale: 120000, update: 10000,
+    stale: LOCK_STALE_MS, update: 10000,
     fs: {
       ...fs,
       statSync(file, ...args) {
@@ -110,25 +114,99 @@ function acquire(root) {
   release.isValid = isValid;
   return release;
 }
+function clearRetryTimer(s) {
+  if (!s?.retryTimer) return;
+  clearTimeout(s.retryTimer);
+  s.retryTimer = null;
+}
+
+/** Tenta de novo depois que o lease antigo vencer; um escritor vivo continua barrando. */
+function scheduleRetry(kind, s) {
+  if (s.retryTimer) return;
+  s.retryTimer = setTimeout(() => {
+    s.retryTimer = null;
+    retry(kind, { force: true });
+  }, RETRY_DELAY_MS);
+  s.retryTimer.unref?.();
+}
+
+/** Abre o lease e grava o metadado; o chamador libera em caso de erro. */
+function openLease(kind, state) {
+  if (!fs.lstatSync(state.root).isDirectory()) throw new Error("A pasta não está disponível.");
+  const marker = readMarker(state.root, kind);
+  if (marker?.shared === true) state.shared = true;
+  state.release = acquire(state.root);
+  const updated = updateMarker(state.root, kind, state.shared);
+  state.shared = updated.shared;
+  state.writable = true;
+  state.reason = null;
+}
+
+/**
+ * Readquire um lease que ficou para trás num restart rápido (ou numa permissão
+ * que acabou de ser corrigida). `force` ignora o cooldown do retry automático.
+ */
+function retry(kind, { force = false } = {}) {
+  const s = state(kind);
+  if (!s) return false;
+  if (s.writable) return true;
+
+  const now = Date.now();
+  if (!force && now - s.lastAttempt < RETRY_COOLDOWN_MS) return false;
+  const previousReason = s.reason;
+  s.lastAttempt = now;
+  try { s.release?.(); } catch { /* lease antigo já caiu */ }
+  s.release = null;
+  s.writable = false;
+
+  try {
+    openLease(kind, s);
+    clearRetryTimer(s);
+    console.info(`[storage] escrita em ${kind} recuperada.`);
+    return true;
+  } catch (error) {
+    try { s.release?.(); } catch { /* nada a liberar */ }
+    s.release = null;
+    s.writable = false;
+    s.reason = error.code === "ELOCKED" ? "in-use" : "unavailable";
+    if (s.reason !== previousReason) {
+      console.warn(
+        `[storage] ${kind} sem escrita (${s.reason}${error.code ? `, ${error.code}` : ""}):`,
+        error.message
+      );
+    }
+    // Um lease vivo continua barrando; tenta de novo quando ele puder vencer.
+    if (s.reason === "in-use") scheduleRetry(kind, s);
+    return false;
+  }
+}
+
 function initialize(layout) {
   release();
   for (const kind of ["media", "videos"]) {
     const root = layout[kind + "Dir"];
-    const state = { root, writable: false, shared: layout[kind + "Shared"] === true, release: null, reason: null };
+    const state = {
+      root,
+      writable: false,
+      shared: layout[kind + "Shared"] === true,
+      release: null,
+      reason: null,
+      lastAttempt: 0,
+      retryTimer: null,
+    };
     leases.set(kind, state);
     try {
-      if (!fs.lstatSync(root).isDirectory()) throw new Error("A pasta não está disponível.");
-      const marker = readMarker(root, kind);
-      if (marker?.shared === true) state.shared = true;
-      state.release = acquire(root);
-      const updated = updateMarker(root, kind, state.shared);
-      state.shared = updated.shared;
-      state.writable = true;
+      openLease(kind, state);
     } catch (error) {
-      state.release?.();
+      try { state.release?.(); } catch { /* nada a liberar */ }
       state.release = null;
       state.writable = false;
       state.reason = error.code === "ELOCKED" ? "in-use" : "unavailable";
+      console.warn(
+        `[storage] ${kind} sem escrita (${state.reason}${error.code ? `, ${error.code}` : ""}):`,
+        error.message
+      );
+      if (state.reason === "in-use") scheduleRetry(kind, state);
     }
   }
 }
@@ -151,7 +229,9 @@ function canMaintain(kind) {
   catch { return false; }
 }
 function assertWritable(kind) {
-  if (!canWrite(kind)) throw new Error("Esta pasta está somente para leitura ou em uso por outra conta. Feche a outra instância ou escolha uma pasta com permissão de escrita.");
+  if (!canWrite(kind) && !retry(kind)) {
+    throw new Error("Esta pasta está somente para leitura ou em uso por outra conta. Feche a outra instância ou escolha uma pasta com permissão de escrita.");
+  }
 }
 function assertMaintain(kind) {
   assertWritable(kind);
@@ -167,8 +247,21 @@ function status() {
 }
 function release() {
   for (const s of leases.values()) {
+    clearRetryTimer(s);
     try { s.release?.(); } catch { /* lock já encerrado no shutdown */ }
   }
   leases.clear();
 }
-module.exports = { acquire, initialize, canWrite, canMaintain, assertWritable, assertMaintain, status, release, readMarker, markShared };
+module.exports = {
+  acquire,
+  initialize,
+  retry,
+  canWrite,
+  canMaintain,
+  assertWritable,
+  assertMaintain,
+  status,
+  release,
+  readMarker,
+  markShared,
+};

@@ -242,7 +242,7 @@
     </div>
 
     <ProgramModelDialog v-model="modelsOpen" :mode="modelsMode" />
-    <ReadinessDialog v-model="readinessOpen" @edit="(id: string) => emit('edit-item', id)" />
+    <ReadinessDialog v-model="readinessOpen" />
 
     <!-- Próximo item: enviar, voltar, travar. Sem item nenhum, o total do programa. -->
     <slot v-if="items.length" name="foot" />

@@ -12,6 +12,7 @@ const updateTask = vi.fn();
 const completeTask = vi.fn();
 const cancelTask = vi.fn();
 const download = vi.fn(async (_path: string) => true);
+const downloadVideo = vi.fn(async (_id: string, _name: string) => true);
 const fetchWithTimeout = vi.fn(async () => ({ arrayBuffer: async () => new ArrayBuffer(8) }));
 const track = vi.fn();
 const captureException = vi.fn();
@@ -37,6 +38,13 @@ vi.mock("@/helpers/MediaUrl", () => ({
 }));
 vi.mock("@/composables/useBackgroundTasks", () => ({
   useBackgroundTasks: () => ({ registerTask, updateTask, completeTask, cancelTask }),
+}));
+vi.mock("@/composables/useOnlineVideoDownloads", () => ({
+  useOnlineVideoDownloads: () => ({
+    download: downloadVideo,
+    refresh: vi.fn(async () => {}),
+    stateOf: () => "none",
+  }),
 }));
 vi.mock("@/i18n", () => ({
   i18nAtual: () => ({
@@ -67,9 +75,21 @@ const song = (
 
 describe("useReadiness — preparar em segundo plano", () => {
   beforeEach(() => {
-    for (const fn of [registerTask, updateTask, completeTask, cancelTask, download, fetchWithTimeout, track, captureException])
+    for (const fn of [
+      registerTask,
+      updateTask,
+      completeTask,
+      cancelTask,
+      download,
+      downloadVideo,
+      fetchWithTimeout,
+      track,
+      captureException,
+    ])
       fn.mockClear();
     download.mockResolvedValue(true);
+    downloadVideo.mockResolvedValue(true);
+    useReadiness().state.videos = [];
   });
 
   it("baixa nuvem e hinos em uma tarefa só, com progresso", async () => {
@@ -86,7 +106,36 @@ describe("useReadiness — preparar em segundo plano", () => {
     expect(fetchWithTimeout).toHaveBeenCalledTimes(2);
     expect(updateTask).toHaveBeenCalled();
     expect(readiness.state.preparing).toBe(false);
-    expect(track).toHaveBeenCalledWith("presentation_readiness_prepared", { songs: 2, cloud: 1 });
+    expect(track).toHaveBeenCalledWith("presentation_readiness_prepared", {
+      songs: 2,
+      cloud: 1,
+      videos: 0,
+    });
+  });
+
+  it("baixa os vídeos online que faltam na mesma tarefa", async () => {
+    const readiness = useReadiness();
+    readiness.state.videos = [
+      {
+        item: { id: "item-video" } as ProgramItem,
+        videoId: "abc123",
+        url: "https://www.youtube.com/watch?v=abc123",
+        title: "Vídeo do culto",
+      },
+    ];
+
+    expect(readiness.prepare(program, "Preparando o culto")).toBe(true);
+    await vi.waitFor(() => expect(completeTask).toHaveBeenCalledOnce());
+
+    expect(downloadVideo).toHaveBeenCalledWith("abc123", "Vídeo do culto", {
+      keep: true,
+      quiet: true,
+    });
+    expect(track).toHaveBeenCalledWith("presentation_readiness_prepared", {
+      songs: 0,
+      cloud: 0,
+      videos: 1,
+    });
   });
 
   it("não começa um segundo preparo enquanto o primeiro roda", async () => {

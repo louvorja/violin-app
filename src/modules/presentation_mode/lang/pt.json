@@ -617,6 +617,8 @@
     "pending_hint": "Itens que mudam toda semana e ainda estão vazios.",
     "songs": "Hinos não baixados ({n})",
     "songs_hint": "Tocam pela internet; baixe antes para não depender da rede.",
+    "videos": "Vídeos online não baixados ({n})",
+    "videos_hint": "Baixe antes do culto para não depender da internet.",
     "cloud": "Arquivos só na nuvem ({n})",
     "cloud_hint": "Ainda não estão neste computador.",
     "missing": "Não encontrados ({n})",
@@ -632,8 +634,8 @@
     "background_now": "Continuar em segundo plano",
     "step_cloud": "Baixando arquivos da nuvem",
     "step_songs": "Baixando hinos",
+    "step_videos": "Baixando vídeos online",
     "step_progress": "{done} de {total}",
-    "choose": "Escolher",
     "more": "e mais {n}"
   },
   "church": {

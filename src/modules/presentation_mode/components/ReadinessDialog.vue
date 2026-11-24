@@ -33,15 +33,6 @@
                 {{ row.detail }}
               </span>
             </span>
-            <LjButton
-              v-if="row.itemId"
-              size="sm"
-              variant="ghost"
-              :data-testid="`pm-readiness-edit-${row.itemId}`"
-              @click="edit(row.itemId)"
-            >
-              {{ tm("readiness.choose") }}
-            </LjButton>
           </li>
           <li v-if="group.rows.length > 8" class="pm-ready__more">
             {{ tm("readiness.more", { n: group.rows.length - 8 }) }}
@@ -93,7 +84,7 @@ import { useReadiness } from "../composables/useReadiness";
  */
 
 const props = defineProps<{ modelValue: boolean }>();
-const emit = defineEmits<{ "update:modelValue": [value: boolean]; edit: [itemId: string] }>();
+const emit = defineEmits<{ "update:modelValue": [value: boolean] }>();
 
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const program = useProgram();
@@ -119,7 +110,6 @@ interface Row {
   title: string;
   /** O arquivo/versão de fato que será baixado (ou o item que o usa). */
   detail?: string;
-  itemId?: string;
 }
 
 /** Uma linha por música: as versões que faltam ficam juntas no detalhe. */
@@ -154,12 +144,22 @@ const groups = computed(() => {
     {
       key: "pending",
       icon: ICONS.UI.ALERT,
-      rows: state.pending.map((i) => ({ key: i.id, label: i.title, title: i.title, itemId: i.id })),
+      rows: state.pending.map((i) => ({ key: i.id, label: i.title, title: i.title })),
     },
     {
       key: "songs",
       icon: ICONS.MUSIC.MUSIC,
       rows: songRows(),
+    },
+    {
+      key: "videos",
+      icon: ICONS.MEDIA.VIDEO_FILE,
+      rows: state.videos.map((need) => ({
+        key: need.videoId,
+        label: need.title,
+        title: need.url,
+        detail: need.item.title && need.item.title !== need.title ? need.item.title : "",
+      })),
     },
     {
       key: "cloud",
@@ -190,7 +190,7 @@ const groups = computed(() => {
   return all.filter((g) => g.rows.length);
 });
 
-const downloadable = computed(() => state.songs.length + state.cloud.length);
+const downloadable = computed(() => state.songs.length + state.videos.length + state.cloud.length);
 
 function recheck(): void {
   void check(program.program.value);
@@ -207,11 +207,6 @@ function prepareAll(): void {
 function continueInBackground(): void {
   if (!state.preparing) return;
   open.value = false;
-}
-
-function edit(itemId: string): void {
-  open.value = false;
-  emit("edit", itemId);
 }
 </script>
 

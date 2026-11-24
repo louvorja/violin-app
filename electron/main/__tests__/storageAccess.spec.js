@@ -84,6 +84,46 @@ describe("permissão de escrita e metadado compartilhado", () => {
     expect(fs.lstatSync(lock).isDirectory()).toBe(true);
   });
 
+  it("readquire o lease quando o lock antigo vira stale", () => {
+    const lock = path.join(videos, ".louvorja-writer.lock");
+    fs.mkdirSync(lock);
+    access.initialize(layout());
+    expect(access.canWrite("videos")).toBe(false);
+
+    // Enquanto o diretório parece fresco, não é roubado.
+    expect(access.retry("videos", { force: true })).toBe(false);
+    expect(fs.lstatSync(lock).isDirectory()).toBe(true);
+
+    const old = new Date(Date.now() - 121_000);
+    fs.utimesSync(lock, old, old);
+    expect(access.retry("videos", { force: true })).toBe(true);
+    expect(access.canWrite("videos")).toBe(true);
+  });
+
+  it("retenta sozinho depois do stale de um lease deixado para trás", () => {
+    vi.useFakeTimers();
+    const lock = path.join(videos, ".louvorja-writer.lock");
+    fs.mkdirSync(lock);
+    access.initialize(layout());
+    expect(access.canWrite("videos")).toBe(false);
+
+    // O timer automático espera o mesmo stale do proper-lockfile.
+    vi.advanceTimersByTime(122_000);
+    expect(access.canWrite("videos")).toBe(true);
+  });
+
+  it("assertWritable recupera o lease stale antes de desistir", () => {
+    const lock = path.join(videos, ".louvorja-writer.lock");
+    fs.mkdirSync(lock);
+    access.initialize(layout());
+    expect(access.canWrite("videos")).toBe(false);
+
+    const old = new Date(Date.now() - 121_000);
+    fs.utimesSync(lock, old, old);
+    expect(() => access.assertWritable("videos")).not.toThrow();
+    expect(access.canWrite("videos")).toBe(true);
+  });
+
   it("o iCloud reescrever o horário da trava não derruba o escritor, e ela continua sendo renovada", () => {
     vi.useFakeTimers();
     access.initialize(layout());

@@ -1444,6 +1444,11 @@ app.on("will-quit", () => {
   cpuProfileCapture.cancel();
   shortcuts.disable();
   powerBlocker.stop();
+  // Os downloads já encerraram no before-quit; solta o lease de escrita antes
+  // de o processo sair para um restart rápido não encontrar a pasta ocupada.
+  try { storageAccess.release(); } catch (error) {
+    console.warn("[storage] Falha ao liberar o lease de escrita:", error?.message || error);
+  }
   if (appTray) {
     try { appTray.destroy(); } catch (_) { /* ignore */ }
     appTray = null;
