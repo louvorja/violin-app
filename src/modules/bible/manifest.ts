@@ -137,6 +137,15 @@ export const contextualPages: RibbonPage[] = [
             defaultValue: false,
             broadcastOnToggle: BROADCAST_TYPE.BIBLE_FORMAT_CHANGED,
           },
+          {
+            // Desligado = o layout em colunas de sempre. Com as três de cima,
+            // vira a segunda coluna do grupo Exibição.
+            id: `${moduleId}_grid_layout`,
+            type: "checkbox",
+            optionKey: KEYS.MODULES.BIBLE.GRID_LAYOUT,
+            label: `${modulePath}.ribbon.grid_layout`,
+            defaultValue: false,
+          },
         ],
       },
       {
