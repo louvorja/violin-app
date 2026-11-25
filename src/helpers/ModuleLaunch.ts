@@ -12,16 +12,12 @@
  */
 import { shallowRef } from "vue";
 
-export interface ModuleLaunchConfig {
-  /** Regressivo ou progressivo (temporizadores e cronômetro). */
-  mode?: "up" | "down";
-  /** Temporizador de Culto: hora de término ou duração. */
-  define_by?: "end" | "duration";
-  /** "HH:MM" — hora de término (temporizadores). */
-  target?: string;
-  /** Minutos — duração (Temporizador de Culto) ou tempo (Cronômetro regressivo). */
-  minutes?: number;
-}
+/**
+ * Configuração que o módulo aplica ao abrir. Cada módulo lê as chaves que
+ * conhece (mode, target, minutes, warning, sound_start, draw_mode…); a lista
+ * de campos de cada um mora em `modules/liturgy/utility.ts`.
+ */
+export type ModuleLaunchConfig = Record<string, unknown>;
 
 export interface ModuleLaunchRequest {
   module: string;
@@ -48,4 +44,22 @@ export function takeModuleLaunch(moduleId: string): ModuleLaunchRequest | undefi
   if (!found) return undefined;
   pendingModuleLaunches.value = pendingModuleLaunches.value.filter((r) => r !== found);
   return found;
+}
+
+/** Leitores tolerantes: valor do tipo certo ou `undefined` (o módulo mantém o que tinha). */
+export function launchString(config: ModuleLaunchConfig, key: string): string | undefined {
+  const value = config[key];
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+export function launchNumber(config: ModuleLaunchConfig, key: string): number | undefined {
+  const value = config[key];
+  if (value === "" || value === null || value === undefined) return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+export function launchBoolean(config: ModuleLaunchConfig, key: string): boolean | undefined {
+  const value = config[key];
+  return typeof value === "boolean" ? value : undefined;
 }

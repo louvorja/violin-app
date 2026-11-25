@@ -444,59 +444,132 @@
           @update:model-value="onUtilityModuleChange(String($event))"
         />
       </LjField>
-      <div v-if="utilityFields.length" class="lif-row">
-        <LjField v-if="utilityFields.includes('mode')" class="lif-field" :label="t('utility.mode')">
-          <LjSelect
-            :model-value="utilityConfig.mode ?? 'down'"
-            :items="utilityModeOptions"
-            data-testid="utility-mode"
-            @update:model-value="setUtilityConfig('mode', $event)"
-          />
-        </LjField>
-        <LjField
-          v-if="utilityFields.includes('define_by')"
-          class="lif-field"
-          :label="t('utility.define_by')"
-        >
-          <LjSelect
-            :model-value="utilityConfig.define_by ?? 'end'"
-            :items="utilityDefineByOptions"
-            data-testid="utility-define-by"
-            @update:model-value="setUtilityConfig('define_by', $event)"
-          />
-        </LjField>
-        <LjField
-          v-if="utilityFields.includes('target')"
-          class="lif-field lif-field--time"
-          :label="t('utility.target')"
-        >
-          <LjInput
-            :model-value="utilityConfig.target ?? ''"
-            type="time"
-            data-testid="utility-target"
-            @update:model-value="setUtilityConfig('target', $event)"
-          />
-        </LjField>
-        <LjField
-          v-if="utilityFields.includes('minutes')"
-          class="lif-field lif-field--duration"
-          :label="t('utility.minutes')"
-        >
-          <LjInput
-            :model-value="utilityConfig.minutes ?? ''"
-            type="number"
-            min="1"
-            data-testid="utility-minutes"
-            @update:model-value="setUtilityConfig('minutes', Number($event))"
-          />
-        </LjField>
-      </div>
+
+      <!-- Os campos vêm da lista de cada módulo (utility.ts), em grupos. -->
+      <template v-for="group in utilityGroups" :key="group">
+        <h4 class="lif-util-group">{{ t(`utility.group_${group}`) }}</h4>
+        <div class="lif-util-fields">
+          <template v-for="field in utilityFieldsOf(group)" :key="field.key">
+            <LjField
+              v-if="field.type === 'select'"
+              class="lif-field"
+              :label="t(`utility.${field.label}`)"
+            >
+              <LjSelect
+                :model-value="String(utilityConfig[field.key] ?? field.default)"
+                :items="
+                  (field.options ?? []).map((o) => ({
+                    value: o.value,
+                    label: t(`utility.${o.label}`),
+                  }))
+                "
+                :data-testid="`utility-${field.key}`"
+                @update:model-value="setUtilityConfig(field.key, $event)"
+              />
+            </LjField>
+            <LjField
+              v-else-if="field.type === 'time'"
+              class="lif-field lif-field--time"
+              :label="t(`utility.${field.label}`)"
+            >
+              <LjInput
+                :model-value="String(utilityConfig[field.key] ?? '')"
+                type="time"
+                :data-testid="`utility-${field.key}`"
+                @update:model-value="setUtilityConfig(field.key, $event)"
+              />
+            </LjField>
+            <LjField
+              v-else-if="field.type === 'number'"
+              class="lif-field lif-field--duration"
+              :label="t(`utility.${field.label}`)"
+            >
+              <LjInput
+                :model-value="String(utilityConfig[field.key] ?? '')"
+                type="number"
+                :min="field.min"
+                :max="field.max"
+                :data-testid="`utility-${field.key}`"
+                @update:model-value="
+                  setUtilityConfig(field.key, $event === '' ? '' : Number($event))
+                "
+              />
+            </LjField>
+            <LjCheckbox
+              v-else-if="field.type === 'checkbox'"
+              class="lif-util-check"
+              :model-value="utilityConfig[field.key] !== false"
+              :label="t(`utility.${field.label}`)"
+              :data-testid="`utility-${field.key}`"
+              @update:model-value="setUtilityConfig(field.key, $event === true)"
+            />
+            <LjField
+              v-else-if="field.type === 'names'"
+              class="lif-field lif-field--grow lif-util-wide"
+              :label="t(`utility.${field.label}`)"
+            >
+              <LjTextarea
+                :model-value="utilityNamesText"
+                :rows="5"
+                :placeholder="t('utility.names_placeholder')"
+                :data-testid="`utility-${field.key}`"
+                @update:model-value="setUtilityConfig(field.key, String($event).split(/\r?\n/))"
+              />
+            </LjField>
+            <!-- Áudio de um aviso: o que vem com o programa ou um da biblioteca. -->
+            <div
+              v-else-if="field.type === 'sound'"
+              class="lif-util-sound"
+              :data-testid="`utility-${field.key}`"
+            >
+              <span
+                class="lif-util-sound__name"
+                :class="{ 'is-default': !utilitySound(field.key) }"
+              >
+                {{ utilitySound(field.key)?.name || t("utility.sound_default") }}
+              </span>
+              <LjButton
+                size="sm"
+                :icon="ICONS.MEDIA.LIBRARY"
+                :data-testid="`utility-${field.key}-pick`"
+                @click="openUtilitySoundPicker(field.key)"
+              >
+                {{ t("utility.sound_pick") }}
+              </LjButton>
+              <LjButton
+                v-if="utilitySound(field.key)"
+                size="sm"
+                variant="ghost"
+                :icon="ICONS.ACTIONS.RESTORE"
+                :data-testid="`utility-${field.key}-default`"
+                @click="setUtilityConfig(field.key, null)"
+              >
+                {{ t("utility.sound_use_default") }}
+              </LjButton>
+            </div>
+          </template>
+        </div>
+      </template>
+
       <LjCheckbox
         v-if="utilitySpec(form.util_module)?.canAutoStart"
+        class="lif-util-autostart"
         :model-value="!!form.util_autostart"
         :label="t('utility.auto_start')"
         data-testid="utility-autostart"
         @update:model-value="setFormField('util_autostart', $event)"
+      />
+      <LiturgyLibrarySearch
+        v-model="utilitySoundPickerOpen"
+        :title="t('utility.sound_pick_title')"
+        :icon="ICONS.MEDIA.LIBRARY"
+        :items="utilitySoundItems"
+        :categories="utilitySoundCategories"
+        :selected-id="
+          utilitySoundPicking ? utilitySound(utilitySoundPicking)?.libraryId : undefined
+        "
+        default-view="list"
+        @pick="onUtilitySoundPicked"
       />
     </section>
 
@@ -592,6 +665,7 @@ import type { OverlaySlot } from "@/types/Overlay";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { canLinkOverlay } from "../overlayLink";
 import {
+  UTILITY_GROUPS,
   UTILITY_MODULES,
   defaultUtilityConfig,
   utilitySpec,
@@ -740,22 +814,70 @@ const utilityTitle = (id: string): string => appT(`modules.${id}.title`);
 const utilityOptions = computed(() =>
   UTILITY_MODULES.map((m) => ({ value: m.id, label: utilityTitle(m.id) }))
 );
-const utilityModeOptions = computed(() => [
-  { value: "down", label: t("utility.mode_down") },
-  { value: "up", label: t("utility.mode_up") },
-]);
-const utilityDefineByOptions = computed(() => [
-  { value: "end", label: t("utility.define_by_end") },
-  { value: "duration", label: t("utility.define_by_duration") },
-]);
 
 const utilityConfig = computed<ModuleLaunchConfig>(() => props.form.util_config ?? {});
 const utilityFields = computed(() =>
   visibleUtilityFields(props.form.util_module, utilityConfig.value)
 );
+/** Só os grupos que têm campo agora, na ordem fixa. */
+const utilityGroups = computed(() =>
+  UTILITY_GROUPS.filter((g) => utilityFields.value.some((f) => f.group === g))
+);
+function utilityFieldsOf(group: string) {
+  return utilityFields.value.filter((f) => f.group === group);
+}
 
-function setUtilityConfig(key: keyof ModuleLaunchConfig, value: unknown): void {
+const utilityNamesText = computed(() => {
+  const names = utilityConfig.value.names;
+  return Array.isArray(names) ? names.join("\n") : "";
+});
+
+function setUtilityConfig(key: string, value: unknown): void {
   props.setFormField("util_config", { ...utilityConfig.value, [key]: value });
+}
+
+function utilitySound(key: string): { libraryId: string; name: string } | null {
+  const value = utilityConfig.value[key] as { libraryId?: string; name?: string } | null;
+  return value?.libraryId ? { libraryId: value.libraryId, name: value.name || "" } : null;
+}
+
+const utilitySoundPickerOpen = ref(false);
+const utilitySoundPicking = ref<string | null>(null);
+const utilitySoundItems = ref<LibrarySearchItem[]>([]);
+const utilitySoundCategories = ref<LibrarySearchCategory[]>([]);
+
+/** Áudios da Biblioteca de Mídia para o aviso escolhido. */
+async function openUtilitySoundPicker(key: string): Promise<void> {
+  utilitySoundPicking.value = key;
+  const [all, categories] = await Promise.all([
+    $idb
+      .getAll<{
+        id: string;
+        name: string;
+        type: string;
+        categoryId?: string;
+      }>(DB_TABLE.MEDIA_LIBRARY)
+      .catch(() => []),
+    $idb.getAll<LibrarySearchCategory>(DB_TABLE.MEDIA_LIBRARY_CATEGORY).catch(() => []),
+  ]);
+  const audios = all.filter((f) => f.type === "audio");
+  const used = new Set(audios.map((a) => a.categoryId).filter(Boolean));
+  utilitySoundItems.value = audios.map((f) => ({
+    id: f.id,
+    name: f.name,
+    icon: ICONS.MEDIA.AUDIO,
+    categoryId: f.categoryId,
+    type: "audio",
+  }));
+  utilitySoundCategories.value = mediaCategories(categories.filter((c) => used.has(c.id)));
+  utilitySoundPickerOpen.value = true;
+}
+
+function onUtilitySoundPicked(item: LibrarySearchItem): void {
+  utilitySoundPickerOpen.value = false;
+  if (utilitySoundPicking.value) {
+    setUtilityConfig(utilitySoundPicking.value, { libraryId: item.id, name: item.name });
+  }
 }
 
 /**
@@ -1546,5 +1668,54 @@ function onVersionChange(version: string) {
   border: 1px solid rgba(var(--lj-on-surface-ch), 0.2);
   flex-shrink: 0;
   forced-color-adjust: none;
+}
+
+/* Utilitário: grupos de campos do módulo escolhido. */
+.lif-util-group {
+  margin: var(--lj-space-5) 0 var(--lj-space-2);
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-xs);
+  font-weight: var(--lj-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lif-util-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--lj-space-4) var(--lj-space-6);
+}
+
+.lif-util-wide {
+  flex-basis: 100%;
+}
+
+.lif-util-sound {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: var(--lj-space-3);
+  margin: calc(-1 * var(--lj-space-2)) 0 var(--lj-space-2) var(--lj-space-7);
+}
+
+.lif-util-sound__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--lj-text-sm);
+}
+
+.lif-util-sound__name.is-default {
+  color: var(--lj-text-subtle);
+}
+
+.lif-util-check {
+  flex-basis: 100%;
+}
+
+.lif-util-autostart {
+  margin-top: var(--lj-space-5);
 }
 </style>

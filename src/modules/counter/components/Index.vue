@@ -25,6 +25,8 @@ import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { COUNTER_START } from "../projectionText";
+import { useModuleLaunch } from "@/composables/useModuleLaunch";
+import { launchNumber } from "@/helpers/ModuleLaunch";
 
 const { show_format } = useModuleFormat("counter", manifest);
 
@@ -48,6 +50,12 @@ watch(
   },
   { immediate: true }
 );
+
+/* Item "Utilitário" da liturgia: começa do número escolhido. */
+useModuleLaunch("counter", ({ config }) => {
+  const start = launchNumber(config, "start");
+  if (start !== undefined) count.value = start;
+});
 
 function increment() {
   count.value++;

@@ -95,6 +95,7 @@ import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useTimerEndAction } from "@/composables/useTimerEndAction";
 import { useModuleLaunch } from "@/composables/useModuleLaunch";
+import { launchBoolean, launchNumber, launchString } from "@/helpers/ModuleLaunch";
 import Media from "@/composables/useMedia";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -126,7 +127,9 @@ import {
   getExtraCues,
   resolveCueSound,
   resolveExtraSound,
+  setSoundChoice,
   type WorshipCue,
+  type WorshipSoundChoice,
   type WorshipExtraCue,
 } from "../sounds";
 
@@ -492,11 +495,26 @@ function onModuleShow(visible: boolean): void {
  * (que reiniciam) rodarem antes, senão eles parariam a contagem recém-iniciada.
  */
 useModuleLaunch(ModuleEnum.TIMER_WORSHIP, async ({ config, autoStart }) => {
-  if (config.mode) mode.value = config.mode;
-  if (config.define_by) $userdata.set(KEYS.MODULES.TIMER_WORSHIP.DEFINE_BY, config.define_by);
-  if (config.target) targetTime.value = config.target;
-  if (config.minutes) {
-    $userdata.set(KEYS.MODULES.TIMER_WORSHIP.DURATION_MINUTES, Math.max(1, config.minutes));
+  const TW = KEYS.MODULES.TIMER_WORSHIP;
+  const newMode = launchString(config, "mode");
+  if (newMode === "up" || newMode === "down") mode.value = newMode;
+  const by = launchString(config, "define_by");
+  if (by === "end" || by === "duration") $userdata.set(TW.DEFINE_BY, by);
+  const target = launchString(config, "target");
+  if (target) targetTime.value = target;
+  const minutes = launchNumber(config, "minutes");
+  if (minutes) $userdata.set(TW.DURATION_MINUTES, Math.max(1, minutes));
+  const secondLine = launchString(config, "second_line");
+  if (secondLine) $userdata.set(TW.SECOND_LINE, secondLine);
+  const warning = launchNumber(config, "warning");
+  if (warning !== undefined) setWarning(warning);
+  const over = launchBoolean(config, "overtime");
+  if (over !== undefined) $userdata.set(TW.COUNT_OVERTIME, over);
+  for (const cue of ["start", "five", "one"] as const) {
+    const on = launchBoolean(config, `sound_${cue}`);
+    if (on !== undefined) $userdata.set(ENABLED_KEYS[cue], on);
+    const fileKey = `sound_${cue}_file`;
+    if (fileKey in config) setSoundChoice(cue, (config[fileKey] as WorshipSoundChoice) ?? null);
   }
   await nextTick();
   reset();

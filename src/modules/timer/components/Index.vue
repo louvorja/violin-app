@@ -76,6 +76,7 @@ import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useTimerEndAction } from "@/composables/useTimerEndAction";
 import { useModuleLaunch } from "@/composables/useModuleLaunch";
+import { launchBoolean, launchNumber, launchString } from "@/helpers/ModuleLaunch";
 import { KEYS } from "@/constants/UserDataKeys";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { formatTimerSeconds, timerProjectionText } from "@/helpers/TimerText";
@@ -364,8 +365,14 @@ function reset(): void {
  * começa a contar. O `nextTick` deixa o watcher de modo (que reinicia) rodar antes.
  */
 useModuleLaunch("timer", async ({ config, autoStart }) => {
-  if (config.mode) mode.value = config.mode;
-  if (config.target) targetTime.value = config.target;
+  const newMode = launchString(config, "mode");
+  if (newMode === "up" || newMode === "down") mode.value = newMode;
+  const target = launchString(config, "target");
+  if (target) targetTime.value = target;
+  const warning = launchNumber(config, "warning");
+  if (warning !== undefined) setWarning(warning);
+  const over = launchBoolean(config, "overtime");
+  if (over !== undefined) $userdata.set(KEYS.MODULES.TIMER.COUNT_OVERTIME, over);
   await nextTick();
   reset();
   if (autoStart) start();

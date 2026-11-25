@@ -151,6 +151,9 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useModuleLaunch } from "@/composables/useModuleLaunch";
+import { launchBoolean, launchNumber, launchString } from "@/helpers/ModuleLaunch";
+import UserData from "@/helpers/UserData";
+import { KEYS } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
 import { LjButton, LjChip } from "@/components/ui";
 import { module as manifest } from "../manifest";
@@ -211,8 +214,14 @@ useModuleProjection("stopwatch", {
  * o item pediu, começa a contar. As voltas ficam como estão.
  */
 useModuleLaunch("stopwatch", async ({ config, autoStart }) => {
-  if (config.mode) setMode(config.mode);
-  if (config.minutes && (config.mode ?? mode.value) === "down") setTarget(config.minutes * 60);
+  const newMode = launchString(config, "mode");
+  if (newMode === "up" || newMode === "down") setMode(newMode);
+  const minutes = launchNumber(config, "minutes");
+  if (minutes && (newMode ?? mode.value) === "down") setTarget(minutes * 60);
+  const warning = launchNumber(config, "warning");
+  if (warning !== undefined) setWarning(warning);
+  const over = launchBoolean(config, "overtime");
+  if (over !== undefined) UserData.set(KEYS.MODULES.STOPWATCH.COUNT_OVERTIME, over);
   await nextTick();
   resetTime();
   if (autoStart) start();

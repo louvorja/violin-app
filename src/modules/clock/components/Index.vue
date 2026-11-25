@@ -65,6 +65,8 @@ import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { clockDateText, clockIs24h, clockShowsSeconds, clockTimeText } from "../projectionText";
 import { vFitClockLine } from "../vFitClockLine";
+import { useModuleLaunch } from "@/composables/useModuleLaunch";
+import { launchBoolean, launchString } from "@/helpers/ModuleLaunch";
 
 const { locale } = useI18n();
 const { fmt, show_format } = useModuleFormat("clock", manifest);
@@ -133,6 +135,16 @@ function openFullscreen() {
 function close() {
   clearInterval(timer);
 }
+
+/* Item "Utilitário" da liturgia: formato de hora e data daquele momento. */
+useModuleLaunch("clock", ({ config }) => {
+  const cycle = launchString(config, "hour_cycle");
+  if (cycle === "24h" || cycle === "12h") fmt.hour_cycle = cycle;
+  const seconds = launchBoolean(config, "show_seconds");
+  if (seconds !== undefined) fmt.time_format = seconds ? "hh:mm:ss" : "hh:mm";
+  const date = launchBoolean(config, "show_date");
+  if (date !== undefined) fmt.show_date = date;
+});
 
 onMounted(() => {
   // Migração one-shot: se houver chaves antigas show24h/showSeconds, copia para
