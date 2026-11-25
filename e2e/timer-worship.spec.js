@@ -203,7 +203,7 @@ test("avisos extras: novo aviso faltando 2:00 com áudio da biblioteca", async (
   await time.press("Enter");
   await expect(page.getByTestId("tw-extra-0")).toContainText("Escolha um áudio");
   await page.getByTestId("tw-extra-0-pick").click();
-  await page.getByText("Encerramento do culto").click();
+  await page.getByText("Encerramento do culto", { exact: true }).click();
   await expect(page.getByTestId("tw-extra-0")).toContainText("Encerramento do culto");
   await page.getByTestId("tw-extra-0-play").click();
   await expect.poll(() => played(page)).toEqual(["Encerramento do culto"]);
@@ -214,9 +214,7 @@ test("avisos extras: novo aviso faltando 2:00 com áudio da biblioteca", async (
   await page.clock.runFor(50_000);
   expect(await played(page)).toEqual(["Encerramento do culto"]);
   await page.clock.runFor(15_000); // passa por 2:00
-  await expect
-    .poll(() => played(page))
-    .toEqual(["Encerramento do culto", "Encerramento do culto"]);
+  await expect.poll(() => played(page)).toEqual(["Encerramento do culto", "Encerramento do culto"]);
 
   // Remover tira da lista e da contagem.
   await page.getByTestId("ribbon-btn-timer_worship_sounds").click();

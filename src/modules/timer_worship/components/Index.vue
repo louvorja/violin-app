@@ -97,6 +97,7 @@ import { useTimerEndAction } from "@/composables/useTimerEndAction";
 import { useModuleLaunch } from "@/composables/useModuleLaunch";
 import { launchBoolean, launchNumber, launchString } from "@/helpers/ModuleLaunch";
 import { applyLaunchEndAction } from "@/helpers/LaunchEndAction";
+import { afterLiturgicalAudio } from "@/helpers/LiturgicalAudios";
 import Media from "@/composables/useMedia";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -366,7 +367,9 @@ function cueEnabled(cue: WorshipCue): boolean {
 async function playExtra(cue: WorshipExtraCue): Promise<void> {
   try {
     const sound = await resolveExtraSound(cue);
-    if (sound) await Media.openAudio({ url: sound.url, title: sound.title });
+    if (!sound) return;
+    await Media.openAudio({ url: sound.url, title: sound.title });
+    afterLiturgicalAudio(cue.libraryId);
   } catch {
     /* noop */
   }

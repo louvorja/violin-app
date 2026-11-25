@@ -161,6 +161,13 @@ export const KEYS = {
     MEDIA_LIBRARY: {
       IS_PLAYING: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.is_playing`,
       SORT_MODE: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.sort_mode`,
+      /** Áudios litúrgicos já criados na biblioteca — apagado pelo usuário não volta. */
+      LITURGICAL_SEEDED: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.liturgical_seeded`,
+      /**
+       * Fundo musical depois da locução da Oração Intercessória:
+       * `{ source: "background_sound" | "media_library", id, name }` ou vazio.
+       */
+      INTERCESSORY_BACKGROUND: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.intercessory_background`,
       TRANSITION_TYPE: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.transition_type`,
       TRANSITION_DURATION: `${MODULES}.${ModuleEnum.MEDIA_LIBRARY}.transition_duration`,
       /** Parâmetros da transição — folhas por efeito (via tabela) + `EASE` compartilhado. */

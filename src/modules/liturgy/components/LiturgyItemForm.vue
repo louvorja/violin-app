@@ -767,6 +767,7 @@ import type { LiturgyItem, LiturgyMusicItem, ScheduledCategory } from "@/types/L
 import type { OverlaySlot } from "@/types/Overlay";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { canLinkOverlay } from "../overlayLink";
+import { ensureLiturgicalAudios } from "@/helpers/LiturgicalAudios";
 import {
   UTILITY_GROUPS,
   UTILITY_MODULES,
@@ -1046,6 +1047,7 @@ async function openUtilitySoundPicker(
 ): Promise<void> {
   utilitySoundPicking.value = key;
   utilityPickerKind.value = kind;
+  await ensureLiturgicalAudios();
   const [all, categories] = await Promise.all([
     $idb
       .getAll<{
@@ -1426,6 +1428,7 @@ function mediaTypeLabel(type: "image" | "video" | "audio" | "pdf"): string {
 
 async function openMediaLibrarySearch(): Promise<void> {
   releaseLibraryObjectUrls();
+  await ensureLiturgicalAudios();
   const [all, categories] = await Promise.all([
     $idb.getAll<{
       id: string;

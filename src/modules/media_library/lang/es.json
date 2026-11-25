@@ -80,5 +80,17 @@
     "project_url": "Proyectar",
     "url_invalid": "Ese no es el enlace de un diseño de Canva. Pega algo como https://www.canva.com/design/..."
   },
-  "audios": "Audios"
+  "audios": "Audios",
+  "intercessory": {
+    "title": "Música de fondo después de la locución",
+    "intro": "Cuando termine la locución de la Oración Intercesora, esta música de fondo empieza a sonar en el Sonido de Fondo — y sigue durante la oración. Cámbiela cuando quiera.",
+    "current": "Fondo actual:",
+    "none": "Ninguno (solo la locución)",
+    "from_bg": "del Sonido de Fondo",
+    "from_library": "de la Biblioteca de Medios",
+    "pick_bg": "Elegir en el Sonido de Fondo",
+    "pick_library": "Elegir en la Biblioteca",
+    "preview": "Escuchar",
+    "clear": "Sin fondo"
+  }
 }

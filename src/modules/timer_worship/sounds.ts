@@ -12,6 +12,7 @@ import $path from "@/helpers/Path";
 import { KEYS } from "@/constants/UserDataKeys";
 import { DB_TABLE } from "@/constants/DbTables";
 import { SABBATH_SCHOOL_SOUNDS } from "@/config/SabbathSchool";
+import { ensureLiturgicalAudios } from "@/helpers/LiturgicalAudios";
 
 export type WorshipCue = "start" | "five" | "one";
 
@@ -113,6 +114,7 @@ export async function listLibraryAudios(): Promise<{
   items: Array<{ id: string; name: string; categoryId?: string }>;
   categories: Array<{ id: string; name: string; icon?: string; iconType?: string; color?: string }>;
 }> {
+  await ensureLiturgicalAudios();
   const [all, categories] = await Promise.all([
     $idb
       .getAll<LibraryAudioRecord & { categoryId?: string }>(DB_TABLE.MEDIA_LIBRARY)

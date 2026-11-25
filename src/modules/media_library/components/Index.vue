@@ -165,6 +165,18 @@
                     :aria-label="tm('add_to_playlist')"
                     @click.stop="adicionarItem(file)"
                   />
+                  <!-- Oração Intercessória: escolher o fundo musical que entra depois da locução. -->
+                  <LjButton
+                    v-if="file.id === INTERCESSORY_PRAYER_ID"
+                    size="sm"
+                    variant="ghost"
+                    icon-only
+                    :icon="ICONS.MUSIC.PLAYBACK"
+                    :title="tm('intercessory.title')"
+                    :aria-label="tm('intercessory.title')"
+                    data-testid="intercessory-background"
+                    @click.stop="showIntercessoryBackground = true"
+                  />
                   <LjButton
                     size="sm"
                     variant="ghost"
@@ -366,6 +378,11 @@
         @delete="handleDeleteCategory"
       />
     </div>
+    <!-- Só monta ao abrir: é raro, e assim a biblioteca não carrega a janela à toa. -->
+    <IntercessoryBackgroundDialog
+      v-if="showIntercessoryBackground"
+      v-model="showIntercessoryBackground"
+    />
   </ModuleContainer>
 </template>
 
@@ -422,6 +439,12 @@ import {
 } from "@/helpers/LibraryFiles";
 import { blobOf, byteSize } from "@/helpers/Bytes";
 import { mimeForName } from "@/helpers/Mime";
+import { afterLiturgicalAudio, ensureLiturgicalAudios } from "@/helpers/LiturgicalAudios";
+import { INTERCESSORY_PRAYER_ID } from "@/config/LiturgicalAudios";
+import IntercessoryBackgroundDialog from "./IntercessoryBackgroundDialog.vue";
+
+/** Janela do fundo musical da Oração Intercessória. */
+const showIntercessoryBackground = ref(false);
 
 const { width: viewportWidth } = useViewport();
 const mobileLayout = computed(() => !Platform.isDesktop && viewportWidth.value <= 1000);
@@ -1559,6 +1582,8 @@ async function tocarAudio(item: PlaylistItem): Promise<void> {
     minimized: true,
     preserveFileProjection: true,
   });
+  // Oração Intercessória: o fundo musical entra quando a locução termina.
+  afterLiturgicalAudio(item.id);
 }
 
 async function projetarItem(item: PlaylistItem, backward: boolean): Promise<void> {
@@ -1864,6 +1889,8 @@ useBroadcastListener(BROADCAST_TYPE.FILE_PROJECTION_PAGE, (payload) => {
 /* ------------------------------------------------------------------ */
 
 onMounted(async () => {
+  // Categoria "Litúrgicos" (vem com o programa) antes da primeira leitura.
+  await ensureLiturgicalAudios();
   files.value = await loadLibrary();
   await loadCategories();
   selectAllCategoriesAndUncategorized();
