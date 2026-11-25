@@ -44,6 +44,8 @@ describe("Utilitário da liturgia — campos", () => {
       "sound_five_file",
       "sound_one",
       "sound_one_file",
+      "extras_mode",
+      "end_action",
     ]);
     const custom = { ...base, define_by: "duration", sound_start: false };
     const visible = keys("timer_worship", custom);
@@ -54,18 +56,76 @@ describe("Utilitário da liturgia — campos", () => {
   });
 
   it("Sorteio mostra faixa ou nomes conforme o modo", () => {
+    const extras = ["effect_duration", "show_history", "random_finish", "roulette_sound"];
     expect(keys("draw", { draw_mode: "number" })).toEqual([
       "draw_mode",
       "range_min",
       "range_max",
       "clear_history",
+      ...extras,
     ]);
-    expect(keys("draw", { draw_mode: "names" })).toEqual(["draw_mode", "names", "clear_history"]);
+    expect(keys("draw", { draw_mode: "names" })).toEqual([
+      "draw_mode",
+      "names",
+      "clear_history",
+      ...extras,
+    ]);
   });
 
   it("Cronômetro progressivo não pede tempo", () => {
     expect(keys("stopwatch", { mode: "up" })).not.toContain("minutes");
     expect(keys("stopwatch", { mode: "down" })).toContain("minutes");
+  });
+});
+
+describe("Utilitário da liturgia — ao terminar e avisos extras", () => {
+  it("o arquivo do fim só aparece com áudio ou vídeo, e aceita o tipo certo", () => {
+    const fields = (c: Record<string, unknown>) => visibleUtilityFields("timer", c);
+    expect(fields({ end_action: "keep" }).map((f) => f.key)).not.toContain("end_file");
+    const audio = fields({ end_action: "audio" }).find((f) => f.key === "end_file");
+    expect(audio?.accept?.({ end_action: "audio" })).toBe("audio");
+    const video = fields({ end_action: "video" }).find((f) => f.key === "end_file");
+    expect(video?.accept?.({ end_action: "video" })).toBe("visual");
+  });
+
+  it("avisos extras: só com 'Os deste item', ordenados e conferidos", () => {
+    expect(keys("timer_worship", { extras_mode: "keep" })).not.toContain("extras");
+    const clean = cleanUtilityConfig("timer_worship", {
+      extras_mode: "custom",
+      extras: [
+        { id: "a", seconds: 120, libraryId: "x", name: "X" },
+        { id: "b", seconds: 600, libraryId: "", name: "" },
+        { id: "", seconds: 30 },
+        { id: "c", seconds: -5 },
+      ],
+    });
+    expect(clean.extras).toEqual([
+      { id: "b", seconds: 600, libraryId: "", name: "" },
+      { id: "a", seconds: 120, libraryId: "x", name: "X" },
+    ]);
+  });
+
+  it("resumo cita os extras e o arquivo do fim", () => {
+    expect(
+      utilitySummary(
+        "timer_worship",
+        {
+          define_by: "end",
+          target: "10:45",
+          extras_mode: "custom",
+          extras: [{ id: "a", seconds: 120, libraryId: "x", name: "X" }],
+          end_action: "audio",
+          end_file: { libraryId: "y", name: "Encerramento" },
+        },
+        false,
+        (k) =>
+          ({
+            "utility.until": "até",
+            "utility.summary_extras": "avisos extras",
+            "utility.summary_end": "no fim:",
+          })[k] ?? k
+      )
+    ).toBe("até 10:45 · 1 avisos extras · no fim: Encerramento");
   });
 });
 

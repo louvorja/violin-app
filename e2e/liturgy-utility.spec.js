@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { test, expect } from "@playwright/test";
 
 test.use({ serviceWorkers: "block" });
@@ -57,7 +58,8 @@ test("Temporizador de Culto até 9:45, iniciando sozinho ao clicar", async ({ pa
   await expect(display).toBeVisible();
   await expect(page.getByTestId("ribbon-btn-timer_worship_toggle")).toContainText("Pausar");
   await page.clock.runFor(3_000);
-  await expect(display).toContainText(/00:44:5\d/);
+  // Começou a contar até 09:45 (sob carga o relógio do teste anda uns segundos a mais).
+  await expect(display).toContainText(/00:44:[0-5]\d/);
   await expect(page.getByTestId("timer-worship-extra")).toHaveText("09:45");
 });
 
@@ -215,4 +217,139 @@ test("Relógio abre em 12 horas, sem opção de iniciar", async ({ page }) => {
       )
     )
     .toBe("12h");
+});
+
+async function seedLibrary(page) {
+  await page.evaluate(async () => {
+    const { default: idb } = await import("/src/helpers/IndexedDB.ts");
+    const { DB_TABLE } = await import("/src/constants/DbTables.ts");
+    const bytes = () => new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" });
+    await idb.put(DB_TABLE.MEDIA_LIBRARY, {
+      id: "aviso-diacono",
+      name: "Aviso do diácono",
+      type: "audio",
+      mime: "audio/mpeg",
+      data: bytes(),
+    });
+    await idb.put(DB_TABLE.MEDIA_LIBRARY, {
+      id: "fim-culto",
+      name: "Fim do culto",
+      type: "audio",
+      mime: "audio/mpeg",
+      data: bytes(),
+    });
+    await idb.put(DB_TABLE.MEDIA_LIBRARY, {
+      id: "video-encerramento",
+      name: "Vídeo de encerramento",
+      type: "video",
+      path: "https://e2e.mock/encerramento.mp4",
+    });
+  });
+}
+
+const savedModule = (page, id) =>
+  page.evaluate((id) => JSON.parse(localStorage.getItem("user_data") || "{}").modules?.[id], id);
+
+test("Temporizador de Culto: avisos extras do item e áudio ao terminar", async ({ page }) => {
+  await openLiturgy(page);
+  await seedLibrary(page);
+  await addUtility(page, async (dialog) => {
+    await chooseOption(dialog, page, "Utilitário", "Temporizador de Culto");
+    await dialog.getByTestId("item-name").fill("Culto Divino");
+    await dialog.getByTestId("utility-target").fill("09:45");
+    await expect(dialog.getByTestId("utility-extras")).toHaveCount(0);
+    await chooseOption(dialog, page, "Avisos extras", "Os deste item");
+    await dialog.getByTestId("utility-extra-add").click();
+    const time = dialog.getByTestId("utility-extra-0-time");
+    await expect(time).toHaveValue("10:00");
+    await time.fill("2:00");
+    await time.press("Enter");
+    await dialog.getByTestId("utility-extra-0-pick").click();
+    await page.getByText("Aviso do diácono").click();
+    await expect(dialog.getByTestId("utility-extra-0")).toContainText("Aviso do diácono");
+
+    await chooseOption(dialog, page, "Ação", "Tocar áudio");
+    await dialog.getByTestId("utility-end_file-pick").click();
+    // Para áudio, o vídeo não aparece na lista.
+    await expect(page.getByText("Vídeo de encerramento")).toHaveCount(0);
+    await page.getByText("Fim do culto").click();
+    await expect(dialog.getByTestId("utility-end_file")).toContainText("Fim do culto");
+  });
+
+  const card = page.locator("[data-item-id]").filter({ hasText: "Culto Divino" });
+  await expect(card).toContainText("no fim: Fim do culto");
+  await card.getByRole("button", { name: "Culto Divino" }).click();
+  await expect(page.getByTestId("timer-worship-display")).toBeVisible();
+  await expect
+    .poll(async () => {
+      const tw = await savedModule(page, "timer_worship");
+      return {
+        extras: (tw?.sound_extras ?? []).map((c) => [c.seconds, c.libraryId]),
+        action: tw?.timer_end_action,
+        title: tw?.timer_end_data_audio?.title,
+      };
+    })
+    .toEqual({ extras: [[120, "aviso-diacono"]], action: "audio", title: "Fim do culto" });
+});
+
+test("Temporizador: projetar vídeo ao terminar", async ({ page }) => {
+  await openLiturgy(page);
+  await seedLibrary(page);
+  await addUtility(page, async (dialog) => {
+    await chooseOption(dialog, page, "Utilitário", "Temporizador");
+    await dialog.getByTestId("utility-target").fill("09:30");
+    await chooseOption(dialog, page, "Ação", "Projetar vídeo ou imagem");
+    await dialog.getByTestId("utility-end_file-pick").click();
+    await expect(page.getByText("Fim do culto")).toHaveCount(0);
+    await page.getByText("Vídeo de encerramento").click();
+  });
+  await page
+    .locator("[data-item-id]")
+    .filter({ hasText: "Temporizador" })
+    .getByRole("button", { name: "Temporizador" })
+    .click();
+  await expect
+    .poll(async () => {
+      const timer = await savedModule(page, "timer");
+      return { action: timer?.timer_end_action, data: timer?.timer_end_data_video };
+    })
+    .toEqual({
+      action: "video",
+      data: { url: "https://e2e.mock/encerramento.mp4", type: "video" },
+    });
+});
+
+test("Sorteio: importar lista .txt, duração do efeito e opções da projeção", async ({ page }) => {
+  await openLiturgy(page);
+  await addUtility(page, async (dialog) => {
+    await chooseOption(dialog, page, "Utilitário", "Sorteio");
+    await chooseOption(dialog, page, "Sortear", "Nomes");
+    await dialog.getByTestId("utility-names").fill("Ana");
+    await dialog.locator('input[type="file"][accept*=".txt"]').setInputFiles({
+      name: "lista.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("﻿João\r\nAna\r\n\r\nMaria\r\n"),
+    });
+    // Junta sem repetir a "Ana" que já estava.
+    await expect(dialog.getByTestId("utility-names")).toHaveValue("Ana\nJoão\nMaria");
+    await chooseOption(dialog, page, "Duração do efeito", "5 s");
+    await dialog.getByTestId("utility-show_history").click();
+    await dialog.getByTestId("utility-random_finish").click();
+  });
+  await page
+    .locator("[data-item-id]")
+    .filter({ hasText: "Sorteio" })
+    .getByRole("button", { name: "Sorteio" })
+    .click();
+  await expect
+    .poll(async () => {
+      const draw = await savedModule(page, "draw");
+      return {
+        effect: draw?.effect_duration,
+        history: draw?.show_drawn_history,
+        random: draw?.random_finish,
+        names: draw?.names,
+      };
+    })
+    .toEqual({ effect: 5000, history: true, random: false, names: ["Ana", "João", "Maria"] });
 });

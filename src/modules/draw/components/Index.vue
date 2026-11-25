@@ -604,6 +604,16 @@ useModuleLaunch("draw", ({ config }) => {
   if (mode === "names" && Array.isArray(config.names) && config.names.length) {
     replaceNames(config.names);
   }
+  const effect = launchNumber(config, "effect_duration");
+  if (effect) UserData.set(KEYS.MODULES.DRAW.EFFECT_DURATION, effect);
+  for (const [field, key] of [
+    ["show_history", KEYS.MODULES.DRAW.SHOW_DRAWN_HISTORY],
+    ["random_finish", KEYS.MODULES.DRAW.RANDOM_FINISH],
+    ["roulette_sound", KEYS.MODULES.DRAW.ROULETTE_SOUND],
+  ] as const) {
+    const on = launchBoolean(config, field);
+    if (on !== undefined) UserData.set(key, on);
+  }
   if (launchBoolean(config, "clear_history")) resetState();
 });
 

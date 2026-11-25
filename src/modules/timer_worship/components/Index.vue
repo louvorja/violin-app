@@ -96,6 +96,7 @@ import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useTimerEndAction } from "@/composables/useTimerEndAction";
 import { useModuleLaunch } from "@/composables/useModuleLaunch";
 import { launchBoolean, launchNumber, launchString } from "@/helpers/ModuleLaunch";
+import { applyLaunchEndAction } from "@/helpers/LaunchEndAction";
 import Media from "@/composables/useMedia";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -127,6 +128,7 @@ import {
   getExtraCues,
   resolveCueSound,
   resolveExtraSound,
+  setExtraCues,
   setSoundChoice,
   type WorshipCue,
   type WorshipSoundChoice,
@@ -516,6 +518,11 @@ useModuleLaunch(ModuleEnum.TIMER_WORSHIP, async ({ config, autoStart }) => {
     const fileKey = `sound_${cue}_file`;
     if (fileKey in config) setSoundChoice(cue, (config[fileKey] as WorshipSoundChoice) ?? null);
   }
+  // "Os deste item": a lista do item substitui os avisos extras do módulo.
+  if (launchString(config, "extras_mode") === "custom" && Array.isArray(config.extras)) {
+    setExtraCues(config.extras as WorshipExtraCue[]);
+  }
+  await applyLaunchEndAction(config, TW);
   await nextTick();
   reset();
   if (autoStart) start();

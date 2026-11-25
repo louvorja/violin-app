@@ -455,7 +455,11 @@
         <div class="lif-util-grid">
           <template v-for="field in utilityFieldsOf(group)" :key="field.key">
             <span class="lif-util-label" :class="{ 'lif-util-label--top': field.type === 'names' }">
-              <template v-if="field.type !== 'checkbox' && field.type !== 'sound'">
+              <template
+                v-if="
+                  field.type !== 'checkbox' && field.type !== 'sound' && field.type !== 'extras'
+                "
+              >
                 {{ t(`utility.${field.label}`) }}
               </template>
             </span>
@@ -500,15 +504,114 @@
                 :data-testid="`utility-${field.key}`"
                 @update:model-value="setUtilityConfig(field.key, $event === true)"
               />
-              <LjTextarea
-                v-else-if="field.type === 'names'"
-                :model-value="utilityNamesText"
-                :rows="5"
-                :placeholder="t('utility.names_placeholder')"
-                :aria-label="t(`utility.${field.label}`)"
+              <div v-else-if="field.type === 'names'" class="lif-util-names">
+                <LjTextarea
+                  :model-value="utilityNamesText"
+                  :rows="5"
+                  :placeholder="t('utility.names_placeholder')"
+                  :aria-label="t(`utility.${field.label}`)"
+                  :data-testid="`utility-${field.key}`"
+                  @update:model-value="setUtilityConfig(field.key, String($event).split(/\r?\n/))"
+                />
+                <div class="lif-util-names__actions">
+                  <input
+                    ref="utilityNamesFile"
+                    type="file"
+                    accept=".txt,text/plain"
+                    class="lif-util-names__file"
+                    @change="importUtilityNames"
+                  />
+                  <LjButton
+                    size="sm"
+                    :icon="ICONS.ACTIONS.IMPORT"
+                    data-testid="utility-names-import"
+                    @click="utilityNamesFile?.click()"
+                  >
+                    {{ t("utility.names_import") }}
+                  </LjButton>
+                  <span class="lif-util-names__count">
+                    {{ utilityNamesCount }} {{ t("utility.summary_names") }}
+                  </span>
+                </div>
+              </div>
+              <!-- Arquivo da biblioteca para o "Ao terminar". -->
+              <div
+                v-else-if="field.type === 'library'"
+                class="lif-util-sound"
                 :data-testid="`utility-${field.key}`"
-                @update:model-value="setUtilityConfig(field.key, String($event).split(/\r?\n/))"
-              />
+              >
+                <span
+                  class="lif-util-sound__name"
+                  :class="{ 'is-default': !utilitySound(field.key) }"
+                >
+                  {{ utilitySound(field.key)?.name || t("utility.end_file_none") }}
+                </span>
+                <LjButton
+                  size="sm"
+                  :icon="ICONS.MEDIA.LIBRARY"
+                  :data-testid="`utility-${field.key}-pick`"
+                  @click="
+                    openUtilitySoundPicker(field.key, field.accept?.(utilityConfig) ?? 'audio')
+                  "
+                >
+                  {{ t("utility.sound_pick") }}
+                </LjButton>
+              </div>
+              <!-- Avisos extras do item: faltando X, toca um áudio da biblioteca. -->
+              <div
+                v-else-if="field.type === 'extras'"
+                class="lif-util-extras"
+                :data-testid="`utility-${field.key}`"
+              >
+                <div
+                  v-for="(cue, index) in utilityExtras"
+                  :key="cue.id"
+                  class="lif-util-extra"
+                  :data-testid="`utility-extra-${index}`"
+                >
+                  <span class="lif-util-extra__when">{{ t("utility.extras_when") }}</span>
+                  <span class="lif-util-extra__time">
+                    <LjInput
+                      :model-value="utilityExtraText[cue.id] ?? formatUtilityCueTime(cue.seconds)"
+                      :aria-label="t('utility.extras_when')"
+                      :data-testid="`utility-extra-${index}-time`"
+                      @update:model-value="utilityExtraText[cue.id] = String($event)"
+                      @blur="commitUtilityExtraTime(cue.id)"
+                      @keydown.enter.prevent="commitUtilityExtraTime(cue.id)"
+                    />
+                  </span>
+                  <span class="lif-util-sound__name" :class="{ 'is-default': !cue.libraryId }">
+                    {{ cue.name || t("utility.extras_no_audio") }}
+                  </span>
+                  <LjButton
+                    size="sm"
+                    :icon="ICONS.MEDIA.LIBRARY"
+                    :data-testid="`utility-extra-${index}-pick`"
+                    @click="openUtilitySoundPicker(`extra:${cue.id}`)"
+                  >
+                    {{ t("utility.sound_pick") }}
+                  </LjButton>
+                  <LjButton
+                    size="sm"
+                    variant="ghost"
+                    icon-only
+                    :icon="ICONS.ACTIONS.DELETE"
+                    :aria-label="t('utility.extras_remove')"
+                    :title="t('utility.extras_remove')"
+                    :data-testid="`utility-extra-${index}-remove`"
+                    @click="removeUtilityExtra(cue.id)"
+                  />
+                </div>
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  :icon="ICONS.ACTIONS.ADD"
+                  data-testid="utility-extra-add"
+                  @click="addUtilityExtra"
+                >
+                  {{ t("utility.extras_add") }}
+                </LjButton>
+              </div>
               <!-- Áudio do aviso logo acima: o que vem com o programa ou um da biblioteca. -->
               <div
                 v-else-if="field.type === 'sound'"
@@ -559,13 +662,15 @@
       </template>
       <LiturgyLibrarySearch
         v-model="utilitySoundPickerOpen"
-        :title="t('utility.sound_pick_title')"
+        :title="
+          utilityPickerKind === 'visual'
+            ? t('utility.visual_pick_title')
+            : t('utility.sound_pick_title')
+        "
         :icon="ICONS.MEDIA.LIBRARY"
         :items="utilitySoundItems"
         :categories="utilitySoundCategories"
-        :selected-id="
-          utilitySoundPicking ? utilitySound(utilitySoundPicking)?.libraryId : undefined
-        "
+        :selected-id="utilityPickedId"
         default-view="list"
         @pick="onUtilitySoundPicked"
       />
@@ -631,7 +736,7 @@
 
 <script setup lang="ts">
 import { useLiturgyI18n } from "../i18n";
-import { ref, watch, computed, nextTick, onBeforeUnmount } from "vue";
+import { ref, reactive, watch, computed, nextTick, onBeforeUnmount } from "vue";
 import {
   LjButton,
   LjCheckbox,
@@ -834,6 +939,84 @@ function setUtilityConfig(key: string, value: unknown): void {
   props.setFormField("util_config", { ...utilityConfig.value, [key]: value });
 }
 
+/* ─── Utilitário: lista de nomes do Sorteio ─── */
+
+const utilityNamesFile = ref<HTMLInputElement | null>(null);
+const utilityNamesCount = computed(
+  () => utilityNamesText.value.split("\n").filter((n) => n.trim()).length
+);
+
+/** Importa um .txt (um nome por linha) e junta à lista, sem repetir. */
+async function importUtilityNames(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  const text = (await file.text()).replace(/^\uFEFF/, "");
+  const current = utilityNamesText.value
+    .split("\n")
+    .map((n) => n.trim())
+    .filter(Boolean);
+  const seen = new Set(current);
+  for (const name of text.split(/\r?\n/).map((n) => n.trim())) {
+    if (name && !seen.has(name)) {
+      seen.add(name);
+      current.push(name);
+    }
+  }
+  setUtilityConfig("names", current);
+}
+
+/* ─── Utilitário: avisos extras do item ─── */
+
+interface UtilityExtraCue {
+  id: string;
+  seconds: number;
+  libraryId: string;
+  name: string;
+}
+
+const utilityExtras = computed<UtilityExtraCue[]>(() =>
+  Array.isArray(utilityConfig.value.extras) ? (utilityConfig.value.extras as UtilityExtraCue[]) : []
+);
+/** Texto sendo digitado no "Faltando" de cada aviso, até confirmar. */
+const utilityExtraText = reactive<Record<string, string>>({});
+
+function formatUtilityCueTime(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function setUtilityExtras(next: UtilityExtraCue[]): void {
+  setUtilityConfig(
+    "extras",
+    [...next].sort((a, b) => b.seconds - a.seconds)
+  );
+}
+
+function addUtilityExtra(): void {
+  const last = utilityExtras.value.at(-1);
+  const seconds = last ? Math.max(60, last.seconds - 60) : 600;
+  const id = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  setUtilityExtras([...utilityExtras.value, { id, seconds, libraryId: "", name: "" }]);
+}
+
+function removeUtilityExtra(id: string): void {
+  delete utilityExtraText[id];
+  setUtilityExtras(utilityExtras.value.filter((c) => c.id !== id));
+}
+
+/** "10:00", "2:30" ou "5" (minutos). Inválido volta ao que era. */
+function commitUtilityExtraTime(id: string): void {
+  const typed = utilityExtraText[id];
+  delete utilityExtraText[id];
+  if (typed === undefined) return;
+  const match = /^(\d{1,4})(?::([0-5]\d))?$/.exec(typed.trim());
+  if (!match) return;
+  const seconds = Number(match[1]) * 60 + Number(match[2] || 0);
+  if (seconds <= 0 || seconds > 86_400) return;
+  setUtilityExtras(utilityExtras.value.map((c) => (c.id === id ? { ...c, seconds } : c)));
+}
+
 function utilitySound(key: string): { libraryId: string; name: string } | null {
   const value = utilityConfig.value[key] as { libraryId?: string; name?: string } | null;
   return value?.libraryId ? { libraryId: value.libraryId, name: value.name || "" } : null;
@@ -844,9 +1027,25 @@ const utilitySoundPicking = ref<string | null>(null);
 const utilitySoundItems = ref<LibrarySearchItem[]>([]);
 const utilitySoundCategories = ref<LibrarySearchCategory[]>([]);
 
-/** Áudios da Biblioteca de Mídia para o aviso escolhido. */
-async function openUtilitySoundPicker(key: string): Promise<void> {
+/** Áudio (padrão) ou vídeo/imagem para o "Ao terminar" em vídeo. */
+const utilityPickerKind = ref<"audio" | "visual">("audio");
+/** Arquivo já escolhido no campo que abriu o seletor, para vir marcado. */
+const utilityPickedId = computed<string | undefined>(() => {
+  const target = utilitySoundPicking.value;
+  if (!target) return undefined;
+  if (target.startsWith("extra:")) {
+    const id = target.slice("extra:".length);
+    return utilityExtras.value.find((c) => c.id === id)?.libraryId || undefined;
+  }
+  return utilitySound(target)?.libraryId;
+});
+
+async function openUtilitySoundPicker(
+  key: string,
+  kind: "audio" | "visual" = "audio"
+): Promise<void> {
   utilitySoundPicking.value = key;
+  utilityPickerKind.value = kind;
   const [all, categories] = await Promise.all([
     $idb
       .getAll<{
@@ -858,14 +1057,15 @@ async function openUtilitySoundPicker(key: string): Promise<void> {
       .catch(() => []),
     $idb.getAll<LibrarySearchCategory>(DB_TABLE.MEDIA_LIBRARY_CATEGORY).catch(() => []),
   ]);
-  const audios = all.filter((f) => f.type === "audio");
-  const used = new Set(audios.map((a) => a.categoryId).filter(Boolean));
-  utilitySoundItems.value = audios.map((f) => ({
+  const wanted = kind === "visual" ? ["video", "image"] : ["audio"];
+  const files = all.filter((f) => wanted.includes(f.type));
+  const used = new Set(files.map((a) => a.categoryId).filter(Boolean));
+  utilitySoundItems.value = files.map((f) => ({
     id: f.id,
     name: f.name,
-    icon: ICONS.MEDIA.AUDIO,
+    icon: mediaIconFor(f.type),
     categoryId: f.categoryId,
-    type: "audio",
+    type: f.type,
   }));
   utilitySoundCategories.value = mediaCategories(categories.filter((c) => used.has(c.id)));
   utilitySoundPickerOpen.value = true;
@@ -873,9 +1073,18 @@ async function openUtilitySoundPicker(key: string): Promise<void> {
 
 function onUtilitySoundPicked(item: LibrarySearchItem): void {
   utilitySoundPickerOpen.value = false;
-  if (utilitySoundPicking.value) {
-    setUtilityConfig(utilitySoundPicking.value, { libraryId: item.id, name: item.name });
+  const target = utilitySoundPicking.value;
+  if (!target) return;
+  if (target.startsWith("extra:")) {
+    const id = target.slice("extra:".length);
+    setUtilityExtras(
+      utilityExtras.value.map((c) =>
+        c.id === id ? { ...c, libraryId: item.id, name: item.name } : c
+      )
+    );
+    return;
   }
+  setUtilityConfig(target, { libraryId: item.id, name: item.name });
 }
 
 /**
@@ -1714,6 +1923,61 @@ function onVersionChange(version: string) {
 .lif-util-control--sound {
   margin-top: calc(-1 * var(--lj-space-2));
   padding-left: 26px;
+}
+
+/* Arquivo do "Ao terminar": sem o recuo dos áudios de aviso. */
+.lif-util-control--library {
+  min-width: 0;
+}
+
+.lif-util-names {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+}
+
+.lif-util-names__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+}
+
+.lif-util-names__file {
+  display: none;
+}
+
+.lif-util-names__count {
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-sm);
+}
+
+.lif-util-extras {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--lj-space-3);
+}
+
+.lif-util-extra {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  max-width: 100%;
+}
+
+.lif-util-extra__when {
+  font-size: var(--lj-text-sm);
+}
+
+.lif-util-extra__time {
+  width: 76px;
+  flex-shrink: 0;
+}
+
+/* O LjInput estica por padrão: dentro da caixa de 76 px, fica nela. */
+.lif-util-extra__time :deep(.lj-input) {
+  width: 100%;
+  min-width: 0;
 }
 
 .lif-util-sound {

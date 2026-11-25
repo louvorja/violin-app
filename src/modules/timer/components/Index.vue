@@ -77,6 +77,7 @@ import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useTimerEndAction } from "@/composables/useTimerEndAction";
 import { useModuleLaunch } from "@/composables/useModuleLaunch";
 import { launchBoolean, launchNumber, launchString } from "@/helpers/ModuleLaunch";
+import { applyLaunchEndAction } from "@/helpers/LaunchEndAction";
 import { KEYS } from "@/constants/UserDataKeys";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { formatTimerSeconds, timerProjectionText } from "@/helpers/TimerText";
@@ -373,6 +374,7 @@ useModuleLaunch("timer", async ({ config, autoStart }) => {
   if (warning !== undefined) setWarning(warning);
   const over = launchBoolean(config, "overtime");
   if (over !== undefined) $userdata.set(KEYS.MODULES.TIMER.COUNT_OVERTIME, over);
+  await applyLaunchEndAction(config, KEYS.MODULES.TIMER);
   await nextTick();
   reset();
   if (autoStart) start();

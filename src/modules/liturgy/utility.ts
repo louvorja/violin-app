@@ -19,9 +19,13 @@ export type UtilityFieldType =
   | "checkbox"
   | "names"
   /** Áudio da Biblioteca de Mídia, ou vazio para o som que vem com o programa. */
-  | "sound";
+  | "sound"
+  /** Arquivo da Biblioteca de Mídia (áudio, ou vídeo/imagem conforme `accept`). */
+  | "library"
+  /** Avisos extras do Temporizador de Culto: faltando X, toca um áudio. */
+  | "extras";
 
-export type UtilityFieldGroup = "timing" | "display" | "sounds" | "draw";
+export type UtilityFieldGroup = "timing" | "display" | "sounds" | "end" | "draw";
 
 export interface UtilityField {
   key: string;
@@ -34,6 +38,8 @@ export interface UtilityField {
   options?: Array<{ value: string; label: string }>;
   min?: number;
   max?: number;
+  /** Para `library`: que tipo de arquivo aceita, conforme a configuração. */
+  accept?: (config: ModuleLaunchConfig) => "audio" | "visual";
   /** Mostra o campo só quando a configuração atual pede. */
   showIf?: (config: ModuleLaunchConfig) => boolean;
 }
@@ -84,6 +90,35 @@ const OVERTIME: UtilityField = {
 };
 
 const isDuration = (c: ModuleLaunchConfig) => c.define_by === "duration";
+
+/**
+ * "Ao terminar": por padrão não mexe no que está no módulo. Escolher outra
+ * opção grava a ação do módulo ao abrir — o arquivo vem da Biblioteca de Mídia.
+ */
+const END_ACTION: UtilityField[] = [
+  {
+    key: "end_action",
+    type: "select",
+    label: "end_action",
+    group: "end",
+    default: "keep",
+    options: [
+      { value: "keep", label: "end_keep" },
+      { value: "none", label: "end_none" },
+      { value: "audio", label: "end_audio" },
+      { value: "video", label: "end_video" },
+    ],
+  },
+  {
+    key: "end_file",
+    type: "library",
+    label: "end_file",
+    group: "end",
+    default: null,
+    accept: (c) => (c.end_action === "video" ? "visual" : "audio"),
+    showIf: (c) => c.end_action === "audio" || c.end_action === "video",
+  },
+];
 
 function soundPair(cue: "start" | "five" | "one"): UtilityField[] {
   const toggle = `sound_${cue}`;
@@ -154,6 +189,26 @@ export const UTILITY_MODULES: UtilityModuleSpec[] = [
       ...soundPair("start"),
       ...soundPair("five"),
       ...soundPair("one"),
+      {
+        key: "extras_mode",
+        type: "select",
+        label: "extras_mode",
+        group: "sounds",
+        default: "keep",
+        options: [
+          { value: "keep", label: "extras_keep" },
+          { value: "custom", label: "extras_custom" },
+        ],
+      },
+      {
+        key: "extras",
+        type: "extras",
+        label: "extras",
+        group: "sounds",
+        default: [],
+        showIf: (c) => c.extras_mode === "custom",
+      },
+      ...END_ACTION,
     ],
   },
   {
@@ -165,6 +220,7 @@ export const UTILITY_MODULES: UtilityModuleSpec[] = [
       { key: "target", type: "time", label: "target", group: "timing", default: "" },
       WARNING,
       OVERTIME,
+      ...END_ACTION,
     ],
   },
   {
@@ -280,11 +336,47 @@ export const UTILITY_MODULES: UtilityModuleSpec[] = [
         group: "draw",
         default: true,
       },
+      {
+        key: "effect_duration",
+        type: "select",
+        label: "effect_duration",
+        group: "display",
+        default: "2000",
+        options: [
+          { value: "1000", label: "effect_1s" },
+          { value: "2000", label: "effect_2s" },
+          { value: "3000", label: "effect_3s" },
+          { value: "5000", label: "effect_5s" },
+          { value: "8000", label: "effect_8s" },
+          { value: "10000", label: "effect_10s" },
+        ],
+      },
+      {
+        key: "show_history",
+        type: "checkbox",
+        label: "show_history",
+        group: "display",
+        default: false,
+      },
+      {
+        key: "random_finish",
+        type: "checkbox",
+        label: "random_finish",
+        group: "display",
+        default: true,
+      },
+      {
+        key: "roulette_sound",
+        type: "checkbox",
+        label: "roulette_sound",
+        group: "display",
+        default: true,
+      },
     ],
   },
 ];
 
-export const UTILITY_GROUPS: UtilityFieldGroup[] = ["timing", "display", "sounds", "draw"];
+export const UTILITY_GROUPS: UtilityFieldGroup[] = ["timing", "draw", "display", "sounds", "end"];
 
 export function utilitySpec(moduleId: string | undefined): UtilityModuleSpec | undefined {
   return UTILITY_MODULES.find((m) => m.id === moduleId);
@@ -330,10 +422,25 @@ function cleanValue(field: UtilityField, value: unknown): unknown {
         .filter(Boolean)
         .slice(0, 10_000);
     }
-    case "sound": {
+    case "sound":
+    case "library": {
       if (!value || typeof value !== "object") return null;
       const v = value as { libraryId?: unknown; name?: unknown };
       return v.libraryId ? { libraryId: String(v.libraryId), name: String(v.name || "") } : null;
+    }
+    case "extras": {
+      if (!Array.isArray(value)) return [];
+      return value
+        .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
+        .map((c) => ({
+          id: String(c.id || ""),
+          seconds: Math.round(Number(c.seconds)),
+          libraryId: String(c.libraryId || ""),
+          name: String(c.name || ""),
+        }))
+        .filter((c) => c.id && Number.isFinite(c.seconds) && c.seconds > 0 && c.seconds <= 86_400)
+        .sort((a, b) => b.seconds - a.seconds)
+        .slice(0, 50);
     }
   }
 }
@@ -381,6 +488,13 @@ export function utilitySummary(
     parts.push(`${t("utility.summary_counter_start")} ${config.start}`);
   }
   if (moduleId === ModuleEnum.CLOCK && config.hour_cycle === "12h") parts.push("12 h");
+  if (visible.has("extras") && Array.isArray(config.extras) && config.extras.length) {
+    parts.push(`${config.extras.length} ${t("utility.summary_extras")}`);
+  }
+  if (config.end_action === "audio" || config.end_action === "video") {
+    const file = config.end_file as { name?: string } | null | undefined;
+    if (file?.name) parts.push(`${t("utility.summary_end")} ${file.name}`);
+  }
   if (autoStart && utilitySpec(moduleId)?.canAutoStart) parts.push(t("utility.auto_start_short"));
   return parts.join(" · ");
 }
