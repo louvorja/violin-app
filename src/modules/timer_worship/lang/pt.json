@@ -61,7 +61,17 @@
     "music": "Configurar música",
     "not_configured": "não configurado",
     "options": "Opções",
-    "warning": "Avisar faltando"
+    "warning": "Avisar faltando",
+    "define_by": "Definir por",
+    "define_by_end": "Hora de término",
+    "define_by_duration": "Duração",
+    "duration_minutes": "Duração (min)",
+    "second_line": "Exibir",
+    "second_line_target": "Término",
+    "second_line_clock": "Relógio",
+    "second_line_both": "Os dois",
+    "sounds": "Áudios",
+    "second_line_none": "Nada"
   },
   "warning": {
     "custom": "Personalizado em segundos",
@@ -72,5 +82,18 @@
     "m2": "2 min",
     "m5": "5 min",
     "m10": "10 min"
+  },
+  "sounds": {
+    "title": "Áudios dos avisos",
+    "intro": "Cada aviso toca o som que vem com o programa. Para usar outro, escolha um áudio da Biblioteca de Mídia.",
+    "default": "Padrão do programa",
+    "listen": "Tocar",
+    "pick": "Biblioteca…",
+    "pick_title": "Escolher áudio na Biblioteca de Mídia",
+    "use_default": "Voltar ao padrão",
+    "library_empty": "Nenhum áudio na Biblioteca de Mídia. Adicione pelo módulo Biblioteca de Mídia."
+  },
+  "screen": {
+    "adjust": "Ajustar tempo"
   }
 }
