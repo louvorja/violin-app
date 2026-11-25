@@ -1,4 +1,6 @@
 import { ref } from "vue";
+import { cleanUtilityConfig, utilitySpec } from "../utility";
+import type { ModuleLaunchConfig } from "@/helpers/ModuleLaunch";
 import $docs from "@/helpers/DocStore";
 import $liturgy, { toLocalDate } from "@/helpers/Liturgy";
 import { DB_TABLE } from "@/constants/DbTables";
@@ -94,6 +96,19 @@ function _normalizeLiturgyItem(raw: unknown): LiturgyItem | null {
       ? { overlay_action: r.overlay_action }
       : {}),
     ...(typeof r.linked_overlay_id === "string" ? { linked_overlay_id: r.linked_overlay_id } : {}),
+    // Utilitário: só módulo conhecido, e a configuração passa pelo mesmo filtro do formulário.
+    ...(typeof r.util_module === "string" && utilitySpec(r.util_module)
+      ? {
+          util_module: r.util_module,
+          util_config: cleanUtilityConfig(
+            r.util_module,
+            typeof r.util_config === "object" && r.util_config !== null
+              ? (r.util_config as ModuleLaunchConfig)
+              : {}
+          ),
+          util_autostart: r.util_autostart === true,
+        }
+      : {}),
   };
 }
 

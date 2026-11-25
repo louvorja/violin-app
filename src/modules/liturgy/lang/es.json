@@ -66,7 +66,8 @@
     "projecao-de-fundo": "Proyección de Fondo",
     "som-de-fundo": "Sonido de Fondo",
     "anuncios": "Anuncios",
-    "overlay": "Superposición"
+    "overlay": "Superposición",
+    "utilitario": "Utilidad"
   },
   "inputs": {
     "type": "Tipo",
@@ -355,5 +356,22 @@
     "link_overlay": "Vincular superposición",
     "linked_overlay": "Superposición vinculada",
     "no_slots": "Ninguna superposición disponible. Cree superposiciones en el módulo Superposiciones."
+  },
+  "utility": {
+    "hint": "Abre el módulo ya configurado. A la hora del culto, solo haga clic en el ítem.",
+    "module": "Utilidad",
+    "choose_module": "Elija qué utilidad abrir",
+    "module_missing": "Esta utilidad no está disponible.",
+    "mode": "Conteo",
+    "mode_down": "Regresivo",
+    "mode_up": "Progresivo",
+    "define_by": "Definir por",
+    "define_by_end": "Hora de término",
+    "define_by_duration": "Duración",
+    "target": "Hasta",
+    "minutes": "Minutos",
+    "until": "hasta",
+    "auto_start": "Iniciar automáticamente al hacer clic",
+    "auto_start_short": "inicia solo"
   }
 }

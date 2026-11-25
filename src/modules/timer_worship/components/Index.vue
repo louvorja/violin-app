@@ -78,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onBeforeUnmount } from "vue";
+import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
@@ -94,6 +94,7 @@ import { useModuleProjection } from "@/composables/useModuleProjection";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useTimerEndAction } from "@/composables/useTimerEndAction";
+import { useModuleLaunch } from "@/composables/useModuleLaunch";
 import Media from "@/composables/useMedia";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -484,6 +485,23 @@ function onModuleShow(visible: boolean): void {
   projectionActive.value = true;
   emitProjection();
 }
+
+/*
+ * Item "Utilitário" da liturgia: abre já configurado e, se o item pediu,
+ * começa a contar. O `nextTick` deixa os watchers de modo e "Definir por"
+ * (que reiniciam) rodarem antes, senão eles parariam a contagem recém-iniciada.
+ */
+useModuleLaunch(ModuleEnum.TIMER_WORSHIP, async ({ config, autoStart }) => {
+  if (config.mode) mode.value = config.mode;
+  if (config.define_by) $userdata.set(KEYS.MODULES.TIMER_WORSHIP.DEFINE_BY, config.define_by);
+  if (config.target) targetTime.value = config.target;
+  if (config.minutes) {
+    $userdata.set(KEYS.MODULES.TIMER_WORSHIP.DURATION_MINUTES, Math.max(1, config.minutes));
+  }
+  await nextTick();
+  reset();
+  if (autoStart) start();
+});
 
 // Fechar o app com a contagem rodando deixava a chave em "true", e o botão da
 // ribbon abria em "Pausar" sem nada contando.

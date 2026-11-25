@@ -295,3 +295,41 @@ describe("parseJaImport", () => {
     expect(classicJson.items[2].time).toBeUndefined();
   });
 });
+
+describe("item Utilitário ao importar", () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  it("preserva módulo, configuração e 'iniciar automaticamente'", () => {
+    const parsed = useLiturgyLibrary().parseImport(
+      JSON.stringify({
+        name: "Culto",
+        items: [
+          {
+            tipo: "utilitario",
+            item: "Escola Sabatina",
+            util_module: "timer_worship",
+            util_config: { mode: "down", define_by: "end", target: "10:45", minutes: 30 },
+            util_autostart: true,
+          },
+        ],
+      })
+    );
+    expect(parsed?.items[0]).toMatchObject({
+      tipo: LiturgyItemTypeEnum.UTILITY,
+      util_module: "timer_worship",
+      util_config: { mode: "down", define_by: "end", target: "10:45" },
+      util_autostart: true,
+    });
+  });
+
+  it("descarta módulo desconhecido", () => {
+    const parsed = useLiturgyLibrary().parseImport(
+      JSON.stringify({
+        name: "Culto",
+        items: [{ tipo: "utilitario", item: "X", util_module: "rm -rf", util_config: { a: 1 } }],
+      })
+    );
+    expect(parsed?.items[0].util_module).toBeUndefined();
+    expect(parsed?.items[0].util_config).toBeUndefined();
+  });
+});

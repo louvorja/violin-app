@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
@@ -75,6 +75,7 @@ import { useModuleI18n } from "@/composables/useModuleI18n";
 import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useTimerEndAction } from "@/composables/useTimerEndAction";
+import { useModuleLaunch } from "@/composables/useModuleLaunch";
 import { KEYS } from "@/constants/UserDataKeys";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { formatTimerSeconds, timerProjectionText } from "@/helpers/TimerText";
@@ -357,6 +358,18 @@ function reset(): void {
   alarmed.value = false;
   updateFromTargetTime();
 }
+
+/*
+ * Item "Utilitário" da liturgia: abre já configurado e, se o item pediu,
+ * começa a contar. O `nextTick` deixa o watcher de modo (que reinicia) rodar antes.
+ */
+useModuleLaunch("timer", async ({ config, autoStart }) => {
+  if (config.mode) mode.value = config.mode;
+  if (config.target) targetTime.value = config.target;
+  await nextTick();
+  reset();
+  if (autoStart) start();
+});
 
 // Fechar zera a contagem e tira o módulo do telão. O horário continua salvo,
 // então reabrir e iniciar retoma do ponto certo.

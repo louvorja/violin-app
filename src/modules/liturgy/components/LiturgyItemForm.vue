@@ -432,6 +432,74 @@
       </LjField>
     </section>
 
+    <!-- ─── Painel UTILITÁRIO ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.UTILITY" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.utilitario") }}</h3>
+      <p class="lif-hint">{{ t("utility.hint") }}</p>
+      <LjField layout="column" :label="t('utility.module')" :error="formErrors?.util_module">
+        <LjSelect
+          :model-value="form.util_module ?? ''"
+          :items="utilityOptions"
+          data-testid="utility-module"
+          @update:model-value="onUtilityModuleChange(String($event))"
+        />
+      </LjField>
+      <div v-if="utilityFields.length" class="lif-row">
+        <LjField v-if="utilityFields.includes('mode')" class="lif-field" :label="t('utility.mode')">
+          <LjSelect
+            :model-value="utilityConfig.mode ?? 'down'"
+            :items="utilityModeOptions"
+            data-testid="utility-mode"
+            @update:model-value="setUtilityConfig('mode', $event)"
+          />
+        </LjField>
+        <LjField
+          v-if="utilityFields.includes('define_by')"
+          class="lif-field"
+          :label="t('utility.define_by')"
+        >
+          <LjSelect
+            :model-value="utilityConfig.define_by ?? 'end'"
+            :items="utilityDefineByOptions"
+            data-testid="utility-define-by"
+            @update:model-value="setUtilityConfig('define_by', $event)"
+          />
+        </LjField>
+        <LjField
+          v-if="utilityFields.includes('target')"
+          class="lif-field lif-field--time"
+          :label="t('utility.target')"
+        >
+          <LjInput
+            :model-value="utilityConfig.target ?? ''"
+            type="time"
+            data-testid="utility-target"
+            @update:model-value="setUtilityConfig('target', $event)"
+          />
+        </LjField>
+        <LjField
+          v-if="utilityFields.includes('minutes')"
+          class="lif-field lif-field--duration"
+          :label="t('utility.minutes')"
+        >
+          <LjInput
+            :model-value="utilityConfig.minutes ?? ''"
+            type="number"
+            min="1"
+            data-testid="utility-minutes"
+            @update:model-value="setUtilityConfig('minutes', Number($event))"
+          />
+        </LjField>
+      </div>
+      <LjCheckbox
+        v-if="utilitySpec(form.util_module)?.canAutoStart"
+        :model-value="!!form.util_autostart"
+        :label="t('utility.auto_start')"
+        data-testid="utility-autostart"
+        @update:model-value="setFormField('util_autostart', $event)"
+      />
+    </section>
+
     <!-- ─── Vincular sobreposição quando há algo disponível ou um vínculo a remover ─── -->
     <section
       v-if="canShowOverlayLink && (overlaySlots.length > 0 || !!form.linked_overlay_id)"
@@ -523,6 +591,13 @@ import type { LiturgyItem, LiturgyMusicItem, ScheduledCategory } from "@/types/L
 import type { OverlaySlot } from "@/types/Overlay";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { canLinkOverlay } from "../overlayLink";
+import {
+  UTILITY_MODULES,
+  defaultUtilityConfig,
+  utilitySpec,
+  visibleUtilityFields,
+} from "../utility";
+import type { ModuleLaunchConfig } from "@/helpers/ModuleLaunch";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -642,6 +717,7 @@ const typeOptions = computed(() => [
   { value: LiturgyItemTypeEnum.OVERLAY, label: t("types.overlay") },
   { value: LiturgyItemTypeEnum.BG_PROJECTION, label: t("types.projecao-de-fundo") },
   { value: LiturgyItemTypeEnum.BG_SOUND, label: t("types.som-de-fundo") },
+  { value: LiturgyItemTypeEnum.UTILITY, label: t("types.utilitario") },
   { value: LiturgyItemTypeEnum.VIDEO_ONLINE, label: t("types.video-online") },
 ]);
 
@@ -656,6 +732,45 @@ const blocoOptions = computed(() => [
 // Sem o item "-- selecione --" que o select carregava: no combobox isso é o
 // placeholder do campo, e "sem música" é o checkbox "Escolher na hora do culto".
 const { t: appT } = useI18n();
+
+/* ─── Utilitário: abrir um módulo já configurado ─── */
+
+const utilityTitle = (id: string): string => appT(`modules.${id}.title`);
+
+const utilityOptions = computed(() =>
+  UTILITY_MODULES.map((m) => ({ value: m.id, label: utilityTitle(m.id) }))
+);
+const utilityModeOptions = computed(() => [
+  { value: "down", label: t("utility.mode_down") },
+  { value: "up", label: t("utility.mode_up") },
+]);
+const utilityDefineByOptions = computed(() => [
+  { value: "end", label: t("utility.define_by_end") },
+  { value: "duration", label: t("utility.define_by_duration") },
+]);
+
+const utilityConfig = computed<ModuleLaunchConfig>(() => props.form.util_config ?? {});
+const utilityFields = computed(() =>
+  visibleUtilityFields(props.form.util_module, utilityConfig.value)
+);
+
+function setUtilityConfig(key: keyof ModuleLaunchConfig, value: unknown): void {
+  props.setFormField("util_config", { ...utilityConfig.value, [key]: value });
+}
+
+/**
+ * Trocar o módulo recomeça a configuração. O nome do item acompanha enquanto
+ * o operador não tiver escrito outro.
+ */
+function onUtilityModuleChange(id: string): void {
+  const previous = props.form.util_module;
+  const name = String(props.form.item || "").trim();
+  props.setFormField("util_module", id);
+  props.setFormField("util_config", defaultUtilityConfig(id));
+  if (!name || (previous && name === utilityTitle(previous))) {
+    props.setFormField("item", utilityTitle(id));
+  }
+}
 const { musics: availableMusics } = useMusicCatalog(() => props.musicsList);
 const musicOptions = computed(() =>
   buildMusicOptions(availableMusics.value, appT("components.music_search.custom_album"))

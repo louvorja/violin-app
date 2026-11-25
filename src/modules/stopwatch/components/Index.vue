@@ -149,7 +149,8 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { useModuleLaunch } from "@/composables/useModuleLaunch";
 import { ICONS } from "@/config/Icons";
 import { LjButton, LjChip } from "@/components/ui";
 import { module as manifest } from "../manifest";
@@ -179,8 +180,10 @@ import {
   overtime,
   progress,
   resetAll,
+  resetTime,
   setMode,
   setTarget,
+  start,
   setWarning,
   targetLabel,
   targetSeconds,
@@ -201,6 +204,18 @@ useModuleProjection("stopwatch", {
     else if (action === "set_time") setTimeFromPayload(payload);
     else if (action === "toggle_format") show_format.value = !show_format.value;
   },
+});
+
+/*
+ * Item "Utilitário" da liturgia: modo e tempo (regressivo) já definidos e, se
+ * o item pediu, começa a contar. As voltas ficam como estão.
+ */
+useModuleLaunch("stopwatch", async ({ config, autoStart }) => {
+  if (config.mode) setMode(config.mode);
+  if (config.minutes && (config.mode ?? mode.value) === "down") setTarget(config.minutes * 60);
+  await nextTick();
+  resetTime();
+  if (autoStart) start();
 });
 
 /* "No telão" na prévia: o mesmo estado que acende o botão Projetar da ribbon. */
