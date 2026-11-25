@@ -420,3 +420,55 @@ describe("LjCombobox", () => {
     expect(montar().find(".lj-combobox__anchor").classes()).not.toContain("is-invalid");
   });
 });
+
+describe("selectOnFocus", () => {
+  const ITENS = [
+    { value: 1, label: "Aleluia" },
+    { value: 2, label: "Santo, Santo, Santo" },
+  ];
+
+  function selecionado(input: HTMLInputElement) {
+    return input.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0);
+  }
+
+  it("ao focar seleciona o texto todo; o mouseup do mesmo clique não desfaz", async () => {
+    const w = montar({ items: ITENS, modelValue: ITENS[0], selectOnFocus: true });
+    await passar();
+    const input = campo(w).element as HTMLInputElement;
+    await campo(w).trigger("mousedown");
+    input.focus(); // dispara o evento focus (uma vez, como no navegador)
+    await passar();
+    const up = new MouseEvent("mouseup", { bubbles: true, cancelable: true });
+    input.dispatchEvent(up);
+    expect(up.defaultPrevented).toBe(true);
+    expect(selecionado(input)).toBe("Aleluia");
+    // O segundo clique, já focado, posiciona o cursor normalmente.
+    const up2 = new MouseEvent("mouseup", { bubbles: true, cancelable: true });
+    input.dispatchEvent(up2);
+    expect(up2.defaultPrevented).toBe(false);
+  });
+
+  it("focar pelo Tab seleciona, mas não segura o primeiro clique depois", async () => {
+    const w = montar({ items: ITENS, modelValue: ITENS[0], selectOnFocus: true });
+    await passar();
+    const input = campo(w).element as HTMLInputElement;
+    input.focus(); // dispara o evento focus (uma vez, como no navegador)
+    await passar();
+    expect(selecionado(input)).toBe("Aleluia");
+    const up = new MouseEvent("mouseup", { bubbles: true, cancelable: true });
+    input.dispatchEvent(up);
+    expect(up.defaultPrevented).toBe(false);
+  });
+
+  it("sem a prop, nada muda", async () => {
+    const w = montar({ items: ITENS, modelValue: ITENS[0] });
+    await passar();
+    const input = campo(w).element as HTMLInputElement;
+    await campo(w).trigger("mousedown");
+    input.focus(); // dispara o evento focus (uma vez, como no navegador)
+    await passar();
+    const up = new MouseEvent("mouseup", { bubbles: true, cancelable: true });
+    input.dispatchEvent(up);
+    expect(up.defaultPrevented).toBe(false);
+  });
+});
