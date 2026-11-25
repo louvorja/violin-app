@@ -265,3 +265,37 @@ describe("shiftTarget", () => {
     expect(shiftTarget("10:45", 1)).toBe("10:46");
   });
 });
+
+describe("Temporizador de Culto — avisos extras", () => {
+  it("tocam na marca, só ao passar por ela", () => {
+    const s = createCountdownState();
+    const c = cfg({ marks: [600, 150] });
+    start(s, c, at(9, 45)); // 15 min
+    const { events } = run(s, c, at(9, 45, 1), at(9, 58, 0));
+    expect(events.filter(([, e]) => e.startsWith("mark"))).toEqual([
+      [600, "mark:600"],
+      [150, "mark:150"],
+    ]);
+  });
+
+  it("iniciar abaixo da marca ou tirar tempo por cima dela não toca", () => {
+    const s = createCountdownState();
+    let c = cfg({ marks: [600] });
+    start(s, c, at(9, 52)); // 8 min, abaixo dos 10
+    expect(run(s, c, at(9, 52, 1), at(9, 53, 0)).events).toEqual([]);
+
+    const s2 = createCountdownState();
+    c = cfg({ marks: [600] });
+    start(s2, c, at(9, 45));
+    c = { ...c, ...adjust(s2, c, -10, at(9, 45, 0, 500)) }; // 15 → 5 min
+    expect(run(s2, c, at(9, 45, 1), at(9, 46, 0)).events).toEqual([]);
+  });
+
+  it("progressivo não toca avisos extras", () => {
+    const s = createCountdownState();
+    const c = cfg({ mode: "up", target: "09:20", marks: [600] });
+    start(s, c, at(9, 0));
+    const { events } = run(s, c, at(9, 0, 1), at(9, 15, 0));
+    expect(events).toEqual([]);
+  });
+});

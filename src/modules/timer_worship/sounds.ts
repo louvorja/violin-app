@@ -133,3 +133,67 @@ export async function listLibraryAudios(): Promise<{
   const used = new Set(items.map((i) => i.categoryId).filter(Boolean));
   return { items, categories: categories.filter((c) => used.has(c.id)) };
 }
+
+/** Aviso extra: toca o áudio da biblioteca quando faltar `seconds`. */
+export interface WorshipExtraCue {
+  id: string;
+  seconds: number;
+  libraryId: string;
+  name: string;
+}
+
+/** Limite de um aviso extra: 24 h, como a duração. */
+const MAX_EXTRA_SECONDS = 24 * 60 * 60;
+
+export function getExtraCues(): WorshipExtraCue[] {
+  const raw = $userdata.get<unknown>(KEYS.MODULES.TIMER_WORSHIP.SOUND_EXTRAS, []);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null)
+    .map((c) => ({
+      id: String(c.id || ""),
+      seconds: Math.round(Number(c.seconds)),
+      libraryId: String(c.libraryId || ""),
+      name: String(c.name || ""),
+    }))
+    .filter(
+      (c) => c.id && Number.isFinite(c.seconds) && c.seconds > 0 && c.seconds <= MAX_EXTRA_SECONDS
+    );
+}
+
+export function setExtraCues(cues: WorshipExtraCue[]): void {
+  $userdata.set(
+    KEYS.MODULES.TIMER_WORSHIP.SOUND_EXTRAS,
+    cues.map((c) => ({ ...c }))
+  );
+}
+
+/** "10:00", "2:30", "5" (minutos) → segundos; inválido → null. */
+export function parseCueTime(text: string): number | null {
+  const value = String(text || "").trim();
+  const match = /^(\d{1,4})(?::([0-5]\d))?$/.exec(value);
+  if (!match) return null;
+  const total = Number(match[1]) * 60 + Number(match[2] || 0);
+  return total > 0 && total <= MAX_EXTRA_SECONDS ? total : null;
+}
+
+/** Segundos → "10:00". */
+export function formatCueTime(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Áudio de um aviso extra. Diferente dos fixos, não tem padrão: se o áudio
+ * sumiu da biblioteca, o aviso fica em silêncio (`null`).
+ */
+export async function resolveExtraSound(cue: WorshipExtraCue): Promise<ResolvedSound | null> {
+  if (!cue.libraryId) return null;
+  try {
+    const rec = await $idb.get<LibraryAudioRecord>(DB_TABLE.MEDIA_LIBRARY, cue.libraryId);
+    const url = rec ? urlOfRecord(rec) : "";
+    if (url) return { url, title: rec?.name || cue.name, fellBack: false };
+  } catch {
+    /* sem áudio */
+  }
+  return null;
+}

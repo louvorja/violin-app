@@ -47,13 +47,82 @@
       </li>
     </ul>
 
+    <!-- Avisos a mais, em qualquer tempo, com áudio da Biblioteca de Mídia. -->
+    <h3 class="tws-subtitle">{{ tm("sounds.extras_title") }}</h3>
+    <p class="tws-intro">{{ tm("sounds.extras_intro") }}</p>
+    <ul v-if="extras.length" class="tws-list">
+      <li
+        v-for="(cue, index) in extras"
+        :key="cue.id"
+        class="tws-row"
+        :data-testid="`tw-extra-${index}`"
+      >
+        <div class="tws-row__head tws-row__head--extra">
+          <label class="tws-when">
+            <span>{{ tm("sounds.extras_when") }}</span>
+            <span class="tws-when__box">
+              <LjInput
+                :model-value="timeText[cue.id] ?? formatCueTime(cue.seconds)"
+                :aria-label="tm('sounds.extras_when')"
+                :data-testid="`tw-extra-${index}-time`"
+                @update:model-value="timeText[cue.id] = String($event)"
+                @blur="commitTime(cue)"
+                @keydown.enter="commitTime(cue)"
+              />
+            </span>
+          </label>
+          <span class="tws-row__name" :class="{ 'tws-row__name--missing': !cue.libraryId }">
+            {{ cue.name || tm("sounds.extras_no_audio") }}
+          </span>
+        </div>
+        <div class="tws-row__actions">
+          <LjButton
+            size="sm"
+            variant="ghost"
+            :icon="ICONS.PLAYER.PLAY"
+            :disabled="!cue.libraryId"
+            :data-testid="`tw-extra-${index}-play`"
+            @click="$emit('previewExtra', { ...cue })"
+          >
+            {{ tm("sounds.listen") }}
+          </LjButton>
+          <LjButton
+            size="sm"
+            :icon="ICONS.MEDIA.LIBRARY"
+            :data-testid="`tw-extra-${index}-pick`"
+            @click="openPicker({ extra: cue.id })"
+          >
+            {{ tm("sounds.pick") }}
+          </LjButton>
+          <LjButton
+            size="sm"
+            variant="ghost"
+            :icon="ICONS.ACTIONS.DELETE"
+            :aria-label="tm('sounds.extras_remove')"
+            :title="tm('sounds.extras_remove')"
+            :data-testid="`tw-extra-${index}-remove`"
+            @click="removeExtra(cue.id)"
+          />
+        </div>
+      </li>
+    </ul>
+    <LjButton
+      class="tws-add"
+      variant="ghost"
+      :icon="ICONS.ACTIONS.ADD"
+      data-testid="tw-extra-add"
+      @click="addExtra"
+    >
+      {{ tm("sounds.extras_add") }}
+    </LjButton>
+
     <LiturgyLibrarySearch
       v-model="pickerOpen"
       :title="tm('sounds.pick_title')"
       :icon="ICONS.MEDIA.LIBRARY"
       :items="libraryItems"
       :categories="libraryCategories"
-      :selected-id="pickingFor ? choices[pickingFor]?.libraryId : undefined"
+      :selected-id="pickedId"
       :empty-text="tm('sounds.library_empty')"
       default-view="list"
       @pick="onPicked"
@@ -62,8 +131,8 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
-import { LjButton, LjDialog } from "@/components/ui";
+import { computed, reactive, ref, watch } from "vue";
+import { LjButton, LjDialog, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import LiturgyLibrarySearch, {
   type LibrarySearchCategory,
@@ -72,10 +141,15 @@ import LiturgyLibrarySearch, {
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import {
   WORSHIP_CUES,
+  formatCueTime,
+  getExtraCues,
   getSoundChoice,
   listLibraryAudios,
+  parseCueTime,
+  setExtraCues,
   setSoundChoice,
   type WorshipCue,
+  type WorshipExtraCue,
   type WorshipSoundChoice,
 } from "../sounds";
 
@@ -83,6 +157,7 @@ const props = defineProps<{ modelValue: boolean }>();
 defineEmits<{
   "update:modelValue": [value: boolean];
   preview: [cue: WorshipCue];
+  previewExtra: [cue: WorshipExtraCue];
 }>();
 
 const { tm } = useModuleI18n("timer_worship");
@@ -99,8 +174,47 @@ const choices = reactive<Record<WorshipCue, WorshipSoundChoice | null>>({
   one: null,
 });
 
+const extras = ref<WorshipExtraCue[]>([]);
+/** Texto sendo digitado no "Faltando" de cada aviso extra, até confirmar. */
+const timeText = reactive<Record<string, string>>({});
+
 function loadChoices(): void {
   for (const cue of WORSHIP_CUES) choices[cue] = getSoundChoice(cue);
+  extras.value = getExtraCues();
+  for (const key of Object.keys(timeText)) delete timeText[key];
+}
+
+function saveExtras(next: WorshipExtraCue[]): void {
+  extras.value = next;
+  setExtraCues(next);
+}
+
+/** Novo aviso faltando 10 min (ou 1 min a menos que o último, para não repetir). */
+function addExtra(): void {
+  const last = extras.value.at(-1);
+  const seconds = last ? Math.max(60, last.seconds - 60) : 600;
+  const id = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  saveExtras([...extras.value, { id, seconds, libraryId: "", name: "" }]);
+}
+
+function removeExtra(id: string): void {
+  saveExtras(extras.value.filter((c) => c.id !== id));
+  delete timeText[id];
+}
+
+/** Confirma o "Faltando": "10:00", "2:30" ou "5" (minutos). Inválido volta ao que era. */
+function commitTime(cue: WorshipExtraCue): void {
+  const typed = timeText[cue.id];
+  delete timeText[cue.id];
+  if (typed === undefined) return;
+  const seconds = parseCueTime(typed);
+  if (seconds === null || seconds === cue.seconds) return;
+  // Mantém a lista do maior para o menor tempo, na ordem em que vão tocar.
+  saveExtras(
+    extras.value
+      .map((c) => (c.id === cue.id ? { ...c, seconds } : c))
+      .sort((a, b) => b.seconds - a.seconds)
+  );
 }
 
 watch(
@@ -112,11 +226,18 @@ watch(
 );
 
 const pickerOpen = ref(false);
-const pickingFor = ref<WorshipCue | null>(null);
+/** Para quem é a escolha: um dos três fixos ou um aviso extra (pelo id). */
+const pickingFor = ref<WorshipCue | { extra: string } | null>(null);
+const pickedId = computed<string | undefined>(() => {
+  const target = pickingFor.value;
+  if (!target) return undefined;
+  if (typeof target === "string") return choices[target]?.libraryId;
+  return extras.value.find((c) => c.id === target.extra)?.libraryId || undefined;
+});
 const libraryItems = ref<LibrarySearchItem[]>([]);
 const libraryCategories = ref<LibrarySearchCategory[]>([]);
 
-async function openPicker(cue: WorshipCue): Promise<void> {
+async function openPicker(cue: WorshipCue | { extra: string }): Promise<void> {
   pickingFor.value = cue;
   const { items, categories } = await listLibraryAudios();
   libraryItems.value = items.map((i) => ({
@@ -133,6 +254,14 @@ function onPicked(item: LibrarySearchItem): void {
   const cue = pickingFor.value;
   pickerOpen.value = false;
   if (!cue) return;
+  if (typeof cue !== "string") {
+    saveExtras(
+      extras.value.map((c) =>
+        c.id === cue.extra ? { ...c, libraryId: item.id, name: item.name } : c
+      )
+    );
+    return;
+  }
   const choice = { libraryId: item.id, name: item.name };
   setSoundChoice(cue, choice);
   choices[cue] = choice;
@@ -189,6 +318,37 @@ function useDefault(cue: WorshipCue): void {
 
 .tws-row__name--default {
   color: var(--lj-text-subtle);
+}
+
+.tws-row__name--missing {
+  color: var(--lj-text-subtle);
+  font-style: italic;
+}
+
+.tws-subtitle {
+  margin: var(--lj-space-7) 0 var(--lj-space-2);
+  font-size: var(--lj-text-md);
+  font-weight: var(--lj-weight-medium);
+}
+
+.tws-row__head--extra {
+  gap: var(--lj-space-2);
+}
+
+.tws-when {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  font-weight: var(--lj-weight-medium);
+}
+
+/* O LjInput estica até o fim da linha; a caixa fixa a largura de "10:00". */
+.tws-when__box {
+  width: 80px;
+}
+
+.tws-add {
+  margin-top: var(--lj-space-3);
 }
 
 .tws-row__actions {

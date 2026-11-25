@@ -91,7 +91,13 @@
     "pick": "Biblioteca…",
     "pick_title": "Escolher áudio na Biblioteca de Mídia",
     "use_default": "Voltar ao padrão",
-    "library_empty": "Nenhum áudio na Biblioteca de Mídia. Adicione pelo módulo Biblioteca de Mídia."
+    "library_empty": "Nenhum áudio na Biblioteca de Mídia. Adicione pelo módulo Biblioteca de Mídia.",
+    "extras_title": "Avisos extras",
+    "extras_intro": "Toque outros áudios da biblioteca em qualquer tempo: faltando 10:00, 2:30… Só tocam quando a contagem passa pelo tempo marcado.",
+    "extras_when": "Faltando",
+    "extras_no_audio": "Escolha um áudio",
+    "extras_add": "Novo aviso",
+    "extras_remove": "Remover aviso"
   },
   "screen": {
     "adjust": "Ajustar tempo"

@@ -73,7 +73,7 @@
     </div>
 
     <TimerEndActionDialogs :end-action="endAction" />
-    <SoundsDialog v-model="showSounds" @preview="playCue" />
+    <SoundsDialog v-model="showSounds" @preview="playCue" @preview-extra="playExtra" />
   </ModuleContainer>
 </template>
 
@@ -120,7 +120,14 @@ import {
   worshipSecondLine,
   worshipTargetTime,
 } from "../projectionText";
-import { ENABLED_KEYS, resolveCueSound, type WorshipCue } from "../sounds";
+import {
+  ENABLED_KEYS,
+  getExtraCues,
+  resolveCueSound,
+  resolveExtraSound,
+  type WorshipCue,
+  type WorshipExtraCue,
+} from "../sounds";
 
 const { show_format, fmt } = useModuleFormat(ModuleEnum.TIMER_WORSHIP, manifest);
 const { rootStyle, textStyle, alertStyle, warningStyle, bgImage, imageStyle, container } =
@@ -148,12 +155,16 @@ const flashBorders = computed<boolean>(
   () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.FLASH_BORDERS, true) !== false
 );
 
+/** Avisos extras da janela "Áudios" (só os que têm áudio escolhido tocam). */
+const extraCues = computed<WorshipExtraCue[]>(() => getExtraCues());
+
 const config = computed<CountdownConfig>(() => ({
   mode: mode.value,
   defineBy: defineBy.value,
   target: targetTime.value,
   durationMinutes: durationMinutes.value,
   overtime: overtime.value,
+  marks: [...new Set(extraCues.value.filter((c) => c.libraryId).map((c) => c.seconds))],
 }));
 
 /*
@@ -345,12 +356,25 @@ function cueEnabled(cue: WorshipCue): boolean {
   return $userdata.get<boolean>(ENABLED_KEYS[cue]) === true;
 }
 
+/** Toca o áudio de um aviso extra; sem áudio na biblioteca, fica em silêncio. */
+async function playExtra(cue: WorshipExtraCue): Promise<void> {
+  try {
+    const sound = await resolveExtraSound(cue);
+    if (sound) await Media.openAudio({ url: sound.url, title: sound.title });
+  } catch {
+    /* noop */
+  }
+}
+
 function handleEvents(events: CountdownEvent[]): void {
   for (const event of events) {
     if (event === "end") {
       endAction.triggerTimerEndAction();
-    } else if (cueEnabled(event)) {
-      void playCue(event);
+    } else if (event.startsWith("mark:")) {
+      const seconds = Number(event.slice("mark:".length));
+      for (const cue of extraCues.value) if (cue.seconds === seconds) void playExtra(cue);
+    } else if (cueEnabled(event as WorshipCue)) {
+      void playCue(event as WorshipCue);
     }
   }
 }

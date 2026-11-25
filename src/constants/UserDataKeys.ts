@@ -290,6 +290,8 @@ export const KEYS = {
       SOUND_START_FILE: `${MODULES_TIMER_WORSHIP}.sound_start_file`,
       SOUND_FIVE_MIN_FILE: `${MODULES_TIMER_WORSHIP}.sound_five_min_file`,
       SOUND_ONE_MIN_FILE: `${MODULES_TIMER_WORSHIP}.sound_one_min_file`,
+      /** Avisos extras: `[{ id, seconds, libraryId, name }]` — tocam faltando `seconds`. */
+      SOUND_EXTRAS: `${MODULES_TIMER_WORSHIP}.sound_extras`,
     },
   },
   OPTIONS: {

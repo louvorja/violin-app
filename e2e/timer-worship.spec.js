@@ -176,3 +176,46 @@ test("áudio escolhido que sumiu da biblioteca toca o padrão", async ({ page })
   await toggle(page).click();
   await expect.poll(() => played(page)).toEqual(["Abertura"]);
 });
+
+test("avisos extras: novo aviso faltando 2:00 com áudio da biblioteca", async ({ page }) => {
+  await openWorship(page, { sound_start: false, sound_five_min: false, sound_one_min: false });
+  await page.evaluate(async () => {
+    const { default: idb } = await import("/src/helpers/IndexedDB.ts");
+    const { DB_TABLE } = await import("/src/constants/DbTables.ts");
+    await idb.put(DB_TABLE.MEDIA_LIBRARY, {
+      id: "lit-encerramento",
+      name: "Encerramento do culto",
+      type: "audio",
+      mime: "audio/mpeg",
+      data: new Blob([new Uint8Array([1, 2, 3, 4])], { type: "audio/mpeg" }),
+    });
+  });
+
+  await page.getByTestId("ribbon-btn-timer_worship_sounds").click();
+  await page.getByTestId("tw-extra-add").click();
+  const time = page.getByTestId("tw-extra-0-time");
+  await expect(time).toHaveValue("10:00");
+  await time.fill("2:00");
+  await time.press("Enter");
+  await expect(page.getByTestId("tw-extra-0")).toContainText("Escolha um áudio");
+  await page.getByTestId("tw-extra-0-pick").click();
+  await page.getByText("Encerramento do culto").click();
+  await expect(page.getByTestId("tw-extra-0")).toContainText("Encerramento do culto");
+  await page.getByTestId("tw-extra-0-play").click();
+  await expect.poll(() => played(page)).toEqual(["Encerramento do culto"]);
+  await page.keyboard.press("Escape");
+
+  await setTarget(page, "11:01"); // 3 min
+  await toggle(page).click();
+  await page.clock.runFor(50_000);
+  expect(await played(page)).toEqual(["Encerramento do culto"]);
+  await page.clock.runFor(15_000); // passa por 2:00
+  await expect
+    .poll(() => played(page))
+    .toEqual(["Encerramento do culto", "Encerramento do culto"]);
+
+  // Remover tira da lista e da contagem.
+  await page.getByTestId("ribbon-btn-timer_worship_sounds").click();
+  await page.getByTestId("tw-extra-0-remove").click();
+  await expect(page.getByTestId("tw-extra-0")).toHaveCount(0);
+});

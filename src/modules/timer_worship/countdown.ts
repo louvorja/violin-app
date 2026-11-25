@@ -29,6 +29,8 @@ export interface CountdownConfig {
   durationMinutes: number;
   /** Seguir contando depois do zero (-00:00:01…), só no regressivo. */
   overtime: boolean;
+  /** Avisos extras: segundos restantes em que cada um toca (regressivo). */
+  marks?: number[];
 }
 
 export interface CountdownState {
@@ -51,7 +53,8 @@ export interface CountdownState {
   lastLeft: number | null;
 }
 
-export type CountdownEvent = "start" | "five" | "one" | "end";
+/** `mark:600` = aviso extra marcado para faltando 10 min. */
+export type CountdownEvent = "start" | "five" | "one" | "end" | `mark:${number}`;
 
 /**
  * Os avisos tocam 10 s antes da marca, como no Classic ('00:05:10' e
@@ -210,6 +213,11 @@ export function tick(state: CountdownState, cfg: CountdownConfig, now: number): 
   if (!state.oneFired && prev > ONE_MIN_CUE && left <= ONE_MIN_CUE) {
     state.oneFired = true;
     events.push("one");
+  }
+  // Avisos extras: tocam na marca exata, só ao passar por ela — como os fixos,
+  // ganhar tempo e passar de novo toca de novo; tirar tempo pula sem tocar.
+  for (const mark of cfg.marks ?? []) {
+    if (mark > 0 && prev > mark && left <= mark) events.push(`mark:${mark}`);
   }
   return events;
 }
