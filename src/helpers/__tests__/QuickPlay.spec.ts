@@ -10,7 +10,7 @@ vi.mock("@/helpers/CustomMusicCatalog", () => ({
 vi.mock("@/helpers/Snackbar", () => ({ default: { warning: (...a: unknown[]) => warning(...a) } }));
 vi.mock("@/i18n", () => ({ i18nAtual: () => null }));
 
-const { quickPlay, isQuickPlayEnter } = await import("../QuickPlay");
+const { quickPlay, isQuickPlayEnter, quickPlayFromRow } = await import("../QuickPlay");
 
 beforeEach(() => {
   open.mockClear();
@@ -74,5 +74,46 @@ describe("quickPlay — Enter da busca", () => {
     expect(isQuickPlayEnter(ev({ isComposing: true }))).toBe(false);
     // Tecla segurada repetiria o pedido de tocar.
     expect(isQuickPlayEnter(ev({ repeat: true }))).toBe(false);
+  });
+});
+
+describe("quickPlayFromRow — duplo clique na linha", () => {
+  function dblclick(target: Element, shiftKey = false): MouseEvent {
+    const ev = new MouseEvent("dblclick", { bubbles: true, shiftKey });
+    Object.defineProperty(ev, "target", { value: target });
+    return ev;
+  }
+
+  it("duplo clique no nome toca o cantado; com Shift, o playback", () => {
+    const td = document.createElement("td");
+    expect(quickPlayFromRow(dblclick(td), { id_music: 7, has_instrumental_music: true })).toBe(
+      true
+    );
+    expect(open).toHaveBeenLastCalledWith({ id_music: 7, mode: "audio" });
+    expect(
+      quickPlayFromRow(dblclick(td, true), { id_music: 7, has_instrumental_music: true })
+    ).toBe(true);
+    expect(open).toHaveBeenLastCalledWith({ id_music: 7, mode: "instrumental" });
+  });
+
+  it("duplo clique num botão da linha (ou no ícone dentro dele) não toca de novo", () => {
+    const btn = document.createElement("button");
+    const icon = document.createElement("svg");
+    btn.appendChild(icon);
+    expect(quickPlayFromRow(dblclick(icon), { id_music: 7 })).toBe(false);
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menuitem");
+    expect(quickPlayFromRow(dblclick(menu), { id_music: 7 })).toBe(false);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("limpa a seleção de texto que o duplo clique deixa", () => {
+    const td = document.createElement("td");
+    td.textContent = "Aleluia";
+    document.body.appendChild(td);
+    window.getSelection()?.selectAllChildren(td);
+    quickPlayFromRow(dblclick(td), { id_music: 7 });
+    expect(window.getSelection()?.toString()).toBe("");
+    td.remove();
   });
 });

@@ -58,3 +58,24 @@ export function isQuickPlayEnter(event: KeyboardEvent): boolean {
     !event.altKey
   );
 }
+
+/**
+ * Duplo clique numa linha de música: o mesmo que o Enter da busca (cantado;
+ * Shift+duplo clique, o playback). Ignora o duplo clique que nasce em botões,
+ * links e campos da própria linha — ali o clique já tem dono (menu de versões,
+ * adicionar à lista...) e tocar junto seria uma ação a mais não pedida.
+ * Devolve `true` se mandou tocar.
+ */
+export function quickPlayFromRow(
+  event: MouseEvent,
+  item: QuickPlayItem | null | undefined
+): boolean {
+  const target = event.target as Element | null;
+  if (target?.closest?.("button, a, input, select, textarea, [role='button'], [role='menuitem']")) {
+    return false;
+  }
+  // O duplo clique seleciona a palavra sob o cursor; numa linha de tabela isso
+  // só deixa o título "pintado" depois de tocar.
+  window.getSelection?.()?.removeAllRanges();
+  return quickPlay(item, event.shiftKey);
+}

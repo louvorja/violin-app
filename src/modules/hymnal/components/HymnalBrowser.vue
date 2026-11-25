@@ -62,6 +62,7 @@
           }"
           @click="selectedId = item.id_music"
           @mousemove="nav.setActive(index)"
+          @dblclick="onRowDblClick($event, item)"
         >
           <td class="lj-u-text-end">
             {{ item.track }}
@@ -122,7 +123,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { HYMNAL_ALBUM_IDS } from "@root/config/musicCatalog.mjs";
 import { useQuickSearch } from "@/composables/useQuickSearch";
 import { useListNavigation } from "@/composables/useListNavigation";
-import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
+import { isQuickPlayEnter, quickPlay, quickPlayFromRow } from "@/helpers/QuickPlay";
 import { executeMusic } from "@/helpers/MusicExecution";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
@@ -187,6 +188,12 @@ async function onSearchKey(event) {
   selectedId.value = hymn.id_music;
   if (arrow) return;
   if (quickPlay(hymn, event.shiftKey)) quickSearch.afterPlay();
+}
+
+// Duplo clique no hino toca o cantado (Shift: playback), como o Enter da busca.
+function onRowDblClick(event, item) {
+  selectedId.value = item.id_music;
+  if (quickPlayFromRow(event, item)) quickSearch.afterPlay();
 }
 
 const disabledAlbums = computed(() => {
