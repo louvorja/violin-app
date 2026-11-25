@@ -281,3 +281,99 @@ test("layout em grade: livro, capítulo e versículo pelos botões; desligado vo
   await expect(page.getByTestId("bible-grid")).toHaveCount(0);
   await expect(page.locator(".bible-col--books")).toBeVisible();
 });
+
+async function setProjectOnClick(page, on) {
+  await page.evaluate(async (on) => {
+    const { default: userData } = await import("/src/helpers/UserData.ts");
+    const { KEYS } = await import("/src/constants/UserDataKeys.ts");
+    userData.set(KEYS.MODULES.BIBLE.PROJECT_ON_CLICK, on);
+  }, on);
+}
+
+test("padrão: clicar no versículo projeta, como sempre", async ({ page }) => {
+  await start(page);
+  const projected = await watchProjected(page);
+  await expect(page.getByTestId("bible-select-bar")).toHaveCount(0);
+  await page.locator("#listVerse_3").click();
+  await expect.poll(projected).toEqual(["Gênesis 1:3 (A)"]);
+});
+
+test("sem projetar ao clicar: clique marca, Shift/Ctrl montam, duplo clique e Enter projetam", async ({
+  page,
+}) => {
+  await start(page);
+  await setProjectOnClick(page, false);
+  const projected = await watchProjected(page);
+  const bar = page.getByTestId("bible-select-bar");
+  await expect(bar).toBeVisible();
+  await expect(bar).not.toHaveClass(/bible-selbar--pending/);
+
+  await page.locator("#listVerse_5").click();
+  await page.locator("#listVerse_9").click({ modifiers: ["Shift"] });
+  await page.locator("#listVerse_12").click({ modifiers: ["Control"] });
+  await expect(page.locator(".bible-verse--active")).toHaveCount(6);
+  await page.waitForTimeout(300);
+  expect(await projected()).toEqual([]);
+  // Marcado e fora do telão: laranja, e a barra mostra o que vai entrar.
+  await expect(page.locator("#listVerse_5")).toHaveClass(/bible-verse--marked/);
+  await expect(page.locator(".bible-verse--live")).toHaveCount(0);
+  await expect(bar).toHaveClass(/bible-selbar--pending/);
+  await expect(bar).toContainText("Gênesis 1:5-9, 12");
+
+  // Enter projeta o que está marcado, e ele passa a azul.
+  await page.keyboard.press("Enter");
+  await expect.poll(projected).toEqual(["Gênesis 1:5-9, 12 (A)"]);
+  await expect(page.locator(".bible-verse--live")).toHaveCount(6);
+  await expect(page.locator(".bible-verse--marked")).toHaveCount(0);
+  await expect(bar).not.toHaveClass(/bible-selbar--pending/);
+
+  // Duplo clique num versículo marcado projeta toda a marcação, não só ele.
+  await page.locator("#listVerse_2").click();
+  await page.locator("#listVerse_3").click({ modifiers: ["Shift"] });
+  await page.locator("#listVerse_7").click({ modifiers: ["Control"] });
+  await page.locator("#listVerse_3").dblclick();
+  await expect.poll(async () => (await projected()).at(-1)).toBe("Gênesis 1:2-3, 7 (A)");
+  await page.locator("#listVerse_7").dblclick({ modifiers: ["Control"] });
+  await expect.poll(async () => (await projected()).length).toBe(3);
+  expect((await projected()).at(-1)).toBe("Gênesis 1:2-3, 7 (A)");
+  await expect(page.locator(".bible-verse--live")).toHaveCount(3);
+
+  // Duplo clique num versículo fora da seleção: ele vira a seleção e projeta.
+  await page.locator("#listVerse_15").dblclick();
+  await expect.poll(async () => (await projected()).at(-1)).toBe("Gênesis 1:15 (A)");
+
+  // Ctrl+duplo clique soma à seleção, mesmo com os dois cliques marcando e desmarcando.
+  await page.locator("#listVerse_17").dblclick({ modifiers: ["Control"] });
+  await expect.poll(async () => (await projected()).at(-1)).toBe("Gênesis 1:15, 17 (A)");
+});
+
+test("Localizar: números e Enter selecionam e projetam; texto só filtra", async ({ page }) => {
+  await start(page);
+  const projected = await watchProjected(page);
+  const locate = page.getByPlaceholder("Localizar");
+  await locate.fill("3-4, 7");
+  await locate.press("Enter");
+  await expect.poll(projected).toEqual(["Gênesis 1:3-4, 7 (A)"]);
+  await expect(page.locator(".bible-verse--active")).toHaveCount(3);
+
+  await locate.fill("Gênesis 1:2 (A)");
+  await locate.press("Enter");
+  await page.waitForTimeout(300);
+  expect(await projected()).toEqual(["Gênesis 1:3-4, 7 (A)"]);
+});
+
+test("layout em grade sem projetar ao clicar: número marca em laranja e duplo clique projeta", async ({
+  page,
+}) => {
+  await start(page);
+  await setGridLayout(page, true);
+  await setProjectOnClick(page, false);
+  const projected = await watchProjected(page);
+  await page.getByTestId("bible-verse-num-2").click();
+  await expect(page.getByTestId("bible-verse-num-2")).toHaveClass(/is-marked/);
+  await page.waitForTimeout(300);
+  expect(await projected()).toEqual([]);
+  await page.getByTestId("bible-verse-num-8").dblclick();
+  await expect.poll(projected).toEqual(["Gênesis 1:8 (A)"]);
+  await expect(page.getByTestId("bible-verse-num-8")).toHaveClass(/is-filled/);
+});

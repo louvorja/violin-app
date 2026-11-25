@@ -146,6 +146,14 @@ export const contextualPages: RibbonPage[] = [
             label: `${modulePath}.ribbon.grid_layout`,
             defaultValue: false,
           },
+          {
+            // Ligado = como sempre foi: clicou, projetou.
+            id: `${moduleId}_project_on_click`,
+            type: "checkbox",
+            optionKey: KEYS.MODULES.BIBLE.PROJECT_ON_CLICK,
+            label: `${modulePath}.ribbon.project_on_click`,
+            defaultValue: true,
+          },
         ],
       },
       {

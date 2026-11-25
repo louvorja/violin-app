@@ -143,10 +143,11 @@
                 :key="v.id"
                 type="button"
                 class="bible-card bible-grade__num bible-grade__num--verse"
-                :class="bible.verses.includes(v.id) ? 'is-filled' : 'is-tonal'"
+                :class="verseNumClass(v.id)"
                 :style="cardColors(book?.color)"
                 :data-testid="`bible-verse-num-${v.id}`"
-                @click="selVerse($event, v.id)"
+                @click="onVerseClick($event, v.id)"
+                @dblclick="onVerseDblClick($event, v.id)"
               >
                 {{ v.value }}
               </button>
@@ -241,6 +242,8 @@
             :icon="ICONS.ACTIONS.SEARCH"
             :placeholder="tm('locate')"
             :aria-label="tm('locate')"
+            :title="tm('locate_hint')"
+            @keydown.enter.prevent="onLocateEnter"
           />
           <LjCheckbox
             v-if="verse_filter"
@@ -258,13 +261,50 @@
               v-for="(verse, num) in filteredVerses"
               :id="`listVerse_${num}`"
               :key="num"
-              :class="['bible-verse', { 'bible-verse--active': bible.verses.includes(+num) }]"
-              @click="selVerse($event, num)"
+              :class="['bible-verse', verseStateClass(+num)]"
+              @click="onVerseClick($event, num)"
+              @dblclick="onVerseDblClick($event, num)"
             >
               <span class="bible-verse__num">{{ num }}</span>
               <span class="bible-verse__text" v-html="verse"></span>
             </div>
           </div>
+        </div>
+        <!--
+          Só quando o clique não projeta. Com algo marcado e ainda fora do telão,
+          mostra o que vai entrar; sem nada pendente, lembra as teclas.
+        -->
+        <div
+          v-if="!projectOnClick"
+          class="bible-selbar"
+          :class="{ 'bible-selbar--pending': hasPendingSelection }"
+          data-testid="bible-select-bar"
+        >
+          <template v-if="hasPendingSelection">
+            <span class="bible-selbar__ref">
+              <span class="bible-selbar__dot" />
+              {{ tm("selection.marked") }}:
+              <strong>{{ pendingReference }}</strong>
+            </span>
+            <span class="bible-selbar__keys">
+              <ShortcutKeys :parts="['Enter']" />
+              {{ tm("selection.or_dblclick") }}
+            </span>
+          </template>
+          <template v-else>
+            <span class="bible-selbar__keys">
+              <ShortcutKeys :parts="['Shift']" />
+              {{ tm("selection.range") }}
+            </span>
+            <span class="bible-selbar__keys">
+              <ShortcutKeys :parts="[addKey]" />
+              {{ tm("selection.add") }}
+            </span>
+            <span class="bible-selbar__keys">
+              <ShortcutKeys :parts="['Enter']" />
+              {{ tm("selection.project") }}
+            </span>
+          </template>
         </div>
         <!-- Preview da projeção (estilo área expandida do Delphi) -->
         <div class="bible-col__preview">
@@ -322,8 +362,9 @@
               v-for="(verse, num) in filteredVerses"
               :id="`listVerse_${num}`"
               :key="num"
-              :class="['bible-verse', { 'bible-verse--active': bible.verses.includes(+num) }]"
-              @click="selVerse($event, num)"
+              :class="['bible-verse', verseStateClass(+num)]"
+              @click="onVerseClick($event, num)"
+              @dblclick="onVerseDblClick($event, num)"
             >
               <span class="bible-verse__num">{{ num }}</span>
               <span class="bible-verse__text" v-html="verse"></span>
@@ -409,6 +450,8 @@ import type {
   BibleVersion,
 } from "@/types/Bible";
 import BibleSpotlight from "@/components/BibleSpotlight.vue";
+import ShortcutKeys from "@/components/ShortcutKeys.vue";
+import Platform from "@/helpers/Platform";
 import { ModuleState } from "@/types/Module";
 import { useSyncManager } from "@/composables/useSyncManager";
 
@@ -710,6 +753,14 @@ function onKeydown(e: KeyboardEvent): void {
   // depois de escolher um item.
   if (alvo?.closest('[role="combobox"], [role="listbox"], [contenteditable="true"]')) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // Com "Projetar ao clicar" desligado, o Enter projeta o que está marcado. Em
+  // cima de um botão o Enter é dele (capítulo, livro...), não da seleção.
+  if (e.key === "Enter" && !e.repeat && !projectOnClick.value && !alvo?.closest("button, a")) {
+    if (!bible.verses.length) return;
+    e.preventDefault();
+    publishSelection();
+    return;
+  }
   if (e.key.length === 1) {
     e.preventDefault();
     spotlightInitialBuffer.value = e.key.toLowerCase();
@@ -898,7 +949,120 @@ const historyVisible = computed<boolean>({
   },
 });
 
-async function selVerse(event: MouseEvent | null, num: number | string): Promise<void> {
+/**
+ * "Projetar ao clicar" (padrão ligado: clicou, projetou, como sempre foi).
+ * Desligado, o clique só marca — Shift e Ctrl/⌘ continuam montando intervalo e
+ * soma — e quem projeta é o duplo clique ou o Enter. Assim dá para montar
+ * "5-9, 12" sem o telão trocar a cada clique.
+ */
+const projectOnClick = computed<boolean>(
+  () => UserData.get<boolean>(KEYS.MODULES.BIBLE.PROJECT_ON_CLICK, true) !== false
+);
+
+/** Versículos do capítulo aberto que estão no telão agora. */
+const liveVerses = computed<number[]>(() =>
+  select_bible.id_bible_book === bible.id_bible_book &&
+  select_bible.chapter === bible.chapter &&
+  select_bible.id_bible_version === bible.id_bible_version
+    ? (select_bible.verses ?? [])
+    : []
+);
+
+/** Marcado e ainda não projetado: só acontece com "Projetar ao clicar" desligado. */
+const hasPendingSelection = computed<boolean>(
+  () =>
+    !projectOnClick.value &&
+    bible.verses.length > 0 &&
+    bible.verses.join(",") !== [...liveVerses.value].sort((a, b) => a - b).join(",")
+);
+
+const pendingReference = computed<string>(() =>
+  hasPendingSelection.value ? scripturalReference({ ...bible, verses: [...bible.verses] }) : ""
+);
+
+/** No Mac quem soma é o Command; nos outros, o Ctrl. */
+const addKey = Platform.isMac ? "⌘" : "Ctrl";
+
+/**
+ * Duas cores: azul = no telão; laranja = marcado, esperando o Enter. Com
+ * "Projetar ao clicar" ligado as duas coincidem e só o azul aparece.
+ */
+function verseStateClass(num: number): Record<string, boolean> {
+  const marked = bible.verses.includes(num);
+  // Ligado, o que está marcado é o que foi projetado (ou vai ser no mesmo clique).
+  const live = projectOnClick.value ? marked : liveVerses.value.includes(num);
+  return {
+    "bible-verse--active": marked,
+    "bible-verse--live": live,
+    "bible-verse--marked": marked && !live,
+  };
+}
+
+function verseNumClass(num: number): string {
+  const state = verseStateClass(num);
+  if (state["bible-verse--live"]) return "is-filled";
+  if (state["bible-verse--marked"]) return "is-tonal is-marked";
+  return "is-tonal";
+}
+
+/**
+ * O que estava marcado antes do primeiro clique. Um duplo clique chega como
+ * dois cliques e só depois o dblclick; sem esta foto, o primeiro clique já
+ * teria trocado "5-9, 12" pelo versículo clicado.
+ */
+let markedBeforeClick: number[] = [];
+
+function onVerseClick(event: MouseEvent, num: number | string): void {
+  if (event.detail <= 1) markedBeforeClick = [...bible.verses];
+  void selVerse(event, num, { publish: projectOnClick.value });
+}
+
+/**
+ * Duplo clique projeta o que está marcado:
+ * - num versículo já marcado: projeta toda a marcação, não só ele;
+ * - com Ctrl/⌘ num versículo de fora: soma ele à marcação e projeta;
+ * - sem tecla, num versículo de fora: ele vira a seleção e projeta.
+ */
+function onVerseDblClick(event: MouseEvent, num: number | string): void {
+  if (projectOnClick.value) return; // o primeiro clique já projetou
+  window.getSelection?.()?.removeAllRanges();
+  const n = parseInt(String(num), 10);
+  if (typeof verses.value[String(n)] !== "string") return;
+  const before = markedBeforeClick.filter((v) => typeof verses.value[String(v)] === "string");
+  if (before.includes(n)) {
+    bible.verses = before;
+  } else if (event.ctrlKey || event.metaKey) {
+    bible.verses = [...before, n];
+  } else if (!bible.verses.includes(n)) {
+    bible.verses = [...bible.verses, n];
+  }
+  bible.verses.sort((a, b) => a - b);
+  last_verse.value = n;
+  publishSelection();
+}
+
+/**
+ * Enter no Localizar: com números ("16", "5-9", "3, 7, 10-12"), seleciona esses
+ * versículos do capítulo e projeta. Texto comum continua só filtrando.
+ */
+function onLocateEnter(): void {
+  const term = (verse_filter.value || "").trim();
+  if (!parseVerseNumbers(term)) return;
+  const found = Object.keys(filteredVerses.value)
+    .map((n) => parseInt(n, 10))
+    .filter((n) => Number.isSafeInteger(n))
+    .sort((a, b) => a - b);
+  if (!found.length) return;
+  bible.verses = found;
+  last_verse.value = found[found.length - 1];
+  publishSelection();
+}
+
+async function selVerse(
+  event: MouseEvent | null,
+  num: number | string,
+  { publish = true }: { publish?: boolean } = {}
+): Promise<void> {
   if (event) {
     try {
       event.preventDefault();
@@ -934,7 +1098,7 @@ async function selVerse(event: MouseEvent | null, num: number | string): Promise
 
   last_verse.value = num;
   bible.verses.sort((a, b) => a - b);
-  publishSelection();
+  if (publish) publishSelection();
 }
 
 function publishSelection(): void {
@@ -1577,6 +1741,77 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload: any) => {
   overflow: auto;
   padding: 0 8px;
   min-height: 0;
+}
+
+/* Versículo no telão: azul. Marcado esperando o Enter: laranja. */
+.bible-verse.bible-verse--live {
+  background: #1d4f91;
+  box-shadow: inset 4px 0 0 #6fb1ff;
+}
+
+.bible-verse.bible-verse--live:hover {
+  background: #22599f;
+}
+
+.bible-verse.bible-verse--marked {
+  background: #6b3d0c;
+  box-shadow: inset 4px 0 0 #f39c12;
+}
+
+.bible-verse.bible-verse--marked:hover {
+  background: #7d470e;
+}
+
+/* Na grade, o número que está no telão usa o mesmo azul da lista. */
+.bible-card.bible-grade__num--verse.is-filled {
+  background: #1d4f91;
+  color: #fff;
+}
+
+.bible-grade__num.is-marked {
+  outline: 2px solid #f39c12;
+  outline-offset: -2px;
+}
+
+.bible-selbar {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lj-space-3) var(--lj-space-6);
+  padding: var(--lj-space-3) var(--lj-space-5);
+  border-top: 1px solid var(--lj-surface-border);
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-xs);
+}
+
+.bible-selbar--pending {
+  justify-content: space-between;
+  color: var(--lj-text);
+  background: rgba(230, 126, 34, 0.14);
+}
+
+.bible-selbar__ref {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  min-width: 0;
+}
+
+.bible-selbar__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f39c12;
+  flex-shrink: 0;
+}
+
+.bible-selbar__keys {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  white-space: nowrap;
 }
 
 .bible-col__preview {

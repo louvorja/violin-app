@@ -7,7 +7,8 @@
     "show_reference": "Exibir Referência",
     "show_version": "Exibir Versão",
     "reference_only": "Exibir Somente Referência",
-    "grid_layout": "Layout em grade"
+    "grid_layout": "Layout em grade",
+    "project_on_click": "Projetar ao clicar"
   },
   "project_start": "Iniciar Projeção",
   "project_stop": "Parar Projeção",
@@ -19,6 +20,14 @@
   "verses_select": "Selecione os versículos",
   "locate": "Localizar",
   "filter_navigate_only": "Navegar somente entre os versículos listados",
+  "locate_hint": "Números (ex.: 5-9, 12) + Enter selecionam e projetam",
+  "selection": {
+    "marked": "Marcados",
+    "or_dblclick": "ou duplo clique para projetar",
+    "range": "intervalo",
+    "add": "somar",
+    "project": "projetar"
+  },
   "history": "Histórico",
   "show_history": "Exibir Histórico",
   "no_history": "Sem histórico",
