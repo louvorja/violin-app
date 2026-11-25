@@ -562,6 +562,18 @@ describe("as aberturas automáticas", () => {
     expect(calls).toEqual([`open:${FILE}`]);
   });
 
+  it("vídeo on-line sem monitor de vídeo configurado abre mesmo assim, como o botão do player", async () => {
+    // Só a opção de arquivos resolve; a de vídeo on-line ficou em "Mesma janela".
+    monitors = { [FILE]: 1, [FILE_RETURN]: 2 };
+    prefs = { [KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN]: true };
+    calls.length = 0;
+    openWindow.mockClear();
+
+    await windows.openVideoProjectionWindows();
+
+    expect(opened().map((o) => o.feature)).toEqual([FILE, ONLINE_VIDEO_RETURN]);
+  });
+
   it("vídeo on-line: um retorno de música que ficou na tela é FECHADO, não reutilizado", async () => {
     musicReturnOnScreen();
     calls.length = 0;

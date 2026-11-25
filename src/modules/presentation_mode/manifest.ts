@@ -69,6 +69,7 @@ export const contextualPages: RibbonPage[] = [
         buttons: [
           { id: `${moduleId}_library_files`, icon: ICONS.UI.FOLDER_OPEN, label: `${btn}.library_files`, action: `${moduleId}_library_files`, color: "#f39c12", size: "small" },
           { id: `${moduleId}_library_media`, icon: ICONS.MEDIA.IMAGE_MULTIPLE, label: `${btn}.library_media`, action: `${moduleId}_library_media`, color: "#9b59b6", size: "small" },
+          { id: `${moduleId}_library_online_videos`, icon: ICONS.MEDIA.YOUTUBE, label: `${btn}.library_online_videos`, action: `${moduleId}_library_online_videos`, color: "#e74c3c", size: "small" },
           { id: `${moduleId}_library_media_library`, icon: ICONS.MODULES.MEDIA_LIBRARY, label: `${btn}.library_media_library`, action: `${moduleId}_library_media_library`, color: "#8e44ad", size: "small" },
           { id: `${moduleId}_library_audio`, icon: ICONS.MEDIA.AUDIO_VIDEO, label: `${btn}.library_audio`, action: `${moduleId}_library_audio`, color: "#16a085", size: "small" },
           { id: `${moduleId}_library_background_sound`, icon: ICONS.MODULES.BACKGROUND_SOUND, label: `${btn}.library_background_sound`, action: `${moduleId}_library_background_sound`, color: "#607d8b", size: "small" },

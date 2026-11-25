@@ -75,6 +75,11 @@
     </header>
 
     <LibraryMusic v-if="tab === 'musics'" :live-song-id="liveSongId" v-bind="relay" />
+    <LibraryOnlineVideos
+      v-else-if="tab === 'online_videos'"
+      :live-video-id="liveVideoId"
+      v-bind="relay"
+    />
     <LibraryMedia
       v-else-if="tab === 'media'"
       :live-path="livePath"
@@ -120,6 +125,7 @@ import { ICONS } from "@/config/Icons";
 const TABS = [
   { id: "files", label: "library.files", icon: ICONS.UI.FOLDER_OPEN },
   { id: "media", label: "library.media", icon: ICONS.MEDIA.IMAGE_MULTIPLE },
+  { id: "online_videos", label: "library.online_videos", icon: ICONS.MEDIA.YOUTUBE },
   { id: "media_library", label: "library.media_library", icon: ICONS.MODULES.MEDIA_LIBRARY },
   { id: "audio", label: "library.audio", icon: ICONS.MEDIA.AUDIO_VIDEO },
   {
@@ -149,6 +155,7 @@ import LibraryBible from "./LibraryBible.vue";
 import LibraryBackgroundSound from "./LibraryBackgroundSound.vue";
 import LibraryBackgroundProjection from "./LibraryBackgroundProjection.vue";
 import LibraryMedia from "./LibraryMedia.vue";
+import LibraryOnlineVideos from "./LibraryOnlineVideos.vue";
 import LibraryNativeMedia from "./LibraryNativeMedia.vue";
 import type { ProgramBibleRef, ProgramItem } from "@/types/Presentation";
 import type { Playable, PlayOptions } from "../program/playable";
@@ -220,8 +227,21 @@ function normalizeTabOrder(value: unknown): LibraryTabDef[] {
       seen.add(raw);
     }
   }
+  // Abas novas entram perto da posição canônica, sem desmanchar a ordem
+  // personalizada: depois da predecessora que já existe no arranjo salvo.
   for (const item of TABS) {
-    if (!seen.has(item.id)) ordered.push(item);
+    if (seen.has(item.id)) continue;
+    let insertAt = ordered.length;
+    const canonicalIndex = TABS.findIndex((tab) => tab.id === item.id);
+    for (let i = canonicalIndex - 1; i >= 0; i--) {
+      const previous = ordered.findIndex((tab) => tab.id === TABS[i].id);
+      if (previous !== -1) {
+        insertAt = previous + 1;
+        break;
+      }
+    }
+    ordered.splice(insertAt, 0, item);
+    seen.add(item.id);
   }
   return ordered;
 }

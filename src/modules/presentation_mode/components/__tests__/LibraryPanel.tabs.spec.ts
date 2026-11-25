@@ -98,7 +98,22 @@ describe("LibraryPanel tabs", () => {
     const ids = wrapper.findAll('[role="tab"]').map((tab) => tab.attributes("data-testid"));
 
     expect(ids.slice(0, 2)).toEqual(["pm-library-tab-bible", "pm-library-tab-files"]);
-    expect(ids).toHaveLength(8);
+    expect(ids.slice(2, 4)).toEqual(["pm-library-tab-media", "pm-library-tab-online_videos"]);
+    expect(ids).toHaveLength(9);
+  });
+
+  it("insere a aba nova depois de Mídia numa ordem já salva", () => {
+    userdata.get.mockReturnValue(["files", "media", "musics"]);
+
+    const wrapper = mountPanel();
+    const ids = wrapper.findAll('[role="tab"]').map((tab) => tab.attributes("data-testid"));
+
+    expect(ids.indexOf("pm-library-tab-online_videos")).toBe(
+      ids.indexOf("pm-library-tab-media") + 1
+    );
+    expect(ids.indexOf("pm-library-tab-online_videos")).toBeLessThan(
+      ids.indexOf("pm-library-tab-musics")
+    );
   });
 
   it("salva a nova ordem quando o usuário arrasta as abas", async () => {
@@ -114,6 +129,7 @@ describe("LibraryPanel tabs", () => {
         "bible",
         "files",
         "media",
+        "online_videos",
         "media_library",
         "audio",
         "background_sound",

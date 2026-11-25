@@ -787,16 +787,22 @@ async function _openSiteReturn(
  * Usa a feature "online_video" diretamente, sem passar pelo fallback
  * "file_projection", para não conflitar com a configuração do
  * Player de Áudio/Vídeo (que pode estar em monitor diferente).
+qss *
+ * A abertura é explícita como a do botão "Abrir no monitor" do player: sem
+ * isso, uma opção de monitor que não resolve ("Mesma janela", monitor ausente)
+ * fazia `openMediaWindow` desistir antes de o `Projection.open` aplicar o
+ * fallback — e o vídeo caía no player da janela principal em vez das telas.
  */
 export async function openVideoProjectionWindows(): Promise<void> {
   if (await isBackgroundOpen()) return;
 
-  await openMediaWindow("projection", "video");
+  await openMediaWindow("projection", "video", { explicit: true });
   const returnOn = $userdata.get(
     KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN,
     false
   ) as boolean;
-  if (await _wantsMediaReturn(returnOn)) await openMediaWindow("return", "video");
+  if (await _wantsMediaReturn(returnOn))
+    await openMediaWindow("return", "video", { explicit: true });
 }
 
 /** A janela que mostra o vídeo on-line está aberta? Sem ela, o player embutido toca na principal. */
