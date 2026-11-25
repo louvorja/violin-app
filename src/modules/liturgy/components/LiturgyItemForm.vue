@@ -445,17 +445,23 @@
         />
       </LjField>
 
-      <!-- Os campos vêm da lista de cada módulo (utility.ts), em grupos. -->
+      <!--
+        Os campos vêm da lista de cada módulo (utility.ts), em grupos. Duas
+        colunas fixas: rótulo à esquerda, controle à direita — caixinhas e
+        áudios entram na coluna dos controles, alinhados com o resto.
+      -->
       <template v-for="group in utilityGroups" :key="group">
         <h4 class="lif-util-group">{{ t(`utility.group_${group}`) }}</h4>
-        <div class="lif-util-fields">
+        <div class="lif-util-grid">
           <template v-for="field in utilityFieldsOf(group)" :key="field.key">
-            <LjField
-              v-if="field.type === 'select'"
-              class="lif-field"
-              :label="t(`utility.${field.label}`)"
-            >
+            <span class="lif-util-label" :class="{ 'lif-util-label--top': field.type === 'names' }">
+              <template v-if="field.type !== 'checkbox' && field.type !== 'sound'">
+                {{ t(`utility.${field.label}`) }}
+              </template>
+            </span>
+            <div class="lif-util-control" :class="`lif-util-control--${field.type}`">
               <LjSelect
+                v-if="field.type === 'select'"
                 :model-value="String(utilityConfig[field.key] ?? field.default)"
                 :items="
                   (field.options ?? []).map((o) => ({
@@ -463,102 +469,94 @@
                     label: t(`utility.${o.label}`),
                   }))
                 "
+                :aria-label="t(`utility.${field.label}`)"
                 :data-testid="`utility-${field.key}`"
                 @update:model-value="setUtilityConfig(field.key, $event)"
               />
-            </LjField>
-            <LjField
-              v-else-if="field.type === 'time'"
-              class="lif-field lif-field--time"
-              :label="t(`utility.${field.label}`)"
-            >
               <LjInput
+                v-else-if="field.type === 'time'"
                 :model-value="String(utilityConfig[field.key] ?? '')"
                 type="time"
+                :aria-label="t(`utility.${field.label}`)"
                 :data-testid="`utility-${field.key}`"
                 @update:model-value="setUtilityConfig(field.key, $event)"
               />
-            </LjField>
-            <LjField
-              v-else-if="field.type === 'number'"
-              class="lif-field lif-field--duration"
-              :label="t(`utility.${field.label}`)"
-            >
               <LjInput
+                v-else-if="field.type === 'number'"
                 :model-value="String(utilityConfig[field.key] ?? '')"
                 type="number"
                 :min="field.min"
                 :max="field.max"
+                :aria-label="t(`utility.${field.label}`)"
                 :data-testid="`utility-${field.key}`"
                 @update:model-value="
                   setUtilityConfig(field.key, $event === '' ? '' : Number($event))
                 "
               />
-            </LjField>
-            <LjCheckbox
-              v-else-if="field.type === 'checkbox'"
-              class="lif-util-check"
-              :model-value="utilityConfig[field.key] !== false"
-              :label="t(`utility.${field.label}`)"
-              :data-testid="`utility-${field.key}`"
-              @update:model-value="setUtilityConfig(field.key, $event === true)"
-            />
-            <LjField
-              v-else-if="field.type === 'names'"
-              class="lif-field lif-field--grow lif-util-wide"
-              :label="t(`utility.${field.label}`)"
-            >
+              <LjCheckbox
+                v-else-if="field.type === 'checkbox'"
+                :model-value="utilityConfig[field.key] !== false"
+                :label="t(`utility.${field.label}`)"
+                :data-testid="`utility-${field.key}`"
+                @update:model-value="setUtilityConfig(field.key, $event === true)"
+              />
               <LjTextarea
+                v-else-if="field.type === 'names'"
                 :model-value="utilityNamesText"
                 :rows="5"
                 :placeholder="t('utility.names_placeholder')"
+                :aria-label="t(`utility.${field.label}`)"
                 :data-testid="`utility-${field.key}`"
                 @update:model-value="setUtilityConfig(field.key, String($event).split(/\r?\n/))"
               />
-            </LjField>
-            <!-- Áudio de um aviso: o que vem com o programa ou um da biblioteca. -->
-            <div
-              v-else-if="field.type === 'sound'"
-              class="lif-util-sound"
-              :data-testid="`utility-${field.key}`"
-            >
-              <span
-                class="lif-util-sound__name"
-                :class="{ 'is-default': !utilitySound(field.key) }"
+              <!-- Áudio do aviso logo acima: o que vem com o programa ou um da biblioteca. -->
+              <div
+                v-else-if="field.type === 'sound'"
+                class="lif-util-sound"
+                :data-testid="`utility-${field.key}`"
               >
-                {{ utilitySound(field.key)?.name || t("utility.sound_default") }}
-              </span>
-              <LjButton
-                size="sm"
-                :icon="ICONS.MEDIA.LIBRARY"
-                :data-testid="`utility-${field.key}-pick`"
-                @click="openUtilitySoundPicker(field.key)"
-              >
-                {{ t("utility.sound_pick") }}
-              </LjButton>
-              <LjButton
-                v-if="utilitySound(field.key)"
-                size="sm"
-                variant="ghost"
-                :icon="ICONS.ACTIONS.RESTORE"
-                :data-testid="`utility-${field.key}-default`"
-                @click="setUtilityConfig(field.key, null)"
-              >
-                {{ t("utility.sound_use_default") }}
-              </LjButton>
+                <span
+                  class="lif-util-sound__name"
+                  :class="{ 'is-default': !utilitySound(field.key) }"
+                >
+                  {{ utilitySound(field.key)?.name || t("utility.sound_default") }}
+                </span>
+                <LjButton
+                  size="sm"
+                  :icon="ICONS.MEDIA.LIBRARY"
+                  :data-testid="`utility-${field.key}-pick`"
+                  @click="openUtilitySoundPicker(field.key)"
+                >
+                  {{ t("utility.sound_pick") }}
+                </LjButton>
+                <LjButton
+                  v-if="utilitySound(field.key)"
+                  size="sm"
+                  variant="ghost"
+                  :icon="ICONS.ACTIONS.RESTORE"
+                  :data-testid="`utility-${field.key}-default`"
+                  @click="setUtilityConfig(field.key, null)"
+                >
+                  {{ t("utility.sound_use_default") }}
+                </LjButton>
+              </div>
             </div>
           </template>
         </div>
       </template>
 
-      <LjCheckbox
-        v-if="utilitySpec(form.util_module)?.canAutoStart"
-        class="lif-util-autostart"
-        :model-value="!!form.util_autostart"
-        :label="t('utility.auto_start')"
-        data-testid="utility-autostart"
-        @update:model-value="setFormField('util_autostart', $event)"
-      />
+      <template v-if="utilitySpec(form.util_module)?.canAutoStart">
+        <h4 class="lif-util-group">{{ t("utility.group_on_click") }}</h4>
+        <div class="lif-util-grid">
+          <span class="lif-util-label" />
+          <LjCheckbox
+            :model-value="!!form.util_autostart"
+            :label="t('utility.auto_start')"
+            data-testid="utility-autostart"
+            @update:model-value="setFormField('util_autostart', $event)"
+          />
+        </div>
+      </template>
       <LiturgyLibrarySearch
         v-model="utilitySoundPickerOpen"
         :title="t('utility.sound_pick_title')"
@@ -1670,9 +1668,11 @@ function onVersionChange(version: string) {
   forced-color-adjust: none;
 }
 
-/* Utilitário: grupos de campos do módulo escolhido. */
+/* Utilitário: grupos de campos do módulo escolhido, em duas colunas fixas. */
 .lif-util-group {
-  margin: var(--lj-space-5) 0 var(--lj-space-2);
+  margin: var(--lj-space-6) 0 var(--lj-space-3);
+  padding-bottom: var(--lj-space-2);
+  border-bottom: 1px solid var(--lj-surface-border);
   color: var(--lj-text-subtle);
   font-size: var(--lj-text-xs);
   font-weight: var(--lj-weight-medium);
@@ -1680,23 +1680,47 @@ function onVersionChange(version: string) {
   text-transform: uppercase;
 }
 
-.lif-util-fields {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--lj-space-4) var(--lj-space-6);
+.lif-util-grid {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--lj-space-3) var(--lj-space-5);
 }
 
-.lif-util-wide {
-  flex-basis: 100%;
+.lif-util-label {
+  color: var(--lj-text);
+  font-size: var(--lj-text-sm);
+}
+
+.lif-util-label--top {
+  align-self: start;
+  padding-top: var(--lj-space-3);
+}
+
+/* Larguras por tipo: o controle não estica até a borda da janela. */
+.lif-util-control--select {
+  width: 220px;
+}
+
+.lif-util-control--time {
+  width: 140px;
+}
+
+.lif-util-control--number {
+  width: 120px;
+}
+
+/* O áudio fica sob a caixinha do aviso, alinhado com o texto dela. */
+.lif-util-control--sound {
+  margin-top: calc(-1 * var(--lj-space-2));
+  padding-left: 26px;
 }
 
 .lif-util-sound {
   display: flex;
-  flex-basis: 100%;
   align-items: center;
   gap: var(--lj-space-3);
-  margin: calc(-1 * var(--lj-space-2)) 0 var(--lj-space-2) var(--lj-space-7);
+  min-width: 0;
 }
 
 .lif-util-sound__name {
@@ -1709,13 +1733,5 @@ function onVersionChange(version: string) {
 
 .lif-util-sound__name.is-default {
   color: var(--lj-text-subtle);
-}
-
-.lif-util-check {
-  flex-basis: 100%;
-}
-
-.lif-util-autostart {
-  margin-top: var(--lj-space-5);
 }
 </style>

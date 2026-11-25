@@ -413,6 +413,7 @@
     "clear_history": "Limpar os já sorteados ao abrir",
     "summary_no_opening": "sem abertura",
     "summary_names": "nomes",
-    "summary_counter_start": "começa em"
+    "summary_counter_start": "começa em",
+    "group_on_click": "Ao clicar no item"
   }
 }
