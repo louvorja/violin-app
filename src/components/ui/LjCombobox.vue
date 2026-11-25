@@ -20,6 +20,11 @@
         :aria-label="ariaLabel"
         :aria-describedby="describedBy"
         @input="onInput"
+        @mousedown="onMouseDown"
+        @focus="onFocus"
+        @mouseup="onMouseUp"
+        @blur="pendingMouseUp = false"
+        @keydown="pendingMouseUp = false"
       />
       <ComboboxTrigger class="lj-combobox__trigger">
         <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="iconSize" />
@@ -106,6 +111,11 @@ const props = withDefaults(
     /** Nome acessível quando o combobox não está dentro de um LjField. */
     ariaLabel?: string;
     id?: string;
+    /**
+     * Seleciona todo o texto do campo ao receber foco: digitar já substitui o
+     * item atual pela nova busca (como no clássico e no MusicSpotlight).
+     */
+    selectOnFocus?: boolean;
   }>(),
   {
     items: () => [],
@@ -163,6 +173,28 @@ function onInput(event: Event) {
 watch(open, (isOpen) => {
   if (!isOpen) query.value = "";
 });
+
+// Seleção ao focar (opt-in): digitar já substitui o texto, sem apagar antes.
+// Focar com o mouse tem um porém: o `mouseup` desse mesmo clique posicionaria o
+// cursor e desfaria a seleção, então só ele é ignorado. Focar pelo Tab não
+// segura nada, para o primeiro clique depois disso posicionar o cursor normal.
+const pendingMouseUp = ref(false);
+let focusByPointer = false;
+function onMouseDown(event: MouseEvent) {
+  focusByPointer = document.activeElement !== event.currentTarget;
+}
+function onFocus(event: FocusEvent) {
+  const byPointer = focusByPointer;
+  focusByPointer = false;
+  if (!props.selectOnFocus) return;
+  (event.target as HTMLInputElement).select();
+  pendingMouseUp.value = byPointer;
+}
+function onMouseUp(event: MouseEvent) {
+  if (!pendingMouseUp.value) return;
+  pendingMouseUp.value = false;
+  event.preventDefault();
+}
 
 // Compara pelo valor do item, não pela identidade: a lista pode ser recriada
 // (troca de idioma, itens novos) enquanto o item escolhido segue sendo o mesmo.
