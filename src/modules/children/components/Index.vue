@@ -84,6 +84,7 @@
               class="lj-music-row"
               :class="{ 'lj-music-row--active': index === nav.index.value }"
               @mousemove="nav.setActive(index)"
+              @dblclick="onRowDblClick($event, music)"
             >
               <td class="ch-track">{{ music.track }}</td>
               <td>
@@ -149,7 +150,7 @@ import { ICONS } from "@/config/Icons";
 import { module as manifest } from "../manifest";
 import { useQuickSearch } from "@/composables/useQuickSearch";
 import { useListNavigation } from "@/composables/useListNavigation";
-import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
+import { isQuickPlayEnter, quickPlay, quickPlayFromRow } from "@/helpers/QuickPlay";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
 import { useDisabledAlbums } from "@/composables/useMusicCatalog";
@@ -251,6 +252,10 @@ function onSearchKey(event: KeyboardEvent): void {
   if (!item) return;
   if (!selectedAlbum.value) return openAlbum(item as ChildAlbum);
   if (quickPlay(item as AlbumMusic, event.shiftKey)) quickSearch.afterPlay();
+}
+// Duplo clique na faixa toca o cantado (Shift: playback), como o Enter da busca.
+function onRowDblClick(event: MouseEvent, music: AlbumMusic) {
+  if (quickPlayFromRow(event, music)) quickSearch.afterPlay();
 }
 // MusicMenuTable mede a viewport, mas esta tabela pode ocupar só um painel estreito.
 const compactPanel = computed(() => panelWidth.value <= 760);

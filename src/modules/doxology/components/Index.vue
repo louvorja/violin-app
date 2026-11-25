@@ -76,6 +76,7 @@
               class="lj-music-row"
               :class="{ 'lj-music-row--active': index === nav.index.value }"
               @mousemove="nav.setActive(index)"
+              @dblclick="onRowDblClick($event, music)"
             >
               <td class="dx-track-number">{{ music.track }}</td>
               <td>
@@ -154,7 +155,7 @@ import Path from "@/helpers/Path";
 import { isAlbumEnabled } from "@root/config/musicCatalog.mjs";
 import { module as manifest } from "../manifest";
 import { useQuickSearch } from "@/composables/useQuickSearch";
-import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
+import { isQuickPlayEnter, quickPlay, quickPlayFromRow } from "@/helpers/QuickPlay";
 import { useListNavigation } from "@/composables/useListNavigation";
 
 interface DoxAlbum {
@@ -246,6 +247,11 @@ function onSearchKey(event: KeyboardEvent): void {
   if (!item) return;
   if (!selectedAlbum.value) return openAlbum(item as DoxAlbum);
   if (quickPlay(item as AlbumMusic, event.shiftKey)) quickSearch.afterPlay();
+}
+
+// Duplo clique na faixa toca o cantado (Shift: playback), como o Enter da busca.
+function onRowDblClick(event: MouseEvent, music: AlbumMusic) {
+  if (quickPlayFromRow(event, music)) quickSearch.afterPlay();
 }
 
 function positiveId(value: unknown): number | null {

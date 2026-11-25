@@ -313,3 +313,16 @@ test("álbuns e ações cabem em desktop e celular", async ({ page }) => {
   await page.getByTestId("mmt-btn-sing").click();
   await expect(page.getByRole("dialog", { name: "Glória ao Pai" })).toBeVisible();
 });
+
+test("duplo clique na faixa toca o cantado", async ({ page }) => {
+  await start(page);
+  const search = page.locator(".dx-toolbar input");
+  await search.fill("gratidão");
+  await search.press("Enter");
+  await page
+    .locator(".dx-tracks tbody tr")
+    .filter({ hasText: "Glória ao Pai" })
+    .locator(".dx-music-name")
+    .dblclick();
+  await expect(page.getByRole("dialog", { name: "Glória ao Pai" })).toBeVisible();
+});

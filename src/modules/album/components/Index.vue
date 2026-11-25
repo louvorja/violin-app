@@ -71,6 +71,7 @@
             class="lj-music-row"
             :class="{ 'lj-music-row--active': index === nav.index.value }"
             @mousemove="nav.setActive(index)"
+            @dblclick="quickPlayFromRow($event, item)"
           >
             <td class="album-track-number">{{ item.track ?? "" }}</td>
             <td>
@@ -116,7 +117,7 @@ import { ICONS } from "@/config/Icons";
 import MusicMenuTable from "@/components/MusicMenuTable.vue";
 import { useDisabledAlbums } from "@/composables/useMusicCatalog";
 import { useListNavigation } from "@/composables/useListNavigation";
-import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
+import { isQuickPlayEnter, quickPlay, quickPlayFromRow } from "@/helpers/QuickPlay";
 import { isAlbumEnabled } from "@root/config/musicCatalog.mjs";
 import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
 
