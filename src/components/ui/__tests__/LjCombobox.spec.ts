@@ -421,54 +421,93 @@ describe("LjCombobox", () => {
   });
 });
 
-describe("selectOnFocus", () => {
-  const ITENS = [
+describe("seleção ao focar", () => {
+  // Entrar no campo seleciona o rótulo do item escolhido, para digitar já
+  // substituir. O jsdom não posiciona cursor em clique, então o que se confere
+  // aqui é a seleção feita no foco e qual `mouseup` é segurado; o clique de
+  // verdade está em e2e/liturgy-music-select.spec.js.
+  const ITEMS = [
     { value: 1, label: "Aleluia" },
     { value: 2, label: "Santo, Santo, Santo" },
   ];
 
-  function selecionado(input: HTMLInputElement) {
+  function selectedText(input: HTMLInputElement) {
     return input.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0);
   }
 
-  it("ao focar seleciona o texto todo; o mouseup do mesmo clique não desfaz", async () => {
-    const w = montar({ items: ITENS, modelValue: ITENS[0], selectOnFocus: true });
+  function release(target: EventTarget) {
+    const event = new MouseEvent("mouseup", { bubbles: true, cancelable: true });
+    target.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+
+  async function mountWithChoice() {
+    const w = montar({ items: ITEMS, modelValue: ITEMS[0] });
     await passar();
-    const input = campo(w).element as HTMLInputElement;
+    return { w, input: campo(w).element as HTMLInputElement };
+  }
+
+  it("ao focar seleciona o texto todo; o mouseup do mesmo clique não desfaz", async () => {
+    const { w, input } = await mountWithChoice();
     await campo(w).trigger("mousedown");
     input.focus(); // dispara o evento focus (uma vez, como no navegador)
     await passar();
-    const up = new MouseEvent("mouseup", { bubbles: true, cancelable: true });
-    input.dispatchEvent(up);
-    expect(up.defaultPrevented).toBe(true);
-    expect(selecionado(input)).toBe("Aleluia");
+    expect(release(input)).toBe(true);
+    expect(selectedText(input)).toBe("Aleluia");
     // O segundo clique, já focado, posiciona o cursor normalmente.
-    const up2 = new MouseEvent("mouseup", { bubbles: true, cancelable: true });
-    input.dispatchEvent(up2);
-    expect(up2.defaultPrevented).toBe(false);
+    await campo(w).trigger("mousedown");
+    expect(release(input)).toBe(false);
   });
 
   it("focar pelo Tab seleciona, mas não segura o primeiro clique depois", async () => {
-    const w = montar({ items: ITENS, modelValue: ITENS[0], selectOnFocus: true });
+    const { w, input } = await mountWithChoice();
+    input.focus();
     await passar();
-    const input = campo(w).element as HTMLInputElement;
-    input.focus(); // dispara o evento focus (uma vez, como no navegador)
-    await passar();
-    expect(selecionado(input)).toBe("Aleluia");
-    const up = new MouseEvent("mouseup", { bubbles: true, cancelable: true });
-    input.dispatchEvent(up);
-    expect(up.defaultPrevented).toBe(false);
+    expect(selectedText(input)).toBe("Aleluia");
+    await campo(w).trigger("mousedown");
+    expect(release(input)).toBe(false);
   });
 
-  it("sem a prop, nada muda", async () => {
-    const w = montar({ items: ITENS, modelValue: ITENS[0] });
+  it("não seleciona por cima de uma busca em andamento", async () => {
+    // O foco volta sozinho ao trocar de janela e retornar. Selecionar ali faria
+    // a próxima tecla apagar o que já foi digitado.
+    const { w, input } = await mountWithChoice();
+    input.focus();
+    await campo(w).setValue("Sant");
     await passar();
-    const input = campo(w).element as HTMLInputElement;
+    input.blur();
+    input.focus();
+    await passar();
+    expect(input.value).toBe("Sant");
+    expect(selectedText(input)).toBe("");
+  });
+
+  it("mexer o mouse no clique que foca não arrasta o texto recém-selecionado", async () => {
+    // Um arrasto de texto termina sem `mouseup`: o clique seguinte herdaria o
+    // `mouseup` segurado e não posicionaria o cursor.
+    const { w, input } = await mountWithChoice();
     await campo(w).trigger("mousedown");
-    input.focus(); // dispara o evento focus (uma vez, como no navegador)
+    input.focus();
     await passar();
-    const up = new MouseEvent("mouseup", { bubbles: true, cancelable: true });
-    input.dispatchEvent(up);
-    expect(up.defaultPrevented).toBe(false);
+    const drag = new Event("dragstart", { bubbles: true, cancelable: true });
+    input.dispatchEvent(drag);
+    expect(drag.defaultPrevented).toBe(true);
+    expect(release(document.body)).toBe(false);
+    // Depois do clique, arrastar texto do campo volta a ser do navegador.
+    const later = new Event("dragstart", { bubbles: true, cancelable: true });
+    input.dispatchEvent(later);
+    expect(later.defaultPrevented).toBe(false);
+  });
+
+  it("soltar o botão fora do campo não deixa um clique futuro preso", async () => {
+    const { w, input } = await mountWithChoice();
+    await campo(w).trigger("mousedown");
+    input.focus();
+    await passar();
+    // O botão foi solto fora: o ouvinte de uma vez só se consome aqui.
+    expect(release(document.body)).toBe(false);
+    // O clique seguinte, com o campo já focado, posiciona o cursor.
+    await campo(w).trigger("mousedown");
+    expect(release(input)).toBe(false);
   });
 });

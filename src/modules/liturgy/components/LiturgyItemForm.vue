@@ -182,7 +182,6 @@
           :items="musicOptions"
           :filter="musicMatches"
           :placeholder="t('inputs.music_placeholder')"
-          select-on-focus
           @update:model-value="onMusicSelected($event as MusicOption)"
         />
       </LjField>

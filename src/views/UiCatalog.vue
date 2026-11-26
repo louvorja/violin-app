@@ -263,7 +263,7 @@
           </LjField>
           <LjField
             label="Música"
-            hint="Combobox filtra conforme você digita, só desenha as linhas visíveis (aguenta milhares) e mostra um texto secundário para separar títulos iguais. Por padrão a busca olha só o rótulo; `filter` troca a regra — aqui, casa também o CD."
+            hint="Combobox filtra conforme você digita, só desenha as linhas visíveis (aguenta milhares) e mostra um texto secundário para separar títulos iguais. Por padrão a busca olha só o rótulo; `filter` troca a regra — aqui, casa também o CD. Entrar no campo seleciona o texto do item escolhido: digitar já substitui. Com o campo focado, o clique posiciona o cursor."
           >
             <LjCombobox
               v-model="demoSong"

@@ -22,9 +22,6 @@
         @input="onInput"
         @mousedown="onMouseDown"
         @focus="onFocus"
-        @mouseup="onMouseUp"
-        @blur="pendingMouseUp = false"
-        @keydown="pendingMouseUp = false"
       />
       <ComboboxTrigger class="lj-combobox__trigger">
         <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="iconSize" />
@@ -111,11 +108,6 @@ const props = withDefaults(
     /** Nome acessível quando o combobox não está dentro de um LjField. */
     ariaLabel?: string;
     id?: string;
-    /**
-     * Seleciona todo o texto do campo ao receber foco: digitar já substitui o
-     * item atual pela nova busca (como no clássico e no MusicSpotlight).
-     */
-    selectOnFocus?: boolean;
   }>(),
   {
     items: () => [],
@@ -174,26 +166,45 @@ watch(open, (isOpen) => {
   if (!isOpen) query.value = "";
 });
 
-// Seleção ao focar (opt-in): digitar já substitui o texto, sem apagar antes.
-// Focar com o mouse tem um porém: o `mouseup` desse mesmo clique posicionaria o
-// cursor e desfaria a seleção, então só ele é ignorado. Focar pelo Tab não
-// segura nada, para o primeiro clique depois disso posicionar o cursor normal.
-const pendingMouseUp = ref(false);
-let focusByPointer = false;
-function onMouseDown(event: MouseEvent) {
-  focusByPointer = document.activeElement !== event.currentTarget;
-}
+// Entrar no campo seleciona o texto: o que está escrito ali é o rótulo do item
+// já escolhido, e quem entra quer trocá-lo — digitar substitui, sem apagar
+// antes (como no clássico e no MusicSpotlight). É o comportamento do
+// componente, não uma opção: um combobox que selecionasse e outro que não
+// seriam o mesmo controle com dois jeitos de usar.
+//
+// Só quando não há busca em andamento. O foco também volta sozinho — ao trocar
+// de janela e retornar, por exemplo — e selecionar ali faria a próxima tecla
+// apagar o que a pessoa já tinha digitado.
 function onFocus(event: FocusEvent) {
-  const byPointer = focusByPointer;
-  focusByPointer = false;
-  if (!props.selectOnFocus) return;
+  if (query.value !== "") return;
   (event.target as HTMLInputElement).select();
-  pendingMouseUp.value = byPointer;
 }
-function onMouseUp(event: MouseEvent) {
-  if (!pendingMouseUp.value) return;
-  pendingMouseUp.value = false;
-  event.preventDefault();
+
+// Focar com o mouse tem dois poréns, e os dois valem só para o clique que traz
+// o foco — com o campo já focado o clique é o de sempre e posiciona o cursor,
+// para quem só quer corrigir um trecho:
+//
+// - o `mouseup` desse clique posicionaria o cursor e desfaria a seleção;
+// - mexer o mouse com o botão apertado começaria a ARRASTAR o texto recém-
+//   selecionado, e um arrasto termina sem `mouseup` nenhum.
+//
+// Os ouvintes ficam na janela, não no campo, e se desfazem juntos no `mouseup`:
+// assim são consumidos onde quer que o botão seja solto, e nada fica armado
+// para engolir um clique futuro.
+function onMouseDown(event: MouseEvent) {
+  const input = event.currentTarget as HTMLInputElement;
+  if (document.activeElement === input || query.value !== "") return;
+  const press = new AbortController();
+  const options = { capture: true, signal: press.signal };
+  window.addEventListener("dragstart", (drag) => drag.preventDefault(), options);
+  window.addEventListener(
+    "mouseup",
+    (release) => {
+      press.abort();
+      if (release.target === input) release.preventDefault();
+    },
+    options
+  );
 }
 
 // Compara pelo valor do item, não pela identidade: a lista pode ser recriada
