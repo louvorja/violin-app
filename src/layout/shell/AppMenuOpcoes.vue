@@ -53,40 +53,37 @@
         />
       </div>
 
-      <div class="opt-row">
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="
-              getUserData<boolean>(KEYS.SHELL.LITURGY_VISIBLE, liturgySidebarDefault()) !== false
-            "
-            @change="saveUserData(KEYS.SHELL.LITURGY_VISIBLE, $c($event))"
-          />
-          <span>{{ $t("options.general.show_liturgy_sidebar") }}</span>
+      <div v-if="supportsWindowAnimation" class="opt-row">
+        <label class="opt-label" for="opt-window-animation">
+          {{ $t("options.general.window_animation") }}
         </label>
+        <LjSelect
+          id="opt-window-animation"
+          :items="windowAnimationOptions"
+          :model-value="windowAnimation"
+          @update:model-value="saveUserData(KEYS.OPTIONS.WINDOW_ANIMATION, String($event))"
+        />
       </div>
 
-      <div v-if="isDesktop" class="opt-row">
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="getUserData(KEYS.OPTIONS.START_WITH_OS, false)"
-            @change="toggleStartWithOS($c($event))"
-          />
-          <span>{{ $t("options.general.start_with_os") }}</span>
+      <div v-if="supportsWindowAnimation && windowAnimation === 'fade'" class="opt-row">
+        <label class="opt-label" for="opt-window-animation-duration">
+          {{ $t("options.general.window_animation_duration") }}
         </label>
+        <div class="opt-range-group">
+          <input
+            id="opt-window-animation-duration"
+            type="range"
+            min="100"
+            max="800"
+            step="20"
+            class="opt-range"
+            :value="windowAnimationDuration"
+            @input="saveUserData(KEYS.OPTIONS.WINDOW_ANIMATION_DURATION, Number($v($event)))"
+          />
+          <span class="opt-range-val">{{ windowAnimationDuration }}ms</span>
+        </div>
       </div>
 
-      <div class="opt-row">
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="getUserData<boolean>(KEYS.OPTIONS.SHOW_STARTUP_TIPS, true) !== false"
-            @change="saveUserData(KEYS.OPTIONS.SHOW_STARTUP_TIPS, $c($event))"
-          />
-          <span>{{ $t("options.general.show_startup_tips") }}</span>
-        </label>
-      </div>
       <div class="opt-bg">
         <div class="opt-bg-fields">
           <div class="opt-row">
@@ -137,8 +134,8 @@
           <MonitorShape
             :width="previewMonitorW"
             :height="previewMonitorH"
-            :height-base="130"
-            :max-width="280"
+            :height-base="108"
+            :max-width="260"
             :remove="!!currentBgImage"
             :remove-label="$t('options.slides.remove_image')"
             @remove="removeBgImage"
@@ -154,6 +151,37 @@
             </div>
           </MonitorShape>
         </div>
+      </div>
+
+      <div class="opt-general-checks">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="
+              getUserData<boolean>(KEYS.SHELL.LITURGY_VISIBLE, liturgySidebarDefault()) !== false
+            "
+            @change="saveUserData(KEYS.SHELL.LITURGY_VISIBLE, $c($event))"
+          />
+          <span>{{ $t("options.general.show_liturgy_sidebar") }}</span>
+        </label>
+
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="getUserData<boolean>(KEYS.OPTIONS.SHOW_STARTUP_TIPS, true) !== false"
+            @change="saveUserData(KEYS.OPTIONS.SHOW_STARTUP_TIPS, $c($event))"
+          />
+          <span>{{ $t("options.general.show_startup_tips") }}</span>
+        </label>
+
+        <label v-if="isDesktop" class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="getUserData(KEYS.OPTIONS.START_WITH_OS, false)"
+            @change="toggleStartWithOS($c($event))"
+          />
+          <span>{{ $t("options.general.start_with_os") }}</span>
+        </label>
       </div>
     </section>
 
@@ -1768,6 +1796,24 @@ function getUserData<T = unknown>(key: string, defaultValue?: T): T {
 const opcoesIdioma = computed(() => [
   { value: "pt", label: "Português" },
   { value: "es", label: "Español" },
+]);
+
+const supportsWindowAnimation = computed(() => isDesktop.value && Platform.platform !== "linux");
+
+const windowAnimation = computed(() => {
+  const value = getUserData<string>(KEYS.OPTIONS.WINDOW_ANIMATION, "fade");
+  return value === "none" || value === "system" ? value : "fade";
+});
+
+const windowAnimationDuration = computed(() => {
+  const raw = Number(getUserData<number>(KEYS.OPTIONS.WINDOW_ANIMATION_DURATION, 260));
+  return Number.isFinite(raw) && raw > 0 ? Math.round(Math.min(800, Math.max(100, raw))) : 260;
+});
+
+const windowAnimationOptions = computed(() => [
+  { value: "fade", label: t("options.general.window_animation_fade") },
+  { value: "none", label: t("options.general.window_animation_none") },
+  { value: "system", label: t("options.general.window_animation_system") },
 ]);
 
 const opcoesPosicaoFundo = computed(() => opcoesDeAjuste(t));

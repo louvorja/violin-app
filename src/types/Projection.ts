@@ -13,6 +13,8 @@ export interface NativeDisplay {
   bounds: { x: number; y: number; width: number; height: number };
 }
 
+export type WindowAnimationEffect = "fade" | "none" | "system";
+
 export interface OpenOptions {
   route: string;
   feature: string;
@@ -20,6 +22,8 @@ export interface OpenOptions {
   fullscreen?: boolean;
   alwaysOnTop?: boolean;
   showInTaskbar?: boolean;
+  windowAnimation?: WindowAnimationEffect;
+  windowAnimationDuration?: number;
   frame?: boolean;
   /**
    * A janela deve receber o foco ao abrir.

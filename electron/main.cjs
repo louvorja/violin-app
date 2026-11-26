@@ -1925,12 +1925,18 @@ ipcMain.handle("windows:open", async (_event, options) => {
     /* Ciclo novo: o resultado da apresentação anterior não vale mais. */
     _apresentacao.delete(options.feature);
   }
+  const windowAnimationOpt =
+    options?.windowAnimation ?? _userDataMain?.options?.window_animation;
+  const windowAnimationDurationOpt =
+    options?.windowAnimationDuration ?? _userDataMain?.options?.window_animation_duration;
   const win = await windowFactory.openOnMonitor({
     ...options,
     preloadPath,
     devUrl,
     prodHtmlPath,
     devTools: devToolsOpt == null ? null : !!devToolsOpt,
+    windowAnimation: windowAnimationOpt,
+    windowAnimationDuration: windowAnimationDurationOpt,
   });
   if (win?.refused) return { id: null, refused: win.refused };
   // `null` quando o windowFactory recusou abrir na tela do operador. O
@@ -1939,7 +1945,12 @@ ipcMain.handle("windows:open", async (_event, options) => {
 });
 
 /** Fecha a janela de uma feature */
-ipcMain.handle("windows:close", (_event, feature) => windowFactory.close(feature));
+ipcMain.handle("windows:close", (_event, feature) =>
+  windowFactory.close(feature, {
+    windowAnimation: _userDataMain?.options?.window_animation,
+    windowAnimationDuration: _userDataMain?.options?.window_animation_duration,
+  })
+);
 
 /** Lista features com janelas abertas */
 ipcMain.handle("windows:listOpen", () => windowFactory.listOpen());

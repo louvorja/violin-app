@@ -348,6 +348,10 @@ export const KEYS = {
     },
     ALWAYS_ON_TOP: `${OPTIONS}.always_on_top`,
     SHOW_PROJECTIONS_IN_TASKBAR: `${OPTIONS}.show_projections_in_taskbar`,
+    /** Efeito de exibição/fechamento de janelas auxiliares no desktop: `"fade"`, `"none"` ou `"system"`. */
+    WINDOW_ANIMATION: `${OPTIONS}.window_animation`,
+    /** Duração do fade de exibição de janelas auxiliares no desktop (ms). */
+    WINDOW_ANIMATION_DURATION: `${OPTIONS}.window_animation_duration`,
     FILE_PROJECTION: {
       ALWAYS_ON_TOP: `${OPTIONS_FILE_PROJECTION}.always_on_top`,
       BACKGROUND_ENABLED: `${OPTIONS_FILE_PROJECTION}.background_enabled`,

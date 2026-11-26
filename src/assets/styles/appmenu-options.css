@@ -96,8 +96,21 @@
 }
 
 .opt--settings .opt-bg {
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.8fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
   column-gap: var(--lj-space-6);
+  row-gap: var(--lj-space-5);
+  padding-top: var(--lj-space-5);
+  border-top: 1px solid var(--lj-surface-border);
+}
+
+.opt--settings .opt-general-checks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lj-space-4) var(--lj-space-8);
+  padding-top: var(--lj-space-5);
+  border-top: 1px solid var(--lj-surface-border);
 }
 
 .opt--settings .opt-bg-pick {
@@ -115,22 +128,17 @@
   .opt--settings .opt-bg-pick {
     flex-wrap: wrap;
   }
+
+  .opt--settings .opt-general-checks {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--lj-space-2);
+  }
 }
 
 @media (min-width: 1201px) {
   .opt--settings .opt-row--clock {
     flex-wrap: nowrap;
-  }
-
-  .opt--settings #opt-sec-general .opt-bg {
-    grid-template-columns: minmax(500px, 1.2fr) minmax(220px, 0.8fr);
-  }
-
-  /* No desktop largo, a prévia acompanha o bloco de fundo sem reservar uma
-     faixa extra abaixo dele. */
-  .opt--settings .opt-bg-preview-wrap {
-    transform: translate(calc(-1 * var(--lj-space-6)), calc(-1 * var(--lj-space-6)));
-    margin-bottom: calc(-1 * var(--lj-space-6));
   }
 }
 
@@ -684,7 +692,7 @@
 }
 .opt-bg-preview-wrap {
   flex: none;
-  align-self: flex-start;
+  align-self: center;
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -14,7 +14,13 @@
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
-import { CategorizedDisplays, DisplayInfo, NativeDisplay, OpenOptions } from "@/types/Projection";
+import {
+  CategorizedDisplays,
+  DisplayInfo,
+  NativeDisplay,
+  OpenOptions,
+  WindowAnimationEffect,
+} from "@/types/Projection";
 import {
   closeWebWindow,
   featuresForRect,
@@ -407,6 +413,17 @@ export async function open(opts: OpenOptions): Promise<void> {
   const showInTaskbar =
     opts.showInTaskbar ??
     ($userdata.get(KEYS.OPTIONS.SHOW_PROJECTIONS_IN_TASKBAR, true) as boolean);
+  const rawWindowAnimation =
+    opts.windowAnimation ?? ($userdata.get(KEYS.OPTIONS.WINDOW_ANIMATION, "fade") as string);
+  const windowAnimation: WindowAnimationEffect =
+    rawWindowAnimation === "none" || rawWindowAnimation === "system" ? rawWindowAnimation : "fade";
+  const rawWindowAnimationDuration = Number(
+    opts.windowAnimationDuration ?? $userdata.get(KEYS.OPTIONS.WINDOW_ANIMATION_DURATION, 260)
+  );
+  const windowAnimationDuration =
+    Number.isFinite(rawWindowAnimationDuration) && rawWindowAnimationDuration > 0
+      ? Math.round(Math.min(800, Math.max(100, rawWindowAnimationDuration)))
+      : 260;
   const frame = opts.frame ?? !fullscreen;
 
   const api = await _getWindowsApi();
@@ -420,6 +437,8 @@ export async function open(opts: OpenOptions): Promise<void> {
         frame,
         alwaysOnTop,
         showInTaskbar,
+        windowAnimation,
+        windowAnimationDuration,
         focusOnOpen: opts.focusOnOpen === true,
       });
       // O main recusa abrir na tela do operador quando o monitor do papel não

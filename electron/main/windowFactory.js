@@ -15,6 +15,17 @@ const { createWindowCloseGate, DEFAULT_CLOSE_ACK_TIMEOUT_MS } = require("./windo
 const { backgroundWindows, prepareWindow } = require("./e2eWindowMode.js");
 const { isExternalRoute, loadTargetFor, webPreferencesFor } = require("./windowRoute.js");
 const { resolverPosicaoJanela, LARGURA_MINIMA, ALTURA_MINIMA } = require("./windowState.js");
+const {
+  DEFAULT_WINDOW_ANIMATION,
+  OPEN_FADE_MS,
+  normalizeWindowAnimation,
+  normalizeWindowAnimationDuration,
+  closeDurationFor,
+  shouldControlOpacity,
+  cancelAnimation,
+  revealWindow,
+  closeWindowWithAnimation,
+} = require("./windowAnimation.js");
 
 /**
  * Features da tela de loading da projeção de Site.
@@ -413,7 +424,10 @@ function willLoad(feature, route) {
  * @returns {BrowserWindow|null} null quando abrir significaria ocupar a tela do
  *   operador no lugar do monitor configurado — ver o bloco de decisão abaixo.
  */
-function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = false, preloadPath, devUrl, prodHtmlPath, width, height, alwaysOnTop = false, showInTaskbar = true, devTools = null, focusOnOpen = false }) {
+function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = false, preloadPath, devUrl, prodHtmlPath, width, height, alwaysOnTop = false, showInTaskbar = true, devTools = null, focusOnOpen = false, windowAnimation = DEFAULT_WINDOW_ANIMATION, windowAnimationDuration = OPEN_FADE_MS }) {
+  const animationMode = normalizeWindowAnimation(windowAnimation);
+  const animationDurationMs = normalizeWindowAnimationDuration(windowAnimationDuration);
+  const isSiteLoader = SITE_LOADER_FEATURES.includes(feature);
   /*
    * A feature também decide, e não só o campo que o renderer manda: um build
    * antigo (sem `focusOnOpen`) não pode deixar o operador atrás da principal.
@@ -441,20 +455,39 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
      * isso — era a janela "abrindo por trás" que o operador via.
      */
     const trazerParaFrente = receberFoco && !backgroundWindows;
+    const existingMeta = _windowMeta.get(feature);
+    if (existingMeta) {
+      existingMeta.windowAnimation = animationMode;
+      existingMeta.windowAnimationDuration = animationDurationMs;
+    }
     if (existing.isVisible()) {
       if (trazerParaFrente) _trazerParaFrente(existing);
       else existing.showInactive();
     } else {
       const alvo = _targetDisplay(feature, monitorId);
       if (!alvo) return null; // segue escondida
+      const controlOpacity = shouldControlOpacity(animationMode, {
+        backgroundWindows,
+        excluded: isSiteLoader,
+      });
+      if (controlOpacity) {
+        try { existing.setOpacity(0); } catch (_) { /* ignore */ }
+      }
       /*
        * `_placeOnDisplay` mostra inativa e agenda o refocus da principal. Aqui
        * o foco é do operador: o refocus sai de cena e o foco vem depois.
        */
-      _placeOnDisplay(existing, alvo, _windowMeta.get(feature) || {}, {
+      _placeOnDisplay(existing, alvo, existingMeta || {}, {
         refocusMain: !trazerParaFrente,
       });
       if (trazerParaFrente) _trazerParaFrente(existing);
+      if (controlOpacity) {
+        revealWindow(existing, animationMode, {
+          backgroundWindows,
+          excluded: isSiteLoader,
+          durationMs: animationDurationMs,
+        });
+      }
     }
     _syncAuxBackgroundThrottling(existing);
     _syncMainBackgroundThrottling();
@@ -526,11 +559,17 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
     height: fullscreen ? bounds.height : (height || 600),
   };
 
+  const controlOpacity = shouldControlOpacity(animationMode, {
+    backgroundWindows,
+    excluded: isSiteLoader,
+  });
+
   const winOpts = {
     x: boundsJanela.x,
     y: boundsJanela.y,
     width: boundsJanela.width,
     height: boundsJanela.height,
+    ...(controlOpacity ? { opacity: 0 } : {}),
     /*
      * O estado da janela comum é descartado abaixo destes mínimos — sem
      * `minWidth/minHeight` o usuário podia encolher além deles e, na próxima
@@ -642,6 +681,8 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
     fullscreen,
     alwaysOnTop,
     showInTaskbar,
+    windowAnimation: animationMode,
+    windowAnimationDuration: animationDurationMs,
     useDeferredFullscreen,
     useMacPresentationLevel,
   };
@@ -837,6 +878,13 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
     } else if (!backgroundWindows && alwaysOnTop && !(fullscreen && isMac)) {
       win.setAlwaysOnTop(true, "pop-up-menu");
     }
+    if (controlOpacity) {
+      revealWindow(win, animationMode, {
+        backgroundWindows,
+        excluded: isSiteLoader,
+        durationMs: animationDurationMs,
+      });
+    }
     // Não roubar foco do main window — `showInactive` já fez isso.
     // O operador navega pela janela principal (setas da Bíblia, atalhos);
     // a projeção apenas exibe e recebe estado via BroadcastChannel.
@@ -882,6 +930,7 @@ function _openOnMonitor({ route, feature, monitorId, fullscreen = true, frame = 
   }
 
   win.on("closed", () => {
+    cancelAnimation(win);
     _openWindows.delete(feature);
     _windowMeta.delete(feature);
     _syncMainBackgroundThrottling();
@@ -1147,15 +1196,31 @@ function reconcile(resolveDisplay) {
 /**
  * Fecha a janela de uma feature, se existir.
  * @param {string} feature
+ * @param {{ immediate?: boolean, windowAnimation?: string, windowAnimationDuration?: number }} [options]
  */
-function close(feature) {
+function close(feature, { immediate = false, windowAnimation, windowAnimationDuration } = {}) {
   const win = _openWindows.get(feature);
-  return _windowCloseGate.close(feature, win, () => win.close());
+  const meta = _windowMeta.get(feature) || {};
+  const mode = normalizeWindowAnimation(
+    windowAnimation !== undefined ? windowAnimation : meta.windowAnimation
+  );
+  const openDurationMs = normalizeWindowAnimationDuration(
+    windowAnimationDuration !== undefined ? windowAnimationDuration : meta.windowAnimationDuration
+  );
+  const isSiteLoader = SITE_LOADER_FEATURES.includes(feature);
+  return _windowCloseGate.close(feature, win, () => {
+    closeWindowWithAnimation(win, mode, () => win.close(), {
+      backgroundWindows,
+      excluded: isSiteLoader,
+      immediate,
+      durationMs: closeDurationFor(openDurationMs),
+    });
+  });
 }
 
 /** Fecha todas as janelas auxiliares antes de um encerramento explícito. */
 function closeAll() {
-  for (const feature of listOpen()) close(feature);
+  for (const feature of listOpen()) close(feature, { immediate: true });
 }
 
 /**
