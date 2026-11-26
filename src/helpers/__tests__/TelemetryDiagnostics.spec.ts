@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TelemetryBuffer } from "../TelemetryBuffer";
-import { TelemetryBoot } from "../TelemetryBoot";
+import { TelemetryBoot, mainBootProperties } from "../TelemetryBoot";
 import { TelemetryIncidents } from "../TelemetryIncidents";
 import { KEYS_LS } from "@/constants/LocalStorageKeys";
 
@@ -128,5 +128,48 @@ describe("diagnósticos limitados", () => {
         throw new Error("blocked");
       }, emit).record("started", 0)
     ).not.toThrow();
+  });
+
+  it("o resumo da abertura conta desde a criação do processo, com os marcos do main", () => {
+    const timeline = {
+      origin: 1_000_000,
+      origin_source: "process",
+      marks: { script_start: 900, app_ready: 2100, window_created: 31_000, caminho: 5, storage_ready: "x" },
+      system_uptime_s: 95,
+      system_free_memory_mb: 612,
+      hostname: "private",
+    };
+    expect(mainBootProperties(timeline, 1_052_000, 1_033_000)).toEqual({
+      process_elapsed_ms: 52_000,
+      process_origin: "process",
+      page_start_ms: 33_000,
+      main_script_start_ms: 900,
+      main_app_ready_ms: 2100,
+      main_window_created_ms: 31_000,
+      system_uptime_s: 95,
+      system_free_memory_mb: 612,
+    });
+
+    const emit = vi.fn();
+    const boot = new TelemetryBoot(
+      () => localStorage,
+      emit,
+      () => mainBootProperties(timeline, 1_052_000, 1_033_000)
+    );
+    boot.record("first_paint", 450);
+    expect(emit).toHaveBeenCalledWith(
+      "app_boot_summary",
+      expect.objectContaining({ stages: { first_paint: 450 }, process_elapsed_ms: 52_000 })
+    );
+  });
+
+  it.each([
+    ["janela recarregada (o main já entregou)", null],
+    ["resposta que não é objeto", "1000000"],
+    ["origem ausente", { marks: { app_ready: 10 } }],
+    ["origem no futuro", { origin: 2_000_000 }],
+    ["origem de horas atrás", { origin: 1_052_000 - 4 * 3_600_000 }],
+  ])("sem linha do tempo confiável o resumo fica só com a janela (%s)", (_caso, value) => {
+    expect(mainBootProperties(value, 1_052_000, 1_033_000)).toEqual({});
   });
 });

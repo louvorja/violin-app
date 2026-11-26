@@ -34,6 +34,30 @@ e políticas do navegador podem não expor Client Hints; o fallback identifica o
 navegador com precisão limitada pelo user-agent, sem inventar uma versão nativa
 do sistema. A web não identifica a distro Linux.
 
+## Abertura medida desde o processo
+
+`elapsed_ms` do `app_boot_summary` é o relógio da janela: começa na navegação, e
+não conta a espera entre o clique no ícone e a janela existir. Na janela
+principal do desktop o resumo traz também, em milissegundos desde a criação do
+processo (`process.getCreationTime()`):
+
+| Propriedade | Momento |
+| --- | --- |
+| `process_elapsed_ms` | Primeira pintura — a espera real de quem abriu o app |
+| `main_script_start_ms` | Primeira linha do `main.cjs` (antes disso é o executável e o Chromium) |
+| `main_storage_ready_ms` | Perfil, migração e trava do acervo prontos |
+| `main_monitor_start_ms` | Monitor de travadas ligado; o que vem antes não vira `main_event_loop_stall` |
+| `main_app_ready_ms` | `app.whenReady()` |
+| `main_window_create_ms`, `main_window_created_ms` | Antes e depois de criar a janela principal |
+| `page_start_ms` | Navegação da janela (`performance.timeOrigin`) |
+
+`process_origin` vale `process`, ou `script` quando o sistema não informa a
+criação do processo e a contagem parte do `main.cjs`. `system_uptime_s` (tempo
+desde que o computador ligou, lido no início) separa a primeira abertura do dia,
+com o disco frio, das seguintes; `system_free_memory_mb` acompanha. Os marcos
+valem só para a primeira carga: janela recarregada não os repete. O tempo de
+montagem do AppImage, anterior ao processo, pode ficar de fora.
+
 ## Fronteiras e falhas
 
 - `telemetry:system-info` é uma operação IPC específica, sem argumentos. O main

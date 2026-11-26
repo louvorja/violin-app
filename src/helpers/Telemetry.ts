@@ -35,7 +35,7 @@ import { classifyLocalEnvironmentError } from "@/helpers/LocalEnvironmentErrors"
 import { failureDetails } from "@/helpers/ReliabilityDiagnostics";
 import packageJson from "@root/package.json";
 import { TelemetryBuffer } from "@/helpers/TelemetryBuffer";
-import { TelemetryBoot } from "@/helpers/TelemetryBoot";
+import { TelemetryBoot, mainBootProperties } from "@/helpers/TelemetryBoot";
 import { TelemetryIncidents } from "@/helpers/TelemetryIncidents";
 import { telemetryActionSource } from "@/helpers/TelemetryAction";
 
@@ -74,6 +74,8 @@ const _responsivenessContext = createResponsivenessContext();
 const _breadcrumbs: Array<{ at: string; event: string; properties?: Record<string, unknown> }> = [];
 const _actionBreadcrumbs: typeof _breadcrumbs = [];
 const _eventBuffer = new TelemetryBuffer();
+let _mainBoot: unknown;
+let _mainBootRequested = false;
 const _boot = new TelemetryBoot(
   () =>
     typeof window === "undefined"
@@ -81,8 +83,23 @@ const _boot = new TelemetryBoot(
       : windowRole() === "main"
         ? window.localStorage
         : window.sessionStorage,
-  (event, properties) => captureEvent(event, properties)
+  (event, properties) => captureEvent(event, properties),
+  () => mainBootProperties(_mainBoot, Date.now(), performance.timeOrigin)
 );
+
+/** Pedido no primeiro estágio: esperar na hora do resumo atrasaria o `elapsed_ms` dele. */
+function requestMainBoot(): void {
+  if (_mainBootRequested || !Platform.isDesktop || windowRole() !== "main") return;
+  _mainBootRequested = true;
+  void Promise.resolve()
+    .then(() => window.louvorjaApi?.telemetry?.bootTimeline?.())
+    .then((value) => {
+      _mainBoot = value;
+    })
+    .catch(() => {
+      /* sem o processo principal o resumo segue só com os tempos da janela */
+    });
+}
 const _incidents = new TelemetryIncidents(
   (event, properties) => captureEvent(event, properties),
   randomId
@@ -780,7 +797,10 @@ export function track(event: string, properties: Record<string, unknown> = {}): 
   if (!isEnabled()) return;
   startDiagnosticFlush();
   const safe = serializableProperties(properties);
-  if (event === "app_boot_stage") _boot.record(safe.stage, safe.duration_ms);
+  if (event === "app_boot_stage") {
+    requestMainBoot();
+    _boot.record(safe.stage, safe.duration_ms);
+  }
   const incident = _incidents.observe(event, safe, incidentContext, requestIncidentReplay);
   if (!incident) return;
   const keep = _eventBuffer.record(event, safe);

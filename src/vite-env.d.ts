@@ -162,6 +162,7 @@ declare global {
       systemInfo?: () => Promise<
         import("./types/TelemetryEnvironment").DesktopSystemInfo | undefined
       >;
+      bootTimeline?: () => Promise<unknown>;
       log: (payload: {
         level: "trace" | "debug" | "info" | "warn" | "error" | "fatal";
         message: string;

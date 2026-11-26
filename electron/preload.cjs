@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld("louvorjaApi", {
     getPendingMainErrors: () => ipcRenderer.invoke("telemetry:pending-main-errors"),
     graphics: () => ipcRenderer.invoke("telemetry:graphics"),
     systemInfo: () => ipcRenderer.invoke("telemetry:system-info"),
+    bootTimeline: () => ipcRenderer.invoke("telemetry:boot-timeline"),
     ackMainError: (id) => ipcRenderer.invoke("telemetry:ack-main-error", id),
     onMainError: (cb) => {
       const handler = (_event, payload) => cb(payload);
