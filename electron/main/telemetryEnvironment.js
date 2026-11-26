@@ -1,6 +1,7 @@
 "use strict";
 
 const os = require("node:os");
+const path = require("node:path");
 const { open } = require("node:fs/promises");
 const MAX_RELEASE_BYTES = 16_384;
 
@@ -52,11 +53,25 @@ async function readReleaseFile(path) {
   }
 }
 
+/** O AppImage roda de uma imagem montada por FUSE; deb e rpm, de arquivos no disco. */
+async function linuxPackage(processInfo, readPackageType) {
+  if (typeof processInfo.env?.APPIMAGE === "string" && processInfo.env.APPIMAGE) return "appimage";
+  try {
+    // Arquivo gravado pelo electron-builder nos pacotes deb, rpm e pacman.
+    const type = await readPackageType(path.join(processInfo.resourcesPath, "package-type"));
+    if (["deb", "rpm", "pacman"].includes(String(type).trim())) return String(type).trim();
+  } catch {
+    /* sem o arquivo: pasta descompactada ou pacote de terceiros */
+  }
+  return "other";
+}
+
 /** @returns {Promise<import('../../src/types/TelemetryEnvironment').DesktopSystemInfo | undefined>} */
 async function collectSystemInfo({
   processInfo = process,
   osInfo = os,
   readRelease = readReleaseFile,
+  readPackageType = readReleaseFile,
 } = {}) {
   const platform = processInfo.platform;
   if (!["darwin", "win32", "linux"].includes(platform)) return undefined;
@@ -72,6 +87,7 @@ async function collectSystemInfo({
     ),
   };
   if (platform === "linux") {
+    result.linuxPackage = await linuxPackage(processInfo, readPackageType);
     // /etc tem precedência; não misturamos dados de duas distribuições.
     for (const path of ["/etc/os-release", "/usr/lib/os-release"]) {
       try {

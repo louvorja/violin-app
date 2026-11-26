@@ -12,6 +12,7 @@ a telemetria preserva esse contexto. Os campos automáticos `$os_version` e
 | Windows desktop | `windows_version`, `os_version`, `windows_build` | Versão nativa NT e número do build, por exemplo `10.0.26100` e `26100` |
 | Windows desktop | `windows_name`, `windows_name_source` | Nome/edição via `os.version()` (`node_os`); preserva Windows Server |
 | Linux desktop | `linux_distro`, `linux_distro_name`, `linux_distro_version`, `os_version` | `ID`, `PRETTY_NAME`/`NAME` e `VERSION_ID` de `/etc/os-release`, com fallback para `/usr/lib/os-release` |
+| Linux desktop | `linux_package` | `appimage` (variável `APPIMAGE`), `deb`/`rpm`/`pacman` (arquivo `resources/package-type` do electron-builder) ou `other` (pasta descompactada, pacote de terceiros) |
 | Todos os desktops | `os_kernel_version`, `process_arch` | `os.release()` e arquitetura do executável; não necessariamente a arquitetura física quando há emulação |
 | Electron | `electron_version`, `chromium_version`, `node_version` | Versões do runtime expostas pelo preload |
 | Todos | `browser_name`, `browser_version`, `browser_version_source` | Electron no desktop; Client Hints ou user-agent na web/PWA |

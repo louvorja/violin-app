@@ -30,6 +30,8 @@ export function nativeEnvironment(value: unknown, platform: string | null): Envi
   if (kernel) result.os_kernel_version = kernel;
 
   if (platform === "linux") {
+    const linuxPackage = text(info.linuxPackage, /^(?:appimage|deb|rpm|pacman|other)$/);
+    if (linuxPackage) result.linux_package = linuxPackage;
     const linux = record(info.linux);
     const id = text(linux.id, /^[a-z0-9._-]+$/, 64);
     if (

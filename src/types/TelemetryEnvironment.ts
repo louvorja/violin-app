@@ -5,6 +5,7 @@ export interface DesktopSystemInfo {
   kernelRelease?: string;
   processArch?: string;
   windowsName?: string;
+  linuxPackage?: "appimage" | "deb" | "rpm" | "pacman" | "other";
   linux?: {
     id?: string;
     name?: string;
