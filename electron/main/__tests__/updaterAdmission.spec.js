@@ -145,6 +145,9 @@ describe("updater admission during presentation", () => {
   it("respeita cancelamento ou desativação antes da microtask de auto-download", async () => {
     const { updater, nativeUpdater } = loadUpdater();
     updater.init({ autoCheck: false, autoDownload: true });
+    // Os eventos só são assinados na primeira verificação; esta não anuncia versão.
+    nativeUpdater.checkForUpdates = vi.fn(async () => {});
+    await updater.checkForUpdates();
     nativeUpdater.emit("update-available", { version: "9.0.0" });
     updater.cancelDownload();
     await Promise.resolve();
@@ -160,6 +163,9 @@ describe("updater admission during presentation", () => {
   it("retoma quando a apresentação acaba antes de limpar a tentativa adiada", async () => {
     const { updater, nativeUpdater } = loadUpdater();
     updater.init({ autoCheck: false, autoDownload: true });
+    // Os eventos só são assinados na primeira verificação; esta não anuncia versão.
+    nativeUpdater.checkForUpdates = vi.fn(async () => {});
+    await updater.checkForUpdates();
     nativeUpdater.emit("update-available", { version: "9.0.0" });
     updater.setPresentationActive(true);
     await Promise.resolve();

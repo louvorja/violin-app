@@ -4,8 +4,8 @@
  * updater.js — Auto-update do app via GitHub Releases.
  *
  * Fluxo unificado (todas as plataformas):
- *   1. init() é chamado após a janela principal ser criada (apenas em produção).
- *   2. 5s após o boot, verifica se há versão nova no GitHub Releases.
+ *   1. init() é chamado após a janela principal ser criada e só guarda as opções.
+ *   2. A tela pede a verificação ao iniciar; o electron-updater carrega nessa hora.
  *   3. Se autoDownload=true, baixa o asset correto (.exe/.dmg/.AppImage/.deb/.rpm)
  *      em background e notifica o renderer.
  *   4. O usuário instala pelo gerenciador de pacotes do sistema.
@@ -24,7 +24,7 @@
 
 // IMPORTANTE: não importar electron-updater no top-level — ele tenta acessar
 // app.getVersion() durante a importação, antes do app estar pronto.
-// Lazy require dentro de init() resolve.
+// Ele só é carregado em _nativeUpdater(), na primeira verificação.
 const { app } = require("electron");
 const fs = require("fs-extra");
 const path = require("path");
@@ -41,6 +41,8 @@ const GITHUB_REPO = "violin-app";
 const GITHUB_RELEASES_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases?per_page=20`;
 
 let autoUpdater = null;
+let _nativeUpdaterLoaded = false;
+let _channel = "latest";
 let UpdaterCancellationToken = null;
 let _nativeDownloadToken = null;
 let _downloadUpdatePromise = null;
@@ -728,23 +730,39 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
   _useBeta = !!useBeta;
   _autoCheck = !!autoCheck;
   _autoDownload = !!autoDownload;
+  _channel = channel;
   _state.version = app.getVersion();
 
-  // Lazy require — só agora que `app` está pronto.
+  if (_autoCheck) {
+    setTimeout(() => {
+      void checkForUpdates();
+    }, 5000);
+  }
+}
+
+/**
+ * Carrega e configura o electron-updater na primeira vez em que é preciso.
+ * Fora do init() de propósito: o require é síncrono e, em disco frio, parava o
+ * processo principal por segundos enquanto a janela ainda carregava.
+ *
+ * @returns {object | null} null quando o módulo não está disponível
+ */
+function _nativeUpdater() {
+  if (_nativeUpdaterLoaded) return autoUpdater;
+  _nativeUpdaterLoaded = true;
+
   // Em dev (não empacotado) o electron-updater existe mas fica inativo;
-  // blindamos o require para não quebrar o boot caso o módulo falhe.
-  if (!autoUpdater) {
-    try {
-      const updaterModule = require("electron-updater");
-      autoUpdater = updaterModule.autoUpdater;
-      UpdaterCancellationToken = updaterModule.CancellationToken;
-      if (typeof UpdaterCancellationToken !== "function") {
-        // Sem cancelamento real, é mais seguro usar o fallback HTTP manual.
-        autoUpdater = null;
-      }
-    } catch (e) {
-      console.warn("[updater] electron-updater indisponível:", e.message);
+  // blindamos o require para não quebrar o app caso o módulo falhe.
+  try {
+    const updaterModule = require("electron-updater");
+    autoUpdater = updaterModule.autoUpdater;
+    UpdaterCancellationToken = updaterModule.CancellationToken;
+    if (typeof UpdaterCancellationToken !== "function") {
+      // Sem cancelamento real, é mais seguro usar o fallback HTTP manual.
+      autoUpdater = null;
     }
+  } catch (e) {
+    console.warn("[updater] electron-updater indisponível:", e.message);
   }
 
   // GitHub provider: controla se considera pre-releases
@@ -781,8 +799,8 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
       // é fixo (não é troca de canal), então uma versão mais velha não deve ser
       // oferecida — é o mesmo estado do x64, que nunca define o canal.
       autoUpdater.allowDowngrade = false;
-    } else if (channel && channel !== "latest") {
-      autoUpdater.channel = channel;
+    } else if (_channel && _channel !== "latest") {
+      autoUpdater.channel = _channel;
     }
     // O electron-updater não conhece a atividade da apresentação. Mantemos o
     // check separado do download para admitir apenas o trabalho automático.
@@ -843,18 +861,10 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
     autoUpdater.on("update-cancelled", () => {
       _setState({ status: "available", error: null });
     });
-
-    // ----- Auto-check após boot ----------------------------------------------
-
-    if (_autoCheck) {
-      setTimeout(() => {
-        void checkForUpdates();
-      }, 5000);
-    }
   }
 
   console.log(
-    "[updater] Inicializado. autoUpdater:",
+    "[updater] electron-updater carregado:",
     !!autoUpdater,
     "| autoDownload:",
     _autoDownload,
@@ -863,6 +873,7 @@ function init({ channel = "latest", autoCheck = true, autoDownload = false, useB
     "| installRequiresElevation:",
     _installRequiresElevation
   );
+  return autoUpdater;
 }
 
 /**
@@ -891,6 +902,7 @@ function setOptions({ useBeta, autoCheck, autoDownload } = {}) {
  * @returns {Promise<{ ok: boolean, state: object, error?: string, updateAvailable?: boolean, version?: string }>}
  */
 async function checkForUpdates() {
+  _nativeUpdater();
   console.info("[updater] checkForUpdates → autoUpdater ativo:", !!(autoUpdater && autoUpdater.isUpdaterActive()), "| checkedViaGithub:", _checkedViaGithub);
   if (!autoUpdater || !autoUpdater.isUpdaterActive()) {
     _checkedViaGithub = true;
@@ -936,6 +948,7 @@ function downloadUpdate(sender) {
 }
 
 async function _runDownloadUpdate(sender) {
+  _nativeUpdater();
   if (!autoUpdater || !autoUpdater.isUpdaterActive() || _checkedViaGithub) {
     try {
       return await downloadPackage(sender);
@@ -983,6 +996,7 @@ function cancelDownload() {
  *   após o instalador ser lançado.
  */
 async function quitAndInstall() {
+  _nativeUpdater();
   if (!autoUpdater || !autoUpdater.isUpdaterActive() || _checkedViaGithub) {
     // O download manual não tem confirmação de instalação pelo sistema.
     // Em particular, nunca encerra o AppImage após abrir o arquivo: o
