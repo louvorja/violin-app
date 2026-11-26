@@ -3,19 +3,18 @@
     <button
       v-for="(label, i) in dayLabels"
       :key="i"
+      type="button"
       class="lit-daytab"
       :class="{ 'is-active': activeDay === i, 'is-today': i === todayIndex }"
       :title="label"
       @click="setActiveDay(i)"
     >
-      <span>
-        <LjIcon
-          :icon="i === todayIndex ? ICONS.CALENDAR.STAR : ICONS.CALENDAR.BLANK_SOLID"
-          size="16"
-          class="lit-daytab__icon"
-        />
-        {{ label }}
-      </span>
+      <LjIcon
+        :icon="i === todayIndex ? ICONS.CALENDAR.STAR : ICONS.CALENDAR.BLANK_SOLID"
+        size="16"
+        class="lit-daytab__icon"
+      />
+      <span class="lit-daytab__label">{{ label }}</span>
     </button>
   </nav>
 </template>
@@ -69,11 +68,11 @@ watch(
 
 .lit-daytab {
   flex: 1;
+  min-width: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--lj-space-1);
+  gap: var(--lj-space-3);
   min-height: var(--lj-ui-h-lg);
   padding: var(--lj-space-2) var(--lj-space-5);
   background: transparent;
@@ -82,9 +81,14 @@ watch(
   cursor: pointer;
   color: var(--lj-text);
   font-size: var(--lj-text-base);
+  white-space: nowrap;
   transition:
     background var(--lj-transition-normal),
     border var(--lj-transition-normal);
+}
+.lit-daytab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .lit-daytab:hover {
   background: rgba(var(--lj-on-surface-ch), 0.06);
