@@ -17,9 +17,12 @@ import WebRoles from "@/helpers/projection/WebRoles";
 import { PROJECTION_TYPE } from "@/constants/Projection";
 import { KEYS } from "@/constants/UserDataKeys";
 import $appdata from "@/helpers/AppData";
+import Media from "@/composables/useMedia";
 import { useDisplays } from "@/composables/useDisplays";
+import { useFileProjection } from "@/composables/useFileProjection";
 import { useReturnPlayer } from "./useReturnPlayer";
 import { useLiveContent } from "./useLiveContent";
+import { takeOffAir } from "./takeOffAir";
 
 /**
  * As duas saídas do Modo apresentação: a tela principal e o retorno de palco.
@@ -321,6 +324,13 @@ export async function stopOutputs(): Promise<void> {
   _busy.value = true;
   _publish();
   try {
+    // Parar a apresentação encerra o que está no ar: o vídeo (embed ou
+    // arquivo), o áudio, a música e o que estiver só no retorno.
+    const kind = useLiveContent().current.value;
+    if (kind) takeOffAir(kind);
+    else Media.close(true, false, true);
+    useFileProjection().stopProjection();
+    await showOnReturn(null);
     _setOn("main", false);
     _setOn("stage", false);
     await closeProjectionWindows();

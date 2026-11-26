@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const openMediaWindow = vi.hoisted(() => vi.fn(async (_kind: string, _media: string, _opts?: unknown) => {}));
 const stageScreen = vi.hoisted(() => ({ value: null as unknown }));
 const appdata = vi.hoisted(() => new Map<string, unknown>());
+const mediaClose = vi.hoisted(() => vi.fn());
 
 vi.mock("@/helpers/Broadcast", () => ({ default: { send: vi.fn(), listen: vi.fn() } }));
 vi.mock("@/helpers/Platform", () => ({ default: { isDesktop: false } }));
@@ -14,6 +15,7 @@ vi.mock("@/helpers/ProjectionWindows", () => ({
   openMediaWindow,
 }));
 vi.mock("@/helpers/Projection", () => ({ close: vi.fn() }));
+vi.mock("@/composables/useMedia", () => ({ default: { close: mediaClose } }));
 vi.mock("@/composables/useProjectionShutdown", () => ({ closingOnPurpose: vi.fn() }));
 // Nenhuma janela aberta: tudo o que Iniciar liga precisa ser aberto.
 vi.mock("@/helpers/projection/webWindow", () => ({ isWebWindowOpen: () => false }));
@@ -39,6 +41,7 @@ function opened(kind: string): boolean {
 beforeEach(async () => {
   stageScreen.value = null;
   await stopOutputs();
+  mediaClose.mockClear();
   openMediaWindow.mockClear();
 });
 
@@ -75,5 +78,15 @@ describe("Iniciar com o retorno em Nenhum", () => {
 
     expect(opened("return")).toBe(false);
     await showOnReturn(null);
+  });
+
+  it("parar a apresentação encerra o que está tocando antes de fechar as telas", async () => {
+    await startOutputs();
+    mediaClose.mockClear();
+
+    await stopOutputs();
+
+    expect(mediaClose).toHaveBeenCalledWith(true, false, true);
+    expect(screenOn.value).toEqual({ main: false, stage: false });
   });
 });
