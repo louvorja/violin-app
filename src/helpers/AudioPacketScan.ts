@@ -91,22 +91,42 @@ export function decodeBatch(
 
 /**
  * Índices (no lote) dos quadros que o decodificador recusa. O lote inteiro vai
- * de uma vez; só quando ele falha cada quadro é refeito, precedido do último
- * quadro aceito — o mesmo contexto que o player daria a ele.
+ * de uma vez; só quando ele falha dividimos o intervalo ao meio (busca binária),
+ * sempre precedido do último quadro aceito — o mesmo contexto que o player daria
+ * a ele. Isso evita 1000 instâncias sequenciais de AudioDecoder num lote com um
+ * único quadro ruim, que estouravam o watchdog de varredura no processo main e
+ * deixavam o restante do vídeo sem reparo.
  */
 export async function rejectedFrames(
   config: AudioDecoderConfig,
   chunks: EncodedAudioChunk[],
   decode: Decode = decodeBatch
 ): Promise<{ rejected: number[]; unlocated: boolean }> {
+  if (chunks.length === 0) return { rejected: [], unlocated: false };
   if (await decode(config, chunks)) return { rejected: [], unlocated: false };
   const rejected: number[] = [];
   let lastGood: EncodedAudioChunk | null = null;
-  for (let i = 0; i < chunks.length; i++) {
-    const context = lastGood ? [lastGood, chunks[i]] : [chunks[i]];
-    if (await decode(config, context)) lastGood = chunks[i];
-    else rejected.push(i);
+
+  async function isolate(lo: number, hi: number, knownBad: boolean): Promise<void> {
+    if (lo >= hi) return;
+    if (!knownBad) {
+      const slice = chunks.slice(lo, hi);
+      const context = lastGood ? [lastGood, ...slice] : slice;
+      if (await decode(config, context)) {
+        lastGood = chunks[hi - 1];
+        return;
+      }
+    }
+    if (hi - lo === 1) {
+      rejected.push(lo);
+      return;
+    }
+    const mid = (lo + hi) >> 1;
+    await isolate(lo, mid, false);
+    await isolate(mid, hi, false);
   }
+
+  await isolate(0, chunks.length, true);
   return { rejected, unlocated: rejected.length === 0 };
 }
 

@@ -11,6 +11,7 @@
   "add": "Adicionar",
   "cancel": "Cancelar",
   "delete": "Excluir",
+  "delete_confirm": "Excluir \"{name}\"?",
   "name": "Nome",
   "category": "Categoria",
   "rename": "Renomear",

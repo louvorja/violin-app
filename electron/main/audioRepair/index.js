@@ -27,7 +27,7 @@ const SILENT_FRAMES = {
   2: Buffer.from([0x21, 0x00, 0x49, 0x90, 0x02, 0x19, 0x00, 0x23, 0x80]),
 };
 const CHUNK_WAIT_MAX_MS = 2500;
-const SCAN_STALL_MS = 1500;
+const SCAN_STALL_MS = 8000;
 const SCAN_TTL_MS = 10 * 60 * 1000;
 const MAX_READ_SAMPLES = 2000;
 

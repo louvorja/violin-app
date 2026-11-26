@@ -131,7 +131,16 @@ describe("quadros recusados", () => {
     const result = await rejectedFrames(config, chunks as never, decode as never);
     expect(result).toEqual({ rejected: [1, 3], unlocated: false });
     // O quadro 2 é conferido depois do 0 (último aceito), nunca depois do 1.
-    expect(contexts[3]).toEqual([chunks[0], chunks[2]]);
+    expect(contexts).toContainEqual([chunks[0], chunks[2]]);
+    expect(contexts.some((list) => list.includes(chunks[1]) && list.includes(chunks[2]) && list.length === 2)).toBe(false);
+  });
+
+  it("isola um quadro ruim em um lote de 1000 por busca binária, sem testar um por um", async () => {
+    const chunks = Array.from({ length: 1000 }, (_, i) => chunk(i === 731));
+    const decode = vi.fn(async (_c: AudioDecoderConfig, list: FakeChunk[]) => !list.some((c) => c.bad));
+    const result = await rejectedFrames(config, chunks as never, decode as never);
+    expect(result).toEqual({ rejected: [731], unlocated: false });
+    expect(decode.mock.calls.length).toBeLessThan(30);
   });
 
   it("falha que só aparece no lote inteiro é contada como não localizada", async () => {

@@ -2599,7 +2599,7 @@ const _self = {
       _ytUnlisten();
       _ytUnlisten = null;
     }
-    if (wasYouTube || stopExistingAudio) {
+    if (wasYouTube || stopExistingAudio || projection.type === "video") {
       _audio.stop();
       /* O áudio avulso morreu aqui (não antes de validar o payload). */
       _encerrarAudioArquivo();
