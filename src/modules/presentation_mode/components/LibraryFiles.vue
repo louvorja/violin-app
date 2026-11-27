@@ -31,59 +31,80 @@
         <span class="pm-folder__label">{{ tm("library.favorites") }}</span>
         <span class="pm-folder__count">{{ lib.counts.value[FAVORITES] ?? "" }}</span>
       </button>
-      <!-- Mídia encaixa aqui o grupo Online (vídeos, playlists e canais). -->
+      <!-- Mídia encaixa aqui os grupos Online e Biblioteca de mídia. -->
       <slot name="nav-extra" />
-      <span v-if="$slots['nav-extra']" class="pm-folders__group">{{ tm("library.folders") }}</span>
-      <!-- Todos e Favoritos ficam fixos no topo; as pastas do operador se arrastam. -->
-      <draggable
-        :model-value="lib.folders.value"
-        item-key="path"
-        tag="div"
-        class="pm-folders__user"
-        :animation="150"
-        ghost-class="pm-folder--ghost"
-        @update:model-value="lib.reorderFolders"
-      >
-        <template #item="{ element: folder }">
-          <LjContextMenu v-bind="folderMenu(folder)">
-            <div
-              class="pm-folder pm-folder--user"
-              :class="{ 'pm-folder--active': !paneActive && lib.source.value === folder.path }"
-              role="button"
-              tabindex="0"
-              :title="folder.path"
-              @click="openSource(folder.path)"
-              @keydown.enter.self="openSource(folder.path)"
-            >
-              <LjIcon :icon="ICONS.UI.FOLDER" :size="15" />
-              <span class="pm-folder__label">{{ folder.label }}</span>
-              <span class="pm-folder__count">{{ lib.counts.value[folder.path] ?? "" }}</span>
-              <button
-                type="button"
-                class="pm-folder__remove"
-                :title="tm('library.remove_folder')"
-                :aria-label="tm('library.remove_folder')"
-                @click.stop="confirmRemove(folder.path)"
-              >
-                <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="11" />
-              </button>
-            </div>
-          </LjContextMenu>
-        </template>
-      </draggable>
       <button
+        v-if="$slots['nav-extra']"
         type="button"
-        class="pm-folder pm-folder--add"
-        data-testid="pm-library-add-folder"
-        @click="addFolder"
+        class="pm-folders__group pm-folders__group--toggle"
+        :aria-expanded="foldersOpen"
+        @click="foldersOpen = !foldersOpen"
       >
-        <LjIcon :icon="ICONS.UI.FOLDER_PLUS" :size="15" />
-        <span class="pm-folder__label">{{ tm("library.add_folder") }}</span>
+        <LjIcon :icon="foldersOpen ? ICONS.UI.CHEVRON_UP : ICONS.UI.CHEVRON_RIGHT" :size="10" />
+        {{ tm("library.folders") }}
       </button>
+      <!-- Todos e Favoritos ficam fixos no topo; as pastas do operador se arrastam. -->
+      <div class="pm-collapse" :class="{ 'pm-collapse--open': foldersOpen }" :inert="!foldersOpen">
+        <div class="pm-collapse__inner">
+          <draggable
+            :model-value="lib.folders.value"
+            item-key="path"
+            tag="div"
+            class="pm-folders__user"
+            :animation="150"
+            ghost-class="pm-folder--ghost"
+            @update:model-value="lib.reorderFolders"
+          >
+            <template #item="{ element: folder }">
+              <LjContextMenu v-bind="folderMenu(folder)">
+                <div
+                  class="pm-folder pm-folder--user"
+                  :class="{ 'pm-folder--active': !paneActive && lib.source.value === folder.path }"
+                  role="button"
+                  tabindex="0"
+                  :title="folder.path"
+                  @click="openSource(folder.path)"
+                  @keydown.enter.self="openSource(folder.path)"
+                >
+                  <LjIcon :icon="ICONS.UI.FOLDER" :size="15" />
+                  <span class="pm-folder__label">{{ folder.label }}</span>
+                  <span class="pm-folder__count">{{ lib.counts.value[folder.path] ?? "" }}</span>
+                  <button
+                    type="button"
+                    class="pm-folder__remove"
+                    :title="tm('library.remove_folder')"
+                    :aria-label="tm('library.remove_folder')"
+                    @click.stop="confirmRemove(folder.path)"
+                  >
+                    <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="11" />
+                  </button>
+                </div>
+              </LjContextMenu>
+            </template>
+          </draggable>
+          <button
+            type="button"
+            class="pm-folder pm-folder--add"
+            data-testid="pm-library-add-folder"
+            @click="addFolder"
+          >
+            <LjIcon :icon="ICONS.UI.FOLDER_PLUS" :size="15" />
+            <span class="pm-folder__label">{{ tm("library.add_folder") }}</span>
+          </button>
+        </div>
+      </div>
     </nav>
 
     <slot v-if="paneActive" name="pane" />
     <div v-else class="pm-files">
+      <div v-if="mediaTypeTabs" class="pm-files__types">
+        <LjTabs
+          :model-value="typeFilter"
+          :tabs="typeTabs"
+          :aria-label="tm('library.media_type_filter')"
+          @update:model-value="typeFilter = $event as MediaTypeFilter"
+        />
+      </div>
       <!-- A pasta veio de um item do programa: o que tocar daqui conta como esse item. -->
       <div v-if="programBand" class="pm-files__program" data-testid="pm-library-program-folder">
         <LjIcon :icon="ICONS.LITURGY.SCRIPT" :size="14" class="pm-files__program-icon" />
@@ -124,7 +145,7 @@
       <FileGrid
         v-else
         data-testid="pm-library-grid"
-        :entries="lib.entries.value"
+        :entries="visibleEntries"
         :selected-path="selected?.path ?? null"
         :live-path="livePath"
         :return-path="returnPath"
@@ -274,7 +295,15 @@ import SeriesBar from "./SeriesBar.vue";
 import { useFolderSeries } from "../composables/useSeries";
 import { useFolderItems } from "../composables/useFolderItems";
 import draggable from "vuedraggable";
-import { LjButton, LjContextMenu, LjEmpty, LjIcon, type LjMenuItem } from "@/components/ui";
+import {
+  LjButton,
+  LjContextMenu,
+  LjEmpty,
+  LjIcon,
+  LjTabs,
+  type LjMenuItem,
+  type LjTab,
+} from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import $alert from "@/helpers/Alert";
@@ -283,6 +312,7 @@ import { useModuleI18n } from "@/composables/useModuleI18n";
 import {
   ALL,
   FAVORITES,
+  fileKind,
   readFolder,
   useFileLibrary,
   type LibraryEntry,
@@ -311,8 +341,10 @@ const props = withDefaults(
     paneActive?: boolean;
     /** Item pasta/série do programa que abriu a pasta (faixa "Aberta pelo programa"). */
     programFolder?: ProgramItem | null;
+    /** Abas por tipo de arquivo na área da grade (aba Mídia). */
+    mediaTypeTabs?: boolean;
   }>(),
-  { scope: "files", paneActive: false, programFolder: null }
+  { scope: "files", paneActive: false, programFolder: null, mediaTypeTabs: false }
 );
 
 const emit = defineEmits<{
@@ -332,6 +364,34 @@ const filePlayable = (entry: LibraryEntry): Playable => ({ type: "file", entry }
 const { t, tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 
 const lib = useFileLibrary(props.scope);
+const foldersOpen = ref(true);
+
+type MediaTypeFilter = "all" | "video" | "image" | "audio" | "document";
+const typeFilter = ref<MediaTypeFilter>("all");
+
+const typeTabs = computed<LjTab[]>(() => [
+  { value: "all", label: tm("library.all") },
+  { value: "video", label: tm("library.videos") },
+  { value: "image", label: tm("library.images") },
+  { value: "audio", label: tm("library.audio") },
+  { value: "document", label: tm("library.documents") },
+]);
+
+function matchesType(entry: LibraryEntry, filter: Exclude<MediaTypeFilter, "all">): boolean {
+  const kind = fileKind(entry.ext);
+  if (filter === "document") return kind === "pdf" || kind === "powerpoint" || kind === "slja";
+  return kind === filter;
+}
+
+const visibleEntries = computed(() => {
+  if (!props.mediaTypeTabs || typeFilter.value === "all") return lib.entries.value;
+  const filter = typeFilter.value;
+  return lib.entries.value.filter((entry) => !entry.isDir && matchesType(entry, filter));
+});
+
+const visibleFileCount = computed(
+  () => visibleEntries.value.filter((entry) => !entry.isDir).length
+);
 
 const folderItems = useFolderItems();
 
@@ -498,7 +558,7 @@ const locationLabel = computed(() => {
 });
 
 const countLabel = computed(() =>
-  t(`modules.${ModuleEnum.PRESENTATION_MODE}.library.items_count`, lib.fileCount.value)
+  t(`modules.${ModuleEnum.PRESENTATION_MODE}.library.items_count`, visibleFileCount.value)
 );
 
 const emptyMessage = computed(() => {
@@ -507,6 +567,9 @@ const emptyMessage = computed(() => {
   if (lib.missing.value) return tm("library.missing");
   if (!lib.entries.value.length) {
     return lib.source.value === FAVORITES ? tm("library.no_favorites") : tm("library.empty");
+  }
+  if (props.mediaTypeTabs && typeFilter.value !== "all" && !visibleEntries.value.length) {
+    return tm("library.no_results");
   }
   return "";
 });
@@ -628,6 +691,38 @@ const emptyMessage = computed(() => {
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--lj-text-subtle);
+}
+
+.pm-folders__group--toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pm-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 180ms var(--lj-ease);
+}
+
+.pm-collapse--open {
+  grid-template-rows: 1fr;
+}
+
+.pm-collapse__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pm-files__types {
+  flex-shrink: 0;
+  padding: var(--lj-space-2) var(--lj-space-3) 0;
+  border-bottom: 1px solid var(--lj-surface-border);
 }
 
 .pm-folder--add {

@@ -34,6 +34,7 @@ vi.mock("@/composables/useModuleI18n", () => ({
   useModuleI18n: () => ({
     t: (key: string) => key,
     tm: (key: string) => key,
+    locale: { value: "pt-BR" },
   }),
 }));
 
@@ -47,7 +48,9 @@ function mount() {
       stubs: {
         FileGrid: {
           props: ["entries"],
-          template: '<div class="pm-native-grid-stub">{{ entries.length }}</div>',
+          emits: ["details"],
+          template:
+            '<div class="pm-native-grid-stub">{{ entries.length }}<button class="details-stub" @click="$emit(\'details\', entries[0])" /></div>',
         },
         LjInput: {
           props: ["modelValue"],
@@ -57,6 +60,12 @@ function mount() {
         },
         LjButton: { template: '<button v-bind="$attrs"><slot /></button>' },
         LjEmpty: { props: ["title"], template: "<div>{{ title }}</div>" },
+        LjTabs: {
+          props: ["modelValue", "tabs"],
+          emits: ["update:modelValue"],
+          template:
+            '<div class="pm-native-tabs-stub"><button v-for="tab in tabs" :key="tab.value" :data-tab="tab.value" @click="$emit(\'update:modelValue\', tab.value)" /></div>',
+        },
         LjIcon: true,
         CategoryListItem: {
           props: ["categoryId", "name", "count", "active", "icon", "iconType", "color"],
@@ -155,6 +164,62 @@ describe("LibraryNativeMedia", () => {
     await wrapper.find(".pm-native__search input").setValue("não existe");
     await flushPromises();
     expect(wrapper.find(".pm-files__empty").text()).toContain("native.no_results");
+  });
+
+  it("filtra a grade pelas abas de tipo de arquivo", async () => {
+    state.entries.value = [
+      { name: "foto.jpg", path: "/fotos/foto.jpg", isDir: false, ext: "jpg", size: 0, mtimeMs: 0 },
+      { name: "video.mp4", path: "/videos/video.mp4", isDir: false, ext: "mp4", size: 0, mtimeMs: 0 },
+      { name: "documento.pdf", path: "/docs/documento.pdf", isDir: false, ext: "pdf", size: 0, mtimeMs: 0 },
+    ];
+    const wrapper = mount();
+    await flushPromises();
+    expect(wrapper.find(".pm-native-grid-stub").text()).toBe("3");
+
+    await wrapper.find('[data-tab="video"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.find(".pm-native-grid-stub").text()).toBe("1");
+
+    await wrapper.find('[data-tab="document"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.find(".pm-native-grid-stub").text()).toBe("1");
+
+    await wrapper.find('[data-tab="image"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.find(".pm-native-grid-stub").text()).toBe("1");
+
+    await wrapper.find('[data-tab="audio"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.find(".pm-files__empty").text()).toContain("native.no_results");
+  });
+
+  it("abre os detalhes do item e envia para a tela ou para o programa", async () => {
+    state.entries.value = [
+      {
+        name: "foto.jpg",
+        path: "/fotos/foto.jpg",
+        isDir: false,
+        ext: "jpg",
+        size: 0,
+        mtimeMs: 0,
+      },
+    ];
+    const wrapper = mount();
+    await flushPromises();
+
+    await wrapper.find(".details-stub").trigger("click");
+    expect(wrapper.find('[data-testid="pm-native-details"]').exists()).toBe(true);
+    expect(wrapper.find(".pm-details__title").text()).toBe("foto.jpg");
+    expect(wrapper.find(".pm-details__path").text()).toBe("/fotos/foto.jpg");
+
+    await wrapper.find('[data-testid="pm-native-details-send"]').trigger("click");
+    expect(wrapper.emitted("play")?.[0]?.[0]).toMatchObject({
+      type: "file",
+      entry: { path: "/fotos/foto.jpg" },
+    });
+
+    await wrapper.find('[data-testid="pm-native-details-close"]').trigger("click");
+    expect(wrapper.find('[data-testid="pm-native-details"]').exists()).toBe(false);
   });
 
   it("troca o filtro ao clicar em uma categoria", async () => {

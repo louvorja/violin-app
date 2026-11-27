@@ -1,84 +1,88 @@
 <template>
-  <span class="pm-online-src__group">{{ tm("library.online") }}</span>
   <button
     type="button"
-    class="pm-online-src"
-    :class="{ 'pm-online-src--active': active === 'online' && online.openId.value === VIDEOS }"
-    data-testid="pm-online-videos"
-    @click="open(VIDEOS)"
+    class="pm-online-src__group pm-online-src__group--toggle"
+    :aria-expanded="expanded"
+    @click="expanded = !expanded"
   >
-    <LjIcon :icon="ICONS.MEDIA.YOUTUBE" :size="15" />
-    <span class="pm-online-src__label">{{ tm("online.videos") }}</span>
-    <span class="pm-online-src__count">{{ online.videos.value.length || "" }}</span>
+    <LjIcon :icon="expanded ? ICONS.UI.CHEVRON_UP : ICONS.UI.CHEVRON_RIGHT" :size="10" />
+    {{ tm("library.online") }}
   </button>
-  <draggable
-    :model-value="online.collections.value"
-    item-key="id"
-    tag="div"
-    class="pm-online-src__list"
-    :animation="150"
-    ghost-class="pm-online-src--ghost"
-    @update:model-value="(list: OnlineCollectionFavorite[]) => online.reorder(list)"
-  >
-    <template #item="{ element: fav }">
-      <div
-        class="pm-online-src pm-online-src--user"
-        :class="{ 'pm-online-src--active': active === 'online' && online.openId.value === fav.id }"
-        role="button"
-        tabindex="0"
-        :title="
-          fav.channel && fav.kind === 'playlist' ? `${fav.title} · ${fav.channel}` : fav.title
-        "
-        :data-testid="`pm-online-src-${fav.ytId}`"
-        @click="open(fav.id)"
-        @keydown.enter.self="open(fav.id)"
+  <div class="pm-collapse" :class="{ 'pm-collapse--open': expanded }" :inert="!expanded">
+    <div class="pm-collapse__inner">
+      <draggable
+        :model-value="online.collections.value"
+        item-key="id"
+        tag="div"
+        class="pm-online-src__list"
+        :animation="150"
+        ghost-class="pm-online-src--ghost"
+        @update:model-value="(list: OnlineCollectionFavorite[]) => online.reorder(list)"
       >
-        <img
-          v-if="fav.kind === 'channel' && fav.thumbnail"
-          :src="fav.thumbnail"
-          alt=""
-          class="pm-online-src__avatar"
-        />
-        <LjIcon
-          v-else
-          :icon="fav.kind === 'channel' ? ICONS.UI.ACCOUNT : ICONS.MEDIA.PLAYLIST"
-          :size="15"
-        />
-        <span class="pm-online-src__label">{{ fav.title }}</span>
-        <button
-          type="button"
-          class="pm-online-src__remove"
-          :title="tm('online.remove')"
-          :aria-label="tm('online.remove')"
-          @click.stop="confirmRemoveFavorite(fav)"
-        >
-          <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="11" />
-        </button>
-      </div>
-    </template>
-  </draggable>
-  <button
-    type="button"
-    class="pm-online-src"
-    :class="{ 'pm-online-src--active': active === 'canva' }"
-    data-testid="pm-online-canva"
-    @click="emit('canva')"
-  >
-    <img :src="logoCanva" alt="" class="pm-online-src__avatar" />
-    <span class="pm-online-src__label">{{ tm("canva.title") }}</span>
-  </button>
-  <button
-    type="button"
-    class="pm-online-src pm-online-src--add"
-    data-testid="pm-online-add"
-    @click="emit('add')"
-  >
-    <LjIcon :icon="ICONS.UI.LINK" :size="15" />
-    <span class="pm-online-src__label">{{ tm("online.add") }}</span>
-  </button>
+        <template #item="{ element: fav }">
+          <div
+            class="pm-online-src pm-online-src--user"
+            :class="{
+              'pm-online-src--active': active === 'online' && online.openId.value === fav.id,
+            }"
+            role="button"
+            tabindex="0"
+            :title="
+              fav.channel && fav.kind === 'playlist' ? `${fav.title} · ${fav.channel}` : fav.title
+            "
+            :data-testid="`pm-online-src-${fav.ytId}`"
+            @click="open(fav.id)"
+            @keydown.enter.self="open(fav.id)"
+          >
+            <img
+              v-if="fav.kind === 'channel' && fav.thumbnail"
+              :src="fav.thumbnail"
+              alt=""
+              class="pm-online-src__avatar"
+            />
+            <LjIcon
+              v-else
+              :icon="fav.kind === 'channel' ? ICONS.UI.ACCOUNT : ICONS.MEDIA.PLAYLIST"
+              :size="15"
+            />
+            <span class="pm-online-src__label">{{ fav.title }}</span>
+            <button
+              type="button"
+              class="pm-online-src__remove"
+              :title="tm('online.remove')"
+              :aria-label="tm('online.remove')"
+              @click.stop="confirmRemoveFavorite(fav)"
+            >
+              <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="11" />
+            </button>
+          </div>
+        </template>
+      </draggable>
+      <button
+        type="button"
+        class="pm-online-src"
+        :class="{ 'pm-online-src--active': active === 'canva' }"
+        data-testid="pm-online-canva"
+        @click="emit('canva')"
+      >
+        <img :src="logoCanva" alt="" class="pm-online-src__avatar" />
+        <span class="pm-online-src__label">{{ tm("canva.title") }}</span>
+      </button>
+      <button
+        type="button"
+        class="pm-online-src pm-online-src--add"
+        data-testid="pm-online-add"
+        @click="emit('add')"
+      >
+        <LjIcon :icon="ICONS.UI.LINK" :size="15" />
+        <span class="pm-online-src__label">{{ tm("online.add") }}</span>
+      </button>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue";
 import draggable from "vuedraggable";
 import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
@@ -88,14 +92,13 @@ import logoCanva from "@/assets/img/canva.png";
 import {
   confirmRemoveFavorite,
   useOnlineLibrary,
-  VIDEOS,
   type OnlineCollectionFavorite,
 } from "../composables/useOnlineLibrary";
 
 /**
- * O grupo Online da barra lateral da aba Mídia: os vídeos favoritos, as
- * playlists e os canais do YouTube, o Canva e o "Adicionar link". Abrir um
- * deles mostra a grade on-line (ou a do Canva) no lugar da grade de arquivos.
+ * O grupo Online da barra lateral da aba Mídia: as playlists e os canais do
+ * YouTube, o Canva e o "Adicionar link". Abrir um deles mostra a grade on-line
+ * (ou a do Canva) no lugar da grade de arquivos.
  */
 
 defineProps<{
@@ -106,6 +109,7 @@ const emit = defineEmits<{ open: []; add: []; canva: [] }>();
 
 const { tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const online = useOnlineLibrary();
+const expanded = ref(true);
 
 function open(id: string): void {
   emit("open");
@@ -121,6 +125,32 @@ function open(id: string): void {
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--lj-text-subtle);
+}
+
+.pm-online-src__group--toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pm-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 180ms var(--lj-ease);
+}
+
+.pm-collapse--open {
+  grid-template-rows: 1fr;
+}
+
+.pm-collapse__inner {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .pm-online-src__list {

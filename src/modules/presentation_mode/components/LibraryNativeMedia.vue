@@ -3,8 +3,13 @@
     <LjEmpty :icon="ICONS.MODULES.MEDIA_LIBRARY" :title="tm('native.desktop_only')" />
   </div>
 
-  <div v-else class="pm-native" data-testid="pm-library-native">
-    <aside class="pm-native__side">
+  <div
+    v-else
+    class="pm-native"
+    :class="{ 'pm-native--embedded': embedded, 'pm-native--details': !!details }"
+    data-testid="pm-library-native"
+  >
+    <aside v-if="!embedded" class="pm-native__side">
       <div class="pm-native__search">
         <LjInput
           v-model="search"
@@ -56,6 +61,23 @@
     </aside>
 
     <div class="pm-files">
+      <div class="pm-native__toolbar">
+        <LjInput
+          v-if="embedded"
+          v-model="search"
+          size="sm"
+          :icon="ICONS.ACTIONS.SEARCH"
+          :placeholder="tm('native.search')"
+          clearable
+          data-testid="pm-native-search"
+        />
+        <LjTabs
+          :model-value="typeFilter"
+          :tabs="typeTabs"
+          :aria-label="tm('library.media_type_filter')"
+          @update:model-value="typeFilter = $event as MediaTypeFilter"
+        />
+      </div>
       <p v-if="native.loading.value && !native.loaded.value" class="pm-files__empty">
         {{ tm("library.loading") }}
       </p>
@@ -75,9 +97,10 @@
         :selected-path="selectedPath"
         :live-path="livePath"
         :return-path="returnPath"
-        no-details
         no-file-actions
+        :extra-menu="nativeMenu"
         @select="onSelect"
+        @details="openDetails"
         @open="(e: LibraryEntry) => emit('play', filePlayable(e))"
         @play="(e: LibraryEntry, o?: PlayOptions) => emit('play', filePlayable(e), o)"
         @stop="emit('stop')"
@@ -123,6 +146,61 @@
         </LjButton>
       </footer>
     </div>
+
+    <aside v-if="details" class="pm-native__details pm-details" data-testid="pm-native-details">
+      <div class="pm-details__head">
+        <span class="pm-details__title">{{ details.name }}</span>
+        <button
+          type="button"
+          class="pm-details__star pm-details__close"
+          :title="t('actions.close')"
+          :aria-label="t('actions.close')"
+          data-testid="pm-native-details-close"
+          @click="closeDetails"
+        >
+          <LjIcon :icon="ICONS.ACTIONS.CLOSE" :size="15" />
+        </button>
+      </div>
+      <dl class="pm-details__table">
+        <dt>{{ tm("library.extension") }}</dt>
+        <dd>{{ details.ext.toUpperCase() || "—" }}</dd>
+        <template v-if="details.size > 0">
+          <dt>{{ tm("library.size") }}</dt>
+          <dd>{{ formatSize(details.size) }}</dd>
+        </template>
+        <template v-if="detailsMeta?.width">
+          <dt>{{ tm("library.resolution") }}</dt>
+          <dd>{{ detailsMeta.width }}×{{ detailsMeta.height }}</dd>
+        </template>
+        <template v-if="detailsMeta?.duration">
+          <dt>{{ tm("library.duration") }}</dt>
+          <dd>{{ DateTime.shortTime(detailsMeta.duration) }}</dd>
+        </template>
+        <dt>{{ tm("library.modified") }}</dt>
+        <dd>{{ formatDate(details.mtimeMs) }}</dd>
+        <dt>{{ tm("library.path") }}</dt>
+        <dd class="pm-details__path" :title="details.path">{{ details.path }}</dd>
+      </dl>
+      <div class="pm-details__actions">
+        <LjButton
+          variant="primary"
+          block
+          :icon="ICONS.PROJECTION.START"
+          data-testid="pm-native-details-send"
+          @click="playDetails"
+        >
+          {{ tm("library.send") }}
+        </LjButton>
+        <LjButton
+          block
+          :icon="ICONS.ACTIONS.ADD"
+          data-testid="pm-native-details-add"
+          @click="addDetails"
+        >
+          {{ tm("library.add_to_program") }}
+        </LjButton>
+      </div>
+    </aside>
   </div>
 </template>
 
@@ -130,19 +208,31 @@
 import { computed, onActivated, onBeforeUnmount, onMounted, ref } from "vue";
 import FileGrid from "./FileGrid.vue";
 import CategoryListItem from "./CategoryListItem.vue";
-import { LjButton, LjEmpty, LjIcon, LjInput } from "@/components/ui";
+import {
+  LjButton,
+  LjEmpty,
+  LjIcon,
+  LjInput,
+  LjTabs,
+  type LjMenuItem,
+  type LjTab,
+} from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
+import DateTime from "@/helpers/DateTime";
 import Modules from "@/helpers/Modules";
+import Platform from "@/helpers/Platform";
 import Strings from "@/helpers/Strings";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import type { ProgramItem } from "@/types/Presentation";
-import type { LibraryEntry } from "../composables/useFileLibrary";
+import { fileKind, useFileLibrary, type LibraryEntry } from "../composables/useFileLibrary";
+import { useMediaMeta } from "../composables/useMediaMeta";
 import {
   ALL,
   useNativeMediaLibrary,
   type NativeMediaCategory,
 } from "../composables/useNativeMediaLibrary";
+import { fileItem } from "../program/items";
 import type { Playable, PlayOptions } from "../program/playable";
 
 /**
@@ -152,7 +242,12 @@ import type { Playable, PlayOptions } from "../program/playable";
  * ("Gerenciar" abre o módulo).
  */
 
-defineProps<{ livePath: string | null; returnPath: string | null }>();
+const props = defineProps<{
+  livePath: string | null;
+  returnPath: string | null;
+  /** Renderiza só a grade (o Modo apresentação já tem as categorias na lateral). */
+  embedded?: boolean;
+}>();
 const emit = defineEmits<{
   preview: [playable: Playable];
   play: [playable: Playable, options?: PlayOptions];
@@ -161,15 +256,39 @@ const emit = defineEmits<{
   "show-on-return": [entry: LibraryEntry | null];
 }>();
 
-const { t, tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { t, tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const native = useNativeMediaLibrary();
+const lib = useFileLibrary();
+const { meta, request } = useMediaMeta();
 const selectedPath = ref<string | null>(null);
 const search = ref("");
+const details = ref<LibraryEntry | null>(null);
+type MediaTypeFilter = "all" | "video" | "image" | "audio" | "document";
+const typeFilter = ref<MediaTypeFilter>("all");
+
+const typeTabs = computed<LjTab[]>(() => [
+  { value: "all", label: tm("library.all") },
+  { value: "video", label: tm("library.videos") },
+  { value: "image", label: tm("library.images") },
+  { value: "audio", label: tm("library.audio") },
+  { value: "document", label: tm("library.documents") },
+]);
+
+function matchesType(entry: LibraryEntry, filter: Exclude<MediaTypeFilter, "all">): boolean {
+  const kind = fileKind(entry.ext);
+  if (filter === "document") return kind === "pdf" || kind === "powerpoint" || kind === "slja";
+  return kind === filter;
+}
 
 const visibleEntries = computed(() => {
+  let list = native.entries.value;
+  const filter = typeFilter.value;
+  if (filter !== "all") {
+    list = list.filter((entry) => matchesType(entry, filter));
+  }
   const query = Strings.fold(search.value.trim());
-  if (!query) return native.entries.value;
-  return native.entries.value.filter((entry) => Strings.fold(entry.name).includes(query));
+  if (query) list = list.filter((entry) => Strings.fold(entry.name).includes(query));
+  return list;
 });
 
 const filePlayable = (entry: LibraryEntry): Playable => ({ type: "file", entry });
@@ -177,6 +296,58 @@ const filePlayable = (entry: LibraryEntry): Playable => ({ type: "file", entry }
 function onSelect(entry: LibraryEntry): void {
   selectedPath.value = entry.path;
   emit("preview", filePlayable(entry));
+}
+
+const detailsMeta = computed(() => (details.value ? (meta.get(details.value.path) ?? null) : null));
+
+function openDetails(entry: LibraryEntry): void {
+  selectedPath.value = entry.path;
+  details.value = entry;
+  request(entry, { priority: true });
+}
+
+function closeDetails(): void {
+  details.value = null;
+}
+
+function playDetails(): void {
+  if (details.value) emit("play", filePlayable(details.value));
+}
+
+function addDetails(): void {
+  if (details.value) emit("add", fileItem(details.value, meta.get(details.value.path) ?? null));
+}
+
+function nativeMenu(entry: LibraryEntry): LjMenuItem[] {
+  return [
+    { separator: true },
+    {
+      label: tm(`file_actions.reveal_${Platform.platform === "darwin" ? "mac" : "other"}`),
+      icon: ICONS.UI.FOLDER_OPEN,
+      action: () => lib.reveal(entry),
+    },
+    { label: tm("native.manage"), icon: ICONS.UI.OPEN_IN_NEW, action: openNativeLibrary },
+  ];
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i++;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+function formatDate(ms: number): string {
+  return new Date(ms).toLocaleDateString(locale.value, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
 const countLabel = computed(() =>
@@ -205,7 +376,11 @@ onMounted(() => {
 onActivated(() => {
   if (native.supported && native.loaded.value) void native.load();
 });
-onBeforeUnmount(() => native.disposeCategoryIcons());
+onBeforeUnmount(() => {
+  // A lateral da aba Mídia continua montada quando só a grade sai; apagar as
+  // URLs dos ícones ali deixaria as categorias sem imagem.
+  if (!props.embedded) native.disposeCategoryIcons();
+});
 </script>
 
 <style scoped>
@@ -218,6 +393,101 @@ onBeforeUnmount(() => native.disposeCategoryIcons());
   min-height: 0;
   display: grid;
   grid-template-columns: 168px minmax(0, 1fr);
+}
+
+.pm-native--embedded {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pm-native--details {
+  grid-template-columns: 168px minmax(0, 1fr) 222px;
+}
+
+.pm-native--embedded.pm-native--details {
+  grid-template-columns: minmax(0, 1fr) 222px;
+}
+
+.pm-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  border-left: 1px solid var(--lj-surface-border);
+}
+
+.pm-details__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.pm-details__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--lj-orange);
+  overflow-wrap: anywhere;
+}
+
+.pm-details__star {
+  display: flex;
+  padding: 2px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--lj-orange);
+  cursor: pointer;
+}
+
+.pm-details__star:hover {
+  background: var(--lj-hover-bg);
+}
+
+.pm-details__table {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 8px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.pm-details__table dt {
+  color: var(--lj-text-subtle);
+}
+
+.pm-details__table dd {
+  margin: 0;
+  font-family: var(--lj-font-mono);
+  text-align: right;
+}
+
+.pm-details__path {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.pm-details__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.pm-native__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  flex-shrink: 0;
+  padding: var(--lj-space-2) var(--lj-space-3) 0;
+  border-bottom: 1px solid var(--lj-surface-border);
+}
+
+.pm-native__toolbar :deep(.lj-input) {
+  width: 160px;
+  min-width: 0;
 }
 
 /* A barra de categorias usa a mesma linha de filtro das abas de fundo. */
