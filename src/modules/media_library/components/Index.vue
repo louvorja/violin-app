@@ -1068,10 +1068,13 @@ async function saveImportedFile(input: {
     throw error;
   }
   files.value.unshift(file);
-  // Sem filtro ativo, o arquivo recém-importado precisa aparecer; escolher a
-  // categoria dele evita que a grade fique vazia com a seleção vazia.
-  if (selectedCategoryIds.value.size === 0) {
-    selectedCategoryIds.value = new Set([input.categoryId || UNCATEGORIZED_ID]);
+  // O arquivo recém-importado precisa aparecer: a grade mostra só as
+  // categorias marcadas, então a dele entra na seleção. Com outra categoria já
+  // marcada (os Litúrgicos, por exemplo), importar para "Sem categoria"
+  // deixava o arquivo novo escondido.
+  const importedCategory = input.categoryId || UNCATEGORIZED_ID;
+  if (!selectedCategoryIds.value.has(importedCategory)) {
+    selectedCategoryIds.value = new Set([...selectedCategoryIds.value, importedCategory]);
   }
   if (input.type === "video") generateAndStoreThumb(file);
   return file;
