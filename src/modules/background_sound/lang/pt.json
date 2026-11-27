@@ -51,5 +51,6 @@
   "default_checkbox": "Som de fundo padrão",
   "default_sound": "Som padrão",
   "set_default": "Definir como som padrão",
-  "unset_default": "Remover som padrão"
+  "unset_default": "Remover som padrão",
+  "no_default_sound": "Nenhum som padrão definido. Marque a estrela de um som para tocá-lo por aqui."
 }

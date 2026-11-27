@@ -1,28 +1,19 @@
 <template>
-  <input
-    type="color"
-    :value="modelValue || '#000000'"
-    class="format-field format-field--color"
-    @input="$emit('update:modelValue', $event.target.value)"
+  <ColorField
+    :model-value="modelValue || '#ffffff'"
+    size="sm"
+    show-hex
+    full-width
+    @update:model-value="$emit('update:modelValue', $event)"
   />
 </template>
 
 <script setup>
+import ColorField from "@/components/inputs/ColorField.vue";
+
 defineProps({
   modelValue: { type: [String, null], default: null },
   field: { type: Object, required: true },
 });
 defineEmits(["update:modelValue"]);
 </script>
-
-<style scoped>
-.format-field--color {
-  width: 100%;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--lj-surface-border);
-  border-radius: var(--lj-radius-xs);
-  cursor: pointer;
-  background: transparent;
-}
-</style>

@@ -66,6 +66,7 @@
             :list="slides"
             item-key="id"
             handle=".se-thumb"
+            :animation="150"
             :delay="300"
             :delay-on-touch-only="true"
             :touch-start-threshold="10"
@@ -188,20 +189,20 @@
             <LjIcon class="se-panel-chev" size="14" :icon="ICONS.UI.CHEVRON_DOWN" />
           </summary>
           <div class="se-panel-body">
-            <textarea
+            <LjTextarea
               v-model="activeSlide.letra"
               class="se-textarea"
-              rows="4"
+              :rows="4"
               :placeholder="tm('labels.main_text')"
-              @input="markDirty"
+              @update:model-value="markDirty"
             />
             <label class="se-field-label">{{ tm("labels.aux_text") }}</label>
-            <textarea
+            <LjTextarea
               v-model="activeSlide.letra_aux"
               class="se-textarea se-textarea--aux"
-              rows="2"
+              :rows="2"
               :placeholder="tm('labels.aux_text')"
-              @input="markDirty"
+              @update:model-value="markDirty"
             />
             <div class="se-row-inline">
               <label class="se-field-label">Alinhamento</label>
@@ -257,65 +258,70 @@
           <div class="se-panel-body">
             <div class="se-row-inline">
               <label class="se-field-label">{{ tm("labels.background") }}</label>
-              <input
+              <ColorField
                 v-model="activeSlide.cor_fundo"
-                type="color"
-                class="se-color-input"
-                :title="tm('labels.color')"
-                @change="markDirty"
+                size="sm"
+                :aria-label="tm('labels.color')"
+                @update:model-value="markDirty"
               />
             </div>
             <div class="se-row-inline">
               <label class="se-field-label">{{ tm("labels.main_text") }}</label>
-              <input
+              <ColorField
                 v-model="activeSlide.cor_letra"
-                type="color"
-                class="se-color-input"
-                :title="tm('labels.color')"
-                @change="markDirty"
+                size="sm"
+                :aria-label="tm('labels.color')"
+                @update:model-value="markDirty"
               />
-              <input
-                v-model.number="activeSlide.tamanho_letra"
+              <LjInput
+                :model-value="activeSlide.tamanho_letra"
                 type="number"
-                min="1"
-                max="100"
+                size="sm"
+                :min="1"
+                :max="100"
                 class="se-num-input"
-                :title="tm('labels.size')"
-                @change="markDirty"
+                :aria-label="tm('labels.size')"
+                @update:model-value="
+                  (v) => {
+                    activeSlide.tamanho_letra = Number(v);
+                    markDirty();
+                  }
+                "
               />
               <span class="se-suffix">%</span>
             </div>
             <div class="se-row-inline">
               <label class="se-field-label">{{ tm("labels.aux_text") }}</label>
-              <input
+              <ColorField
                 v-model="activeSlide.cor_letra_aux"
-                type="color"
-                class="se-color-input"
-                :title="tm('labels.color')"
-                @change="markDirty"
+                size="sm"
+                :aria-label="tm('labels.color')"
+                @update:model-value="markDirty"
               />
-              <input
-                v-model.number="activeSlide.tamanho_letra_aux"
+              <LjInput
+                :model-value="activeSlide.tamanho_letra_aux"
                 type="number"
-                min="1"
-                max="100"
+                size="sm"
+                :min="1"
+                :max="100"
                 class="se-num-input"
-                :title="tm('labels.size')"
-                @change="markDirty"
+                :aria-label="tm('labels.size')"
+                @update:model-value="
+                  (v) => {
+                    activeSlide.tamanho_letra_aux = Number(v);
+                    markDirty();
+                  }
+                "
               />
               <span class="se-suffix">%</span>
             </div>
-            <label class="se-checkbox-row">
-              <input
-                type="checkbox"
-                :checked="transparentBg"
-                @change="
-                  transparentBg = $event.target.checked;
-                  markDirty();
-                "
+            <div class="se-checkbox-row">
+              <LjCheckbox
+                v-model="transparentBg"
+                :label="tm('labels.transparent_bg')"
+                @update:model-value="markDirty"
               />
-              <span>{{ tm("labels.transparent_bg") }}</span>
-            </label>
+            </div>
             <p
               v-if="globalFormatOverridesExternal"
               class="se-hint"
@@ -355,13 +361,19 @@
 
             <div v-if="activeImageUrl" class="se-row-inline">
               <label class="se-field-label">{{ tm("labels.position") }}</label>
-              <select
-                v-model.number="activeSlide.imagem_posicao"
+              <LjSelect
+                :model-value="activeSlide.imagem_posicao"
+                :items="positionOptions"
+                size="sm"
                 class="se-select"
-                @change="markDirty"
-              >
-                <option v-for="p in 9" :key="p" :value="p">{{ tm(`positions.${p}`) }}</option>
-              </select>
+                :aria-label="tm('labels.position')"
+                @update:model-value="
+                  (v) => {
+                    activeSlide.imagem_posicao = Number(v);
+                    markDirty();
+                  }
+                "
+              />
             </div>
           </div>
         </details>
@@ -472,7 +484,8 @@
 </template>
 
 <script setup>
-import { LjIcon } from "@/components/ui";
+import { LjCheckbox, LjIcon, LjInput, LjSelect, LjTextarea } from "@/components/ui";
+import ColorField from "@/components/inputs/ColorField.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import draggable from "vuedraggable";
@@ -534,6 +547,10 @@ const audioCurrentTime = ref(0);
 const audioDuration = ref(0);
 
 const tm = (key) => moduleContainer.value?.tm(key) || key;
+
+const positionOptions = computed(() =>
+  Array.from({ length: 9 }, (_, i) => ({ value: i + 1, label: tm(`positions.${i + 1}`) }))
+);
 
 const activeSlide = computed(() => slides.value[current.value] || CustomSongs.newSlide());
 
@@ -1980,36 +1997,9 @@ function replicateText(scope) {
   max-width: 88px;
 }
 
-.se-color-input {
-  width: 32px;
-  height: 22px;
-  border: 1px solid var(--lj-surface-border);
-  border-radius: var(--lj-radius-xs);
-  background: none;
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-}
 .se-num-input {
-  width: 46px;
-  height: 22px;
-  padding: 0 4px;
-  font-size: 11px;
-  border: 1px solid var(--lj-surface-border);
-  border-radius: var(--lj-radius-xs);
-  background: transparent;
-  color: inherit;
-  outline: none;
-  text-align: right;
+  width: 64px;
   flex-shrink: 0;
-}
-.se-num-input::-webkit-inner-spin-button,
-.se-num-input::-webkit-outer-spin-button {
-  opacity: 0.5;
-  height: 18px;
-}
-.se-num-input:focus {
-  border-color: var(--lj-ui-accent);
 }
 .se-suffix {
   font-size: 10px;
@@ -2018,15 +2008,8 @@ function replicateText(scope) {
 .se-checkbox-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  cursor: pointer;
   min-height: 22px;
   padding-left: 2px;
-}
-.se-checkbox-row > input[type="checkbox"] {
-  margin: 0;
-  cursor: pointer;
 }
 
 /* Segmented control (alinhamento) */
@@ -2394,9 +2377,14 @@ function replicateText(scope) {
     outline-offset: 2px;
   }
 
-  .se-workspace--mobile .se-slide-list-add,
-  .se-workspace--mobile .se-player-play {
+  .se-workspace--mobile .se-slide-list-add {
     min-height: 44px;
+  }
+
+  /* Redondo: crescer só a altura deixava o botão oval. */
+  .se-workspace--mobile .se-player-play {
+    width: 44px;
+    height: 44px;
   }
 
   .se-workspace--mobile .se-preview-stage {

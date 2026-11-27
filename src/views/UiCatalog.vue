@@ -263,7 +263,7 @@
           </LjField>
           <LjField
             label="Música"
-            hint="Combobox filtra conforme você digita, só desenha as linhas visíveis (aguenta milhares) e mostra um texto secundário para separar títulos iguais. Por padrão a busca olha só o rótulo; `filter` troca a regra — aqui, casa também o CD."
+            hint="Combobox filtra conforme você digita, só desenha as linhas visíveis (aguenta milhares) e mostra um texto secundário para separar títulos iguais. Por padrão a busca olha só o rótulo; `filter` troca a regra — aqui, casa também o CD. Entrar no campo seleciona o texto do item escolhido: digitar já substitui. Com o campo focado, o clique posiciona o cursor."
           >
             <LjCombobox
               v-model="demoSong"
@@ -408,6 +408,57 @@
         </p>
         <div class="cat-stack">
           <LjButton size="sm" @click="drawerOpen = true">Abrir painel temporário</LjButton>
+        </div>
+      </section>
+
+      <!-- ══════════ Movimento ══════════ -->
+      <section class="cat__section">
+        <h2 class="cat__h2">Movimento</h2>
+        <p class="cat__lead">
+          O que muda de lugar usa mola, e mola só anda em
+          <code>transform</code>
+          . Cor, opacidade e sombra continuam em
+          <code>--lj-transition-*</code>
+          . A primeira linha é a curva comum, para comparar: todas partem juntas, e a diferença está
+          em como cada uma pousa. Clique várias vezes seguidas para ver a troca de direção no meio
+          do caminho.
+        </p>
+        <div class="cat-motion" :class="{ 'is-moved': motionMoved }">
+          <div v-for="m in MOTION_TOKENS" :key="m.token" class="cat-motion__lane">
+            <div class="cat-motion__label">
+              <code>{{ m.token }}</code>
+              <span>{{ m.usage }}</span>
+            </div>
+            <div class="cat-motion__track">
+              <span class="cat-motion__dot" :style="{ transition: `transform var(${m.token})` }" />
+            </div>
+          </div>
+        </div>
+        <div class="cat__row">
+          <LjButton size="sm" variant="primary" @click="motionMoved = !motionMoved">Mover</LjButton>
+          <LjSwitch v-model="motionSwitch" label="O pino usa --lj-motion-bounce" />
+        </div>
+
+        <h3 class="cat__h3">Troca de página</h3>
+        <p class="cat__lead">
+          Conteúdo que troca no mesmo lugar — módulo, painel de aba, tela do menu — recebe a classe
+          <code>lj-page-in</code>
+          : desliza com mola e esmaece. Quem conhece a ordem das abas publica
+          <code>--lj-nav-x</code>
+          (abas lado a lado) ou
+          <code>--lj-nav-y</code>
+          (itens empilhados) e a página entra pelo lado certo; sem direção, ela só esmaece.
+        </p>
+        <div class="cat__row">
+          <LjButton size="sm" @click="replayPage(-1)">Aba à esquerda</LjButton>
+          <LjButton size="sm" @click="replayPage(0)">Sem direção</LjButton>
+          <LjButton size="sm" @click="replayPage(1)">Aba à direita</LjButton>
+        </div>
+        <div class="cat-page" :style="{ '--lj-nav-x': pageDirection }">
+          <div :key="pageKey" class="cat-page__sheet lj-page-in">
+            <strong>Página {{ pageKey + 1 }}</strong>
+            <span>O conteúdo anterior some na hora; este entra por cima.</span>
+          </div>
         </div>
       </section>
 
@@ -590,6 +641,23 @@ const tab = ref("geral");
 const dialogOpen = ref(false);
 const toastOpen = ref(false);
 const drawerOpen = ref(false);
+
+// Demonstração de movimento: a mesma distância, um token por linha.
+const motionMoved = ref(false);
+const pageKey = ref(0);
+const pageDirection = ref(0);
+function replayPage(direction: number): void {
+  pageDirection.value = direction;
+  pageKey.value += 1;
+}
+const motionSwitch = ref(false);
+const MOTION_TOKENS = [
+  { token: "--lj-transition-normal", usage: "curva comum — só para comparar" },
+  { token: "--lj-motion-fast", usage: "menu, diálogo, paleta de comandos" },
+  { token: "--lj-motion-normal", usage: "painel lateral, drawer temporário, abas" },
+  { token: "--lj-reflow-enter", usage: "layout: rodapé do player, chat pinado, acordeão" },
+  { token: "--lj-motion-bounce", usage: "peça pequena e solta: switch, toast" },
+];
 const demoSlider = ref(32);
 const sanfona = ref<string | string[] | undefined>("hinario");
 
@@ -772,6 +840,85 @@ onMounted(() => {
   color: var(--lj-text-subtle);
   font-family: var(--lj-font-mono);
   font-size: var(--lj-text-xs);
+}
+
+/* Demonstração de movimento */
+.cat__h3 {
+  margin: var(--lj-space-7) 0 var(--lj-space-3);
+  font-size: var(--lj-text-md);
+  font-weight: var(--lj-weight-semibold);
+  color: var(--lj-text);
+}
+.cat-page {
+  margin-top: var(--lj-space-5);
+  padding: var(--lj-space-5);
+  overflow: hidden;
+  background: var(--lj-surface-bg);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-md);
+}
+.cat-page__sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-2);
+  padding: var(--lj-space-6);
+  background: var(--lj-surface-bg-subtle, var(--lj-surface-bg));
+  border-radius: var(--lj-radius-sm);
+  color: var(--lj-text);
+}
+.cat-motion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-4);
+  margin-bottom: var(--lj-space-6);
+}
+.cat-motion__lane {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--lj-space-6);
+}
+.cat-motion__label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-muted);
+}
+.cat-motion__label code {
+  color: var(--lj-text);
+}
+.cat-motion__track {
+  --cat-motion-travel: 260px;
+  position: relative;
+  width: calc(var(--cat-motion-travel) + 18px);
+  max-width: 100%;
+  height: 18px;
+  background: var(--lj-surface-bg-soft);
+  border: 1px solid var(--lj-surface-border);
+  border-radius: var(--lj-radius-pill);
+}
+.cat-motion__dot {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  background: var(--lj-ui-accent);
+  border-radius: 50%;
+}
+.cat-motion.is-moved .cat-motion__dot {
+  transform: translateX(var(--cat-motion-travel));
+}
+
+@media (max-width: 700px) {
+  .cat-motion__lane {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--lj-space-2);
+  }
+  .cat-motion__track {
+    --cat-motion-travel: 180px;
+  }
 }
 
 .cat-stack {

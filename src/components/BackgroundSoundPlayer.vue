@@ -27,6 +27,7 @@
           :variant="bg.repeat.value ? 'primary' : 'ghost'"
           class="bgs-footer-icon"
           icon-only
+          :title="$t('shell.background_sound.repeat')"
           @click="toggleRepeat"
         />
         <LjButton
@@ -35,7 +36,8 @@
           :icon="bg.isPlaying.value ? ICONS.PLAYER.PAUSE : ICONS.PLAYER.PLAY"
           class="bgs-footer-icon"
           icon-only
-          @click="bg.togglePlay(bg.fadeInMs.value, bg.fadeOutMs.value)"
+          :title="$t(`shell.background_sound.${bg.isPlaying.value ? 'pause' : 'play'}`)"
+          @click="bg.toggleWithFade()"
         />
         <LjButton
           variant="danger"
@@ -43,7 +45,8 @@
           :icon="ICONS.PLAYER.STOP"
           icon-only
           data-testid="bgs-stop-fade"
-          @click="bg.stop(bg.fadeOutMs.value)"
+          :title="$t('shell.background_sound.stop')"
+          @click="bg.stopWithFade()"
         />
         <LjButton
           variant="danger"
@@ -51,6 +54,7 @@
           :icon="ICONS.PLAYER.STOP_NOW"
           icon-only
           data-testid="bgs-stop-now"
+          :title="$t('shell.background_sound.stop_immediately')"
           @click="bg.stop(0)"
         />
       </div>

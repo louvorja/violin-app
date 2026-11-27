@@ -1,22 +1,24 @@
 <template>
-  <select
-    :value="modelValue || ''"
-    class="format-field format-field--input"
-    @change="$emit('update:modelValue', $event.target.value)"
+  <LjSelect
+    :model-value="modelValue || ''"
+    :items="sortedFonts"
+    item-value="family"
+    item-label="name"
+    size="sm"
+    class="format-field"
+    @update:model-value="$emit('update:modelValue', String($event))"
   >
-    <option
-      v-for="f in sortedFonts"
-      :key="f.family"
-      :value="f.family"
-      :style="{ fontFamily: fontPreview(f.family) }"
-    >
-      {{ f.name }}
-    </option>
-  </select>
+    <template #item="{ item }">
+      <span class="format-field__font-preview" :style="{ fontFamily: fontPreview(item.family) }">
+        {{ item.name }}
+      </span>
+    </template>
+  </LjSelect>
 </template>
 
 <script setup>
 import { computed } from "vue";
+import LjSelect from "@/components/ui/LjSelect.vue";
 import { Fonts, resolveFont } from "@/config/Fonts";
 
 defineProps({
@@ -34,13 +36,11 @@ function fontPreview(family) {
 
 <style scoped>
 .format-field {
-  font-size: 12px;
-  padding: 4px 6px;
-  border: 1px solid var(--lj-surface-border);
-  border-radius: var(--lj-radius-xs);
-  background: var(--lj-surface-bg);
-  color: inherit;
   width: 100%;
-  box-sizing: border-box;
+}
+
+.format-field__font-preview {
+  display: inline-block;
+  line-height: 1.35;
 }
 </style>

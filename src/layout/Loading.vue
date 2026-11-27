@@ -101,13 +101,29 @@ const message = computed(() => {
   color: var(--lj-ui-accent);
 }
 
-.loading-enter-active,
-.loading-leave-active {
+.loading-enter-active {
   transition: opacity var(--lj-transition-normal);
+}
+.loading-leave-active {
+  transition: opacity var(--lj-exit-fast);
+}
+
+.loading-enter-active .loading {
+  transition: transform var(--lj-motion-fast);
+}
+.loading-leave-active .loading {
+  transition: transform var(--lj-exit-fast);
 }
 
 .loading-enter-from,
 .loading-leave-to {
   opacity: 0;
+}
+
+.loading-enter-from .loading {
+  transform: scale(var(--lj-enter-dialog-scale));
+}
+.loading-leave-to .loading {
+  transform: scale(0.97);
 }
 </style>

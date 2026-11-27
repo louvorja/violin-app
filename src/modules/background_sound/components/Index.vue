@@ -230,6 +230,7 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useViewport } from "@/composables/useViewport";
 import { module as manifest } from "../manifest";
+import { RIBBON_ACTION, runRibbonAction, type RibbonActionHandlers } from "../ribbonActions";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
@@ -248,6 +249,7 @@ import {
 } from "@/helpers/LocalFailureNotice";
 import { localPathOf } from "@/helpers/FilePath";
 import { resolveBackgroundSoundPath } from "@/helpers/BackgroundSoundPath";
+import { playDefaultBackgroundSound } from "@/helpers/BackgroundSoundPlayback";
 import { ICONS } from "@/config/Icons";
 import {
   LjButton,
@@ -264,7 +266,7 @@ import CategoryManagerDialog, { CategoryFileData } from "@/components/CategoryMa
 import { nextCategorySelection } from "@/helpers/CategorySelection";
 import $idb from "@/helpers/IndexedDB";
 import { DB_TABLE } from "@/constants/DbTables";
-import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
+import { getSetting } from "@/helpers/SettingsStorage";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { MediaFile } from "@/types/Media";
 import {
@@ -464,39 +466,6 @@ async function loadSettings(): Promise<void> {
   cachedSettings = s ? { ...BGS_DEFAULTS, ...s } : { ...BGS_DEFAULTS };
 }
 
-async function saveSettings(): Promise<void> {
-  /*
-   * `saveSetting` é `$idb.put` (substituição, não merge): o `autoPause` vem do
-   * player e não do cache local, senão um ajuste de fade daqui regravaria por
-   * cima da opção que o operador acabou de ligar na ribbon.
-   */
-  await saveSetting({ id: SETTINGS_ID, ...cachedSettings, autoPause: bg.autoPause.value });
-  bg.fadeInMs.value = cachedSettings.fadeIn;
-  bg.fadeOutMs.value = cachedSettings.fadeOut;
-}
-
-const fadeInDuration = computed({
-  get: () => cachedSettings.fadeIn,
-  set: (v: number) => {
-    cachedSettings.fadeIn = v;
-    saveSettings();
-  },
-});
-const fadeOutDuration = computed({
-  get: () => cachedSettings.fadeOut,
-  set: (v: number) => {
-    cachedSettings.fadeOut = v;
-    saveSettings();
-  },
-});
-const repeatSetting = computed<boolean>({
-  get: () => cachedSettings.repeat,
-  set: (v: boolean) => {
-    cachedSettings.repeat = v;
-    saveSettings();
-    bg.repeat.value = v;
-  },
-});
 const isMuted = ref(false);
 const previousVolume = ref(50);
 
@@ -1001,7 +970,7 @@ function isCurrentPlaying(fileId: string): boolean {
 
 function toggleFile(file: MediaFile): void {
   if (bg.currentFile.value?.id === file.id && bg.isPlaying.value) {
-    bg.togglePlay(fadeInDuration.value, fadeOutDuration.value);
+    bg.toggleWithFade();
   } else {
     playFile(file);
   }
@@ -1009,7 +978,7 @@ function toggleFile(file: MediaFile): void {
 
 function playFile(file: MediaFile): void {
   const path = resolveFilePath(file);
-  bg.playFile({ ...file, path }, fadeInDuration.value);
+  bg.playFile({ ...file, path }, bg.fadeInMs.value);
 }
 
 function resolveFilePath(file: MediaFile): string {
@@ -1041,12 +1010,22 @@ function playRandomFromVisible(): void {
   playFile(files[idx].file);
 }
 
+/** "Tocar" da guia: alterna a faixa carregada; sem nenhuma, começa pelo som padrão. */
 function toggleCurrent(): void {
-  bg.togglePlay(fadeInDuration.value, fadeOutDuration.value);
+  if (bg.currentFile.value) {
+    bg.toggleWithFade();
+    return;
+  }
+  void playDefault();
+}
+
+async function playDefault(): Promise<void> {
+  const outcome = await playDefaultBackgroundSound();
+  if (outcome === "missing") $snackbar.info(tm("no_default_sound"));
 }
 
 function stop(): void {
-  bg.stop(fadeOutDuration.value);
+  bg.stopWithFade();
 }
 
 function stopImmediately(): void {
@@ -1091,29 +1070,21 @@ function toggleMute(): void {
 /*  Ribbon actions                                                     */
 /* ------------------------------------------------------------------ */
 
+const ribbonHandlers: RibbonActionHandlers = {
+  [RIBBON_ACTION.PLAY]: toggleCurrent,
+  [RIBBON_ACTION.STOP]: stop,
+  [RIBBON_ACTION.STOP_IMMEDIATELY]: stopImmediately,
+  [RIBBON_ACTION.PLAY_RANDOM]: playRandomFromVisible,
+  [RIBBON_ACTION.ADD_AUDIO]: openAddAudioMenu,
+  [RIBBON_ACTION.MANAGE_CATEGORIES]: () => {
+    showManageDialog.value = true;
+  },
+};
+
 useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload) => {
   const data = payload as { module?: string; action?: string } | null;
   if (data?.module !== ModuleEnum.BACKGROUND_SOUND) return;
-  switch (data.action) {
-    case "play":
-      toggleCurrent();
-      break;
-    case "stop":
-      stop();
-      break;
-    case "stop_immediately":
-      stopImmediately();
-      break;
-    case "random":
-      if (visibleFiles.value.length) playRandomFromVisible();
-      break;
-    case "add_audio":
-      openAddAudioMenu();
-      break;
-    case "manage_categories":
-      showManageDialog.value = true;
-      break;
-  }
+  runRibbonAction(data.action, ribbonHandlers);
 });
 
 /* ------------------------------------------------------------------ */

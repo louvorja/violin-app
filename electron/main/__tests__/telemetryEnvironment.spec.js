@@ -69,6 +69,29 @@ describe("telemetry environment nativo", () => {
     expect(await collectSystemInfo(options)).not.toHaveProperty("linux");
   });
 
+  it.each([
+    ["appimage", { APPIMAGE: "/home/igreja/LouvorJA.AppImage" }, "deb"],
+    ["deb", {}, "deb\n"],
+    ["rpm", {}, "rpm"],
+    ["pacman", {}, "pacman"],
+    ["other", {}, "snap"],
+    ["other", {}, new Error("ENOENT")],
+  ])("identifica o pacote Linux instalado (%s)", async (expected, env, packageType) => {
+    const readPackageType = vi.fn(async () => {
+      if (packageType instanceof Error) throw packageType;
+      return packageType;
+    });
+    const result = await collectSystemInfo({
+      processInfo: { platform: "linux", arch: "x64", env, resourcesPath: "/opt/LouvorJA Violin/resources" },
+      osInfo,
+      readRelease: async () => "ID=debian",
+      readPackageType,
+    });
+    expect(result.linuxPackage).toBe(expected);
+    if (expected !== "appimage")
+      expect(readPackageType).toHaveBeenCalledWith("/opt/LouvorJA Violin/resources/package-type");
+  });
+
   it("não executa expansões, não inclui campos arbitrários e limita o arquivo", () => {
     expect(
       parseOsRelease(

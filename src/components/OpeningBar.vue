@@ -87,16 +87,26 @@ const visible = computed(() => !!opening.value && !toastShown.value);
   outline-offset: 1px;
 }
 
-.opening-enter-active,
-.opening-leave-active {
+.opening-enter-active {
   transition:
-    opacity var(--lj-transition-fast),
-    transform var(--lj-transition-fast);
+    opacity var(--lj-transition-normal),
+    transform var(--lj-motion-fast);
 }
 
-.opening-enter-from,
+.opening-leave-active {
+  transition:
+    opacity var(--lj-exit-fast),
+    transform var(--lj-exit-fast);
+}
+
+.opening-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(var(--lj-enter-edge-shift))
+    scale(var(--lj-enter-layer-scale));
+}
+
 .opening-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(8px);
+  transform: translateX(-50%) translateY(6px) scale(0.98);
 }
 </style>

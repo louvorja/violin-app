@@ -31,6 +31,7 @@ function mountMirror(sources: string[]) {
   );
   return {
     list,
+    color: (source: string) => api.mirrorColor(source),
     text: (source: string) => api.mirrorText(source),
     lines: () => wrapper.findAll("p").map((line) => line.text()),
   };
@@ -85,6 +86,28 @@ describe("espelho de módulo antes de o módulo ser aberto (#58)", () => {
     await nextTick();
 
     expect(lines()).toEqual(["7", "09:25:07"]);
+  });
+
+  it("acompanha a cor de aviso/alerta do módulo e a solta quando o aviso acaba (#80)", async () => {
+    const { color } = mountMirror([ModuleEnum.TIMER_WORSHIP, ModuleEnum.STOPWATCH]);
+    const authority = new ModulePresentationAuthority();
+    const publish = (value: Record<string, unknown>) =>
+      Broadcast.send(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, authority.publish(value));
+
+    expect(color(ModuleEnum.TIMER_WORSHIP)).toBe("");
+
+    publish({ module: ModuleEnum.TIMER_WORSHIP, text: "00:00:59", active: true, color: "#F59E0B" });
+    await nextTick();
+    expect(color(ModuleEnum.TIMER_WORSHIP)).toBe("#F59E0B");
+    expect(color(ModuleEnum.STOPWATCH)).toBe("");
+
+    publish({ module: ModuleEnum.TIMER_WORSHIP, text: "-00:00:01", active: true, color: "#E74C3C" });
+    await nextTick();
+    expect(color(ModuleEnum.TIMER_WORSHIP)).toBe("#E74C3C");
+
+    publish({ module: ModuleEnum.TIMER_WORSHIP, text: "00:10:00", active: true });
+    await nextTick();
+    expect(color(ModuleEnum.TIMER_WORSHIP)).toBe("");
   });
 
   it("pede uma vez à janela principal o último valor de cada módulo espelhado", async () => {

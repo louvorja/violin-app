@@ -53,52 +53,50 @@
         />
       </div>
 
-      <div class="opt-row">
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="
-              getUserData<boolean>(KEYS.SHELL.LITURGY_VISIBLE, liturgySidebarDefault()) !== false
-            "
-            @change="saveUserData(KEYS.SHELL.LITURGY_VISIBLE, $c($event))"
-          />
-          <span>{{ $t("options.general.show_liturgy_sidebar") }}</span>
+      <div v-if="supportsWindowAnimation" class="opt-row">
+        <label class="opt-label" for="opt-window-animation">
+          {{ $t("options.general.window_animation") }}
         </label>
+        <LjSelect
+          id="opt-window-animation"
+          :items="windowAnimationOptions"
+          :model-value="windowAnimation"
+          @update:model-value="saveUserData(KEYS.OPTIONS.WINDOW_ANIMATION, String($event))"
+        />
       </div>
 
-      <div v-if="isDesktop" class="opt-row">
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="getUserData(KEYS.OPTIONS.START_WITH_OS, false)"
-            @change="toggleStartWithOS($c($event))"
-          />
-          <span>{{ $t("options.general.start_with_os") }}</span>
+      <div v-if="supportsWindowAnimation && windowAnimation === 'fade'" class="opt-row">
+        <label class="opt-label" for="opt-window-animation-duration">
+          {{ $t("options.general.window_animation_duration") }}
         </label>
+        <div class="opt-range-group">
+          <input
+            id="opt-window-animation-duration"
+            type="range"
+            min="100"
+            max="800"
+            step="20"
+            class="opt-range"
+            :value="windowAnimationDuration"
+            @input="saveUserData(KEYS.OPTIONS.WINDOW_ANIMATION_DURATION, Number($v($event)))"
+          />
+          <span class="opt-range-val">{{ windowAnimationDuration }}ms</span>
+        </div>
       </div>
 
-      <div class="opt-row">
-        <label class="opt-checkbox">
-          <input
-            type="checkbox"
-            :checked="getUserData<boolean>(KEYS.OPTIONS.SHOW_STARTUP_TIPS, true) !== false"
-            @change="saveUserData(KEYS.OPTIONS.SHOW_STARTUP_TIPS, $c($event))"
-          />
-          <span>{{ $t("options.general.show_startup_tips") }}</span>
-        </label>
-      </div>
       <div class="opt-bg">
         <div class="opt-bg-fields">
           <div class="opt-row">
             <label class="opt-label" for="opt-bg-color">
               {{ $t("options.background.color") }}
             </label>
-            <input
+            <ColorField
               id="opt-bg-color"
-              type="color"
-              class="opt-color"
-              :value="bgColor"
-              @input="onBgColorChange"
+              :model-value="bgColor"
+              :aria-label="$t('options.background.color')"
+              size="sm"
+              show-hex
+              @update:model-value="onBgColorChange"
             />
           </div>
 
@@ -137,8 +135,8 @@
           <MonitorShape
             :width="previewMonitorW"
             :height="previewMonitorH"
-            :height-base="130"
-            :max-width="280"
+            :height-base="108"
+            :max-width="260"
             :remove="!!currentBgImage"
             :remove-label="$t('options.slides.remove_image')"
             @remove="removeBgImage"
@@ -154,6 +152,37 @@
             </div>
           </MonitorShape>
         </div>
+      </div>
+
+      <div class="opt-general-checks">
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="
+              getUserData<boolean>(KEYS.SHELL.LITURGY_VISIBLE, liturgySidebarDefault()) !== false
+            "
+            @change="saveUserData(KEYS.SHELL.LITURGY_VISIBLE, $c($event))"
+          />
+          <span>{{ $t("options.general.show_liturgy_sidebar") }}</span>
+        </label>
+
+        <label class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="getUserData<boolean>(KEYS.OPTIONS.SHOW_STARTUP_TIPS, true) !== false"
+            @change="saveUserData(KEYS.OPTIONS.SHOW_STARTUP_TIPS, $c($event))"
+          />
+          <span>{{ $t("options.general.show_startup_tips") }}</span>
+        </label>
+
+        <label v-if="isDesktop" class="opt-checkbox">
+          <input
+            type="checkbox"
+            :checked="getUserData(KEYS.OPTIONS.START_WITH_OS, false)"
+            @change="toggleStartWithOS($c($event))"
+          />
+          <span>{{ $t("options.general.start_with_os") }}</span>
+        </label>
       </div>
     </section>
 
@@ -510,47 +539,43 @@
               <tr>
                 <th scope="row">{{ $t("options.slides.fmt_attr_color") }}</th>
                 <td>
-                  <input
-                    type="color"
-                    class="opt-color"
+                  <ColorField
+                    size="sm"
                     :aria-label="`${$t('options.slides.fmt_el_title')} — ${$t('options.slides.fmt_attr_color')}`"
-                    :value="
+                    :model-value="
                       getUserData(KEYS.OPTIONS.SLIDE.TITLE_COLOR, SLIDE_STYLE_DEFAULT.color_cover)
                     "
-                    @input="saveUserData(KEYS.OPTIONS.SLIDE.TITLE_COLOR, $v($event))"
+                    @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.TITLE_COLOR, $event)"
                   />
                 </td>
                 <td>
-                  <input
-                    type="color"
-                    class="opt-color"
+                  <ColorField
+                    size="sm"
                     :aria-label="`${$t('options.slides.fmt_el_lyric')} — ${$t('options.slides.fmt_attr_color')}`"
-                    :value="
+                    :model-value="
                       getUserData(KEYS.OPTIONS.SLIDE.TEXT_COLOR, SLIDE_STYLE_DEFAULT.color_lyric)
                     "
-                    @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_COLOR, $v($event))"
+                    @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_COLOR, $event)"
                   />
                 </td>
                 <td>
-                  <input
-                    type="color"
-                    class="opt-color"
+                  <ColorField
+                    size="sm"
                     :aria-label="`${$t('options.slides.fmt_el_repeat')} — ${$t('options.slides.fmt_attr_color')}`"
-                    :value="
+                    :model-value="
                       getUserData(KEYS.OPTIONS.SLIDE.REPEAT_COLOR, SLIDE_STYLE_DEFAULT.color_repeat)
                     "
-                    @input="saveUserData(KEYS.OPTIONS.SLIDE.REPEAT_COLOR, $v($event))"
+                    @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.REPEAT_COLOR, $event)"
                   />
                 </td>
                 <td>
-                  <input
-                    type="color"
-                    class="opt-color"
+                  <ColorField
+                    size="sm"
                     :aria-label="`${$t('options.slides.fmt_el_aux')} — ${$t('options.slides.fmt_attr_color')}`"
-                    :value="
+                    :model-value="
                       getUserData(KEYS.OPTIONS.SLIDE.AUX_COLOR, SLIDE_STYLE_DEFAULT.color_aux)
                     "
-                    @input="saveUserData(KEYS.OPTIONS.SLIDE.AUX_COLOR, $v($event))"
+                    @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.AUX_COLOR, $event)"
                   />
                 </td>
               </tr>
@@ -679,17 +704,17 @@
              tudo, então nenhum controle existente muda de lugar quando um efeito é
              ligado; a primeira etiqueta da linha ("Cor Sombra:") é quem a nomeia. -->
         <div v-if="getUserData(KEYS.OPTIONS.SLIDE.SHADOW_ENABLED, false)" class="fmt-params">
-          <label class="fmt-field">
+          <div class="fmt-field">
             <span class="opt-format-label">{{ $t("options.slides.shadow_color") }}</span>
-            <input
-              type="color"
-              class="opt-color"
-              :value="
+            <ColorField
+              size="sm"
+              :aria-label="$t('options.slides.shadow_color')"
+              :model-value="
                 getUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, SLIDE_STYLE_DEFAULT.shadow_color)
               "
-              @input="saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, $v($event))"
+              @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.SHADOW_COLOR, $event)"
             />
-          </label>
+          </div>
           <label class="fmt-field">
             <span class="opt-format-label">{{ $t("options.slides.shadow_blur") }}</span>
             <input
@@ -738,20 +763,20 @@
         </div>
 
         <div v-if="getUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_ENABLED, false)" class="fmt-params">
-          <label class="fmt-field">
+          <div class="fmt-field">
             <span class="opt-format-label">{{ $t("options.slides.text_border_color") }}</span>
-            <input
-              type="color"
-              class="opt-color"
-              :value="
+            <ColorField
+              size="sm"
+              :aria-label="$t('options.slides.text_border_color')"
+              :model-value="
                 getUserData(
                   KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR,
                   SLIDE_STYLE_DEFAULT.text_border_color
                 )
               "
-              @input="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR, $v($event))"
+              @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.TEXT_BORDER_COLOR, $event)"
             />
-          </label>
+          </div>
           <label class="fmt-field">
             <span class="opt-format-label">{{ $t("options.slides.text_border_width") }}</span>
             <input
@@ -954,15 +979,15 @@
             />
             <span>{{ $t("options.slides.bg_transparent") }}</span>
           </label>
-          <label class="opt-format-field">
+          <div class="opt-format-field">
             <span class="opt-format-label">{{ $t("options.slides.bg_color") }}</span>
-            <input
-              type="color"
-              class="opt-color"
-              :value="getUserData(KEYS.OPTIONS.SLIDE.BG_COLOR, '#000000')"
-              @input="saveUserData(KEYS.OPTIONS.SLIDE.BG_COLOR, $v($event))"
+            <ColorField
+              size="sm"
+              :aria-label="$t('options.slides.bg_color')"
+              :model-value="getUserData(KEYS.OPTIONS.SLIDE.BG_COLOR, '#000000')"
+              @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.BG_COLOR, $event)"
             />
-          </label>
+          </div>
           <label class="opt-format-field opt-format-field--grow">
             <span class="opt-format-label">{{ $t("options.slides.bg_image") }}</span>
             <div class="opt-bg-pick">
@@ -1040,15 +1065,15 @@
         <!-- Parte superior (slide atual) -->
         <div class="opt-format-row">
           <span class="opt-format-group-label">{{ $t("options.slides.return_bg_top") }}</span>
-          <label class="opt-format-field">
+          <div class="opt-format-field">
             <span class="opt-format-label">{{ $t("options.slides.bg_color") }}</span>
-            <input
-              type="color"
-              class="opt-color"
-              :value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_COLOR, '#1a201a')"
-              @input="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_COLOR, $v($event))"
+            <ColorField
+              size="sm"
+              :aria-label="$t('options.slides.bg_color')"
+              :model-value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_COLOR, '#1a201a')"
+              @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_TOP_COLOR, $event)"
             />
-          </label>
+          </div>
           <label class="opt-format-field opt-format-field--grow">
             <span class="opt-format-label">{{ $t("options.slides.bg_image") }}</span>
             <div class="opt-bg-pick">
@@ -1114,15 +1139,15 @@
         <!-- Parte inferior (próxima frase) -->
         <div class="opt-format-row">
           <span class="opt-format-group-label">{{ $t("options.slides.return_bg_bottom") }}</span>
-          <label class="opt-format-field">
+          <div class="opt-format-field">
             <span class="opt-format-label">{{ $t("options.slides.bg_color") }}</span>
-            <input
-              type="color"
-              class="opt-color"
-              :value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_COLOR, '#1d251d')"
-              @input="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_COLOR, $v($event))"
+            <ColorField
+              size="sm"
+              :aria-label="$t('options.slides.bg_color')"
+              :model-value="getUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_COLOR, '#1d251d')"
+              @update:model-value="saveUserData(KEYS.OPTIONS.SLIDE.RETURN_BG_BOTTOM_COLOR, $event)"
             />
-          </label>
+          </div>
           <label class="opt-format-field opt-format-field--grow">
             <span class="opt-format-label">{{ $t("options.slides.bg_image") }}</span>
             <div class="opt-bg-pick">
@@ -1526,12 +1551,13 @@
           <label class="opt-label" for="opt-fp-bg-color">
             {{ $t("options.background.color") }}
           </label>
-          <input
+          <ColorField
             id="opt-fp-bg-color"
-            type="color"
-            class="opt-color"
-            :value="fileProjBgColor"
-            @input="onFileProjBgColor"
+            size="sm"
+            show-hex
+            :aria-label="$t('options.background.color')"
+            :model-value="fileProjBgColor"
+            @update:model-value="onFileProjBgColor"
           />
         </div>
 
@@ -1704,6 +1730,7 @@ import { useDisplays } from "@/composables/useDisplays";
 import WebDisplays from "@/helpers/projection/WebDisplays";
 import MonitorSelect from "@/components/inputs/MonitorSelect.vue";
 import SelectFont from "@/components/inputs/SelectFont.vue";
+import ColorField from "@/components/inputs/ColorField.vue";
 import MonitorShape from "@/components/MonitorShape.vue";
 import $userdata from "@/helpers/UserData";
 import Platform from "@/helpers/Platform";
@@ -1868,6 +1895,24 @@ onMounted(() => {
     .catch(() => {});
 });
 
+const supportsWindowAnimation = computed(() => isDesktop.value && Platform.platform !== "linux");
+
+const windowAnimation = computed(() => {
+  const value = getUserData<string>(KEYS.OPTIONS.WINDOW_ANIMATION, "fade");
+  return value === "none" || value === "system" ? value : "fade";
+});
+
+const windowAnimationDuration = computed(() => {
+  const raw = Number(getUserData<number>(KEYS.OPTIONS.WINDOW_ANIMATION_DURATION, 260));
+  return Number.isFinite(raw) && raw > 0 ? Math.round(Math.min(800, Math.max(100, raw))) : 260;
+});
+
+const windowAnimationOptions = computed(() => [
+  { value: "fade", label: t("options.general.window_animation_fade") },
+  { value: "none", label: t("options.general.window_animation_none") },
+  { value: "system", label: t("options.general.window_animation_system") },
+]);
+
 const opcoesPosicaoFundo = computed(() => opcoesDeAjuste(t));
 
 const opcoesAlinhamento = computed(() => [
@@ -2010,8 +2055,8 @@ function notifyViews(): void {
   Broadcast.send(BROADCAST_TYPE.WALLPAPER_UPDATE, {});
 }
 
-function onBgColorChange(e: Event): void {
-  bgColor.value = (e.target as HTMLInputElement).value;
+function onBgColorChange(hex: string): void {
+  bgColor.value = hex;
   scheduleSave();
 }
 
@@ -2530,8 +2575,8 @@ function scheduleFileProjSave(): void {
   }, 300);
 }
 
-function onFileProjBgColor(e: Event): void {
-  fileProjBgColor.value = (e.target as HTMLInputElement).value;
+function onFileProjBgColor(hex: string): void {
+  fileProjBgColor.value = hex;
   // Sem o debounce, arrastar no seletor de cor gravava no IndexedDB e disparava
   // um broadcast por evento de movimento — com a projeção aberta ao vivo.
   scheduleFileProjSave();

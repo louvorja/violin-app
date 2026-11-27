@@ -74,19 +74,28 @@ export function overlayImageStyle(
   };
 }
 
+/** Cor de aviso/alerta que o módulo espelhado publicou; vazio quando não há. */
+export type OverlayMirrorColor = (_source: string | null | undefined) => string;
+
+/**
+ * `mirrorColor` só vale para o espelho de módulo: o aviso/alerta do temporizador
+ * manda mais que a cor da sobreposição, como já manda na projeção do módulo.
+ */
 export function overlayTextStyle(
   slot: OverlaySlot,
-  units: OverlayUnits = VIEWPORT_UNITS
+  units: OverlayUnits = VIEWPORT_UNITS,
+  mirrorColor?: OverlayMirrorColor
 ): Record<string, string> {
   const s = slot.style;
   const rawSize = Number(s.font_size);
   const size = Number.isFinite(rawSize)
     ? Math.min(20, Math.max(0, rawSize))
     : OVERLAY_STYLE_DEFAULTS.font_size;
+  const alertColor = slot.type === "module_mirror" ? mirrorColor?.(slot.source_module) : "";
   return {
     fontFamily: resolveFont(s.font, FONT.PROJECTION.FALLBACK),
     fontSize: `${size}${units.h}`,
-    color: s.color || "#FFFFFF",
+    color: alertColor || s.color || "#FFFFFF",
     textAlign: s.text_align || "center",
     lineHeight: "1.3",
     fontWeight: "600",

@@ -7,6 +7,7 @@ import type { LiturgyItem } from "@/types/Liturgy";
 import type { BiblePassage } from "@/types/Bible";
 import type { LiturgyLibraryItem } from "@/types/LiturgyLibrary";
 import { agendaParaPersistir, lerHorario } from "../agenda";
+import { horarioDoTitulo } from "../titleTime";
 
 const TABLE = DB_TABLE.LITURGY_LIBRARY;
 const DEFAULT_COLOR = "#00004F";
@@ -92,6 +93,17 @@ function _normalizeLiturgyItem(raw: unknown): LiturgyItem | null {
       ? r.id
       : (crypto.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
 
+  const itemText = typeof r.item === "string" ? r.item : "";
+  const blocoId = typeof r.blocoId === "string" ? r.blocoId : undefined;
+  const rawTime = typeof r.time === "string" ? lerHorario(r.time) : "";
+  const rawTimeMode = r.time_mode === "manual" || r.time_mode === "auto" ? r.time_mode : undefined;
+  // Liturgias importadas sem campo `time` (ex.: `.ja`/`.llja` do Classic) costumam
+  // trazer o horário no texto do título ("18h55: Cronometro"). Só inferimos quando
+  // não há escolha explícita de `time_mode` (um export do Violin com `"auto"` é preservado).
+  const inferredTime = !rawTime && !rawTimeMode && !blocoId ? horarioDoTitulo(itemText) : "";
+  const time = rawTime || inferredTime;
+  const timeMode = rawTimeMode ?? (inferredTime ? "manual" : undefined);
+
   const passage = _normalizeBiblePassage(r.bible);
   // Um item "biblia" sem trecho projetável não é Bíblia: vira anotação, em vez
   // de falhar na hora de ir ao ar. O contrário também vale: `bible` só fica no
@@ -101,9 +113,7 @@ function _normalizeLiturgyItem(raw: unknown): LiturgyItem | null {
       ? LiturgyItemTypeEnum.ANOTACAO
       : declarado;
   const bible = tipo === LiturgyItemTypeEnum.BIBLIA ? passage : undefined;
-  const declaredItem = typeof r.item === "string" ? r.item : "";
-  const item =
-    declaredItem.trim() !== "" || !bible ? declaredItem : bible.reference;
+  const item = itemText.trim() !== "" || !bible ? itemText : bible.reference;
 
   return {
     id,
@@ -127,10 +137,10 @@ function _normalizeLiturgyItem(raw: unknown): LiturgyItem | null {
           Number.isFinite(Number(r.id_music))
         ? { id_music: Number(r.id_music) }
         : {}),
-    ...(typeof r.time === "string" ? { time: lerHorario(r.time) } : {}),
-    ...(r.time_mode === "manual" || r.time_mode === "auto" ? { time_mode: r.time_mode } : {}),
+    ...(typeof r.time === "string" || inferredTime ? { time } : {}),
+    ...(timeMode ? { time_mode: timeMode } : {}),
     ...(typeof r.checked === "string" ? { checked: r.checked } : {}),
-    ...(typeof r.blocoId === "string" ? { blocoId: r.blocoId } : {}),
+    ...(blocoId !== undefined ? { blocoId } : {}),
     ...(typeof r.ref_id === "string" ? { ref_id: r.ref_id } : {}),
     ...(Array.isArray(r.anuncios_ids)
       ? { anuncios_ids: r.anuncios_ids.filter((id): id is string => typeof id === "string") }

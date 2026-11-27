@@ -59,36 +59,41 @@
                 </button>
               </nav>
 
-              <div class="app-menu-content">
-                <Transition name="app-menu-screen" mode="out-in">
-                  <div :key="activeItem?.id">
-                    <div
-                      v-if="!renderedItem"
-                      class="app-menu-content-placeholder"
-                      aria-busy="true"
-                    ></div>
+              <div
+                class="app-menu-content"
+                :style="{ '--lj-nav-y': screenDirection, '--lj-nav-x': 0 }"
+              >
+                <div class="app-menu-screen-clip">
+                  <Transition name="app-menu-screen" mode="out-in">
+                    <div :key="activeItem?.id">
+                      <div
+                        v-if="!renderedItem"
+                        class="app-menu-content-placeholder"
+                        aria-busy="true"
+                      ></div>
 
-                    <!-- Painéis específicos por item -->
-                    <AppMenuOpcoes
-                      v-if="renderedItem?.id === 'settings'"
-                      :initial-tab="optionsTab"
-                    />
-                    <AppMenuSobre v-else-if="renderedItem?.id === 'about'" />
-                    <AppMenuTransmitir v-else-if="renderedItem?.id === 'transmission'" />
-                    <AppMenuSincronizar v-else-if="renderedItem?.id === 'sync'" />
-                    <AppMenuIntegracoes v-else-if="renderedItem?.id === 'integrations'" />
-                    <AppMenuAcessibilidade v-else-if="renderedItem?.id === 'accessibility'" />
-                    <AppMenuAtualizacoes v-else-if="renderedItem?.id === 'updates'" />
-                    <AppMenuAbrirArquivo v-else-if="renderedItem?.id === 'open_file'" />
-                    <AppMenuAlbums v-else-if="renderedItem?.id === 'albums'" />
-                    <AppMenuLicencas v-else-if="renderedItem?.id === 'licenses'" />
-                    <AppMenuDev v-else-if="renderedItem?.id === 'dev'" />
+                      <!-- Painéis específicos por item -->
+                      <AppMenuOpcoes
+                        v-if="renderedItem?.id === 'settings'"
+                        :initial-tab="optionsTab"
+                      />
+                      <AppMenuSobre v-else-if="renderedItem?.id === 'about'" />
+                      <AppMenuTransmitir v-else-if="renderedItem?.id === 'transmission'" />
+                      <AppMenuSincronizar v-else-if="renderedItem?.id === 'sync'" />
+                      <AppMenuIntegracoes v-else-if="renderedItem?.id === 'integrations'" />
+                      <AppMenuAcessibilidade v-else-if="renderedItem?.id === 'accessibility'" />
+                      <AppMenuAtualizacoes v-else-if="renderedItem?.id === 'updates'" />
+                      <AppMenuAbrirArquivo v-else-if="renderedItem?.id === 'open_file'" />
+                      <AppMenuAlbums v-else-if="renderedItem?.id === 'albums'" />
+                      <AppMenuLicencas v-else-if="renderedItem?.id === 'licenses'" />
+                      <AppMenuDev v-else-if="renderedItem?.id === 'dev'" />
 
-                    <p v-else-if="renderedItem" class="app-menu-content-placeholder">
-                      {{ $t("shell.appmenu_content_placeholder") }}
-                    </p>
-                  </div>
-                </Transition>
+                      <p v-else-if="renderedItem" class="app-menu-content-placeholder">
+                        {{ $t("shell.appmenu_content_placeholder") }}
+                      </p>
+                    </div>
+                  </Transition>
+                </div>
               </div>
             </div>
           </div>
@@ -99,6 +104,7 @@
 </template>
 
 <script setup>
+import { useNavDirection } from "@/composables/useNavDirection";
 import { LjIcon } from "@/components/ui";
 import { ref, computed, nextTick, onMounted, onBeforeUnmount, defineAsyncComponent } from "vue";
 
@@ -141,6 +147,11 @@ const open = ref(false);
 const trigger = ref(null);
 const navigation = ref(null);
 const activeItem = ref(null);
+// De que lado a tela nova entra: pela posição do item no menu lateral.
+const screenDirection = useNavDirection(
+  () => activeItem.value?.id ?? null,
+  () => items.value.map((item) => item.id)
+);
 const renderedItem = ref(null);
 let renderTimer = null;
 let optionsPreloadTimer = null;
@@ -736,12 +747,34 @@ function onOpenOptions(e) {
   height: var(--lj-systembar-height);
 }
 
-.app-menu-screen-enter-active,
-.app-menu-screen-leave-active {
-  transition: opacity var(--lj-transition-fast);
+.app-menu-screen-enter-active {
+  transition:
+    opacity var(--lj-transition-normal),
+    transform var(--lj-motion-normal);
 }
 
-.app-menu-screen-enter-from,
+.app-menu-screen-leave-active {
+  transition: opacity var(--lj-exit-fast);
+}
+
+/* Mesma entrada de `.lj-page-in` (ui.css). Os itens do menu lateral estão
+   empilhados, então a direção é vertical: ir para um item mais abaixo traz a
+   tela de baixo (`--lj-nav-y`, publicado em .app-menu-content). */
+.app-menu-screen-enter-from {
+  opacity: 0;
+  transform: translateY(calc(var(--lj-nav-y, 0) * var(--lj-enter-page-shift)));
+}
+
+/* A tela que entra deslocada para baixo aumentaria a área de rolagem de
+   .app-menu-content, e a barra de rolagem piscaria a cada troca. Esta caixa
+   corta o deslocamento antes de ele chegar lá. A margem negativa devolve aos
+   controles encostados na borda o espaço do anel de foco. */
+.app-menu-screen-clip {
+  margin: calc(-1 * var(--lj-space-4));
+  padding: var(--lj-space-4);
+  overflow: clip;
+}
+
 .app-menu-screen-leave-to {
   opacity: 0;
 }

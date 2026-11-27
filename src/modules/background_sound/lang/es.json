@@ -51,5 +51,6 @@
   "default_checkbox": "Sonido de fondo predeterminado",
   "default_sound": "Sonido predeterminado",
   "set_default": "Establecer como sonido predeterminado",
-  "unset_default": "Quitar sonido predeterminado"
+  "unset_default": "Quitar sonido predeterminado",
+  "no_default_sound": "Ningún sonido predeterminado definido. Marca la estrella de un sonido para reproducirlo desde aquí."
 }

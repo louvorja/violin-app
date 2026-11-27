@@ -7,22 +7,30 @@
     :aria-label="$t('shell.open_modules')"
   >
     <draggable
+      ref="strip"
       :list="openModules"
       item-key="id"
       class="subtabs"
       :disabled="isMobileWeb"
       ghost-class="subtab--ghost"
       :animation="150"
-      @end="onReorder"
+      @start="onDragStart"
+      @end="onDragEnd"
     >
       <template #item="{ element: m }">
         <button
           type="button"
           role="tab"
           class="subtab"
-          :class="{ 'subtab--active': isActive(m.id) }"
+          :class="{
+            'subtab--active': isActive(m.id),
+            'subtab--entering': enteringTabs.has(m.id),
+            'subtab--activating': activatingTab === m.id,
+          }"
+          :data-tab="m.id"
           :aria-selected="isActive(m.id)"
           @click="focus(m.id)"
+          @animationend="onTabAnimationEnd(m.id, $event)"
         >
           <LjIcon
             :icon="getModule(m.id).icon"
@@ -52,7 +60,7 @@
 <script setup>
 import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { computed } from "vue";
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { useViewport } from "@/composables/useViewport";
 import Platform from "@/helpers/Platform";
 import { useI18n } from "vue-i18n";
@@ -84,6 +92,182 @@ function onReorder() {
   const ids = openModules.value.map((m) => m.id);
   $userdata.set(KEYS.MODULES.OPEN_ORDER, ids);
 }
+
+/*
+ * Entrada, saída e reacomodação das abas.
+ *
+ * A aba nova cresce no lugar, a fechada some e as vizinhas deslizam para ocupar
+ * o espaço — em vez de a faixa inteira pular de um quadro para o outro.
+ *
+ * Seria o caso de um <TransitionGroup>, mas o vuedraggable 4.1 não funciona
+ * dentro de um (o Vue clona os filhos com chave e o Sortable nunca é criado —
+ * sem erro na tela, a faixa só deixa de aceitar arrasto). Então é feito à mão:
+ *
+ * - Entrada: classe `subtab--entering` aplicada só às abas recém-abertas e
+ *   retirada no `animationend`. Deixar a animação fixa em `.subtab` fazia o
+ *   Sortable (ou tirar `animation: none` no fim do arrasto) reiniciar a entrada
+ *   em toda a faixa, piscando todas as abas ao reordenar.
+ * - Saída: o Vue tira a aba do DOM na hora; uma cópia dela, pregada onde ela
+ *   estava, é que some.
+ * - Vizinhas: FLIP — mede onde cada aba estava, deixa o layout mudar, põe cada
+ *   uma de volta no lugar antigo com `transform` e solta, com a transição do
+ *   token.
+ *
+ * Durante o arrasto (e logo depois dele) o FLIP não roda: quem move as abas ali
+ * é o Sortable.
+ */
+const strip = ref(null);
+const dragging = ref(false);
+const enteringTabs = reactive(new Set());
+const enterTimers = new Map();
+const activatingTab = ref(null);
+let activateTimer;
+let knownIds = new Set(openModules.value.map((m) => m.id));
+let settleTimer;
+
+function clearEnter(id) {
+  const timer = enterTimers.get(id);
+  if (timer) {
+    clearTimeout(timer);
+    enterTimers.delete(id);
+  }
+  enteringTabs.delete(id);
+}
+
+function markEntering(id) {
+  clearEnter(id);
+  enteringTabs.add(id);
+  enterTimers.set(
+    id,
+    setTimeout(() => clearEnter(id), 400)
+  );
+}
+
+function clearActivating() {
+  clearTimeout(activateTimer);
+  activateTimer = undefined;
+  activatingTab.value = null;
+}
+
+function markActivating(id) {
+  clearActivating();
+  activatingTab.value = id;
+  activateTimer = setTimeout(clearActivating, 250);
+}
+
+watch(
+  () => $appdata.get("active_module"),
+  (id) => {
+    if (id) markActivating(id);
+    else clearActivating();
+  }
+);
+
+function onTabAnimationEnd(id, event) {
+  // `subtab-in` é a animação mais longa das duas; só limpa quando ela acaba
+  // (e ignora eventos borbulhados de filhos ou pseudo-elementos).
+  if (event.target !== event.currentTarget) return;
+  if (event.animationName && !event.animationName.includes("subtab-in")) return;
+  clearEnter(id);
+}
+
+function tabElements() {
+  const root = strip.value?.$el ?? strip.value;
+  return root instanceof HTMLElement ? [...root.querySelectorAll(":scope > .subtab")] : [];
+}
+
+function snapshotTabs() {
+  return new Map(tabElements().map((el) => [el.dataset.tab, { el, left: el.offsetLeft }]));
+}
+
+function animateTabChange(before) {
+  const root = strip.value?.$el ?? strip.value;
+  if (!(root instanceof HTMLElement)) return;
+  const after = new Map(tabElements().map((el) => [el.dataset.tab, el]));
+
+  // Saída: a cópia some onde a aba estava.
+  for (const [id, { el, left }] of before) {
+    if (after.has(id)) continue;
+    const ghost = el.cloneNode(true);
+    ghost.classList.remove("subtab--entering", "subtab--activating");
+    ghost.classList.add("subtab--leaving");
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.removeAttribute("role");
+    ghost.style.left = `${left}px`;
+    ghost.style.width = `${el.offsetWidth || parseFloat(getComputedStyle(el).width) || 0}px`;
+    root.appendChild(ghost);
+    const remove = () => ghost.remove();
+    ghost.addEventListener("animationend", remove, { once: true });
+    setTimeout(remove, 400);
+  }
+
+  // Vizinhas: voltam ao lugar antigo sem transição e deslizam até o novo.
+  const moved = [];
+  for (const [id, el] of after) {
+    const was = before.get(id);
+    if (!was) continue;
+    const dx = was.left - el.offsetLeft;
+    if (!dx) continue;
+    el.classList.remove("subtab--moving");
+    el.style.transition = "none";
+    el.style.transform = `translateX(${dx}px)`;
+    moved.push(el);
+  }
+  if (!moved.length) return;
+  void root.offsetWidth; // aplica o ponto de partida antes de soltar
+  for (const el of moved) {
+    el.classList.add("subtab--moving");
+    el.style.transition = "";
+    el.style.transform = "";
+    const done = () => el.classList.remove("subtab--moving");
+    el.addEventListener("transitionend", done, { once: true });
+    setTimeout(done, 400);
+  }
+}
+
+// `pre` mede antes de o Vue mexer no DOM; o `nextTick` roda depois.
+watch(
+  () => openModules.value.map((m) => m.id).join("|"),
+  (key) => {
+    const nextIds = key ? key.split("|") : [];
+    const nextSet = new Set(nextIds);
+    for (const id of enteringTabs) {
+      if (!nextSet.has(id)) clearEnter(id);
+    }
+    if (!dragging.value) {
+      for (const id of nextIds) {
+        if (!knownIds.has(id)) markEntering(id);
+      }
+      const before = snapshotTabs();
+      void nextTick(() => animateTabChange(before));
+    }
+    knownIds = nextSet;
+  },
+  { flush: "pre" }
+);
+
+function onDragStart() {
+  clearTimeout(settleTimer);
+  dragging.value = true;
+  clearActivating();
+  for (const id of [...enteringTabs]) clearEnter(id);
+}
+
+function onDragEnd() {
+  onReorder();
+  // O Vue ainda vai reordenar os nós para a ordem nova; só então o FLIP volta
+  // a observar trocas de lista.
+  settleTimer = setTimeout(() => {
+    dragging.value = false;
+  }, 300);
+}
+
+onBeforeUnmount(() => {
+  clearTimeout(settleTimer);
+  clearActivating();
+  for (const timer of enterTimers.values()) clearTimeout(timer);
+  enterTimers.clear();
+});
 
 function isActive(id) {
   return $appdata.get("active_module") === id;
@@ -127,10 +311,58 @@ function close(id) {
   overflow-y: hidden;
   scrollbar-width: none;
   font-family: var(--lj-font-shell);
+  /* Referência da aba que sai (`position: absolute` durante a saída). */
+  position: relative;
 }
 
 .subtabs::-webkit-scrollbar {
   display: none;
+}
+
+/* Entrada, saída e reacomodação das abas (ver o comentário no script).
+   A aba nova cresce a partir da base, que é onde ela se prende ao painel — mas
+   só enquanto carrega `subtab--entering`, para o arrasto do Sortable nunca
+   reiniciar a entrada nas abas já abertas. */
+.subtab {
+  transform-origin: 50% 100%;
+}
+
+.subtab.subtab--entering {
+  animation:
+    subtab-in var(--lj-motion-fast),
+    subtab-fade-in var(--lj-transition-fast);
+}
+
+@keyframes subtab-in {
+  from {
+    transform: scale(var(--lj-enter-layer-scale));
+  }
+}
+
+@keyframes subtab-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A cópia da aba fechada: pregada onde a aba estava, some no lugar. */
+.subtab.subtab--leaving {
+  position: absolute;
+  bottom: 0;
+  pointer-events: none;
+  animation: subtab-out var(--lj-exit-fast) both;
+}
+
+@keyframes subtab-out {
+  to {
+    opacity: 0;
+    transform: scale(var(--lj-enter-layer-scale));
+  }
+}
+
+/* As vizinhas deslizam até o novo lugar (o ponto de partida vem do script). */
+.subtab.subtab--moving {
+  transition: transform var(--lj-motion-fast);
 }
 
 /* A aba inativa termina 2px acima da base e a ativa desce até ela, mas o topo é
@@ -191,6 +423,17 @@ function close(id) {
   width: var(--subtab-r);
   height: var(--subtab-r);
   pointer-events: none;
+}
+
+.subtab--active.subtab--activating::before,
+.subtab--active.subtab--activating::after {
+  animation: subtab-foot-in var(--lj-transition-fast) both;
+}
+
+@keyframes subtab-foot-in {
+  from {
+    opacity: 0;
+  }
 }
 
 /* O círculo tem centro no canto de cima, junto à aba: por dentro é transparente

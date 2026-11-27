@@ -10,8 +10,14 @@
       @change="onChange"
     />
     <span class="lj-check__box" aria-hidden="true">
-      <LjIcon v-if="indeterminate" :icon="ICONS.ACTIONS.MINUS" :size="11" />
-      <LjIcon v-else-if="modelValue" :icon="ICONS.UI.CHECK" :size="11" />
+      <!-- A marca fica sempre no DOM e quem a mostra é o CSS (`:checked`): assim
+           ela tem de onde sair ao desmarcar, em vez de sumir de um quadro para o
+           outro, e só anima em mudança de estado — nunca ao montar a tela. -->
+      <LjIcon
+        :icon="indeterminate ? ICONS.ACTIONS.MINUS : ICONS.UI.CHECK"
+        :size="11"
+        class="lj-check__icon"
+      />
     </span>
     <span v-if="label || $slots.default" class="lj-check__label">
       <slot>{{ label }}</slot>
@@ -89,9 +95,10 @@ function onChange(event: Event): void {
   border-radius: var(--lj-radius-xs);
   color: var(--lj-ui-accent-fg);
   transition:
-    background var(--lj-transition-fast),
+    background-color var(--lj-transition-fast),
     border-color var(--lj-transition-fast),
-    box-shadow var(--lj-transition-fast);
+    box-shadow var(--lj-transition-fast),
+    transform var(--lj-transition-fast);
 }
 
 .lj-check__input:checked + .lj-check__box,
@@ -107,5 +114,29 @@ function onChange(event: Event): void {
 
 .lj-check:hover .lj-check__box {
   border-color: var(--lj-ui-accent);
+}
+
+/* A marca é DESENHADA: o traço corre do começo ao fim ao marcar, como quem
+   risca o tique à mão, e é recolhido de volta ao desmarcar. Um ícone que só
+   aparece e some não diz que algo foi feito.
+   O ícone do Tabler é um traço (`stroke`), então basta animar o tracejado: 24 é
+   maior que o comprimento de qualquer um dos dois desenhos (o tique mede ~21,
+   o traço do indeterminado 14). São transições, não animações: transição não
+   roda na primeira pintura, então abrir uma lista com cem caixas já marcadas
+   não dispara cem riscos. */
+.lj-check__icon :deep(path) {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  transition: stroke-dashoffset var(--lj-exit-panel);
+}
+
+.lj-check__input:checked + .lj-check__box .lj-check__icon :deep(path),
+.lj-check__input:indeterminate + .lj-check__box .lj-check__icon :deep(path) {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset var(--lj-draw);
+}
+
+.lj-check:not(.is-disabled):active .lj-check__box {
+  transform: scale(0.88);
 }
 </style>

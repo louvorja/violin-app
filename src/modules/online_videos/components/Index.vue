@@ -130,6 +130,7 @@ import Media from "@/composables/useMedia";
 import { prepare as prepareOnlineVideo } from "@/helpers/OnlineVideo";
 import { useOnlineVideoDownloads } from "@/composables/useOnlineVideoDownloads";
 import { usePlaylistPlayback } from "@/modules/musics/composables/usePlaylistPlayback";
+import { useOnlineVideoStage } from "@/composables/useOnlineVideoStage";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import $database from "@/helpers/Database";
 import $userdata from "@/helpers/UserData";
@@ -141,6 +142,12 @@ const { t: i18nT, locale } = useI18n();
 const tm = (key: string): string => i18nT(`modules.online_videos.${key}`);
 const downloads = useOnlineVideoDownloads();
 const playlistPlayback = usePlaylistPlayback();
+const stage = useOnlineVideoStage(() => playlistPlayback.currentSong.value);
+const projectingId = stage.projectingId;
+// Síncrono: o botão da ribbon lê esta chave, inclusive no fechamento do módulo.
+watch(projectingId, (id) => $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, !!id), {
+  flush: "sync",
+});
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -151,7 +158,6 @@ const viewMode = computed<"grid" | "list">(() =>
 );
 const selectedChannel = ref<Channel | null>(null);
 const selectedPlaylist = ref<Playlist | null>(null);
-const projectingId = ref<string>("");
 
 const searching = computed(() => search.value.trim().length > 0);
 
@@ -263,20 +269,6 @@ function playPlaylistVideos(playlistId: string): void {
   startVideoSequence(playlistTitle(playlistId) || tm("playlists"), list);
 }
 
-watch(
-  () => playlistPlayback.currentSong.value,
-  (song) => {
-    const key = song?.onlineVideo?.itemKey;
-    if (key) {
-      projectingId.value = key;
-      $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, true);
-    } else if (!song && projectingId.value) {
-      projectingId.value = "";
-      $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, false);
-    }
-  }
-);
-
 function videosOf(playlistId: string) {
   return (apiData.value?.videos ?? []).filter((v) => v.playlist_id === playlistId).length;
 }
@@ -356,23 +348,15 @@ function buildEmbedUrl(videoId: string): string {
   return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&controls=0`;
 }
 
-/** Cancelado ou impossível de tocar: o card deixa de aparecer "no ar", salvo se outro vídeo já o substituiu. */
-function releaseIfNotPlaying(id: string, opened: boolean): void {
-  if (opened || projectingId.value !== id) return;
-  projectingId.value = "";
-  $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, false);
-}
-
 async function projectVideo(video: OnlineVideo): Promise<void> {
-  projectingId.value = video.video_id;
-  $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, true);
   const channel = channelTitleForVideo(video);
-  const opened = await Media.openYouTube(
-    buildEmbedUrl(video.video_id),
-    video.title,
-    channel ? { subtitle: channel } : undefined
+  await stage.project(video.video_id, () =>
+    Media.openYouTube(
+      buildEmbedUrl(video.video_id),
+      video.title,
+      channel ? { subtitle: channel } : undefined
+    )
   );
-  releaseIfNotPlaying(video.video_id, opened);
 }
 
 useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => {
@@ -383,16 +367,10 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => 
     if (!url) return;
     const id = extractYoutubeId(url);
     if (!id) return;
-    projectingId.value = id;
-    $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, true);
-    void Media.openYouTube(buildEmbedUrl(id), url).then((opened) =>
-      releaseIfNotPlaying(id, opened)
-    );
+    void stage.project(id, () => Media.openYouTube(buildEmbedUrl(id), url));
   } else if (data.action === "toggle") {
     if (projectingId.value) {
-      projectingId.value = "";
-      $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, false);
-      Media.close(true);
+      stage.stop();
     } else {
       // Sem vídeo selecionado — não faz nada
     }
@@ -402,11 +380,7 @@ useBroadcastListener(BROADCAST_TYPE.MODULE_RIBBON_ACTION, (payload: unknown) => 
 });
 
 function close(): void {
-  if (projectingId.value) {
-    projectingId.value = "";
-    $userdata.set(KEYS.MODULES.ONLINE_VIDEOS.IS_PROJECTING, false);
-    Media.close(true);
-  }
+  if (projectingId.value) stage.stop();
 }
 </script>
 

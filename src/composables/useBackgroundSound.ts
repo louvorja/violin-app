@@ -292,6 +292,22 @@ export function useBackgroundSound() {
     }
   }
 
+  /**
+   * "Parar" e "Tocar/Pausar" do operador, com o fade configurado.
+   *
+   * Cada tela passava a própria duração: o rodapé chamava `stop()` sem nenhuma
+   * (corte seco, igual ao "Parar imediatamente" ao lado) e o módulo usava a
+   * cópia lida ao abrir, alheia ao ajuste feito depois na ribbon. O corte seco
+   * continua sendo `stop(0)`.
+   */
+  function stopWithFade(): void {
+    stop(fadeOutMs.value);
+  }
+
+  function toggleWithFade(): void {
+    togglePlay(fadeInMs.value, fadeOutMs.value);
+  }
+
   function seek(pct: number): void {
     if (duration.value > 0) {
       _audio.currentTime = (pct / 100) * duration.value;
@@ -398,9 +414,11 @@ export function useBackgroundSound() {
     setVolume,
     playFile,
     stop,
+    stopWithFade,
     pause,
     resume,
     togglePlay,
+    toggleWithFade,
     fadeIn,
     fadeOut,
     seek,

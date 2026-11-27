@@ -101,6 +101,7 @@
 </template>
 
 <script setup>
+import { applyMotionOrigin } from "@/helpers/MotionOrigin";
 import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, onMounted, useSlots } from "vue";
@@ -264,6 +265,8 @@ function onPointerDownOutside(event) {
 // Mesmo acordo do LjDialog: focar o primeiro controle abriria a janela com um
 // campo já selecionado. O contêiner recebe o foco e o Tab segue dali.
 function onOpenAutoFocus(event) {
+  // Cresce a partir de onde foi o clique que a abriu (helpers/MotionOrigin.ts).
+  applyMotionOrigin(event.currentTarget);
   event.preventDefault();
   /* O autofocus pode chegar depois de outra camada já ter o foco (player e
    * paleta abertos em sequência). Ver `deveAssumirFoco`. */
@@ -515,11 +518,19 @@ function listenerResize(active) {
 }
 
 .lj-window[data-state="open"] {
-  animation: lj-window-in var(--lj-ui-float-enter);
+  animation: lj-window-in var(--lj-ui-float-enter) both;
+}
+
+.lj-window[data-state="closed"] {
+  animation: lj-window-out var(--lj-ui-float-exit) both;
 }
 
 .lj-window__scrim[data-state="open"] {
-  animation: lj-window-fade var(--lj-ui-float-enter);
+  animation: lj-window-fade var(--lj-transition-normal) both;
+}
+
+.lj-window__scrim[data-state="closed"] {
+  animation: lj-window-fade-out var(--lj-ui-float-exit) both;
 }
 
 @keyframes lj-window-fade {
@@ -528,10 +539,23 @@ function listenerResize(active) {
   }
 }
 
+@keyframes lj-window-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
 @keyframes lj-window-in {
   from {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + var(--lj-ui-float-shift))) scale(0.97);
+    transform: translate(-50%, -50%) scale(var(--lj-enter-dialog-scale));
+  }
+}
+
+@keyframes lj-window-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.97);
   }
 }
 
@@ -544,7 +568,9 @@ function listenerResize(active) {
     transform: none;
   }
 
-  .lj-window[data-state="open"] {
+  /* Em tela cheia a janela não tem o `translate(-50%, -50%)` que os keyframes
+     assumem: animada, ela saltaria meia tela para o lado ao abrir e ao fechar. */
+  .lj-window[data-state] {
     animation: none;
   }
 

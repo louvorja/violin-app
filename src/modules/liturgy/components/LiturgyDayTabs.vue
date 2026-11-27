@@ -1,56 +1,59 @@
 <template>
-  <nav ref="tabs" class="lit-daytabs">
-    <button
-      v-for="(label, i) in dayLabels"
-      :key="i"
-      class="lit-daytab"
-      :class="{ 'is-active': activeDay === i, 'is-today': i === todayIndex }"
-      :title="label"
-      @click="setActiveDay(i)"
-    >
-      <span>
-        <LjIcon
-          :icon="i === todayIndex ? ICONS.CALENDAR.STAR : ICONS.CALENDAR.BLANK_SOLID"
-          size="16"
-          class="lit-daytab__icon"
-        />
-        {{ label }}
-      </span>
-    </button>
-  </nav>
+  <div ref="host" class="lit-daytabs" :data-today-index="todayIndex">
+    <LjTabs
+      :model-value="String(activeDay)"
+      :tabs="dayTabItems"
+      :aria-label="t('day_tabs.label')"
+      @update:model-value="setActiveDay(Number($event))"
+    />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { LjIcon } from "@/components/ui";
+import { useLiturgyI18n } from "../i18n";
+import { LjTabs, type LjTab } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
+
 const props = withDefaults(
   defineProps<{
     activeDay?: number;
     dayLabels?: string[];
+    dayItemCounts?: number[];
     todayIndex?: number;
     setActiveDay: (index: number) => void;
   }>(),
   {
     activeDay: 0,
     dayLabels: () => [],
+    dayItemCounts: () => [],
     todayIndex: 0,
   }
 );
 
-const tabs = ref<HTMLElement | null>(null);
+const { t } = useLiturgyI18n();
+const host = ref<HTMLElement | null>(null);
+
+const dayTabItems = computed<LjTab[]>(() =>
+  props.dayLabels.map((label, i) => ({
+    value: String(i),
+    label,
+    icon: i === props.todayIndex ? ICONS.CALENDAR.STAR : ICONS.CALENDAR.BLANK_SOLID,
+    badge: (props.dayItemCounts[i] ?? 0) > 0 ? props.dayItemCounts[i] : undefined,
+  }))
+);
 
 watch(
   () => props.activeDay,
   async () => {
     await nextTick();
-    const nav = tabs.value;
-    if (!nav || !window.matchMedia("(max-width: 600px)").matches) return;
-    const active = nav.querySelector<HTMLElement>(".lit-daytab.is-active");
+    const list = host.value?.querySelector<HTMLElement>(".lj-tabs__list");
+    if (!list || !window.matchMedia("(max-width: 600px)").matches) return;
+    const active = list.querySelector<HTMLElement>('.lj-tabs__trigger[data-state="active"]');
     if (!active) return;
-    const navRect = nav.getBoundingClientRect();
+    const listRect = list.getBoundingClientRect();
     const activeRect = active.getBoundingClientRect();
-    nav.scrollLeft += activeRect.left - navRect.left - (navRect.width - activeRect.width) / 2;
+    list.scrollLeft += activeRect.left - listRect.left - (listRect.width - activeRect.width) / 2;
   },
   { immediate: true }
 );
@@ -58,56 +61,49 @@ watch(
 
 <style scoped>
 .lit-daytabs {
-  display: flex;
-  align-items: stretch;
-  gap: var(--lj-space-2);
-  padding: var(--lj-space-3) var(--lj-space-4);
   background: var(--lj-surface-bg);
-  border-bottom: 1px solid var(--lj-surface-border);
   flex-shrink: 0;
 }
 
-.lit-daytab {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--lj-space-1);
-  min-height: var(--lj-ui-h-lg);
-  padding: var(--lj-space-2) var(--lj-space-5);
-  background: transparent;
-  border: var(--lj-ui-border);
-  border-radius: var(--lj-ui-radius);
-  cursor: pointer;
-  color: var(--lj-text);
-  font-size: var(--lj-text-base);
-  transition:
-    background var(--lj-transition-normal),
-    border var(--lj-transition-normal);
-}
-.lit-daytab:hover {
-  background: rgba(var(--lj-on-surface-ch), 0.06);
-}
-.lit-daytab.is-active {
-  background: var(--lj-ui-accent-soft);
-  border-color: var(--lj-ui-accent);
-  color: var(--lj-ui-accent-text);
-  font-weight: var(--lj-weight-semibold);
+.lit-daytabs :deep(.lj-tabs__list) {
+  padding: 0 var(--lj-space-4);
+  gap: 0;
 }
 
-.lit-daytab:focus-visible {
-  outline: none;
-  box-shadow: var(--lj-ui-focus);
+.lit-daytabs :deep(.lj-tabs__trigger) {
+  flex: 1;
+  min-width: 0;
+  justify-content: center;
+  height: 36px;
+  padding-inline: var(--lj-space-3);
 }
-.lit-daytab.is-today .lit-daytab__icon {
+
+.lit-daytabs :deep(.lj-tabs__trigger .lj-chip) {
+  font-variant-numeric: tabular-nums;
+}
+
+.lit-daytabs :deep(.lj-tabs__trigger[data-state="active"] .lj-chip) {
+  background: var(--lj-ui-accent-soft);
+  border-color: transparent;
+  color: var(--lj-ui-accent-text);
+}
+
+/* Destaque sutil no ícone do dia atual (hoje). */
+.lit-daytabs[data-today-index="0"] :deep(.lj-tabs__trigger:nth-of-type(1) .lj-icon),
+.lit-daytabs[data-today-index="1"] :deep(.lj-tabs__trigger:nth-of-type(2) .lj-icon),
+.lit-daytabs[data-today-index="2"] :deep(.lj-tabs__trigger:nth-of-type(3) .lj-icon),
+.lit-daytabs[data-today-index="3"] :deep(.lj-tabs__trigger:nth-of-type(4) .lj-icon),
+.lit-daytabs[data-today-index="4"] :deep(.lj-tabs__trigger:nth-of-type(5) .lj-icon),
+.lit-daytabs[data-today-index="5"] :deep(.lj-tabs__trigger:nth-of-type(6) .lj-icon),
+.lit-daytabs[data-today-index="6"] :deep(.lj-tabs__trigger:nth-of-type(7) .lj-icon) {
   color: var(--lj-orange);
 }
 
 @media (max-width: 600px) {
-  .lit-daytabs {
+  .lit-daytabs :deep(.lj-tabs__list) {
     min-width: 0;
     max-width: 100%;
+    padding: 0 var(--lj-space-2);
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
@@ -117,15 +113,15 @@ watch(
     touch-action: pan-x;
   }
 
-  .lit-daytabs::-webkit-scrollbar {
+  .lit-daytabs :deep(.lj-tabs__list::-webkit-scrollbar) {
     display: none;
   }
 
-  .lit-daytab {
+  .lit-daytabs :deep(.lj-tabs__trigger) {
     flex: 0 0 auto;
-    min-width: 76px;
-    min-height: 44px;
-    padding-inline: var(--lj-space-3);
+    min-width: 84px;
+    height: 44px;
+    padding-inline: var(--lj-space-4);
     scroll-snap-align: center;
   }
 }

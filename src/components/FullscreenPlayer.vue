@@ -110,12 +110,17 @@ function startHideTimer() {
   background: var(--lj-footer-bg);
 }
 
-.slide-up-enter-active,
-.slide-up-leave-active {
-  /* Subida/descida do player em fullscreen — antes 0.3s, agora 0.15s pra UX */
+/* Subida/descida do player em fullscreen. Encostado na borda de baixo, então
+   mola sem ultrapassagem na entrada e curva seca na saída. */
+.slide-up-enter-active {
   transition:
-    transform 0.15s ease,
-    opacity 0.15s ease;
+    transform var(--lj-motion-fast),
+    opacity var(--lj-transition-fast);
+}
+.slide-up-leave-active {
+  transition:
+    transform var(--lj-exit-panel),
+    opacity var(--lj-exit-panel);
 }
 .slide-up-enter-from,
 .slide-up-leave-to {

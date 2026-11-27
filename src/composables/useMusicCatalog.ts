@@ -18,12 +18,24 @@ export function useDisabledAlbums() {
   return computed(getDisabledAlbums);
 }
 
+const _yearsByLocale = new Map<string, Map<string, number>>();
+
+function sameYears(a: Map<string, number>, b: Map<string, number>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [id, year] of a) {
+    if (b.get(id) !== year) return false;
+  }
+  return true;
+}
+
 export function useMusicCatalog<
   T extends Pick<LiturgyMusicItem, "name" | "albums" | "albums_names" | "custom_song_id">,
 >(source: MaybeRefOrGetter<T[]>, enabled: MaybeRefOrGetter<boolean> = true) {
   const { locale } = useI18n();
   const disabledAlbums = useDisabledAlbums();
-  const years = shallowRef<Map<string, number>>(new Map());
+  const years = shallowRef<Map<string, number>>(
+    toValue(enabled) ? (_yearsByLocale.get(locale.value) ?? new Map()) : new Map()
+  );
   let revision = 0;
   onScopeDispose(() => {
     revision++;
@@ -33,11 +45,18 @@ export function useMusicCatalog<
     [locale, () => toValue(enabled)],
     async ([language, active]) => {
       const current = ++revision;
-      years.value = new Map();
-      if (!active) return;
+      if (!active) {
+        if (years.value.size) years.value = new Map();
+        return;
+      }
+      const cached = _yearsByLocale.get(language);
+      if (cached && !sameYears(years.value, cached)) years.value = cached;
       try {
         const categories = await Database.get(`${language}_categories`, { silent: true });
-        if (current === revision) years.value = albumYears(categories);
+        if (current !== revision) return;
+        const next = albumYears(categories);
+        _yearsByLocale.set(language, next);
+        if (!sameYears(years.value, next)) years.value = next;
       } catch {
         // O catálogo continua disponível com anos explícitos e edições conhecidas.
       }

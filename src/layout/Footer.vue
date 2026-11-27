@@ -435,9 +435,13 @@ onMounted(loadDBVersion);
   right: 0;
   height: var(--lj-player-height);
   transform: translateY(100%);
+  /* O conteúdo acima ganha `padding-bottom` enquanto o player sobe
+     (.shell-root, em Shell.vue). Os dois usam o MESMO token nas duas direções:
+     com tempos diferentes aparece uma faixa vazia entre o conteúdo e o rodapé
+     no meio do caminho. */
   transition:
-    transform 0.6s ease,
-    height 0.4s ease;
+    transform var(--lj-reflow-enter),
+    height var(--lj-reflow-enter);
   z-index: 10;
   background: var(--lj-footer-bg);
   border-top: 1px solid var(--lj-footer-border);
@@ -468,7 +472,11 @@ onMounted(loadDBVersion);
 
 .footer--active {
   transform: translateY(0);
-  transition: transform 0.3s ease; /* entrada: 0.3s (rápida) */
+  /* Visível, a altura muda na hora (a barra de playlist aparece e some): o
+     rodapé publica a própria altura em --lj-dock-offset a cada mudança, e
+     animar as duas coisas faria o padding do conteúdo perseguir um alvo que
+     ainda está andando. */
+  transition: transform var(--lj-reflow-enter);
 }
 
 /* Playlist bar */

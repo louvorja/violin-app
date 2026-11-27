@@ -98,12 +98,14 @@ const model = computed({
   min-height: 0;
 }
 
-/* 0,35s é a duração que o painel tinha em vuetify-overrides.css — mais lenta
-   que a das camadas flutuantes de propósito, porque o percurso é a largura
-   inteira da coluna. */
-.module-format-drawer-enter-active,
+/* O percurso é a largura inteira da coluna, então a entrada usa mola (95% do
+   caminho em ~0,15s) e a saída é seca. Sem ultrapassagem: o painel nasce
+   encostado na borda esquerda do módulo. */
+.module-format-drawer-enter-active {
+  transition: transform var(--lj-motion-normal);
+}
 .module-format-drawer-leave-active {
-  transition: transform 0.5s var(--lj-ease);
+  transition: transform var(--lj-exit-panel);
 }
 
 .module-format-drawer-enter-from,

@@ -1,7 +1,7 @@
 <template>
   <ModuleContainer ref="moduleContainer" :manifest="manifest" @show="show" @close="close">
-    <template #header>
-      <div v-if="compact" class="col-toolbar">
+    <template v-if="compact" #header>
+      <div class="col-toolbar">
         <LjMenu :items="categoryMenuItems" side="bottom" align="start">
           <template #trigger>
             <LjButton
@@ -27,16 +27,21 @@
       </div>
     </template>
 
-    <template #left>
-      <nav v-if="!compact" class="col-sidebar" :aria-label="tm('title')">
+    <template v-if="!compact" #left>
+      <nav class="col-sidebar" :aria-label="tm('title')">
         <LjProgress v-if="loading" indeterminate :height="4" />
 
-        <button type="button" class="col-nav-item" @click="openMusicSearch">
-          <LjIcon :icon="ICONS.ACTIONS.SEARCH" :size="16" />
-          <span class="col-nav-item__label">{{ tm("music_search.title") }}</span>
-        </button>
+        <LjButton
+          variant="subtle"
+          size="sm"
+          :icon="ICONS.ACTIONS.SEARCH"
+          class="col-sidebar__search-btn"
+          @click="openMusicSearch"
+        >
+          {{ tm("music_search.title") }}
+        </LjButton>
 
-        <hr class="col-divider" />
+        <LjDivider class="col-divider" />
 
         <button
           v-for="category in categories"
@@ -50,9 +55,11 @@
           <span class="col-nav-item__label">{{ category.name }}</span>
         </button>
 
+        <LjDivider v-if="categories.length" class="col-divider" />
+
         <button
           type="button"
-          class="col-nav-item col-nav-item--last"
+          class="col-nav-item"
           :class="{ 'is-active': id_category === 0 }"
           :aria-current="id_category === 0 ? 'true' : undefined"
           @click="setCategory(0)"
@@ -62,52 +69,83 @@
       </nav>
     </template>
 
-    <p v-if="error" class="col-alert" role="alert">{{ error }}</p>
-
     <div ref="albumsScroll" class="collections-scroll" @scroll="onScroll">
-      <LjAlert
-        v-if="offlineLibrary.active.value"
-        variant="info"
-        :text="t('shell.offline_albums_only')"
-        class="col-offline"
-      />
-      <div class="col-search">
-        <LjInput
-          ref="searchInput"
-          v-model="search"
-          clearable
-          autocomplete="off"
-          :icon="ICONS.ACTIONS.SEARCH"
-          :placeholder="tm('music_search.title')"
-          @keydown="onSearchKey"
+      <div class="col-content" :style="{ '--lj-nav-x': 0, '--lj-nav-y': catDirection }">
+        <LjAlert v-if="error" variant="error" :text="error" class="col-alert" />
+
+        <LjAlert
+          v-if="offlineLibrary.active.value"
+          variant="info"
+          :text="t('shell.offline_albums_only')"
+          class="col-offline"
         />
-      </div>
 
-      <div class="col-grid">
-        <button
-          v-for="(album, index) in visibleAlbums"
-          :key="album.id_album"
-          type="button"
-          class="col-album"
-          :class="{
-            'col-album--wide': width > 350,
-            'col-album--active': index === nav.index.value,
-          }"
-          :style="album.color ? { background: album.color } : undefined"
-          @click="openAlbum(album.id_album)"
+        <div class="col-head">
+          <div v-if="!compact" class="col-head__title-wrap">
+            <h2 class="col-head__title">{{ currentCategoryName }}</h2>
+            <span v-if="!loading" class="col-head__count">{{ filteredAlbums.length }}</span>
+          </div>
+
+          <div class="col-search">
+            <LjInput
+              ref="searchInput"
+              v-model="search"
+              clearable
+              autocomplete="off"
+              :icon="ICONS.ACTIONS.SEARCH"
+              :placeholder="tm('filter_placeholder')"
+              :aria-label="tm('filter_placeholder')"
+              @keydown="onSearchKey"
+            />
+            <span v-if="shortSearch" class="col-search__hint">{{ tm("filter_hint") }}</span>
+          </div>
+        </div>
+
+        <div v-if="visibleAlbums.length" :key="String(id_category)" class="col-grid lj-page-in">
+          <button
+            v-for="(album, index) in visibleAlbums"
+            :key="album.id_album"
+            type="button"
+            class="col-album"
+            :class="{
+              'col-album--wide': width > 350,
+              'col-album--active': index === nav.index.value,
+            }"
+            :style="album.color ? { background: album.color } : undefined"
+            @click="openAlbum(album.id_album)"
+          >
+            <span v-if="album.url_image" class="col-album__cover">
+              <img :src="pathFile(album.url_image)" :alt="album.name" loading="lazy" />
+            </span>
+            <span class="col-album__text">
+              <span class="col-album__name">{{ album.name }}</span>
+              <span v-if="album.subtitle" class="col-album__subtitle">{{ album.subtitle }}</span>
+            </span>
+          </button>
+        </div>
+
+        <LjEmpty
+          v-else-if="!loading"
+          :icon="ICONS.ACTIONS.SEARCH"
+          :title="tm('empty_search')"
+          :description="filtering() ? tm('empty_search_hint') : undefined"
+          class="col-empty"
         >
-          <span v-if="album.url_image" class="col-album__cover">
-            <img :src="pathFile(album.url_image)" :alt="album.name" loading="lazy" />
-          </span>
-          <span class="col-album__text">
-            <span class="col-album__name">{{ album.name }}</span>
-            <span v-if="album.subtitle" class="col-album__subtitle">{{ album.subtitle }}</span>
-          </span>
-        </button>
-      </div>
+          <template v-if="filtering()" #action>
+            <LjButton
+              variant="subtle"
+              size="sm"
+              :icon="ICONS.ACTIONS.SEARCH"
+              @click="openMusicSearch"
+            >
+              {{ tm("music_search.title") }}
+            </LjButton>
+          </template>
+        </LjEmpty>
 
-      <div v-if="visibleAlbums.length < filteredAlbums.length" class="col-more">
-        <LjSpinner :size="24" />
+        <div v-if="visibleAlbums.length < filteredAlbums.length" class="col-more">
+          <LjSpinner :size="24" />
+        </div>
       </div>
     </div>
   </ModuleContainer>
@@ -117,9 +155,19 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useViewport } from "@/composables/useViewport";
+import { useNavDirection } from "@/composables/useNavDirection";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
-import { LjAlert, LjButton, LjIcon, LjInput, LjMenu, LjProgress, LjSpinner } from "@/components/ui";
+import {
+  LjAlert,
+  LjButton,
+  LjDivider,
+  LjEmpty,
+  LjInput,
+  LjMenu,
+  LjProgress,
+  LjSpinner,
+} from "@/components/ui";
 import { useOfflineLibrary } from "@/composables/useOfflineLibrary";
 import { ICONS } from "@/config/Icons";
 import Strings from "@/helpers/Strings";
@@ -145,6 +193,11 @@ const id_category = ref(null);
 const loading = ref(false);
 const error = ref(null);
 const disabledAlbums = useDisabledAlbums();
+
+const catDirection = useNavDirection(
+  () => id_category.value,
+  () => [...categories.value.map((c) => c.id_category), 0]
+);
 
 const albums = computed(() => {
   const disabled = disabledAlbums.value;
@@ -177,6 +230,10 @@ const search = ref("");
 
 // Busca textual só filtra a partir de 4 caracteres (performance).
 const filtering = () => Strings.clean(search.value).length >= 4;
+const shortSearch = computed(() => {
+  const len = Strings.clean(search.value).length;
+  return len > 0 && len < 4;
+});
 
 const filteredAlbums = computed(() => {
   if (!filtering()) return albums.value;
@@ -204,7 +261,7 @@ function onScroll(event) {
 const tm = (key) => moduleContainer.value?.tm(key) || key;
 const pathFile = (img) => Path.file(img);
 
-// Título da barra compacta: nome da categoria atual ou "todas as coletâneas".
+// Título da categoria atual ou "todas as coletâneas".
 const currentCategoryName = computed(() => {
   if (!id_category.value) return tm("all_collections");
   return categories.value.find((c) => c.id_category === id_category.value)?.name || "";
@@ -342,15 +399,21 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--lj-space-1);
-  width: 200px;
+  width: 204px;
   height: 100%;
-  padding: var(--lj-space-2);
+  padding: var(--lj-space-3);
+  box-sizing: border-box;
+}
+
+.col-sidebar__search-btn {
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .col-nav-item {
   display: flex;
   align-items: center;
-  gap: var(--lj-space-4);
+  gap: var(--lj-space-3);
   width: 100%;
   padding: var(--lj-space-3) var(--lj-space-4);
   border: none;
@@ -389,48 +452,79 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
-/* Empurra "todas as coletâneas" para o fim da coluna. */
-.col-nav-item--last {
-  margin-top: auto;
-}
-
 .col-divider {
-  height: 1px;
   margin: var(--lj-space-2) 0;
-  border: none;
-  background: var(--lj-surface-divider);
 }
 
 /* ---- corpo ---- */
-.col-alert {
-  margin: var(--lj-space-4);
-  padding: var(--lj-space-4) var(--lj-space-5);
-  border-left: 3px solid var(--lj-danger);
-  border-radius: var(--lj-radius-sm);
-  background: var(--lj-danger-soft);
-  color: var(--lj-alert-error-color);
-  font-size: var(--lj-text-base);
-}
-
 .collections-scroll {
   height: 100%;
   overflow-y: auto;
 }
 
+.col-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-5);
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding: var(--lj-space-5) var(--lj-space-6) var(--lj-space-7);
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+.col-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lj-space-4);
+}
+
+.col-head__title-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: var(--lj-space-3);
+  min-width: 0;
+}
+
+.col-head__title {
+  margin: 0;
+  font-size: var(--lj-text-xl);
+  font-weight: var(--lj-weight-semibold);
+  color: var(--lj-text);
+  line-height: 1.25;
+}
+
+.col-head__count {
+  font-size: var(--lj-text-sm);
+  color: var(--lj-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
 .col-search {
-  padding: var(--lj-space-4) var(--lj-space-6) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-1);
+  flex: 1 1 240px;
+  max-width: 340px;
 }
 
 .col-search :deep(.lj-input) {
   width: 100%;
 }
 
+.col-search__hint {
+  font-size: var(--lj-text-xs);
+  color: var(--lj-text-subtle);
+  padding-inline: var(--lj-space-1);
+}
+
 .col-grid {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
   gap: var(--lj-space-4);
-  padding: var(--lj-space-4);
 }
 
 /* Cartão de álbum: a cor vem do banco (album.color); sem ela, cai num cinza
@@ -438,11 +532,10 @@ onMounted(async () => {
 .col-album {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--lj-space-5);
   width: 100%;
-  padding: var(--lj-space-5);
-  border: none;
+  padding: var(--lj-space-4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--lj-radius-md);
   background: var(--lj-gray-700);
   color: var(--lj-white);
@@ -451,11 +544,14 @@ onMounted(async () => {
   text-align: left;
   cursor: pointer;
   overflow: hidden;
-  transition: box-shadow var(--lj-transition-normal);
+  transition:
+    box-shadow var(--lj-transition-normal),
+    border-color var(--lj-transition-fast);
 }
 
 .col-album:hover {
   box-shadow: var(--lj-shadow-2);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .col-album:focus-visible {
@@ -469,21 +565,18 @@ onMounted(async () => {
   outline-offset: 2px;
 }
 
-.col-album--wide {
-  min-width: 300px;
-  max-width: 300px;
-}
-
 .col-album__cover {
   display: block;
   flex-shrink: 0;
-  width: 75px;
-  height: 75px;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--lj-radius-sm);
+  overflow: hidden;
 }
 
 .col-album--wide .col-album__cover {
-  width: 125px;
-  height: 125px;
+  width: 96px;
+  height: 96px;
 }
 
 .col-album__cover img {
@@ -491,6 +584,7 @@ onMounted(async () => {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  border-radius: var(--lj-radius-sm);
 }
 
 .col-album__text {
@@ -498,20 +592,24 @@ onMounted(async () => {
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  gap: var(--lj-space-2);
+  gap: var(--lj-space-1);
 }
 
 .col-album__name {
-  font-size: var(--lj-text-xl);
-  font-weight: var(--lj-weight-medium);
+  font-size: var(--lj-text-lg);
+  font-weight: var(--lj-weight-semibold);
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
 .col-album__subtitle {
-  font-size: var(--lj-text-base);
-  opacity: 0.85;
+  font-size: var(--lj-text-sm);
+  opacity: 0.8;
   overflow-wrap: anywhere;
+}
+
+.col-empty {
+  padding-block: var(--lj-space-10);
 }
 
 .col-more {
@@ -519,5 +617,19 @@ onMounted(async () => {
   justify-content: center;
   padding: var(--lj-space-6);
   color: var(--lj-text-muted);
+}
+
+@media (max-width: 600px) {
+  .col-content {
+    padding: var(--lj-space-4);
+  }
+
+  .col-search {
+    max-width: none;
+  }
+
+  .col-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

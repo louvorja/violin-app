@@ -104,8 +104,20 @@ vi.mock("@/composables/useSyncManager", async () => {
 });
 vi.mock("@/components/ui", () => ({
   LjButton: { props: ["disabled"], template: '<button :disabled="disabled"><slot /></button>' },
+  LjCheckbox: {
+    props: ["modelValue", "label", "disabled"],
+    emits: ["update:modelValue"],
+    template:
+      '<label><input type="checkbox" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)" />{{ label }}</label>',
+  },
   LjIcon: { template: "<span />" },
   LjProgress: { template: "<span />" },
+  LjSelect: {
+    props: ["id", "modelValue", "items", "disabled"],
+    emits: ["update:modelValue"],
+    template:
+      '<select :id="id" :value="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="i in items" :key="i.value" :value="i.value">{{ i.label }}</option></select>',
+  },
   LjTabs: {
     props: ["tabs", "modelValue"],
     emits: ["update:modelValue"],

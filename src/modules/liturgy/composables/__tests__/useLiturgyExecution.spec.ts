@@ -91,7 +91,14 @@ vi.mock("@/helpers/Liturgy", () => ({
   },
 }));
 vi.mock("@/helpers/ImageConvert", () => ({ heicToJpeg: vi.fn() }));
-vi.mock("@/helpers/Alert", () => ({ default: { error: vi.fn(), info: vi.fn(), show: vi.fn() } }));
+vi.mock("@/helpers/Alert", () => ({
+  default: { error: vi.fn(), info: vi.fn(), show: vi.fn() },
+  escapeHtml: (text: unknown) =>
+    String(text ?? "").replace(
+      /[&<>"']/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] || c
+    ),
+}));
 vi.mock("@/helpers/Broadcast", () => ({
   default: {
     send: mocks.broadcastSend,
@@ -142,6 +149,8 @@ import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { KEYS } from "@/constants/UserDataKeys";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import type { LiturgyItem } from "@/types/Liturgy";
+import type { SearchMusicItem } from "@/types/Music";
+import { chosenMusicItem } from "../../chosenMusic";
 import { DB_TABLE } from "@/constants/DbTables";
 import $alert from "@/helpers/Alert";
 import { fetchWithTimeout } from "@/helpers/Http";
@@ -674,6 +683,29 @@ describe("liturgia — vínculo de sobreposição", () => {
     expect(mocks.openMusic).not.toHaveBeenCalled();
     expect(mocks.openCustomAudio).not.toHaveBeenCalled();
   });
+
+  it("música personalizada escolhida na hora do culto toca pelo UUID", async () => {
+    mocks.getCustomSong.mockResolvedValue(customSong);
+    const naHora = {
+      id: "music-choose",
+      tipo: LiturgyItemTypeEnum.MUSICA,
+      item: "Louvor especial",
+      musica: -1,
+      subtipo: "escolha",
+      escolha: true,
+    } as LiturgyItem;
+    const executable = chosenMusicItem(naHora, {
+      id_music: -2,
+      name: "Canção personalizada",
+      custom_song_id: "custom-1",
+    } as SearchMusicItem);
+    const { playMusic } = useLiturgyExecution();
+
+    expect(await playMusic(executable!, "sung")).toBe(true);
+    expect(mocks.getCustomSong).toHaveBeenCalledWith("custom-1");
+    expect(mocks.openCustomSong).toHaveBeenCalledWith(customSong, "audio");
+    expect(mocks.openMusic).not.toHaveBeenCalled();
+  });
 });
 
 describe("liturgia — ciclo de vida do overlay vinculado", () => {
@@ -754,9 +786,14 @@ describe("liturgia — ciclo de vida do overlay vinculado", () => {
     await executeItem({
       id: "nota-1",
       tipo: LiturgyItemTypeEnum.ANOTACAO,
-      item: "Lembrete",
-      subitem: "Avisar o pastor",
+      item: "Lembrete <script>",
+      subitem: "Linha 1\n<b>Linha 2</b>",
     } as LiturgyItem);
+    expect($alert.show).toHaveBeenCalledWith({
+      title: "Lembrete &lt;script&gt;",
+      text: "Linha 1<br>&lt;b&gt;Linha 2&lt;/b&gt;",
+      translate: false,
+    });
     expect(slots[0].enabled).toBe(true);
 
     await executeItem({

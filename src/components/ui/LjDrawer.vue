@@ -250,9 +250,11 @@ function focarPainel(event: Event): void {
 /* ---------------------------------------------------------------------------
  * Movimento
  *
- * Mesmo par de tempos das demais camadas flutuantes (--lj-ui-float-enter /
- * --lj-ui-float-exit), só que o percurso aqui é a largura inteira do painel:
- * o deslocamento curto do menu não leria como um painel chegando da borda.
+ * A saída e o véu usam o par das demais camadas flutuantes. A entrada do
+ * painel não: o percurso aqui é a largura inteira, e os 4px do menu não leriam
+ * como um painel chegando da borda — ele ganha a mola um degrau mais longa
+ * (--lj-motion-normal), que ainda assim chega em ~0,15s. É a mola sem
+ * ultrapassagem: um painel que passasse do alvo descolaria da borda.
  * ------------------------------------------------------------------------- */
 .lj-drawer--left {
   --lj-drawer-from: -100%;
@@ -262,17 +264,17 @@ function focarPainel(event: Event): void {
 }
 
 .lj-drawer--temporary[data-state="open"] {
-  animation: lj-drawer-in var(--lj-ui-float-enter);
+  animation: lj-drawer-in var(--lj-motion-normal) both;
 }
 .lj-drawer--temporary[data-state="closed"] {
-  animation: lj-drawer-out var(--lj-ui-float-exit);
+  animation: lj-drawer-out var(--lj-exit-panel) both;
 }
 
 .lj-drawer__overlay[data-state="open"] {
-  animation: lj-drawer-fade-in var(--lj-ui-float-enter);
+  animation: lj-drawer-fade-in var(--lj-transition-normal) both;
 }
 .lj-drawer__overlay[data-state="closed"] {
-  animation: lj-drawer-fade-out var(--lj-ui-float-exit);
+  animation: lj-drawer-fade-out var(--lj-exit-panel) both;
 }
 
 @keyframes lj-drawer-in {
@@ -301,10 +303,10 @@ function focarPainel(event: Event): void {
    Estas regras vêm depois de .lj-drawer de propósito: mesma especificidade,
    ganham por ordem e zeram a largura declarada lá. */
 .lj-drawer-push-enter-active {
-  transition: width var(--lj-ui-float-enter);
+  transition: width var(--lj-reflow-enter);
 }
 .lj-drawer-push-leave-active {
-  transition: width var(--lj-ui-float-exit);
+  transition: width var(--lj-reflow-exit);
 }
 .lj-drawer-push-enter-from,
 .lj-drawer-push-leave-to {

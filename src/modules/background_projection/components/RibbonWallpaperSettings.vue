@@ -2,7 +2,12 @@
   <div class="rbw-container">
     <div class="rbw-col">
       <div class="rbw-group">
-        <input type="color" class="rbw-color" :value="wpColor" @input="onColor" />
+        <ColorField
+          :model-value="wpColor"
+          :aria-label="tm('bg_color')"
+          size="sm"
+          @update:model-value="onColor"
+        />
         <label class="rbw-label">{{ tm("bg_color") }}</label>
       </div>
       <div class="rbw-group">
@@ -35,7 +40,13 @@
       <div class="rbw-group">
         <div v-if="wpImageUrl" class="rbw-preview">
           <img :src="wpImageUrl" class="rbw-preview-img" />
-          <button class="rbw-preview-remove" @click="remove">
+          <button
+            type="button"
+            class="rbw-preview-remove"
+            :aria-label="$t('options.slides.remove_image')"
+            :title="$t('options.slides.remove_image')"
+            @click="remove"
+          >
             <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="15" />
           </button>
         </div>
@@ -46,11 +57,10 @@
 
 <script setup lang="ts">
 import { LjButton, LjIcon, LjSelect } from "@/components/ui";
+import ColorField from "@/components/inputs/ColorField.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { useI18n } from "vue-i18n";
-import $modules from "@/helpers/Modules";
-import { ModuleEnum } from "@/enums/ModuleEnum";
 import { pickImageData } from "@/helpers/FilePicker";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -59,7 +69,6 @@ import { DEFAULT_BACKGROUND_COLOR, MAIN_BACKGROUND_ID, Settings } from "@/types/
 import { opcoesDeAjuste } from "@/helpers/BackgroundStyle";
 
 const { t: i18nT } = useI18n();
-const modulePrefix = $modules.getPath(ModuleEnum.BACKGROUND_PROJECTION);
 const tm = (key: string) => i18nT(`modules.background_projection.${key}`);
 const currentBgImage = computed(() => wpImageUrl.value);
 const opcoesAjuste = computed(() => opcoesDeAjuste(i18nT));
@@ -88,8 +97,8 @@ async function scheduleSave(): Promise<void> {
   }, 300);
 }
 
-function onColor(e: Event): void {
-  wpColor.value = (e.target as HTMLInputElement).value;
+function onColor(hex: string): void {
+  wpColor.value = hex;
   scheduleSave();
 }
 
@@ -172,22 +181,13 @@ onBeforeUnmount(() => {
   letter-spacing: 0.3px;
   margin-left: 5px;
 }
-.rbw-color {
-  width: 35px;
-  height: 20px;
-  border: 1px solid #555;
-  border-radius: var(--lj-radius-sm);
-  cursor: pointer;
-  padding: 0;
-  background: transparent;
-}
 .rbw-preview {
   position: relative;
   width: 120px;
   height: 80px;
   border-radius: var(--lj-radius-xs);
   overflow: hidden;
-  border: 1px solid #555;
+  border: 1px solid var(--lj-surface-border-strong);
   flex-shrink: 0;
 }
 .rbw-preview-img {

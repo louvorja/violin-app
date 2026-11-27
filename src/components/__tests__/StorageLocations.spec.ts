@@ -43,6 +43,12 @@ vi.mock("@/components/ui", () => ({
     template:
       '<label><input type="checkbox" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)" />{{ label }}</label>',
   },
+  LjSelect: {
+    props: ["modelValue", "items", "disabled", "placeholder"],
+    emits: ["update:modelValue"],
+    template:
+      '<select :value="modelValue ?? \'\'" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-if="placeholder" value="" disabled>{{ placeholder }}</option><option v-for="i in items" :key="i.value" :value="i.value" :disabled="i.disabled">{{ i.label }}</option></select>',
+  },
 }));
 
 const initial: StorageLocations = {

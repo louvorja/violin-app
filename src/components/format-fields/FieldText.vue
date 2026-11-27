@@ -1,13 +1,16 @@
 <template>
-  <input
+  <LjInput
     type="text"
-    :value="modelValue || ''"
-    class="format-field format-field--input"
-    @input="$emit('update:modelValue', $event.target.value)"
+    size="sm"
+    :model-value="modelValue || ''"
+    class="format-field"
+    @update:model-value="$emit('update:modelValue', $event)"
   />
 </template>
 
 <script setup>
+import LjInput from "@/components/ui/LjInput.vue";
+
 defineProps({
   modelValue: { type: [String, null], default: null },
   field: { type: Object, required: true },
@@ -16,14 +19,7 @@ defineEmits(["update:modelValue"]);
 </script>
 
 <style scoped>
-.format-field--input {
-  font-size: 12px;
-  padding: 4px 6px;
-  border: 1px solid var(--lj-surface-border);
-  border-radius: var(--lj-radius-xs);
-  background: var(--lj-surface-bg);
-  color: inherit;
+.format-field {
   width: 100%;
-  box-sizing: border-box;
 }
 </style>

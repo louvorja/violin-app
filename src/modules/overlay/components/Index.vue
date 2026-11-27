@@ -171,7 +171,7 @@ const enabled = computed(
 const localSlots = reactive<OverlaySlot[]>([]);
 const editingSlot = ref<OverlaySlot | null>(null);
 const previewImageCache = reactive<Record<string, string>>({});
-const { mirrorText } = useModuleMirror(() =>
+const { mirrorText, mirrorColor } = useModuleMirror(() =>
   localSlots.filter((slot) => slot.type === "module_mirror").map((slot) => slot.source_module)
 );
 
@@ -327,7 +327,7 @@ function previewSlotStyle(slot: OverlaySlot): Record<string, string> {
 }
 
 function previewTextStyle(slot: OverlaySlot): Record<string, string> {
-  return overlayTextStyle(slot, STAGE_UNITS);
+  return overlayTextStyle(slot, STAGE_UNITS, mirrorColor);
 }
 
 function previewImageStyle(slot: OverlaySlot): Record<string, string> {
@@ -564,6 +564,9 @@ onBeforeUnmount(() => {
 .overlay-slot-editor {
   padding: var(--lj-space-5);
   border-top: 1px solid var(--lj-surface-divider);
+  /* O painel de aba do editor entra deslizando de lado (`.lj-page-in`); sem
+     isto ele criaria rolagem horizontal na lista por um instante. */
+  overflow-x: clip;
 }
 
 /* Lado a lado só quando a lista comporta a fileira de abas do editor (369px

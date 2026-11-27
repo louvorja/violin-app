@@ -109,6 +109,16 @@ const model = computed({
   box-shadow: var(--lj-shadow-1);
   outline: none;
   cursor: grab;
+  /* A Reka posiciona o pino com `transform` inline, que vence qualquer regra
+     daqui — um `transform: scale()` no hover simplesmente não acontece. A
+     propriedade `scale` é independente e soma com o posicionamento. */
+  transition:
+    scale var(--lj-motion-bounce),
+    box-shadow var(--lj-transition-fast);
+}
+
+.lj-slider__thumb:hover {
+  scale: 1.14;
 }
 
 .lj-slider__thumb:focus-visible {
@@ -117,6 +127,8 @@ const model = computed({
 
 .lj-slider__thumb:active {
   cursor: grabbing;
+  scale: 1.06;
+  box-shadow: var(--lj-ui-focus);
 }
 
 .lj-slider__value {

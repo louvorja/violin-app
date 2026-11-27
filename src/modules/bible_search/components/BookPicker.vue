@@ -44,53 +44,53 @@
     </div>
     <Teleport to="body">
       <div v-if="open" ref="popoverRef" class="book-picker-popover" @click.stop>
-        <input
-          v-model="filter"
-          type="text"
-          class="book-picker-filter"
-          :placeholder="tm('modules.bible_search.ribbon.filter.book_filter')"
-        />
+        <div class="book-picker-filter-wrap">
+          <LjInput
+            v-model="filter"
+            size="sm"
+            clearable
+            :placeholder="tm('ribbon.filter.book_filter')"
+          />
+        </div>
         <div class="book-picker-body">
           <div class="book-picker-group book-picker-group-ot">
             <div class="book-picker-group-title">
               {{ tm("ribbon.filter.ot") }}
             </div>
-            <label v-for="book in filteredOt" :key="book.id_bible_book" class="book-picker-item">
-              <input
-                type="checkbox"
-                :checked="selected.has(book.id_bible_book)"
-                @change="toggle(book.id_bible_book)"
+            <div v-for="book in filteredOt" :key="book.id_bible_book" class="book-picker-item">
+              <LjCheckbox
+                :model-value="selected.has(book.id_bible_book)"
+                :label="book.name"
+                @update:model-value="toggle(book.id_bible_book)"
               />
-              <span>{{ book.name }}</span>
-            </label>
+            </div>
           </div>
           <div class="book-picker-group">
             <div class="book-picker-group-title">
               {{ tm("ribbon.filter.nt") }}
             </div>
-            <label v-for="book in filteredNt" :key="book.id_bible_book" class="book-picker-item">
-              <input
-                type="checkbox"
-                :checked="selected.has(book.id_bible_book)"
-                @change="toggle(book.id_bible_book)"
+            <div v-for="book in filteredNt" :key="book.id_bible_book" class="book-picker-item">
+              <LjCheckbox
+                :model-value="selected.has(book.id_bible_book)"
+                :label="book.name"
+                @update:model-value="toggle(book.id_bible_book)"
               />
-              <span>{{ book.name }}</span>
-            </label>
+            </div>
           </div>
         </div>
         <div class="book-picker-footer">
-          <button class="book-picker-action" @click="selectOt">
+          <LjButton size="sm" variant="subtle" class="book-picker-action" @click="selectOt">
             {{ tm("ribbon.filter.ot") }}
-          </button>
-          <button class="book-picker-action" @click="selectNt">
+          </LjButton>
+          <LjButton size="sm" variant="subtle" class="book-picker-action" @click="selectNt">
             {{ tm("ribbon.filter.nt") }}
-          </button>
-          <button class="book-picker-action" @click="selectAll">
+          </LjButton>
+          <LjButton size="sm" variant="subtle" class="book-picker-action" @click="selectAll">
             {{ tm("ribbon.filter.select_all") }}
-          </button>
-          <button class="book-picker-action" @click="clearAll">
+          </LjButton>
+          <LjButton size="sm" variant="subtle" class="book-picker-action" @click="clearAll">
             {{ tm("ribbon.filter.clear_all") }}
-          </button>
+          </LjButton>
         </div>
       </div>
     </Teleport>
@@ -98,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import { LjIcon, LjSelect } from "@/components/ui";
+import { LjButton, LjCheckbox, LjIcon, LjInput, LjSelect } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, reactive, onMounted, onUnmounted, useId } from "vue";
 import { useI18n } from "vue-i18n";
@@ -332,18 +332,9 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
   flex-direction: column;
   overflow: hidden;
 }
-.book-picker-filter {
-  height: 32px;
-  padding: 0 10px;
-  border: none;
+.book-picker-filter-wrap {
+  padding: var(--lj-space-2) var(--lj-space-3);
   border-bottom: 1px solid var(--lj-surface-border);
-  background: transparent;
-  color: var(--lj-text);
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-  width: 100%;
-  box-sizing: border-box;
 }
 .book-picker-body {
   flex: 1;
@@ -374,18 +365,11 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
 .book-picker-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  padding: 3px 0;
-  cursor: pointer;
-  color: var(--lj-text);
+  padding: 2px 4px;
+  border-radius: var(--lj-radius-xs);
 }
 .book-picker-item:hover {
   background: var(--lj-hover-bg);
-}
-.book-picker-item input {
-  margin: 0;
-  flex-shrink: 0;
 }
 .book-picker-footer {
   display: flex;
@@ -397,19 +381,5 @@ onUnmounted(() => document.removeEventListener("click", onDocClick, true));
 }
 .book-picker-action {
   flex: 1;
-  height: 24px;
-  padding: 0 6px;
-  border: var(--lj-ui-border);
-  border-radius: var(--lj-radius-xs);
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-size: 10px;
-  font-family: inherit;
-  cursor: pointer;
-  outline: none;
-  white-space: nowrap;
-}
-.book-picker-action:hover {
-  border-color: var(--lj-ui-accent);
 }
 </style>

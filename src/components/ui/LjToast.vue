@@ -207,16 +207,26 @@ const timerStyle = computed(() => ({
   }
 }
 
-.lj-toast-enter-active,
-.lj-toast-leave-active {
+/* Chega com a mola que passa um fio do alvo: o toast é uma peça solta, e é esse
+   quique que chama o olho sem precisar de cor. Só o `transform` leva a mola — a
+   opacidade segue a curva comum, senão ela "passaria" de 1. A saída é seca. */
+.lj-toast-enter-active {
   transition:
     opacity var(--lj-transition-normal),
-    transform var(--lj-transition-normal);
+    transform var(--lj-motion-bounce);
 }
-.lj-toast-enter-from,
+.lj-toast-leave-active {
+  transition:
+    opacity var(--lj-exit-fast),
+    transform var(--lj-exit-fast);
+}
+.lj-toast-enter-from {
+  opacity: 0;
+  transform: translate(-50%, var(--lj-enter-edge-shift)) scale(var(--lj-enter-layer-scale));
+}
 .lj-toast-leave-to {
   opacity: 0;
-  transform: translate(-50%, 8px);
+  transform: translate(-50%, 6px) scale(0.98);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -41,6 +41,16 @@ describe("TelemetryEnvironment", () => {
     ).toEqual({});
   });
 
+  it("leva o formato do pacote Linux mesmo sem os-release e recusa valor desconhecido", () => {
+    expect(nativeEnvironment({ platform: "linux", linuxPackage: "appimage" }, "linux")).toEqual({
+      linux_package: "appimage",
+    });
+    expect(
+      nativeEnvironment({ platform: "linux", linuxPackage: "/home/igreja/app" }, "linux")
+    ).toEqual({});
+    expect(nativeEnvironment({ platform: "darwin", linuxPackage: "deb" }, "darwin")).toEqual({});
+  });
+
   it("usa a versão Linux da distro e tolera rolling release sem versão", () => {
     const info = {
       platform: "linux",

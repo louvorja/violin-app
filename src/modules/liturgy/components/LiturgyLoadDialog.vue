@@ -71,11 +71,11 @@
       </div>
     </div>
 
-    <LjAlert
+    <LjEmpty
       v-else-if="!library.loading.value"
       class="llo-feedback"
-      variant="info"
-      :text="t('library.load_empty')"
+      :icon="ICONS.LITURGY.SCRIPT"
+      :title="t('library.load_empty')"
     />
 
     <LjProgress v-if="library.loading.value" class="llo-feedback" indeterminate />
@@ -85,7 +85,7 @@
 <script setup lang="ts">
 import { useLiturgyI18n } from "../i18n";
 import { ref, computed, watch } from "vue";
-import { LjAlert, LjButton, LjDialog, LjIcon, LjInput, LjProgress } from "@/components/ui";
+import { LjButton, LjDialog, LjEmpty, LjIcon, LjInput, LjProgress } from "@/components/ui";
 import $alert, { escapeHtml } from "@/helpers/Alert";
 import { useLiturgyLibrary, WEEKDAY_KEYS } from "../composables/useLiturgyLibrary";
 import { DEFAULT_COLOR } from "../composables/useLiturgyItems";
@@ -103,6 +103,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   "update:modelValue": [v: boolean];
   picked: [item: LiturgyPick];
+  deleted: [id: string];
 }>();
 
 const { t, locale } = useLiturgyI18n();
@@ -215,11 +216,13 @@ async function deleteItem(item: LiturgyLibraryItem) {
       title: t("actions.delete"),
       text: t("library.delete_confirm", { name: escapeHtml(item.name) }),
       translate: false,
+      destructive: true,
     },
     async (btn?: string) => {
       if (btn !== "yes") return;
       await library.remove(item.id);
       allItems.value = await library.list();
+      emit("deleted", item.id);
     }
   );
 }

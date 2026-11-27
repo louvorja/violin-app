@@ -73,6 +73,25 @@ describe("estilo de sobreposição", () => {
     expect(Number(style.opacity)).toBeCloseTo(0.2);
   });
 
+  it("a cor de aviso do módulo espelhado vale na projeção e na prévia (#80)", () => {
+    const slot = createOverlaySlot({ type: "module_mirror", source_module: "timer_worship" });
+    slot.style.color = "#FFFFFF";
+    const mirrorColor = (source: string | null | undefined) =>
+      source === "timer_worship" ? "#F59E0B" : "";
+
+    expect(overlayTextStyle(slot, undefined, mirrorColor).color).toBe("#F59E0B");
+    expect(overlayTextStyle(slot, STAGE_UNITS, mirrorColor).color).toBe("#F59E0B");
+    // Sem aviso em vigor, continua a cor escolhida na sobreposição.
+    expect(overlayTextStyle(slot, undefined, () => "").color).toBe("#FFFFFF");
+    expect(overlayTextStyle(slot).color).toBe("#FFFFFF");
+  });
+
+  it("texto livre não herda cor de módulo, mesmo com um módulo guardado no slot", () => {
+    const slot = createOverlaySlot({ type: "text", source_module: "timer_worship" });
+    slot.style.color = "#00FF00";
+    expect(overlayTextStyle(slot, undefined, () => "#F59E0B").color).toBe("#00FF00");
+  });
+
   it("alinha o texto pelo lado da âncora", () => {
     const at = (anchor: string) =>
       overlayTextAlign({

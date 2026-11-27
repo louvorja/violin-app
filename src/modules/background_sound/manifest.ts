@@ -7,6 +7,7 @@ import { ICONS } from "@/config/Icons"
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { KEYS } from "@/constants/UserDataKeys";
 import { getModulePath } from "@/helpers/ModulePath"
+import { RIBBON_ACTION } from "./ribbonActions";
 const RibbonSettings = defineAsyncComponent(
   () => import("@/modules/background_sound/components/RibbonSettings.vue")
 );
@@ -45,7 +46,7 @@ export const contextualPages: RibbonPage[] = [
             id: `${moduleId}_play`,
             icon: ICONS.PLAYER.PLAY_PAUSE,
             label: `${modulePath}.play`,
-            action: `${moduleId}_play`,
+            action: `${moduleId}_${RIBBON_ACTION.PLAY}`,
             color: "#27ae60",
             stateBinding: {
               watchPath: KEYS.MODULES.BACKGROUND_SOUND.IS_PLAYING,
@@ -61,21 +62,21 @@ export const contextualPages: RibbonPage[] = [
             id: `${moduleId}_stop`,
             icon: ICONS.PLAYER.STOP,
             label: `${modulePath}.stop`,
-            action: `${moduleId}_stop`,
+            action: `${moduleId}_${RIBBON_ACTION.STOP}`,
             color: "#e74c3c",
           },
           {
             id: `${moduleId}_stop_immediately`,
             icon: ICONS.PLAYER.STOP_NOW,
             label: `${modulePath}.stop_immediately`,
-            action: `${moduleId}_stop_immediately`,
+            action: `${moduleId}_${RIBBON_ACTION.STOP_IMMEDIATELY}`,
             color: "#e74c3c",
           },
           {
             id: `${moduleId}_random`,
             icon: ICONS.PLAYER.SHUFFLE,
             label: `${modulePath}.play_random`,
-            action: `${moduleId}_play_random`,
+            action: `${moduleId}_${RIBBON_ACTION.PLAY_RANDOM}`,
             color: "#1976d2",
           },
         ],
@@ -88,14 +89,14 @@ export const contextualPages: RibbonPage[] = [
             id: `${moduleId}_add_audio`,
             icon: ICONS.MEDIA.ADD,
             label: `${modulePath}.add_audio`,
-            action: `${moduleId}_add_audio`,
+            action: `${moduleId}_${RIBBON_ACTION.ADD_AUDIO}`,
             color: "#1976d2",
           },
           {
             id: `${moduleId}_manage_categories`,
             icon: ICONS.UI.TUNE,
             label: `shell.category.manage_categories`,
-            action: `${moduleId}_manage_categories`,
+            action: `${moduleId}_${RIBBON_ACTION.MANAGE_CATEGORIES}`,
             color: "#1976d2",
           },
         ],

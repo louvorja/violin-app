@@ -604,8 +604,12 @@ function toggleLibras() {
 /* Saída do card: desliza para a direita e some; os irmãos acompanham. */
 .bg-task-leave-active {
   transition:
-    transform 0.45s var(--lj-ease),
-    opacity 0.45s var(--lj-ease);
+    transform var(--lj-exit-panel),
+    opacity var(--lj-exit-panel);
+}
+
+.bg-task-move {
+  transition: transform var(--lj-motion-fast);
 }
 
 .bg-task-leave-to {

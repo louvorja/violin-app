@@ -13,7 +13,7 @@
       <PlaylistPanel />
     </template>
 
-    <template v-if="userdata" #header>
+    <template v-if="userdata?.search && userdata?.filter" #header>
       <div class="musics-header-content" :class="{ 'musics-header-content--mobile': mobileLayout }">
         <nav v-if="mobileLayout" class="musics-mobile-nav" :aria-label="tm('title')">
           <button
@@ -106,17 +106,13 @@
       v-show="!mobileLayout || mobileView === 'music'"
       ref="table"
       v-model="data"
+      class="musics-table"
+      :class="{ 'musics-table--compact-actions': compactActions }"
       :search="search"
       :letter="letter"
       :search_min_length="3"
-      :searchable_fields="{
-        name: search_name,
-        custom_collections: search_name,
-        lyric: search_lyric,
-        albums_names: search_album,
-        track: search_track,
-      }"
-      :filter="{ has_instrumental_music: filter_instrumental_music }"
+      :searchable_fields="searchableFields"
+      :filter="tableFilter"
       :disabled_albums="disabledAlbums"
       :scroll="scroll"
       :has_scroll="has_scroll"
@@ -127,13 +123,13 @@
     >
       <thead>
         <tr>
-          <th class="lj-u-text-start">{{ tm("table.music_name") }}</th>
-          <th v-if="!compact" class="lj-u-text-start">
+          <th class="lj-u-text-start musics-col-name">{{ tm("table.music_name") }}</th>
+          <th v-if="!compact" class="lj-u-text-start musics-col-album">
             {{ tm("table.album_name") }}
           </th>
-          <th class="lj-u-text-end">{{ tm("table.duration") }}</th>
-          <th v-if="selectedPlaylist" />
-          <th />
+          <th class="lj-u-text-end musics-col-duration">{{ tm("table.duration") }}</th>
+          <th v-if="selectedPlaylist" class="musics-col-playlist" />
+          <th class="musics-col-actions" />
         </tr>
       </thead>
       <tbody>
@@ -145,17 +141,18 @@
           :data-testid="`music-row-${item.id_music}`"
           @mousemove="nav.setActive(index)"
         >
-          <td>
+          <td class="musics-name-cell">
             {{ item.name }}
-            <div v-if="compact" class="musics-albums">
+            <div v-if="compact" class="musics-albums musics-albums-list">
               <LjChip
                 v-for="name in item.custom_collection_names || []"
                 :key="name"
                 :variant="chipVariant"
                 size="sm"
                 class="musics-album-chip"
+                :title="name"
               >
-                {{ name }}
+                <span class="musics-album-chip__label">{{ name }}</span>
               </LjChip>
               <LjChip
                 v-for="album in item.albums"
@@ -163,32 +160,39 @@
                 :variant="chipVariant"
                 size="sm"
                 class="musics-album-chip"
+                :title="albumLabel(album)"
                 @click="openAlbum(album.id_album)"
               >
-                {{ albumLabel(album) }}
+                <span class="musics-album-chip__label">{{ albumLabel(album) }}</span>
               </LjChip>
             </div>
           </td>
-          <td v-if="!compact">
-            <LjChip
-              v-for="name in item.custom_collection_names || []"
-              :key="name"
-              :variant="chipVariant"
-              class="musics-album-chip"
-            >
-              {{ name }}
-            </LjChip>
-            <LjChip
-              v-for="album in item.albums"
-              :key="album.id_album"
-              :variant="chipVariant"
-              class="musics-album-chip"
-              @click="openAlbum(album.id_album)"
-            >
-              {{ albumLabel(album) }}
-            </LjChip>
+          <td v-if="!compact" class="musics-album-cell">
+            <div class="musics-albums-list">
+              <LjChip
+                v-for="name in item.custom_collection_names || []"
+                :key="name"
+                :variant="chipVariant"
+                class="musics-album-chip"
+                :title="name"
+              >
+                <span class="musics-album-chip__label">{{ name }}</span>
+              </LjChip>
+              <LjChip
+                v-for="album in item.albums"
+                :key="album.id_album"
+                :variant="chipVariant"
+                class="musics-album-chip"
+                :title="albumLabel(album)"
+                @click="openAlbum(album.id_album)"
+              >
+                <span class="musics-album-chip__label">{{ albumLabel(album) }}</span>
+              </LjChip>
+            </div>
           </td>
-          <td class="lj-u-text-end">{{ item.custom_song_id ? "" : shortTime(item.duration) }}</td>
+          <td class="lj-u-text-end musics-duration-cell">
+            {{ item.custom_song_id ? "" : shortTime(item.duration) }}
+          </td>
           <td v-if="selectedPlaylist" class="lj-u-text-center">
             <template v-if="item.custom_song_id" />
             <LjButton
@@ -219,6 +223,7 @@
                 :has_instrumental_music="item.has_instrumental_music"
                 :custom-song-id="item.custom_song_id"
                 :has-audio="item.has_audio !== false"
+                :compact-breakpoint="ACTIONS_COMPACT_BREAKPOINT"
                 defer-quick-actions
               />
             </div>
@@ -255,6 +260,7 @@ import { LjAlert, LjButton, LjCheckbox, LjChip, LjIcon, LjInput, LjSwitch } from
 /* ####### INSTALAÇÃO DO MODULO ############################## */
 /* ########################################################### */
 import { computed, nextTick, onActivated, onMounted, ref, useId, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { useViewport } from "@/composables/useViewport";
 import Platform from "@/helpers/Platform";
 import Media from "@/composables/useMedia";
@@ -279,11 +285,10 @@ import { loadCustomMusicCatalog } from "@/helpers/CustomMusicCatalog";
 import { albumLabel, musicTitle } from "@root/config/musicCatalog.mjs";
 
 const moduleContainer = ref(null);
-const tm = (key) => {
-  return moduleContainer.value?.tm(key) || key;
-};
+const { t: i18nT } = useI18n();
+const tm = (key) => i18nT(`modules.${manifest.id}.${key}`);
 const userdata = computed(() => {
-  return moduleContainer.value?.userdata;
+  return $userdata.get(KEYS.MODULES.MUSICS.ROOT, null) ?? moduleContainer.value?.userdata;
 });
 
 const { selectedPlaylist, hydrate, addSong, removeSong, isSongInPlaylist } = usePlaylists();
@@ -317,11 +322,17 @@ const customMusics = ref([]);
 async function loadCustomMusics() {
   if (Platform.isRemote) return;
   const items = await loadCustomMusicCatalog().catch(() => []);
-  customMusics.value = items.map((item) => ({
+  const next = items.map((item) => ({
     ...item,
     albums_names: (item.custom_collection_names || []).join(", "),
     custom_collections: (item.custom_collection_names || []).join(", "),
   }));
+  // Reabrir a aba recarrega o acervo pessoal (pode ter mudado em outro módulo).
+  // Quase sempre não mudou — e trocar o array assim mesmo fazia a tabela
+  // inteira recomeçar: as linhas voltavam em levas, as colunas mudavam de
+  // largura a cada leva e a rolagem pulava, toda vez que a aba era aberta.
+  if (JSON.stringify(next) === JSON.stringify(customMusics.value)) return;
+  customMusics.value = next;
 }
 onActivated(loadCustomMusics);
 
@@ -486,11 +497,25 @@ const filter_instrumental_music = computed(() => {
   return userdata.value?.filter?.instrumental_music ?? false;
 });
 
+const searchableFields = computed(() => ({
+  name: search_name.value,
+  custom_collections: search_name.value,
+  lyric: search_lyric.value,
+  albums_names: search_album.value,
+  track: search_track.value,
+}));
+
+const tableFilter = computed(() => ({
+  has_instrumental_music: filter_instrumental_music.value,
+}));
+
 const disabled = computed(() => {
   return !search_name.value && !search_lyric.value && !search_album.value && !search_track.value;
 });
 
+const ACTIONS_COMPACT_BREAKPOINT = 550;
 const compact = computed(() => displayWidth.value <= 800);
+const compactActions = computed(() => displayWidth.value <= ACTIONS_COMPACT_BREAKPOINT);
 watch(selectedPlaylist, (playlist) => {
   if (!playlist && mobileView.value === "songs") mobileView.value = "playlists";
 });
@@ -580,12 +605,59 @@ function close() {
   color: var(--lj-warning);
 }
 
+/* A tabela recebe linhas em levas (DataTable.showFirstPage) e por scroll.
+   Com `table-layout: auto` o navegador recalcula a largura de todas as colunas
+   a cada leva que entra — o que fazia a lista tremer toda vez que abria. */
+.musics-table :deep(.lj-table__table) {
+  table-layout: fixed;
+}
+
+.musics-col-duration {
+  width: 82px;
+}
+
+.musics-col-playlist {
+  width: 44px;
+}
+
+.musics-col-actions {
+  width: calc(8 * var(--lj-ui-h-md) + 7 * var(--lj-space-1) + 2 * var(--lj-space-4));
+}
+
+.musics-table--compact-actions .musics-col-actions {
+  width: 44px;
+}
+
+.musics-name-cell {
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+
+.musics-duration-cell {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .musics-albums {
+  padding-top: var(--lj-space-1);
   padding-bottom: var(--lj-space-2);
+}
+
+.musics-albums-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lj-space-1);
+  min-width: 0;
 }
 
 .musics-album-chip {
   cursor: pointer;
+  max-width: 100%;
+}
+
+.musics-album-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .musics-alert {

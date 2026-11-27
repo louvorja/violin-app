@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <Transition name="alert">
+    <Transition name="alert" @enter="onEnter">
       <div v-if="show" class="alert-overlay">
         <div
           ref="box"
@@ -62,6 +62,7 @@
 </template>
 
 <script setup>
+import { applyMotionOrigin } from "@/helpers/MotionOrigin";
 import { LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
@@ -72,6 +73,12 @@ const alert = computed(() => $appdata.get("alert"));
 const show = computed(() => alert.value?.show === true);
 
 const box = ref(null);
+
+// A pergunta cresce a partir de onde foi o clique que a provocou. A caixa entra
+// por classe de transição, então o repouso (`none`) vai explícito.
+function onEnter(overlay) {
+  applyMotionOrigin(overlay.querySelector(".alert"), "none");
+}
 
 // O foco tem de entrar na caixa assim que ela abre: no prompt, o campo é o
 // primeiro elemento e sem isso o usuário não consegue digitar sem clicar antes.
@@ -398,14 +405,35 @@ function clickBtn(value) {
   border-color: var(--lj-success);
 }
 
-.alert-enter-active,
-.alert-leave-active {
+/* O véu só esmaece; quem se move é a caixa, que chega com a mesma mola e o
+   mesmo percurso curto do LjDialog — os dois são a mesma coisa para quem olha.
+   A mola tem a duração da opacidade do véu de propósito (`--lj-motion-fast` e
+   `--lj-transition-normal` são o mesmo tempo): o Vue encerra a transição pelo
+   elemento raiz, e uma mola mais longa seria cortada no meio. A saída é curta:
+   enquanto o véu não some ele segura os cliques, e o operador acabou de
+   responder — quer voltar ao que fazia. */
+.alert-enter-active {
   transition: opacity var(--lj-transition-normal);
+}
+.alert-enter-active .alert {
+  transition: transform var(--lj-motion-fast);
+}
+.alert-leave-active {
+  transition: opacity var(--lj-exit-fast);
+}
+.alert-leave-active .alert {
+  transition: transform var(--lj-exit-fast);
 }
 
 .alert-enter-from,
 .alert-leave-to {
   opacity: 0;
+}
+.alert-enter-from .alert {
+  transform: scale(var(--lj-enter-dialog-scale));
+}
+.alert-leave-to .alert {
+  transform: scale(0.97);
 }
 
 /* Escolha pelo teclado (setas): o operador precisa ver qual botão o Enter aperta. */

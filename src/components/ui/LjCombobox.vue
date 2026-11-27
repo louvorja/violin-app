@@ -20,9 +20,11 @@
         :aria-label="ariaLabel"
         :aria-describedby="describedBy"
         @input="onInput"
+        @mousedown="onMouseDown"
+        @focus="onFocus"
       />
-      <ComboboxTrigger class="lj-combobox__trigger">
-        <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="iconSize" />
+      <ComboboxTrigger class="lj-combobox__trigger" :data-state="open ? 'open' : 'closed'">
+        <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="iconSize" class="lj-combobox__caret" />
       </ComboboxTrigger>
     </ComboboxAnchor>
 
@@ -164,6 +166,47 @@ watch(open, (isOpen) => {
   if (!isOpen) query.value = "";
 });
 
+// Entrar no campo seleciona o texto: o que está escrito ali é o rótulo do item
+// já escolhido, e quem entra quer trocá-lo — digitar substitui, sem apagar
+// antes (como no clássico e no MusicSpotlight). É o comportamento do
+// componente, não uma opção: um combobox que selecionasse e outro que não
+// seriam o mesmo controle com dois jeitos de usar.
+//
+// Só quando não há busca em andamento. O foco também volta sozinho — ao trocar
+// de janela e retornar, por exemplo — e selecionar ali faria a próxima tecla
+// apagar o que a pessoa já tinha digitado.
+function onFocus(event: FocusEvent) {
+  if (query.value !== "") return;
+  (event.target as HTMLInputElement).select();
+}
+
+// Focar com o mouse tem dois poréns, e os dois valem só para o clique que traz
+// o foco — com o campo já focado o clique é o de sempre e posiciona o cursor,
+// para quem só quer corrigir um trecho:
+//
+// - o `mouseup` desse clique posicionaria o cursor e desfaria a seleção;
+// - mexer o mouse com o botão apertado começaria a ARRASTAR o texto recém-
+//   selecionado, e um arrasto termina sem `mouseup` nenhum.
+//
+// Os ouvintes ficam na janela, não no campo, e se desfazem juntos no `mouseup`:
+// assim são consumidos onde quer que o botão seja solto, e nada fica armado
+// para engolir um clique futuro.
+function onMouseDown(event: MouseEvent) {
+  const input = event.currentTarget as HTMLInputElement;
+  if (document.activeElement === input || query.value !== "") return;
+  const press = new AbortController();
+  const options = { capture: true, signal: press.signal };
+  window.addEventListener("dragstart", (drag) => drag.preventDefault(), options);
+  window.addEventListener(
+    "mouseup",
+    (release) => {
+      press.abort();
+      if (release.target === input) release.preventDefault();
+    },
+    options
+  );
+}
+
 // Compara pelo valor do item, não pela identidade: a lista pode ser recriada
 // (troca de idioma, itens novos) enquanto o item escolhido segue sendo o mesmo.
 function sameItem(a: Item, b: Item): boolean {
@@ -254,6 +297,19 @@ function displayValue(item: unknown): string {
   color: var(--lj-text-subtle);
   cursor: pointer;
   flex-shrink: 0;
+  transition: color var(--lj-transition-fast);
+}
+
+.lj-combobox__trigger:hover {
+  color: var(--lj-text);
+}
+
+.lj-combobox__caret {
+  transition: transform var(--lj-motion-fast);
+}
+
+.lj-combobox__trigger[data-state="open"] .lj-combobox__caret {
+  transform: rotate(180deg);
 }
 
 /* A camada é teleportada para o <body>, que não carrega a cor do app. */
@@ -320,11 +376,16 @@ function displayValue(item: unknown): string {
   width: 14px;
   flex-shrink: 0;
   color: var(--lj-ui-accent-text);
-  visibility: hidden;
+  opacity: 0;
+  transform: scale(0.75);
+  transition:
+    opacity var(--lj-transition-fast),
+    transform var(--lj-motion-fast);
 }
 
 .lj-combobox__item[data-state="checked"] .lj-combobox__check {
-  visibility: visible;
+  opacity: 1;
+  transform: scale(1);
 }
 
 .lj-combobox__empty {

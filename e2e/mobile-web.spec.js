@@ -318,6 +318,13 @@ test("Biblioteca de Mídia alterna entre acervo e playlist em 320×568", async (
   });
   const imported = page.locator(".media-grid-item").filter({ hasText: "mobile-e2e.png" });
   await expect(imported).toBeVisible();
+  // Toque longo abre o menu do chip: nome selecionável chamava a seleção do Android por cima.
+  const chip = page.locator(".media-chips .lj-category-chip").first();
+  await expect(chip).toHaveCSS("user-select", "none");
+  await chip.dispatchEvent("contextmenu", { clientX: 40, clientY: 200 });
+  await expect(page.locator(".lj-category-chip__menu")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".lj-category-chip__menu")).toBeHidden();
   await expectTouchTarget(imported.getByRole("button", { name: "Renomear" }));
   await expectTouchTarget(imported.getByRole("button", { name: "Excluir" }));
   // O card projeta o arquivo avulso; é o botão "+" que o coloca na playlist.
@@ -328,6 +335,29 @@ test("Biblioteca de Mídia alterna entre acervo e playlist em 320×568", async (
   await expect(page.getByRole("dialog", { name: "Renomear" })).toBeHidden();
   await tabs.last().tap();
   await expect(page.locator(".media-playlist-item")).toContainText("mobile-e2e.png");
+  await expectNoPageOverflow(page);
+});
+
+test("Editor de Músicas mantém o botão de tocar redondo em 360×740", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await boot(page);
+  await page.locator("#ribbon-tab-collections").tap();
+  await page.getByTestId("ribbon-btn-slide_editor").tap();
+  await expect(page.getByTestId("se-track")).toBeVisible({ timeout: 15_000 });
+  const mp3 = new Uint8Array(64).fill(0x55);
+  mp3.set([0xff, 0xfb, 0x90, 0x00]);
+  await page.locator('input[type="file"][accept="audio/*"]').setInputFiles({
+    name: "mobile-e2e.mp3",
+    mimeType: "audio/mpeg",
+    buffer: Buffer.from(mp3),
+  });
+  await page.locator(".se-mobile-nav button").nth(1).tap();
+  const play = page.locator(".se-player-play");
+  await expect(play).toBeVisible();
+  await expectTouchTarget(play);
+  const box = await play.boundingBox();
+  expect(box.width).toBeCloseTo(box.height, 0);
+  await expectInsideViewport(page.locator(".se-player"), page);
   await expectNoPageOverflow(page);
 });
 

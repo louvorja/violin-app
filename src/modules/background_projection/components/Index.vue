@@ -517,6 +517,9 @@ async function confirmRename(): Promise<void> {
 }
 
 async function removeFile(file: BgFile): Promise<void> {
+  if (!(await Alert.confirm(tm("delete_confirm", { name: file.name }), { destructive: true }))) {
+    return;
+  }
   revokeObjectUrl(file.id);
   if (isPlaying.value && selectedId.value === file.id) {
     await stop();

@@ -92,6 +92,7 @@ const model = computed({
   cursor: pointer;
   outline: none;
   user-select: none;
+  transition: color var(--lj-transition-fast);
 }
 
 .lj-tabs__trigger:hover:not(:disabled) {
@@ -123,8 +124,12 @@ const model = computed({
   width: var(--reka-tabs-indicator-size);
   transform: translateX(var(--reka-tabs-indicator-position));
   background: var(--lj-ui-accent);
+  /* Mola sem ultrapassagem: o traço corre até a aba e pousa. A largura vai na
+     mesma curva para o traço não esticar fora de compasso com o deslocamento —
+     é a única exceção à regra de mola só em `transform`, e só é barata porque o
+     indicador é absoluto: mudar a largura dele não refaz o layout de ninguém. */
   transition:
-    transform var(--lj-transition-normal),
-    width var(--lj-transition-normal);
+    transform var(--lj-motion-normal),
+    width var(--lj-motion-normal);
 }
 </style>

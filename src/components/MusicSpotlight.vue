@@ -138,6 +138,12 @@ const props = defineProps<{
   onMusicAction?: (music: SearchMusicItem, action: MusicActionEnum) => void;
   /** As ações que quem escolhe sabe tocar; sem a lista, todas. */
   musicActions?: MusicActionEnum[];
+  /**
+   * Quem escolhe sabe tocar música personalizada, pelo `custom_song_id`. Sem
+   * isso o seletor só oferece o acervo: a ação de fim do temporizador guarda o
+   * `id_music`, que na personalizada é só a posição na lista.
+   */
+  customSongs?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -312,9 +318,8 @@ async function loadMusics(): Promise<void> {
         if (Array.isArray(data)) loadedLocale.value = language;
       })(),
       (async () => {
-        // Os seletores de timer e do painel de liturgia ainda recebem IDs do catálogo.
         const data =
-          !Platform.isRemote && props.mode !== "pick" && !props.onMusicAction
+          !Platform.isRemote && (props.customSongs || executes.value)
             ? await loadCustomMusicCatalog()
             : [];
         if (revision === loadRevision) customMusics.value = data;

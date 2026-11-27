@@ -3,6 +3,10 @@
   "description": "Lista las colecciones",
   "all_collections": "Todas las Colecciones",
   "categories": "Categorías",
+  "filter_placeholder": "Filtrar colecciones...",
+  "filter_hint": "Escriba al menos 4 caracteres para filtrar",
+  "empty_search": "Ninguna colección encontrada",
+  "empty_search_hint": "Pruebe con otro término o busque por el nombre de la música en Localizar Músicas.",
   "music_search": {
     "title": "Localizar Músicas"
   }

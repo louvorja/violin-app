@@ -1,5 +1,5 @@
 <template>
-  <div class="rc-root">
+  <div class="rc-root" :style="{ '--lj-nav-x': tabDirection, '--lj-nav-y': 0 }">
     <!-- Carregando -->
     <div v-if="loading" class="rc-loading" role="presentation">
       <LjSpinner :size="48" />
@@ -30,7 +30,7 @@
 
     <div class="rc-content">
       <!-- Tab Músicas -->
-      <div v-if="isBooted('music')" v-show="tab === 'music'" class="rc-pane">
+      <div v-if="isBooted('music')" v-show="tab === 'music'" class="rc-pane lj-page-in">
         <remote-music
           ref="musicRef"
           v-model:tab="tab"
@@ -42,7 +42,7 @@
       </div>
 
       <!-- Tab Bíblia -->
-      <div v-if="isBooted('bible')" v-show="tab === 'bible'" class="rc-pane">
+      <div v-if="isBooted('bible')" v-show="tab === 'bible'" class="rc-pane lj-page-in">
         <remote-bible
           ref="bibleRef"
           v-model:active-bible="activeBible"
@@ -52,12 +52,12 @@
       </div>
 
       <!-- Tab Sorteio -->
-      <div v-if="isBooted('draw')" v-show="tab === 'draw'" class="rc-pane">
+      <div v-if="isBooted('draw')" v-show="tab === 'draw'" class="rc-pane lj-page-in">
         <remote-draw ref="drawRef" :token="token" @show-snackbar="showSnackbar" />
       </div>
 
       <!-- Tab Liturgia -->
-      <div v-if="isBooted('liturgy')" v-show="tab === 'liturgy'" class="rc-pane">
+      <div v-if="isBooted('liturgy')" v-show="tab === 'liturgy'" class="rc-pane lj-page-in">
         <remote-liturgy
           ref="liturgyRef"
           v-model:tab="tab"
@@ -68,7 +68,7 @@
       </div>
 
       <!-- Tab Slides (Controle) -->
-      <div v-if="isBooted('slides')" v-show="tab === 'slides'" class="rc-pane">
+      <div v-if="isBooted('slides')" v-show="tab === 'slides'" class="rc-pane lj-page-in">
         <remote-slides
           :slides="slides"
           :current-slide-index="currentSlideIndex"
@@ -78,7 +78,11 @@
       </div>
 
       <!-- Tab Anúncios -->
-      <div v-if="isBooted('announcements')" v-show="tab === 'announcements'" class="rc-pane">
+      <div
+        v-if="isBooted('announcements')"
+        v-show="tab === 'announcements'"
+        class="rc-pane lj-page-in"
+      >
         <remote-announcements
           ref="announcementsRef"
           :token="token"
@@ -88,12 +92,16 @@
       </div>
 
       <!-- Tab Vídeos Online -->
-      <div v-if="isBooted('videos')" v-show="tab === 'videos'" class="rc-pane">
+      <div v-if="isBooted('videos')" v-show="tab === 'videos'" class="rc-pane lj-page-in">
         <remote-videos ref="videosRef" :token="token" @show-snackbar="showSnackbar" />
       </div>
 
       <!-- Tab Som de fundo -->
-      <div v-if="isBooted('background_sound')" v-show="tab === 'background_sound'" class="rc-pane">
+      <div
+        v-if="isBooted('background_sound')"
+        v-show="tab === 'background_sound'"
+        class="rc-pane lj-page-in"
+      >
         <remote-background-sound
           ref="backgroundSoundRef"
           :token="token"
@@ -102,7 +110,7 @@
       </div>
 
       <!-- Tab Apresentador -->
-      <div v-if="isBooted('presenter')" v-show="tab === 'presenter'" class="rc-pane">
+      <div v-if="isBooted('presenter')" v-show="tab === 'presenter'" class="rc-pane lj-page-in">
         <remote-presenter :token="token" @show-snackbar="showSnackbar" />
       </div>
 
@@ -116,12 +124,16 @@
       </div>
 
       <!-- Tab Biblioteca de Mídia -->
-      <div v-if="isBooted('media_library')" v-show="tab === 'media_library'" class="rc-pane">
+      <div
+        v-if="isBooted('media_library')"
+        v-show="tab === 'media_library'"
+        class="rc-pane lj-page-in"
+      >
         <remote-media-library ref="mediaLibraryRef" :token="token" @show-snackbar="showSnackbar" />
       </div>
 
       <!-- Tab Player (mídia em reprodução) -->
-      <div v-if="isBooted('player')" v-show="tab === 'player'" class="rc-pane">
+      <div v-if="isBooted('player')" v-show="tab === 'player'" class="rc-pane lj-page-in">
         <remote-player
           ref="playerRef"
           :token="token"
@@ -131,7 +143,7 @@
       </div>
 
       <!-- Tab Cronômetro -->
-      <div v-if="isBooted('stopwatch')" v-show="tab === 'stopwatch'" class="rc-pane">
+      <div v-if="isBooted('stopwatch')" v-show="tab === 'stopwatch'" class="rc-pane lj-page-in">
         <remote-stopwatch
           ref="stopwatchRef"
           :token="token"
@@ -141,7 +153,7 @@
       </div>
 
       <!-- Tab Atalhos -->
-      <div v-if="isBooted('shortcuts')" v-show="tab === 'shortcuts'" class="rc-pane">
+      <div v-if="isBooted('shortcuts')" v-show="tab === 'shortcuts'" class="rc-pane lj-page-in">
         <remote-shortcuts :token="token" @show-snackbar="showSnackbar" />
       </div>
     </div>
@@ -264,6 +276,7 @@
 </template>
 
 <script setup>
+import { useNavDirection } from "@/composables/useNavDirection";
 import { ref, onMounted, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModuleI18n } from "@/composables/useModuleI18n";
@@ -296,6 +309,11 @@ const { tm: drawTm } = useModuleI18n("draw");
 const route = useRoute();
 
 const tab = ref("shortcuts");
+// De que lado o painel novo entra: pela posição da aba (`.lj-page-in`, ui.css).
+const tabDirection = useNavDirection(
+  () => tab.value,
+  () => tabItems.value.map((item) => item.value)
+);
 const loading = ref(true);
 const snackbar = ref({ show: false, text: "", color: "" });
 const token = computed(() => getToken());
@@ -900,6 +918,9 @@ onMounted(async () => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* O painel que entra deslizando pela direita (`.lj-page-in`) não pode criar
+     rolagem horizontal aqui. */
+  overflow-x: hidden;
 }
 
 .rc-pane {

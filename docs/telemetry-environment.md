@@ -12,6 +12,7 @@ a telemetria preserva esse contexto. Os campos automáticos `$os_version` e
 | Windows desktop | `windows_version`, `os_version`, `windows_build` | Versão nativa NT e número do build, por exemplo `10.0.26100` e `26100` |
 | Windows desktop | `windows_name`, `windows_name_source` | Nome/edição via `os.version()` (`node_os`); preserva Windows Server |
 | Linux desktop | `linux_distro`, `linux_distro_name`, `linux_distro_version`, `os_version` | `ID`, `PRETTY_NAME`/`NAME` e `VERSION_ID` de `/etc/os-release`, com fallback para `/usr/lib/os-release` |
+| Linux desktop | `linux_package` | `appimage` (variável `APPIMAGE`), `deb`/`rpm`/`pacman` (arquivo `resources/package-type` do electron-builder) ou `other` (pasta descompactada, pacote de terceiros) |
 | Todos os desktops | `os_kernel_version`, `process_arch` | `os.release()` e arquitetura do executável; não necessariamente a arquitetura física quando há emulação |
 | Electron | `electron_version`, `chromium_version`, `node_version` | Versões do runtime expostas pelo preload |
 | Todos | `browser_name`, `browser_version`, `browser_version_source` | Electron no desktop; Client Hints ou user-agent na web/PWA |
@@ -32,6 +33,30 @@ não o build NT: `13.0.0` indica Windows 11 ou posterior. Portanto esse valor n�
 e políticas do navegador podem não expor Client Hints; o fallback identifica o
 navegador com precisão limitada pelo user-agent, sem inventar uma versão nativa
 do sistema. A web não identifica a distro Linux.
+
+## Abertura medida desde o processo
+
+`elapsed_ms` do `app_boot_summary` é o relógio da janela: começa na navegação, e
+não conta a espera entre o clique no ícone e a janela existir. Na janela
+principal do desktop o resumo traz também, em milissegundos desde a criação do
+processo (`process.getCreationTime()`):
+
+| Propriedade | Momento |
+| --- | --- |
+| `process_elapsed_ms` | Primeira pintura — a espera real de quem abriu o app |
+| `main_script_start_ms` | Primeira linha do `main.cjs` (antes disso é o executável e o Chromium) |
+| `main_storage_ready_ms` | Perfil, migração e trava do acervo prontos |
+| `main_monitor_start_ms` | Monitor de travadas ligado; o que vem antes não vira `main_event_loop_stall` |
+| `main_app_ready_ms` | `app.whenReady()` |
+| `main_window_create_ms`, `main_window_created_ms` | Antes e depois de criar a janela principal |
+| `page_start_ms` | Navegação da janela (`performance.timeOrigin`) |
+
+`process_origin` vale `process`, ou `script` quando o sistema não informa a
+criação do processo e a contagem parte do `main.cjs`. `system_uptime_s` (tempo
+desde que o computador ligou, lido no início) separa a primeira abertura do dia,
+com o disco frio, das seguintes; `system_free_memory_mb` acompanha. Os marcos
+valem só para a primeira carga: janela recarregada não os repete. O tempo de
+montagem do AppImage, anterior ao processo, pode ficar de fora.
 
 ## Fronteiras e falhas
 

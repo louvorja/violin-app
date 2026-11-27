@@ -44,6 +44,7 @@
 </template>
 
 <script setup lang="ts">
+import { applyMotionOrigin } from "@/helpers/MotionOrigin";
 import { LjIcon } from "@/components/ui";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import {
@@ -124,6 +125,8 @@ const layerStyle = computed(() => ({ "--lj-dialog-stack": String(nivel.value) })
 // o que atrapalha em diálogos de confirmação. O contêiner recebe o foco e a
 // navegação por Tab segue funcionando.
 function onOpenAutoFocus(event: Event): void {
+  // Cresce a partir de onde foi o clique que o abriu (helpers/MotionOrigin.ts).
+  applyMotionOrigin(event.currentTarget as Element | null);
   emit("openAutoFocus", event);
   if (event.defaultPrevented) return;
   event.preventDefault();
@@ -157,7 +160,7 @@ function onDismiss(event: Event): void {
   inset: 0;
   z-index: calc(var(--lj-z-dialog) + var(--lj-dialog-stack, 0) * 2);
   background: var(--lj-black-alpha-40);
-  animation: lj-dialog-fade var(--lj-ui-float-enter);
+  animation: lj-dialog-fade var(--lj-transition-normal) both;
 }
 
 /* Sem par de saída o diálogo some seco, enquanto menu, select e popover saem
@@ -165,7 +168,7 @@ function onDismiss(event: Event): void {
    Os tokens de entrada e saída são deliberadamente assimétricos: quem chega
    desacelera, quem sai acelera. */
 .lj-dialog__overlay[data-state="closed"] {
-  animation: lj-dialog-fade-out var(--lj-ui-float-exit);
+  animation: lj-dialog-fade-out var(--lj-ui-float-exit) both;
 }
 
 .lj-dialog {
@@ -192,11 +195,11 @@ function onDismiss(event: Event): void {
   font-family: var(--lj-font-shell);
   font-size: var(--lj-text-base);
   outline: none;
-  animation: lj-dialog-in var(--lj-ui-float-enter);
+  animation: lj-dialog-in var(--lj-ui-float-enter) both;
 }
 
 .lj-dialog[data-state="closed"] {
-  animation: lj-dialog-out var(--lj-ui-float-exit);
+  animation: lj-dialog-out var(--lj-ui-float-exit) both;
 }
 
 .lj-dialog--sm {
@@ -321,7 +324,7 @@ function onDismiss(event: Event): void {
 @keyframes lj-dialog-in {
   from {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + var(--lj-ui-float-shift))) scale(0.97);
+    transform: translate(-50%, -50%) scale(var(--lj-enter-dialog-scale));
   }
 }
 
@@ -334,7 +337,7 @@ function onDismiss(event: Event): void {
 @keyframes lj-dialog-out {
   to {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + var(--lj-ui-float-shift))) scale(0.97);
+    transform: translate(-50%, -50%) scale(0.97);
   }
 }
 </style>

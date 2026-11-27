@@ -84,13 +84,11 @@ function getManager() {
     const tools = createTools({ binDir: path.join(paths.dataDir(), "bin"), execFileImpl: host.execFile });
     // Antes de qualquer yt-dlp deste processo rodar; não segura a inicialização.
     void tools.cleanup().catch((error) => console.warn("[onlineVideo] limpeza do yt-dlp falhou:", error?.message || error));
-    const canWriteVideos = () =>
-      storageAccess.canWrite("videos") || storageAccess.retry("videos");
     _manager = createManager({
       dir: paths.videosDir(),
       workDir: paths.videoWorkDir(),
       shared: storageAccess.status().videos?.shared === true,
-      canWrite: canWriteVideos,
+      canWrite: () => storageAccess.canWrite("videos"),
       canMaintain: () => storageAccess.canMaintain("videos"),
       tools,
       run: (opts) => {
@@ -114,7 +112,7 @@ function getManager() {
       presentationActive,
     });
     const manager = _manager;
-    _ready = (canWriteVideos()
+    _ready = (storageAccess.canWrite("videos")
       ? migrateDownloads(path.join(paths.bootstrapDir(), "online_videos"), manager.store.dir, {
         workDir: paths.videoWorkDir(), shared: storageAccess.status().videos?.shared === true,
       })

@@ -156,6 +156,7 @@
             v-model="selectedCollectionSongs"
             item-key="id"
             handle=".cc-drag"
+            :animation="150"
             @end="persistCollectionOrder"
           >
             <template #item="{ element }">

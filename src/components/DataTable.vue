@@ -94,8 +94,6 @@ const props = defineProps({
   sort_by: String,
   disabled_albums: { type: Array, default: () => [] },
   albumId: { type: [Number, String], default: null },
-  /** Mostra só as músicas desta coletânea (id do álbum); null mostra todas. */
-  only_album: { type: Number, default: null },
   /**
    * Mínimo de caracteres para o filtro textual ser aplicado (scroll infinito
    * em listas grandes). Buscas numéricas exatas (nº do hino/track) escapam
@@ -251,7 +249,6 @@ function getBaseEntries(filter, disabled) {
     filter,
     disabled,
     letter: props.letter,
-    only_album: props.only_album,
   });
   if (signature === _baseCacheSignature) return _baseCache;
 
@@ -274,13 +271,10 @@ function getBaseEntries(filter, disabled) {
       entry.albumIds.length === 0 ||
       entry.albumIds.some((albumId) => isAlbumEnabled(albumId, disabled));
 
-    const inAlbum = props.only_album == null || !!entry.albumIds?.includes(props.only_album);
-
     return (
       filterCondition &&
       initialLetter &&
       albumActive &&
-      inAlbum &&
       (props.albumId == null || isAlbumEnabled(props.albumId, disabled))
     );
   });
@@ -337,10 +331,6 @@ watch(
 );
 watch(
   () => props.letter,
-  () => compareFilterData()
-);
-watch(
-  () => props.only_album,
   () => compareFilterData()
 );
 watch(
@@ -482,7 +472,16 @@ function searchableKeys() {
     : [];
 }
 
+function currentFilterSnapshot() {
+  return {
+    searchable_fields: props.searchable_fields,
+    filter: props.filter,
+    letter: props.letter,
+  };
+}
+
 function filterData() {
+  last_filter.value = currentFilterSnapshot();
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   const reportFilter = () => {
     const durationMs = Math.max(
@@ -517,8 +516,7 @@ function filterData() {
     // ordenada e renderizar a primeira página. Isso remove trabalho síncrono
     // do primeiro frame em qualquer dispositivo.
     const disabled = disabledAlbumIds();
-    const needsBaseFilter =
-      filter.length > 0 || disabled.length > 0 || props.letter !== "" || props.only_album != null;
+    const needsBaseFilter = filter.length > 0 || disabled.length > 0 || props.letter !== "";
     is_fuzzy.value = false;
 
     if ((searchable.length === 0 || value === "") && !needsBaseFilter) {
@@ -681,12 +679,8 @@ function paginateData() {
 }
 
 function compareFilterData() {
-  const filter = {
-    searchable_fields: props.searchable_fields,
-    filter: props.filter,
-    letter: props.letter,
-    only_album: props.only_album,
-  };
+  if (!fileData) return;
+  const filter = currentFilterSnapshot();
 
   if (JSON.stringify(filter) === JSON.stringify(last_filter.value)) {
     return;

@@ -76,7 +76,7 @@ function onChange(event: Event): void {
   border: 1px solid var(--lj-surface-border-strong);
   border-radius: var(--lj-radius-pill);
   transition:
-    background var(--lj-transition-fast),
+    background-color var(--lj-transition-fast),
     border-color var(--lj-transition-fast),
     box-shadow var(--lj-transition-fast);
 }
@@ -88,9 +88,15 @@ function onChange(event: Event): void {
   width: 12px;
   height: 12px;
   background: var(--lj-surface-bg);
-  border-radius: 50%;
+  border-radius: var(--lj-radius-pill);
   box-shadow: var(--lj-shadow-1);
-  transition: transform var(--lj-transition-fast);
+  /* O pino é a peça física do controle: desliza com mola e passa meio pixel do
+     batente antes de assentar. A cor da trilha, acima, continua na curva. O
+     aperto usa a propriedade `scale`, independente do `transform` do percurso:
+     as duas animam ao mesmo tempo sem uma apagar a outra. */
+  transition:
+    transform var(--lj-motion-bounce),
+    scale var(--lj-transition-fast);
 }
 
 .lj-switch__input:checked + .lj-switch__track {
@@ -100,6 +106,12 @@ function onChange(event: Event): void {
 
 .lj-switch__input:checked + .lj-switch__track .lj-switch__thumb {
   transform: translateX(12px);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lj-switch:not(.is-disabled):active .lj-switch__thumb {
+    scale: 0.92;
+  }
 }
 
 .lj-switch__input:focus-visible + .lj-switch__track {

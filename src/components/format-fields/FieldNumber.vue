@@ -1,16 +1,18 @@
 <template>
-  <input
+  <LjInput
     type="number"
-    :value="modelValue ?? ''"
+    size="sm"
+    :model-value="modelValue ?? ''"
     :min="min"
     :max="max"
     class="format-field format-field--number"
-    @input="$emit('update:modelValue', Number($event.target.value))"
+    @update:model-value="$emit('update:modelValue', Number($event))"
   />
 </template>
 
 <script setup>
 import { computed } from "vue";
+import LjInput from "@/components/ui/LjInput.vue";
 
 const props = defineProps({
   modelValue: { type: [Number, null], default: null },
@@ -40,13 +42,6 @@ const max = computed(() => {
 
 <style scoped>
 .format-field--number {
-  font-size: 12px;
-  padding: 4px 6px;
-  border: 1px solid var(--lj-surface-border);
-  border-radius: var(--lj-radius-xs);
-  background: var(--lj-surface-bg);
-  color: inherit;
-  width: 80px;
-  box-sizing: border-box;
+  width: 88px;
 }
 </style>

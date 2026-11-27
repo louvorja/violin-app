@@ -27,7 +27,10 @@
         >
           <div
             class="shell-content"
-            :class="{ 'shell-content--desktop-download': showDesktopDownload }"
+            :class="{
+              'shell-content--desktop-download': showDesktopDownload,
+              'shell-content--has-module': moduleCoversBackground,
+            }"
           >
             <AppAlert />
             <AppSnackbar />
@@ -140,6 +143,7 @@ import { useViewport } from "@/composables/useViewport";
 import { useShellExpanded } from "@/composables/useModuleExpanded";
 import { useProjectionShutdown } from "@/composables/useProjectionShutdown";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import { awaitingModule, shownModuleId } from "@/composables/useModuleSwap";
 import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
 import { open as openProjection } from "@/helpers/Projection";
 import { useSyncManager } from "@/composables/useSyncManager";
@@ -248,18 +252,29 @@ const checkCatalogOnForeground = () => {
 onMounted(() => document.addEventListener("visibilitychange", checkCatalogOnForeground));
 onBeforeUnmount(() => document.removeEventListener("visibilitychange", checkCatalogOnForeground));
 
+// A tela inicial sai quando o módulo aparece, não quando é pedido. O primeiro
+// módulo aberto a partir daqui ainda precisa baixar o próprio código, e tirar a
+// tela inicial já no clique deixava o fundo do tema sozinho por alguns quadros
+// (composables/useModuleSwap.ts).
+const noModuleOnScreen = computed(
+  () => !$appdata.get<string | null>("active_module", null) || awaitingModule.value
+);
+
+// Com um módulo desenhado, o que fica atrás dele tem a cor dele — não a do
+// tema. O módulo cobre a área inteira, então isso só aparece se algum quadro
+// escapar sem módulo (remontagem, falha de carga), e aí não pisca cor nenhuma.
+const moduleCoversBackground = computed(
+  () => shownModuleId.value !== null && !awaitingModule.value
+);
+
 const showDesktopDownload = computed(() => {
-  return (
-    installChannel.value === "desktop" &&
-    width.value >= 720 &&
-    !$appdata.get<string | null>("active_module", null)
-  );
+  return installChannel.value === "desktop" && width.value >= 720 && noModuleOnScreen.value;
 });
 
 const showHome = computed(
   () =>
     !showDesktopDownload.value &&
-    !$appdata.get<string | null>("active_module", null) &&
+    noModuleOnScreen.value &&
     $appdata.get<boolean>("import_modules", false)
 );
 
@@ -895,7 +910,7 @@ onBeforeUnmount(() => {
   min-height: 100dvh;
   overflow: hidden;
   backface-visibility: hidden;
-  transition: opacity 120ms ease-out;
+  transition: opacity var(--lj-transition-fast);
 }
 
 /* Fade-in rápido (antes 256ms herdado do AlphaBlend Delphi) */
@@ -917,7 +932,8 @@ onBeforeUnmount(() => {
   max-width: 100%;
   overflow: hidden;
   padding-bottom: var(--lj-dock-offset, 0px);
-  transition: padding-bottom 0.3s ease;
+  /* Mesmo token do `transform` do rodapé (Footer.vue): os dois andam juntos. */
+  transition: padding-bottom var(--lj-reflow-enter);
 }
 .shell-grid {
   position: relative;
@@ -933,7 +949,8 @@ onBeforeUnmount(() => {
   min-width: 0;
   overflow: hidden;
   margin-left: 0;
-  transition: margin-left 0.35s var(--lj-ease);
+  /* Mesmo token do chat pinado (ChatDrawer.vue): os dois andam juntos. */
+  transition: margin-left var(--lj-reflow-enter);
 }
 .shell-center--drawer-pinned {
   margin-left: 300px;
@@ -945,6 +962,22 @@ onBeforeUnmount(() => {
   /* O fundo inicial acompanha a luminosidade real da superfície do tema. */
   background: var(--lj-home-bg);
   color: var(--lj-home-text);
+}
+/* Mesma superfície de .module-embedded (ModuleContainer.vue).
+   O atraso é o tempo de entrada do primeiro módulo (PAGE_LEAVE_MS em
+   useModuleSwap.ts): vindo da tela inicial, o fundo continua na cor do tema
+   até o módulo terminar de cobri-lo, e a página dissolve sobre a tela inicial
+   em vez de sobre um quadro branco. Na volta a classe sai sem atraso — o
+   módulo esmaece direto sobre a cor do tema. */
+.shell-content--has-module {
+  background: var(--lj-surface-bg);
+  transition: background-color 0s linear 0.3s;
+  /* O módulo ocupa a área inteira e rola por conta própria. Sem isto, a página
+     que entra deslizando pela direita aumenta a área de rolagem daqui por um
+     instante, e a barra de rolagem pisca a cada troca de aba. `clip` nem
+     chega a criar área de rolagem; `hidden` é a reserva. */
+  overflow: hidden;
+  overflow: clip;
 }
 
 .shell-sidebar {

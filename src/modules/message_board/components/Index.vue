@@ -458,9 +458,11 @@ function close() {
 }
 
 /* Transições */
-.mb-drawer-enter-active,
+.mb-drawer-enter-active {
+  transition: transform var(--lj-motion-normal);
+}
 .mb-drawer-leave-active {
-  transition: transform var(--lj-transition-slow);
+  transition: transform var(--lj-exit-panel);
 }
 .mb-drawer-enter-from,
 .mb-drawer-leave-to {

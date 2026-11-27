@@ -33,14 +33,24 @@
             :class="{ 'is-active': activeCatId === c.id }"
             @click="setActiveCatId(c.id)"
           >
-            <input
-              type="color"
-              class="ls-cat__color"
-              :value="c.cor || DEFAULT_CATEGORY_COLOR"
-              :title="t('actions.change_color')"
-              :aria-label="t('actions.change_color')"
-              @input="updateCatColor(c.id, ($event.target as HTMLInputElement).value)"
-            />
+            <LjPopover :title="t('actions.change_color')">
+              <template #trigger>
+                <button
+                  type="button"
+                  class="ls-cat__color"
+                  :style="{ background: c.cor || DEFAULT_CATEGORY_COLOR }"
+                  :title="t('actions.change_color')"
+                  :aria-label="t('actions.change_color')"
+                  @click.stop
+                />
+              </template>
+              <LjColorPicker
+                :model-value="c.cor || DEFAULT_CATEGORY_COLOR"
+                :presets="COLORS"
+                :label="t('actions.change_color')"
+                @update:model-value="updateCatColor(c.id, $event)"
+              />
+            </LjPopover>
 
             <LjInput
               v-if="editingCatId === c.id"
@@ -72,8 +82,8 @@
               icon-only
               class="ls-danger"
               :icon="ICONS.ACTIONS.CLOSE"
-              :title="t('actions.remove')"
-              :aria-label="t('actions.remove')"
+              :title="t('actions.delete')"
+              :aria-label="t('actions.delete')"
               @click.stop="removeCategory(c.id)"
             />
           </li>
@@ -103,60 +113,73 @@
           />
         </div>
 
-        <div v-else class="ls-table">
-          <div class="ls-row ls-row--head">
-            <span></span>
-            <span>{{ t("schedules.date") }}</span>
-            <span>{{ t("schedules.item_name") }}</span>
-            <span>{{ t("schedules.file") }}</span>
-            <span></span>
-          </div>
-
-          <div v-if="categoryItems.length === 0" class="ls-empty">
-            <LjEmpty :icon="ICONS.UI.FILE" :title="t('schedules.no_items')" />
-          </div>
-
-          <div v-for="it in categoryItems" :key="it.id" class="ls-row">
-            <LjIcon
-              :icon="fileTypeIcon(String(it.arquivo || ''))"
-              :size="16"
-              class="ls-row__icon"
-            />
-            <!-- `ScheduledItem` indexa campos como `unknown`: o v-model direto
-                 não tipa, então a leitura vira string e a escrita é explícita. -->
-            <LjInput
-              :model-value="String(it.data ?? '')"
-              type="date"
-              size="md"
-              class="ls-cell"
-              @update:model-value="it.data = $event"
-              @change="updateScheduled(it)"
-            />
-            <LjInput
-              :model-value="fileName(String(it.arquivo || ''))"
-              size="md"
-              class="ls-cell"
-              readonly
-            />
-            <LjInput
-              :model-value="String(it.arquivo ?? '')"
-              size="md"
-              class="ls-cell"
-              @update:model-value="it.arquivo = $event"
-              @change="updateScheduled(it)"
-            />
-            <LjButton
-              size="sm"
-              variant="ghost"
-              icon-only
-              class="ls-danger"
-              :icon="ICONS.ACTIONS.CLOSE"
-              :title="t('actions.remove')"
-              :aria-label="t('actions.remove')"
-              @click="removeScheduled(it.id)"
-            />
-          </div>
+        <div v-else-if="categoryItems.length === 0" class="ls-empty">
+          <LjEmpty :icon="ICONS.UI.FILE" :title="t('schedules.no_items')" />
         </div>
+
+        <LjTable v-else density="compact" sticky hover class="ls-table">
+          <thead>
+            <tr>
+              <th class="ls-col-icon" />
+              <th class="ls-col-date">{{ t("schedules.date") }}</th>
+              <th>{{ t("schedules.item_name") }}</th>
+              <th>{{ t("schedules.file") }}</th>
+              <th class="ls-col-action" />
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="it in categoryItems" :key="it.id">
+              <td class="ls-col-icon">
+                <LjIcon
+                  :icon="fileTypeIcon(String(it.arquivo || ''))"
+                  :size="16"
+                  class="ls-row__icon"
+                />
+              </td>
+              <!-- `ScheduledItem` indexa campos como `unknown`: o v-model direto
+                   não tipa, então a leitura vira string e a escrita é explícita. -->
+              <td class="ls-col-date">
+                <LjInput
+                  :model-value="String(it.data ?? '')"
+                  type="date"
+                  size="sm"
+                  class="ls-cell"
+                  @update:model-value="it.data = $event"
+                  @change="updateScheduled(it)"
+                />
+              </td>
+              <td>
+                <LjInput
+                  :model-value="fileName(String(it.arquivo || ''))"
+                  size="sm"
+                  class="ls-cell"
+                  readonly
+                />
+              </td>
+              <td>
+                <LjInput
+                  :model-value="String(it.arquivo ?? '')"
+                  size="sm"
+                  class="ls-cell"
+                  @update:model-value="it.arquivo = $event"
+                  @change="updateScheduled(it)"
+                />
+              </td>
+              <td class="ls-col-action">
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  class="ls-danger"
+                  :icon="ICONS.ACTIONS.CLOSE"
+                  :title="t('actions.delete')"
+                  :aria-label="t('actions.delete')"
+                  @click="removeScheduled(it.id)"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </LjTable>
       </section>
     </div>
 
@@ -171,9 +194,19 @@
 <script setup lang="ts">
 import { useLiturgyI18n } from "../i18n";
 import { ref } from "vue";
-import { LjButton, LjDialog, LjEmpty, LjIcon, LjInput } from "@/components/ui";
+import {
+  LjButton,
+  LjColorPicker,
+  LjDialog,
+  LjEmpty,
+  LjIcon,
+  LjInput,
+  LjPopover,
+  LjTable,
+} from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import type { ScheduledCategory, ScheduledItem } from "@/types/Liturgy";
+import { COLORS } from "../composables/useLiturgyItems";
 
 const props = withDefaults(
   defineProps<{
@@ -355,28 +388,15 @@ function fileName(path?: string): string {
   min-width: 0;
 }
 
-/* Não há primitivo de cor: o <input type="color"> nativo abre o seletor do
-   sistema, como o LiturgyManageDialog já faz. Aqui ele vira a própria
-   bolinha da categoria. */
 .ls-cat__color {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
   padding: 0;
-  background: transparent;
-  border: var(--lj-ui-border);
+  border: 1px solid rgba(var(--lj-on-surface-ch), 0.25);
   border-radius: 50%;
-  overflow: hidden;
   cursor: pointer;
-}
-
-.ls-cat__color::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.ls-cat__color::-webkit-color-swatch {
-  border: none;
-  border-radius: 50%;
+  forced-color-adjust: none;
 }
 
 .ls-cat__color:focus-visible {
@@ -388,30 +408,21 @@ function fileName(path?: string): string {
 
 .ls-table {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
+  min-height: 0;
 }
 
-/* Sem primitivo de tabela: grade de colunas fixas sobre os mesmos tokens. */
-.ls-row {
-  display: grid;
-  grid-template-columns: 30px 130px 1fr 1fr 30px;
-  gap: var(--lj-space-2);
-  align-items: center;
-  padding: var(--lj-space-2) var(--lj-space-4);
-  border-bottom: 1px solid var(--lj-surface-divider);
+.ls-col-icon {
+  width: 34px;
+  text-align: center;
 }
 
-.ls-row--head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--lj-surface-bg-soft);
-  color: var(--lj-text-muted);
-  font-size: var(--lj-text-sm);
-  font-weight: var(--lj-weight-medium);
-  text-transform: uppercase;
+.ls-col-date {
+  width: 140px;
+}
+
+.ls-col-action {
+  width: 34px;
+  text-align: center;
 }
 
 .ls-row__icon {
@@ -431,15 +442,8 @@ function fileName(path?: string): string {
   padding: var(--lj-space-6);
 }
 
-/* Ação destrutiva discreta: mantém o fantasma do LjButton e só troca a cor.
-   O seletor descendente supera a regra `.lj-btn--ghost` do próprio primitivo. */
-.ls-cat .ls-danger,
-.ls-row .ls-danger {
-  color: var(--lj-danger);
-}
-
 .ls-cat .ls-danger:hover,
-.ls-row .ls-danger:hover {
+.ls-table :deep(.ls-danger:hover) {
   background: var(--lj-danger-soft);
   color: var(--lj-danger);
 }

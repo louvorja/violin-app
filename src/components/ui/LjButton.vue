@@ -94,6 +94,49 @@ const buttonBindings = computed(() => {
   font-weight: var(--lj-weight-medium);
   white-space: nowrap;
   user-select: none;
+  /* Repete a lista de .lj-ui-control (ui.css) porque `transition` não soma:
+     declarar só o `transform` aqui apagaria as três de lá. Esta é a volta do
+     aperto — o botão solta com a mola que passa um fio do tamanho e assenta. */
+  transition:
+    background-color var(--lj-transition-fast),
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast),
+    transform var(--lj-motion-bounce);
+}
+
+/* Aperto: o botão cede sob o ponteiro. A ida é curta e seca — quem clicou já
+   decidiu, e a resposta tem de vir no mesmo quadro; a mola fica para a volta.
+
+   Com texto, ele afunda uma distância FIXA em vez de encolher. Escala é
+   proporcional ao tamanho, e botão aqui tem a largura que o layout der: os 3%
+   que mal se veem num botão de 96px são 30px num botão esticado pela coluna. */
+.lj-btn:active {
+  transform: translateY(var(--lj-press-shift));
+  transition:
+    background-color var(--lj-transition-fast),
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast),
+    transform 0.08s var(--lj-ease-out);
+}
+
+/* O só-ícone é quadrado e pequeno por contrato (largura = altura do controle),
+   então nele a escala é segura — e é o que se lê melhor num alvo de 22px. */
+.lj-btn--icon:active {
+  transform: scale(var(--lj-press-scale));
+}
+
+/* Mexer no botão mexe também na área de clique: quem aperta bem na borda solta
+   o ponteiro FORA do botão já deslocado, e o navegador entrega o `click` ao
+   elemento pai — o botão afunda e nada acontece, sem erro nenhum. Este
+   pseudo-elemento devolve a faixa perdida enquanto durar o aperto. Não precisa
+   de `position: relative` no botão: o próprio `transform` acima já o torna o
+   bloco de referência — e o contexto de empilhamento, de modo que o z-index
+   negativo deixa a guarda atrás do rótulo e do ícone, sem lhes tomar o clique. */
+.lj-btn:active::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  z-index: -1;
 }
 
 .lj-btn__label {

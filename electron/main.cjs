@@ -5,6 +5,8 @@ if (process.argv.includes(storageBootstrap.FLAG) && process.env[storageBootstrap
   storageBootstrap.runHelper();
   return;
 }
+const bootTimeline = require("./main/bootTimeline.js");
+bootTimeline.mark("script_start");
 
 /**
  * Entry point do main process do LouvorJA Electron.
@@ -234,6 +236,7 @@ try {
   app.exit(1);
   return;
 }
+bootTimeline.mark("storage_ready");
 // Mesmo AppUserModelID do instalador NSIS em todas as BrowserWindows. O Windows
 // agrupa as projeções sob o app, em vez de mostrá-las como aplicativos distintos.
 if (process.platform === "win32") app.setAppUserModelId("br.com.louvorja.app");
@@ -769,6 +772,7 @@ ipcMain.handle("site-loader:aguardar", () => {
 });
 runtimeHealth.watchApp(app);
 runtimeHealth.start();
+bootTimeline.mark("monitor_start");
 
 // Encaminha falhas do processo principal para o renderer enquanto ele ainda
 // está vivo. O monitor não altera o comportamento padrão do Node após uma
@@ -1180,6 +1184,7 @@ async function _bootstrapMonitorConfig() {
 }
 
 app.whenReady().then(async () => {
+  bootTimeline.mark("app_ready");
   // Vale a partir da próxima abertura; longe da abertura atual para não disputar CPU.
   setTimeout(() => gpuPreference.detect(paths.bootstrapDir()), 60_000).unref?.();
   powerMonitor.on("resume", handleSystemResume);
@@ -1300,7 +1305,9 @@ app.whenReady().then(async () => {
     console.warn("[main] HTTP server não disponível:", e.message);
   }
 
+  bootTimeline.mark("window_create");
   createWindow();
+  bootTimeline.mark("window_created");
   appBootstrapped = true;
   createAppTray();
   // A janela principal já se registra no HTTP server dentro de createWindow().
@@ -1521,6 +1528,12 @@ ipcMain.handle("telemetry:pending-main-errors", () => _readPendingMainErrors());
 // Metadados estáveis durante o processo; leitura única, sob demanda e sem argumentos do renderer.
 let systemInfoPromise;
 ipcMain.handle("telemetry:system-info", () => (systemInfoPromise ??= collectSystemInfo()));
+// Só a janela principal mede a abertura, e só na primeira carga.
+ipcMain.handle("telemetry:boot-timeline", (event) =>
+  mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents
+    ? bootTimeline.take()
+    : null
+);
 // Qual placa o Chromium escolheu e a taxa de cada monitor: "aceleração ligada"
 // não distingue a placa dedicada da integrada num computador com as duas.
 ipcMain.handle("telemetry:graphics", async () => {
@@ -1966,12 +1979,18 @@ ipcMain.handle("windows:open", async (_event, options) => {
     /* Ciclo novo: o resultado da apresentação anterior não vale mais. */
     _apresentacao.delete(options.feature);
   }
+  const windowAnimationOpt =
+    options?.windowAnimation ?? _userDataMain?.options?.window_animation;
+  const windowAnimationDurationOpt =
+    options?.windowAnimationDuration ?? _userDataMain?.options?.window_animation_duration;
   const win = await windowFactory.openOnMonitor({
     ...options,
     preloadPath,
     devUrl,
     prodHtmlPath,
     devTools: devToolsOpt == null ? null : !!devToolsOpt,
+    windowAnimation: windowAnimationOpt,
+    windowAnimationDuration: windowAnimationDurationOpt,
   });
   if (win?.refused) return { id: null, refused: win.refused };
   // `null` quando o windowFactory recusou abrir na tela do operador. O
@@ -1980,7 +1999,12 @@ ipcMain.handle("windows:open", async (_event, options) => {
 });
 
 /** Fecha a janela de uma feature */
-ipcMain.handle("windows:close", (_event, feature) => windowFactory.close(feature));
+ipcMain.handle("windows:close", (_event, feature) =>
+  windowFactory.close(feature, {
+    windowAnimation: _userDataMain?.options?.window_animation,
+    windowAnimationDuration: _userDataMain?.options?.window_animation_duration,
+  })
+);
 
 /** Lista features com janelas abertas */
 ipcMain.handle("windows:listOpen", () => windowFactory.listOpen());

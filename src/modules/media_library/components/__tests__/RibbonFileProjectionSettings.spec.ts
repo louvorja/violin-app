@@ -42,6 +42,11 @@ vi.mock("@/components/ui", () => ({
     props: ["variant", "size", "icon"],
     template: `<button type="button" class="lj-btn-stub"><slot /></button>`,
   },
+  LjCheckbox: {
+    props: ["id", "modelValue", "label"],
+    emits: ["update:modelValue"],
+    template: `<label><input :id="id" type="checkbox" :checked="modelValue" @change="$emit('update:modelValue', $event.target.checked)" /><span>{{ label }}</span></label>`,
+  },
   LjIcon: {
     props: ["icon", "size"],
     template: `<span class="lj-icon-stub" />`,
@@ -49,6 +54,13 @@ vi.mock("@/components/ui", () => ({
   LjSelect: {
     props: ["modelValue", "items", "size", "ariaLabel"],
     template: `<div class="lj-select-stub">{{ items.map((i) => i.label).join("|") }}</div>`,
+  },
+}));
+vi.mock("@/components/inputs/ColorField.vue", () => ({
+  default: {
+    props: ["modelValue"],
+    emits: ["update:modelValue"],
+    template: `<input type="color" class="lj-color-field-stub" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />`,
   },
 }));
 

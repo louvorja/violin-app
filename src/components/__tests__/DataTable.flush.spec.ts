@@ -100,4 +100,19 @@ describe("busca pelo teclado no DataTable", () => {
     await wrapper.setProps({ search: "12" });
     expect((wrapper.vm as unknown as Table).searching()).toBe(true);
   });
+
+  it("não refiltra nem reinicia as linhas quando recebe novo objeto com os mesmos filtros após carregar", async () => {
+    const wrapper = await mountTable();
+    const before = shown(wrapper).revision;
+    const emittedBefore = wrapper.emitted("update:modelValue")!.length;
+
+    await wrapper.setProps({
+      searchable_fields: { name: true },
+      filter: undefined,
+    });
+    await nextTick();
+
+    expect(shown(wrapper).revision).toBe(before);
+    expect(wrapper.emitted("update:modelValue")).toHaveLength(emittedBefore);
+  });
 });

@@ -7,15 +7,16 @@
     }"
   >
     <div class="liturgy-panel-header">
-      <button
-        type="button"
+      <LjButton
+        size="sm"
+        variant="ghost"
+        icon-only
         class="liturgy-icon-btn"
+        :icon="effectiveCollapsed ? ICONS.UI.BACK : ICONS.UI.CHEVRON_RIGHT"
         :title="$t('shell.toggle_liturgy')"
         :aria-label="$t('shell.toggle_liturgy')"
         @click="toggleCollapsed"
-      >
-        <LjIcon :icon="effectiveCollapsed ? ICONS.UI.BACK : ICONS.UI.CHEVRON_RIGHT" size="16" />
-      </button>
+      />
       <LjIcon
         :icon="ICONS.MODULES.LITURGY"
         :color="getModule(ModuleEnum.LITURGY).color"
@@ -25,16 +26,17 @@
       <span v-if="!effectiveCollapsed && totals.count > 0" class="liturgy-totals">
         {{ totals.count }} · {{ totals.duration }}
       </span>
-      <button
+      <LjButton
         v-if="!effectiveCollapsed"
-        type="button"
+        size="sm"
+        variant="ghost"
+        icon-only
         class="liturgy-icon-btn"
+        :icon="ICONS.ACTIONS.EDIT"
         :title="$t('shell.edit_liturgy')"
         :aria-label="$t('shell.edit_liturgy')"
         @click="openLiturgy"
-      >
-        <LjIcon :icon="ICONS.ACTIONS.EDIT" size="13" />
-      </button>
+      />
     </div>
 
     <div v-if="!effectiveCollapsed" class="liturgy-panel-body">
@@ -74,14 +76,24 @@
               :title="tooltipDoItem(item)"
               @click="executar(item)"
             >
-              <span class="liturgy-item-bar" />
-              <LjIcon :icon="$liturgy.iconForItem(item)" size="14" class="liturgy-item-icon" />
+              <span class="liturgy-item-badge" aria-hidden="true">
+                <LjIcon :icon="$liturgy.iconForItem(item)" size="14" />
+              </span>
               <span class="liturgy-item-content">
                 <span class="liturgy-item-title lj-u-truncate">
-                  {{ item.item || item.subitem || "—" }}
+                  {{ item.item || subitemText(item) || "—" }}
                 </span>
-                <span v-if="item.subitem && item.subitem !== item.item" class="liturgy-item-sub">
-                  {{ item.subitem }}
+                <span
+                  v-if="subitemText(item) && subitemText(item) !== item.item"
+                  class="liturgy-item-sub"
+                >
+                  <LjIcon
+                    v-if="subitemParsed(item).icon"
+                    :icon="subitemParsed(item).icon"
+                    size="11"
+                    class="liturgy-item-sub-icon"
+                  />
+                  <span class="lj-u-truncate">{{ subitemText(item) }}</span>
                 </span>
               </span>
               <span v-if="item.time" class="liturgy-item-meta">{{ item.time }}</span>
@@ -94,12 +106,7 @@
       </ul>
     </div>
 
-    <MusicSpotlight
-      v-model="escolhaAberta"
-      mode="pick"
-      :on-music-action="onVersaoEscolhida"
-      @pick="onMusicaEscolhida"
-    />
+    <LiturgyMusicChooser ref="seletorDeMusica" @chosen="onMusicaEscolhida" />
   </aside>
 </template>
 
@@ -108,15 +115,14 @@ import { LjButton, LjEmpty, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import MusicSpotlight from "@/components/MusicSpotlight.vue";
-import { ACTION_LITURGY_VERSION } from "@/config/MusicAction";
+import LiturgyMusicChooser from "@/modules/liturgy/components/LiturgyMusicChooser.vue";
 import $liturgy from "@/helpers/Liturgy";
 import $userdata from "@/helpers/UserData";
 import $modules from "@/helpers/Modules";
 import { KEYS } from "@/constants/UserDataKeys";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { useLiturgyExecution } from "@/modules/liturgy/composables/useLiturgyExecution";
-import { prepararAgenda } from "@/modules/liturgy/agenda";
+import { formatarDuracao, parseSubitem, prepararAgenda } from "@/modules/liturgy/agenda";
 import { useViewport } from "@/composables/useViewport";
 import Platform from "@/helpers/Platform";
 import { getModule } from "@/config/modules";
@@ -148,8 +154,7 @@ const effectiveCollapsed = computed(() => (isCompact.value ? !mobileOpen.value :
 watch(isCompact, () => {
   mobileOpen.value = false;
 });
-const escolhaAberta = ref(false);
-const itemEmEscolha = ref(null);
+const seletorDeMusica = ref(null);
 
 // Mesma preparação da tela cheia: os itens agrupados sob o bloco e com a
 // hora calculada. Sem ela o painel mostrava outra ordem e nenhum horário.
@@ -159,12 +164,7 @@ const totals = computed(() => {
   const arr = items.value;
   const count = arr.filter((i) => i.tipo !== LiturgyItemTypeEnum.BLOCO).length;
   const totalMin = arr.reduce((s, i) => s + (Number(i.duration) || 0), 0);
-  let duration = "—";
-  if (totalMin > 0) {
-    const h = Math.floor(totalMin / 60);
-    const m = totalMin % 60;
-    duration = h > 0 ? `${h}h${m > 0 ? m + "m" : ""}` : `${m}m`;
-  }
+  const duration = totalMin > 0 ? formatarDuracao(totalMin) : "—";
   return { count, duration };
 });
 
@@ -200,8 +200,51 @@ function precisaEscolherMusica(item) {
   return item.tipo === LiturgyItemTypeEnum.MUSICA && (item.escolha || !item.id_music);
 }
 
+const SCHEDULED_ICON_MAP = {
+  mp4: ICONS.MEDIA.VIDEO,
+  webm: ICONS.MEDIA.VIDEO,
+  mkv: ICONS.MEDIA.VIDEO,
+  mov: ICONS.MEDIA.VIDEO,
+  avi: ICONS.MEDIA.VIDEO,
+  m4v: ICONS.MEDIA.VIDEO,
+  mp3: ICONS.MEDIA.AUDIO,
+  wav: ICONS.MEDIA.AUDIO,
+  ogg: ICONS.MEDIA.AUDIO,
+  flac: ICONS.MEDIA.AUDIO,
+  aac: ICONS.MEDIA.AUDIO,
+  m4a: ICONS.MEDIA.AUDIO,
+  opus: ICONS.MEDIA.AUDIO,
+  wma: ICONS.MEDIA.AUDIO,
+  jpg: ICONS.MEDIA.IMAGE,
+  jpeg: ICONS.MEDIA.IMAGE,
+  png: ICONS.MEDIA.IMAGE,
+  webp: ICONS.MEDIA.IMAGE,
+  gif: ICONS.MEDIA.IMAGE,
+  bmp: ICONS.MEDIA.IMAGE,
+  heic: ICONS.MEDIA.IMAGE,
+  heif: ICONS.MEDIA.IMAGE,
+  pdf: ICONS.UI.FILE,
+};
+
+function subitemParsed(item) {
+  if (item.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS) {
+    const sched = $liturgy.findScheduledForToday(item.ref_id || item.id, $liturgy.getActiveDate());
+    const arquivo = sched ? String(sched.arquivo || "") : "";
+    if (!arquivo) return { icon: "", text: "" };
+    const ext = arquivo.split(".").pop()?.toLowerCase() || "";
+    const icon = SCHEDULED_ICON_MAP[ext] || ICONS.UI.FILE;
+    const text = arquivo.split(/[\\/]/).pop() || arquivo;
+    return { icon, text };
+  }
+  return parseSubitem(item.subitem);
+}
+
+function subitemText(item) {
+  return subitemParsed(item).text;
+}
+
 function tooltipDoItem(item) {
-  const nome = item.item || item.subitem || "";
+  const nome = item.item || subitemText(item) || "";
   return precisaEscolherMusica(item) ? `${nome} — ${t("shell.liturgy_pick_music")}` : nome;
 }
 
@@ -217,8 +260,7 @@ function marcar(item) {
 
 function executar(item) {
   if (precisaEscolherMusica(item)) {
-    itemEmEscolha.value = item;
-    escolhaAberta.value = true;
+    seletorDeMusica.value?.choose(item);
     return;
   }
   executeItem(item);
@@ -230,17 +272,9 @@ function executar(item) {
  * intenção ("um hino aqui"), e qual hino foi cantado neste domingo é decisão do
  * culto — quem quiser fixar edita o item na tela do módulo.
  */
-function onMusicaEscolhida(music, versao = "sung") {
-  const item = itemEmEscolha.value;
-  itemEmEscolha.value = null;
-  const id = Number(music.id_music);
-  if (!item || !Number.isFinite(id)) return;
-  playMusic({ ...item, id_music: id, musica: id, escolha: false }, versao);
+function onMusicaEscolhida(executavel, versao, item) {
+  playMusic(executavel, versao);
   marcar(item);
-}
-
-function onVersaoEscolhida(music, action) {
-  onMusicaEscolhida(music, ACTION_LITURGY_VERSION[action] ?? "sung");
 }
 
 onMounted(() => {
@@ -259,7 +293,7 @@ onMounted(() => {
   color: var(--lj-text);
   min-height: 0;
   overflow: hidden;
-  transition: width var(--lj-transition-slow);
+  transition: width var(--lj-reflow-enter);
   font-family: var(--lj-font-shell);
 }
 
@@ -429,19 +463,19 @@ onMounted(() => {
   align-items: center;
   gap: var(--lj-space-3);
   width: 100%;
-  padding: var(--lj-space-2) var(--lj-space-4) var(--lj-space-2) var(--lj-space-6);
+  padding: var(--lj-space-2) var(--lj-space-4);
   background: var(--lj-surface-bg);
   border: 1px solid var(--lj-surface-border);
-  border-radius: var(--lj-radius-sm);
+  border-radius: var(--lj-radius-md);
   color: inherit;
   font-family: inherit;
   font-size: var(--lj-text-base);
   text-align: left;
   cursor: pointer;
   transition:
-    background var(--lj-transition-fast),
+    background-color var(--lj-transition-fast),
     border-color var(--lj-transition-fast),
-    transform 0.05s;
+    transform var(--lj-motion-bounce);
   user-select: none;
 }
 
@@ -457,21 +491,29 @@ onMounted(() => {
 }
 
 .liturgy-item:active {
-  transform: scale(0.985);
+  transform: translateY(var(--lj-press-shift));
+  transition:
+    background-color var(--lj-transition-fast),
+    border-color var(--lj-transition-fast),
+    transform var(--lj-exit-fast);
 }
 
-.liturgy-item-bar {
+/* Guarda da área de clique durante o aperto (ver design-system.md). */
+.liturgy-item:active::after {
+  content: "";
   position: absolute;
-  left: 0;
-  top: var(--lj-space-2);
-  bottom: var(--lj-space-2);
-  width: 3px;
-  background: var(--item-color, var(--lj-surface-border-strong));
-  border-radius: 0 var(--lj-radius-xs) var(--lj-radius-xs) 0;
+  inset: -4px;
 }
 
-.liturgy-item-icon {
-  opacity: 0.7;
+.liturgy-item-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--lj-radius-sm);
+  background: color-mix(in oklab, var(--item-color, var(--lj-ui-accent)) 12%, transparent);
+  color: var(--item-color, var(--lj-text-muted));
   flex-shrink: 0;
 }
 
@@ -488,12 +530,17 @@ onMounted(() => {
 }
 
 .liturgy-item-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-1);
+  min-width: 0;
   font-size: var(--lj-text-xs);
   opacity: 0.7;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   line-height: 1.2;
+}
+
+.liturgy-item-sub-icon {
+  flex-shrink: 0;
 }
 
 .liturgy-item-meta {
@@ -533,5 +580,25 @@ onMounted(() => {
 .liturgy-panel--compact-web .liturgy-item,
 .liturgy-panel--compact-web :deep(.lj-btn) {
   min-height: 44px;
+}
+</style>
+
+<style>
+html[data-theme="dark"] .liturgy-bloco {
+  color: color-mix(in oklab, var(--item-color, var(--lj-text-muted)) 42%, var(--lj-white));
+  border-bottom-color: color-mix(
+    in oklab,
+    var(--item-color, var(--lj-surface-border-strong)) 50%,
+    var(--lj-white)
+  );
+}
+
+html[data-theme="dark"] .liturgy-item-badge {
+  background: color-mix(
+    in oklab,
+    var(--item-color, var(--lj-ui-accent)) 24%,
+    var(--lj-surface-bg-active)
+  );
+  color: color-mix(in oklab, var(--item-color, var(--lj-text)) 42%, var(--lj-white));
 }
 </style>

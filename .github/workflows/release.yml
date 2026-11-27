@@ -91,6 +91,17 @@ jobs:
         env:
           HUSKY: "0"
 
+      - name: Instalar posthog-cli (Windows)
+        # O instalador do @posthog/cli extrai o binário com o powershell.exe 5.1. Chamado de
+        # um passo em pwsh, o 5.1 herda o PSModulePath do PowerShell 7 e carrega o
+        # Microsoft.PowerShell.Archive errado: o Expand-Archive falha sem código de erro, o
+        # instalador termina "com sucesso" e o build quebra adiante com ENOENT no .exe.
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          node node_modules\@posthog\cli\install.js
+          if not exist node_modules\@posthog\cli\node_modules\.bin_real\posthog-cli.exe exit /b 1
+
       - name: Conferir Xcode para ícone em camadas
         if: matrix.platform == 'mac'
         shell: bash
@@ -264,9 +275,11 @@ jobs:
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
             echo "title=LouvorJA Violin ${GITHUB_REF_NAME#v} (pré-visualização)" >> "$GITHUB_OUTPUT"
+            echo "target=dev" >> "$GITHUB_OUTPUT"
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
             echo "title=LouvorJA Violin ${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "target=main" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Montar texto final da release
@@ -292,6 +305,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          # main é produção, dev é beta. A tag já existe; isto só acerta o rótulo da release.
+          target_commitish: ${{ steps.meta.outputs.target }}
           name: ${{ steps.meta.outputs.title }}
           prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
           # O rascunho permite conferir todos os instaladores e manifests antes de publicar.

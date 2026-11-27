@@ -22,16 +22,29 @@ const IDLE_TEXT: Partial<Record<string, (_now: Date) => string>> = {
  * Texto do espelho de módulo. Vem do módulo quando ele está ou esteve aberto na
  * sessão; antes disso, é o que ele mostra ao abrir. A hora é calculada aqui, com as
  * opções do Relógio: não depende da tela dele aberta nem congela quando ela fecha.
+ *
+ * A cor de aviso/alerta chega no mesmo pacote que a projeção do módulo usa: o
+ * espelho de um temporizador que não muda de cor esconde do palco a única
+ * informação que importa perto do fim.
  */
 export function useModuleMirror(sources: () => Array<string | null | undefined>) {
   const { locale } = useI18n();
   const values = reactive<Record<string, string>>({});
+  const colors = reactive<Record<string, string>>({});
   const now = ref(new Date());
   let tick: ReturnType<typeof setTimeout> | null = null;
 
   useBroadcastListener(BROADCAST_TYPE.MODULE_PROJECTION_VALUE, (payload) => {
-    const p = payload as { module?: string; text?: string; reference?: string } | null;
-    if (p?.module) values[p.module] = p.text || p.reference || "";
+    const p = payload as {
+      module?: string;
+      text?: string;
+      reference?: string;
+      color?: string;
+    } | null;
+    if (!p?.module) return;
+    values[p.module] = p.text || p.reference || "";
+    // Pacote sem cor apaga a anterior: o aviso não pode sobrar depois de zerar.
+    colors[p.module] = typeof p.color === "string" ? p.color : "";
   });
 
   // Na virada do segundo, para a projeção e o retorno trocarem juntos.
@@ -81,5 +94,10 @@ export function useModuleMirror(sources: () => Array<string | null | undefined>)
     return values[source] || IDLE_TEXT[source]?.(now.value) || "—";
   }
 
-  return { mirrorText };
+  /** Cor de aviso/alerta em vigor no módulo; vazio = vale a cor da sobreposição. */
+  function mirrorColor(source: string | null | undefined): string {
+    return (source && colors[source]) || "";
+  }
+
+  return { mirrorText, mirrorColor };
 }

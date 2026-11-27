@@ -68,6 +68,11 @@ const ITENS: Item[] = [
 
 function montar() {
   return mount(LiturgyTimeline, {
+    global: {
+      stubs: {
+        LjTooltip: { template: "<slot />" },
+      },
+    },
     props: {
       items: ITENS as never,
       isChecked: () => false,

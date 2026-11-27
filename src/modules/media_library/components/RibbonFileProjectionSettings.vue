@@ -12,19 +12,21 @@
     <div class="rfps-container">
       <div class="rfps-col">
         <div class="rfps-group">
-          <input
+          <LjCheckbox
             id="rfps-custom-background"
-            type="checkbox"
-            :checked="enabled"
-            @change="onToggle"
+            :model-value="enabled"
+            :label="$t('options.file_projection.custom_background')"
+            @update:model-value="onToggle"
           />
-          <label class="rfps-label" for="rfps-custom-background">
-            {{ $t("options.file_projection.custom_background") }}
-          </label>
         </div>
         <template v-if="enabled">
           <div class="rfps-group">
-            <input type="color" class="rfps-color" :value="wpColor" @input="onColor" />
+            <ColorField
+              :model-value="wpColor"
+              :aria-label="tm('bg_color')"
+              size="sm"
+              @update:model-value="onColor"
+            />
             <label class="rfps-label">{{ tm("bg_color") }}</label>
           </div>
           <div class="rfps-group">
@@ -62,7 +64,13 @@
         <div class="rfps-group">
           <div v-if="wpImageUrl" class="rfps-preview">
             <img :src="wpImageUrl" class="rfps-preview-img" />
-            <button class="rfps-preview-remove" @click="remove">
+            <button
+              type="button"
+              class="rfps-preview-remove"
+              :aria-label="$t('options.slides.remove_image')"
+              :title="$t('options.slides.remove_image')"
+              @click="remove"
+            >
               <LjIcon :icon="ICONS.ACTIONS.CLOSE" size="15" />
             </button>
           </div>
@@ -73,13 +81,12 @@
 </template>
 
 <script setup lang="ts">
-import { LjButton, LjIcon, LjSelect } from "@/components/ui";
+import { LjButton, LjCheckbox, LjIcon, LjSelect } from "@/components/ui";
+import ColorField from "@/components/inputs/ColorField.vue";
 import { ICONS } from "@/config/Icons";
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { useI18n } from "vue-i18n";
-import $modules from "@/helpers/Modules";
 import $userdata from "@/helpers/UserData";
-import { ModuleEnum } from "@/enums/ModuleEnum";
 import { pickImageData } from "@/helpers/FilePicker";
 import { getSetting, saveSetting } from "@/helpers/SettingsStorage";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -91,7 +98,6 @@ import { opcoesDeAjuste } from "@/helpers/BackgroundStyle";
 
 const { t: i18nT } = useI18n();
 const opcoesAjuste = computed(() => opcoesDeAjuste(i18nT));
-const modulePrefix = $modules.getPath(ModuleEnum.MEDIA_LIBRARY);
 const tm = (key: string) => i18nT(`modules.media_library.${key}`);
 const currentBgImage = computed(() => wpImageUrl.value);
 
@@ -110,8 +116,8 @@ function notifyViews(): void {
   Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION_BG_UPDATE, {});
 }
 
-function onToggle(e: Event): void {
-  enabled.value = (e.target as HTMLInputElement).checked;
+function onToggle(value: boolean): void {
+  enabled.value = value;
   $userdata.set(KEY_HABILITADO, enabled.value);
   if (enabled.value) {
     saveSetting({
@@ -137,8 +143,8 @@ async function scheduleSave(): Promise<void> {
   }, 300);
 }
 
-function onColor(e: Event): void {
-  wpColor.value = (e.target as HTMLInputElement).value;
+function onColor(hex: string): void {
+  wpColor.value = hex;
   scheduleSave();
 }
 
@@ -222,22 +228,13 @@ onBeforeUnmount(() => {
   letter-spacing: 0.3px;
   margin-left: 5px;
 }
-.rfps-color {
-  width: 35px;
-  height: 20px;
-  border: 1px solid #555;
-  border-radius: var(--lj-radius-sm);
-  cursor: pointer;
-  padding: 0;
-  background: transparent;
-}
 .rfps-preview {
   position: relative;
   width: 120px;
   height: 80px;
   border-radius: var(--lj-radius-xs);
   overflow: hidden;
-  border: 1px solid #555;
+  border: 1px solid var(--lj-surface-border-strong);
   flex-shrink: 0;
 }
 .rfps-preview-img {
