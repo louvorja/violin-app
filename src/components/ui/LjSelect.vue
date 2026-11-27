@@ -30,7 +30,11 @@
 
         <SelectViewport class="lj-select__viewport">
           <template v-for="item in items" :key="String(valueOf(item))">
-            <SelectItem class="lj-select__item" :value="keyOf(valueOf(item))">
+            <SelectItem
+              class="lj-select__item"
+              :value="keyOf(valueOf(item))"
+              :disabled="disabledOf(item)"
+            >
               <span class="lj-select__check">
                 <LjIcon :icon="ICONS.UI.CHECK" :size="12" />
               </span>
@@ -150,6 +154,12 @@ function labelOf(item: T): string {
     : String(item);
 }
 
+function disabledOf(item: T): boolean {
+  return (
+    typeof item === "object" && item !== null && Boolean((item as Record<string, unknown>).disabled)
+  );
+}
+
 const selectedItem = computed(() =>
   props.modelValue == null
     ? undefined
@@ -226,6 +236,11 @@ const selectedLabel = computed(() => (selectedItem.value ? labelOf(selectedItem.
 .lj-select__caret {
   color: var(--lj-text-subtle);
   flex-shrink: 0;
+  transition: transform var(--lj-motion-fast);
+}
+
+.lj-select[data-state="open"] .lj-select__caret {
+  transform: rotate(180deg);
 }
 
 /* O painel acompanha a largura do gatilho — dropdown mais estreito ou mais
@@ -278,11 +293,16 @@ const selectedLabel = computed(() => (selectedItem.value ? labelOf(selectedItem.
   width: 14px;
   flex-shrink: 0;
   color: var(--lj-ui-accent-text);
-  visibility: hidden;
+  opacity: 0;
+  transform: scale(0.75);
+  transition:
+    opacity var(--lj-transition-fast),
+    transform var(--lj-motion-fast);
 }
 
 .lj-select__item[data-state="checked"] .lj-select__check {
-  visibility: visible;
+  opacity: 1;
+  transform: scale(1);
 }
 
 .lj-select__scroll {

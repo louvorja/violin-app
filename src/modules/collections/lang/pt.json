@@ -3,6 +3,10 @@
   "description": "Lista as coletâneas",
   "all_collections": "Todas as Coletâneas",
   "categories": "Categorias",
+  "filter_placeholder": "Filtrar coletâneas...",
+  "filter_hint": "Digite pelo menos 4 caracteres para filtrar",
+  "empty_search": "Nenhuma coletânea encontrada",
+  "empty_search_hint": "Tente outro termo ou busque pelo nome da música em Localizar Músicas.",
   "music_search": {
     "title": "Localizar Músicas"
   }

@@ -1,9 +1,9 @@
 <template>
-  <div class="editor-root">
+  <div class="editor-root" :style="{ '--lj-nav-x': tabDirection, '--lj-nav-y': 0 }">
     <LjTabs v-model="activeTab" :tabs="tabItems" :aria-label="tm('title')" class="editor-tabs" />
 
     <!-- Content tab -->
-    <div v-if="activeTab === 'content'" class="editor-pane">
+    <div v-if="activeTab === 'content'" class="editor-pane lj-page-in">
       <LjField :label="tm('slot.name')" layout="column">
         <LjInput :model-value="m.name" @update:model-value="set('name', $event)" />
       </LjField>
@@ -41,7 +41,7 @@
     </div>
 
     <!-- Position tab -->
-    <div v-if="activeTab === 'position'" class="editor-pane">
+    <div v-if="activeTab === 'position'" class="editor-pane lj-page-in">
       <div class="editor-position">
         <LjField
           :label="tm('position.anchor')"
@@ -98,7 +98,7 @@
     </div>
 
     <!-- Appearance tab -->
-    <div v-if="activeTab === 'appearance'" class="editor-pane">
+    <div v-if="activeTab === 'appearance'" class="editor-pane lj-page-in">
       <LjField :label="tm('style.font')" layout="column">
         <div class="editor-font">
           <SelectFont
@@ -128,16 +128,17 @@
 
       <div class="editor-grid">
         <LjField :label="tm('style.color')" layout="column">
-          <div class="editor-color">
-            <LjInput
-              :model-value="m.style.color"
-              type="color"
-              @update:model-value="
-                m.style.color = $event;
-                emitChange();
-              "
-            />
-          </div>
+          <ColorField
+            :model-value="m.style.color"
+            :aria-label="tm('style.color')"
+            size="sm"
+            show-hex
+            full-width
+            @update:model-value="
+              m.style.color = $event;
+              emitChange();
+            "
+          />
         </LjField>
         <LjField :label="tm('style.text_align')" layout="column">
           <LjSelect
@@ -153,11 +154,14 @@
 
       <LjField :label="tm('style.background')" layout="column">
         <div class="editor-background">
-          <div class="editor-color editor-background__color">
-            <LjInput
+          <div class="editor-background__color">
+            <ColorField
               :model-value="backgroundColor"
-              type="color"
+              :aria-label="tm('style.background')"
               :disabled="noBackground"
+              size="sm"
+              show-hex
+              full-width
               @update:model-value="setBackground($event)"
             />
           </div>
@@ -267,7 +271,7 @@
     </div>
 
     <!-- Animation tab -->
-    <div v-if="activeTab === 'animation'" class="editor-pane">
+    <div v-if="activeTab === 'animation'" class="editor-pane lj-page-in">
       <LjField :label="tm('animation.entrance')" layout="column">
         <LjSelect
           :model-value="m.style.animation"
@@ -306,7 +310,7 @@
     </div>
 
     <!-- Visibility tab -->
-    <div v-if="activeTab === 'visibility'" class="editor-pane">
+    <div v-if="activeTab === 'visibility'" class="editor-pane lj-page-in">
       <LjCheckbox
         :model-value="m.show_on_return"
         :label="tm('visibility.show_on_return')"
@@ -328,10 +332,12 @@
 </template>
 
 <script setup>
+import { useNavDirection } from "@/composables/useNavDirection";
 import { ref, reactive, computed, watch, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import OverlayImagePicker from "./OverlayImagePicker.vue";
 import SelectFont from "@/components/inputs/SelectFont.vue";
+import ColorField from "@/components/inputs/ColorField.vue";
 import {
   LjCheckbox,
   LjField,
@@ -351,6 +357,11 @@ const props = defineProps({
 const emit = defineEmits(["change"]);
 
 const activeTab = ref("content");
+// De que lado o painel novo entra: pela posição da aba (`.lj-page-in`, ui.css).
+const tabDirection = useNavDirection(
+  () => activeTab.value,
+  () => tabItems.value.map((item) => item.value)
+);
 
 const { t: _t } = useI18n();
 const tm = (key) => _t(`modules.overlay.${key}`);
@@ -435,9 +446,8 @@ const fitOptions = [
   { label: tm("style.fit_scale_down"), value: "scale-down" },
 ];
 
-// <input type="color"> não representa "transparente": sem esta ponte ele
-// mostrava preto para um fundo que na verdade não pinta nada, e depois de
-// escolher uma cor não havia como voltar.
+// ColorField trabalha com hex opaco (#rrggbb) e não representa "transparente":
+// sem esta ponte, escolher uma cor impediria voltar ao fundo transparente.
 const noBackground = computed(() => !m.style.background || m.style.background === "transparent");
 const backgroundColor = computed(() => (noBackground.value ? lastBackground : m.style.background));
 let lastBackground = noBackground.value ? "#000000" : m.style.background;
@@ -520,17 +530,6 @@ function onTypeChange() {
 .editor-suffix {
   color: var(--lj-text-subtle);
   font-size: var(--lj-text-sm);
-}
-
-/* O seletor de cor é um <input type="color"> nativo: o invólucro existe só
-   para o CSS com escopo alcançar a moldura do LjInput. */
-.editor-color :deep(.lj-input) {
-  width: 100%;
-  padding-inline: var(--lj-space-2);
-}
-
-.editor-color :deep(.lj-input__field) {
-  cursor: pointer;
 }
 
 /* O SelectFont vem com a largura fixa da tela de Opções; aqui ele acompanha os

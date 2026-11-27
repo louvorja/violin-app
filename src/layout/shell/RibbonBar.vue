@@ -173,30 +173,14 @@
                   :data-testid="`ribbon-btn-${btn.id}`"
                 >
                   <label class="ribbon-field-label">{{ $t(btn.label) }}</label>
-                  <select
+                  <LjSelect
+                    size="sm"
                     class="ribbon-field-select"
-                    :value="getSelectValue(btn)"
-                    @change="setSelectValue(btn, ($event.target as HTMLSelectElement)?.value)"
-                  >
-                    <option v-for="opt in btn.options || []" :key="opt.value" :value="opt.value">
-                      {{ $t(opt.label) }}
-                    </option>
-                    <option
-                      v-for="opt in btn.dynamicOptions
-                        ? dynamicSelectOptions[btn.dynamicOptions]
-                        : []"
-                      :key="opt.value"
-                      :value="opt.value"
-                    >
-                      {{ opt.label }}
-                    </option>
-                    <template v-if="btn.feature">
-                      <option value="">{{ $t("options.slides.same_window") }}</option>
-                      <option v-for="r in roleOptions" :key="r.role" :value="r.role">
-                        {{ r.label }}
-                      </option>
-                    </template>
-                  </select>
+                    :model-value="getSelectValue(btn)"
+                    :items="getSelectItems(btn)"
+                    :aria-label="$t(btn.label)"
+                    @update:model-value="setSelectValue(btn, $event)"
+                  />
                 </div>
                 <div
                   v-else-if="btn.type === 'slider'"
@@ -225,24 +209,25 @@
                   :data-testid="`ribbon-btn-${btn.id}`"
                 >
                   <label class="ribbon-field-label">{{ $t(btn.label) }}</label>
-                  <input
+                  <LjInput
                     class="ribbon-field-number"
                     type="number"
+                    size="sm"
                     :min="btn.min"
                     :max="btn.max"
                     :step="btn.step ?? 1"
-                    :value="getSelectValue(btn)"
-                    @change="setSelectValue(btn, ($event.target as HTMLSelectElement)?.value)"
+                    :model-value="getSelectValue(btn)"
+                    :aria-label="$t(btn.label)"
+                    @update:model-value="setSelectValue(btn, $event)"
                   />
                 </div>
-                <label v-else-if="btn.type === 'checkbox'" class="ribbon-field-checkbox">
-                  <input
-                    type="checkbox"
-                    :checked="getCheckValue(btn)"
-                    @change="setCheckValue(btn, ($event.target as HTMLInputElement).checked)"
+                <div v-else-if="btn.type === 'checkbox'" class="ribbon-field-checkbox">
+                  <LjCheckbox
+                    :model-value="getCheckValue(btn)"
+                    :label="$t(btn.label)"
+                    @update:model-value="setCheckValue(btn, $event)"
                   />
-                  <span>{{ $t(btn.label) }}</span>
-                </label>
+                </div>
                 <div
                   v-else-if="btn.type === 'switch'"
                   class="ribbon-switch"
@@ -315,7 +300,7 @@ import RibbonButtonComponent from "@/layout/shell/RibbonButtonComponent.vue";
 import RibbonGroupComponent from "@/layout/shell/RibbonGroupComponent.vue";
 import RibbonTabs from "@/components/RibbonTabs.vue";
 import { useViewport } from "@/composables/useViewport";
-import { LjSlider, LjSwitch } from "@/components/ui";
+import { LjCheckbox, LjInput, LjSelect, LjSlider, LjSwitch } from "@/components/ui";
 import { prefetchModule } from "@/helpers/ModulePrefetch";
 import { ensureContrastOnDark } from "@/helpers/ColorContrast";
 
@@ -399,6 +384,25 @@ function getCustomComponentProps(
     module: getModuleIdForGroup(group),
     config: btn || group,
   };
+}
+
+function getSelectItems(btn: RibbonButton): Array<{ value: string | number; label: string }> {
+  const items: Array<{ value: string | number; label: string }> = [];
+  for (const opt of btn.options || []) {
+    items.push({ value: opt.value, label: t(opt.label) });
+  }
+  if (btn.dynamicOptions) {
+    for (const opt of dynamicSelectOptions[btn.dynamicOptions] || []) {
+      items.push({ value: opt.value, label: opt.label });
+    }
+  }
+  if (btn.feature) {
+    items.push({ value: "", label: t("options.slides.same_window") });
+    for (const r of roleOptions.value) {
+      items.push({ value: r.role, label: r.label });
+    }
+  }
+  return items;
 }
 
 function getSelectValue(btn: RibbonButton): string | number {
@@ -1160,36 +1164,12 @@ useBroadcastListener(BROADCAST_TYPE.RIBBON_SELECT_PAGE, (payload: unknown) => {
 }
 
 .ribbon-field-select {
-  height: var(--lj-ui-h-sm);
-  padding: 0 var(--lj-ui-px-sm);
-  border: var(--lj-ui-border);
-  border-radius: var(--lj-ui-radius);
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font: inherit;
-  outline: none;
-}
-
-.ribbon-field-select:focus {
-  border-color: var(--lj-ui-accent);
-  box-shadow: var(--lj-ui-focus);
+  width: auto;
+  min-width: 110px;
 }
 
 .ribbon-field-number {
-  height: var(--lj-ui-h-sm);
-  padding: 0 var(--lj-ui-px-sm);
-  border: var(--lj-ui-border);
-  border-radius: var(--lj-ui-radius);
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font: inherit;
-  outline: none;
   width: 90px;
-}
-
-.ribbon-field-number:focus {
-  border-color: var(--lj-ui-accent);
-  box-shadow: var(--lj-ui-focus);
 }
 
 .ribbon-slider-row {

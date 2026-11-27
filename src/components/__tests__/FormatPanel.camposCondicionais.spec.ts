@@ -57,15 +57,15 @@ async function montar() {
 describe("FormatPanel — campo condicionado a um switch", () => {
   it("só mostra a cor do relógio depois de ligar o switch", async () => {
     const w = await montar();
-    await vi.waitFor(() => expect(w.findAll('input[type="color"]')).toHaveLength(1));
+    await vi.waitFor(() => expect(w.findAll(".lj-color-field")).toHaveLength(1));
 
-    await w.get('input[type="checkbox"]').setValue(true);
+    await w.get('[role="switch"]').setValue(true);
     await flushPromises();
-    await vi.waitFor(() => expect(w.findAll('input[type="color"]')).toHaveLength(2));
+    await vi.waitFor(() => expect(w.findAll(".lj-color-field")).toHaveLength(2));
 
-    await w.get('input[type="checkbox"]').setValue(false);
+    await w.get('[role="switch"]').setValue(false);
     await flushPromises();
-    await vi.waitFor(() => expect(w.findAll('input[type="color"]')).toHaveLength(1));
+    await vi.waitFor(() => expect(w.findAll(".lj-color-field")).toHaveLength(1));
   });
 
   it("os rótulos do novo campo existem nos dois idiomas", () => {

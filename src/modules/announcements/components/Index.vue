@@ -237,22 +237,24 @@
           <div class="an-section">{{ tm("personalization") }}</div>
           <div class="an-style-grid">
             <LjField layout="column" :label="tm('bg_color')">
-              <div class="an-color">
-                <LjInput
-                  type="color"
-                  :model-value="editing.style?.bgColor || '#000000'"
-                  @update:model-value="setStyle('bgColor', $event)"
-                />
-              </div>
+              <ColorField
+                :model-value="editing.style?.bgColor || '#000000'"
+                :aria-label="tm('bg_color')"
+                size="sm"
+                show-hex
+                full-width
+                @update:model-value="setStyle('bgColor', $event)"
+              />
             </LjField>
             <LjField layout="column" :label="tm('text_color')">
-              <div class="an-color">
-                <LjInput
-                  type="color"
-                  :model-value="editing.style?.textColor || '#ffffff'"
-                  @update:model-value="setStyle('textColor', $event)"
-                />
-              </div>
+              <ColorField
+                :model-value="editing.style?.textColor || '#ffffff'"
+                :aria-label="tm('text_color')"
+                size="sm"
+                show-hex
+                full-width
+                @update:model-value="setStyle('textColor', $event)"
+              />
             </LjField>
             <div class="an-style-field">
               <LjCheckbox
@@ -263,13 +265,14 @@
             </div>
             <template v-if="editing.style?.textShadow">
               <LjField layout="column" :label="tm('shadow_color')">
-                <div class="an-color">
-                  <LjInput
-                    type="color"
-                    :model-value="editing.style?.textShadowColor || '#000000'"
-                    @update:model-value="setStyle('textShadowColor', $event)"
-                  />
-                </div>
+                <ColorField
+                  :model-value="editing.style?.textShadowColor || '#000000'"
+                  :aria-label="tm('shadow_color')"
+                  size="sm"
+                  show-hex
+                  full-width
+                  @update:model-value="setStyle('textShadowColor', $event)"
+                />
               </LjField>
               <LjField
                 layout="column"
@@ -362,6 +365,7 @@ import { module as manifest } from "../manifest";
 import { aplicarOrdemDoDrag } from "../dragOrder";
 import { loadAnnouncements } from "../storage";
 import ModuleContainer from "@/components/ModuleContainer.vue";
+import ColorField from "@/components/inputs/ColorField.vue";
 import {
   LjButton,
   LjCheckbox,
@@ -999,14 +1003,6 @@ function close(): void {
   field-sizing: content;
   min-height: 48px;
   max-height: 220px;
-}
-
-.an-color :deep(.lj-input) {
-  width: 100%;
-  padding-inline: var(--lj-space-2);
-}
-.an-color :deep(.lj-input__field) {
-  cursor: pointer;
 }
 
 @media (max-width: 1000px) {

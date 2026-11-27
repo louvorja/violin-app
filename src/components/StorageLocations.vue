@@ -39,26 +39,22 @@
           {{ t("options.storage.default_is") }}
           <code>{{ defaultDir(kind) }}</code>
         </p>
-        <label
+        <div
           v-if="draft[`${kind}Dir`] !== locations[`${kind}Dir`]"
           class="storage-locations__action"
         >
           <span>{{ t("options.storage.existing_files") }}</span>
-          <select
-            v-model="draft[`${kind}Action`]"
+          <LjSelect
+            :model-value="draft[`${kind}Action`]"
+            :items="actionOptions(kind)"
             :disabled="busy"
-            class="lj-ui-control lj-ui-size-md"
-          >
-            <option value="move" :disabled="!locations.canMove?.[kind]">
-              {{ t("options.storage.move_existing") }}
-            </option>
-            <option value="copy">{{ t("options.storage.copy_existing") }}</option>
-            <option value="reuse">{{ t("options.storage.reuse_existing") }}</option>
-          </select>
+            :aria-label="t('options.storage.existing_files')"
+            @update:model-value="draft[`${kind}Action`] = $event as LocationsInput['mediaAction']"
+          />
           <span class="storage-locations__hint">
             {{ t(`options.storage.${draft[`${kind}Action`]}_hint`) }}
           </span>
-        </label>
+        </div>
       </section>
 
       <section class="storage-locations__section">
@@ -75,22 +71,26 @@
       <section v-if="classicApi" class="storage-locations__section">
         <h3>{{ t("options.storage.classic.title") }}</h3>
         <p class="storage-locations__hint">{{ t("options.storage.classic.hint") }}</p>
-        <label class="storage-locations__checkbox">
-          <input v-model="classic.enabled" type="checkbox" :disabled="busy || !classic.dir" />
-          <span>{{ t("options.storage.classic.enabled") }}</span>
-        </label>
+        <div class="storage-locations__checkbox">
+          <LjCheckbox
+            v-model="classic.enabled"
+            :disabled="busy || !classic.dir"
+            :label="t('options.storage.classic.enabled')"
+          />
+        </div>
         <code v-if="classic.dir" class="storage-locations__path">{{ classic.dir }}</code>
         <p v-else class="storage-locations__hint">{{ t("options.storage.classic.none") }}</p>
-        <label v-if="classic.dir" class="storage-locations__action">
+        <div v-if="classic.dir" class="storage-locations__action">
           <span>{{ t("options.storage.classic.language") }}</span>
-          <select v-model="classic.lang" :disabled="busy" class="lj-ui-control lj-ui-size-md">
-            <option :value="null" disabled>
-              {{ t("options.storage.classic.choose_language") }}
-            </option>
-            <option value="pt">Português</option>
-            <option value="es">Español</option>
-          </select>
-        </label>
+          <LjSelect
+            :model-value="classic.lang"
+            :items="classicLangOptions"
+            :disabled="busy"
+            :placeholder="t('options.storage.classic.choose_language')"
+            :aria-label="t('options.storage.classic.language')"
+            @update:model-value="classic.lang = String($event)"
+          />
+        </div>
         <p v-if="classic.dir && !classic.available" class="storage-locations__warning">
           {{ t("options.storage.classic.unavailable") }}
         </p>
@@ -250,7 +250,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { LjButton, LjCheckbox, LjDialog } from "@/components/ui";
+import { LjButton, LjCheckbox, LjDialog, LjSelect } from "@/components/ui";
 import Platform from "@/helpers/Platform";
 import Alert from "@/helpers/Alert";
 
@@ -293,6 +293,23 @@ const pathsChanged = computed(
     editableKinds.some((kind) => draft[`${kind}Dir`] !== locations.value![`${kind}Dir`])
 );
 const dirty = computed(() => pathsChanged.value || classicValue() !== originalClassic.value);
+
+const classicLangOptions = [
+  { value: "pt", label: "Português" },
+  { value: "es", label: "Español" },
+];
+
+function actionOptions(kind: "media" | "videos") {
+  return [
+    {
+      value: "move",
+      label: t("options.storage.move_existing"),
+      disabled: !locations.value?.canMove?.[kind],
+    },
+    { value: "copy", label: t("options.storage.copy_existing") },
+    { value: "reuse", label: t("options.storage.reuse_existing") },
+  ];
+}
 
 function reportError(cause: unknown, key = "options.storage.change_failed"): void {
   error.value = `${t(key)}${cause instanceof Error && cause.message ? ` ${cause.message}` : ""}`;

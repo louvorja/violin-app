@@ -143,14 +143,18 @@
       size="sm"
     >
       <div class="si-ym-row">
-        <select v-model="pickerYear" class="si-select" :aria-label="tm('year')">
-          <option v-for="y in yearRange" :key="y" :value="y">{{ y }}</option>
-        </select>
-        <select v-model="pickerMonth" class="si-select" :aria-label="tm('month')">
-          <option v-for="(m, idx) in monthNames" :key="idx" :value="idx + 1">
-            {{ m }}
-          </option>
-        </select>
+        <LjSelect
+          :model-value="pickerYear"
+          :items="yearOptions"
+          :aria-label="tm('year')"
+          @update:model-value="pickerYear = Number($event)"
+        />
+        <LjSelect
+          :model-value="pickerMonth"
+          :items="monthOptions"
+          :aria-label="tm('month')"
+          @update:model-value="pickerMonth = Number($event)"
+        />
       </div>
       <template #footer>
         <LjButton size="sm" variant="primary" @click="onYearMonthPick">OK</LjButton>
@@ -199,16 +203,11 @@
       </LjField>
       <div class="si-entry-cat-row">
         <span class="si-entry-cat-dot" :style="{ background: entryCategoryColor }" />
-        <select
+        <LjSelect
           v-model="entryCategoryId"
-          class="si-select si-select--full"
+          :items="categoryOptions"
           :aria-label="tm('pick_category')"
-        >
-          <option value="">{{ tm("pick_category") }}</option>
-          <option v-for="c in categories" :key="c.id" :value="c.id">
-            {{ c.nome }}
-          </option>
-        </select>
+        />
       </div>
       <div class="si-file-row">
         <LjButton size="md" variant="subtle" :icon="ICONS.UI.FILE_PLUS" @click="chooseEntryFile">
@@ -278,14 +277,11 @@
     >
       <div class="si-auto-cat">
         <span class="si-entry-cat-dot" :style="{ background: autoCategoryColor }" />
-        <select
+        <LjSelect
           v-model="autoPopulateTargetCat"
-          class="si-select si-select--full"
+          :items="categoryOptions"
           :aria-label="tm('pick_category')"
-        >
-          <option value="">{{ tm("pick_category") }}</option>
-          <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.nome }}</option>
-        </select>
+        />
       </div>
 
       <div class="si-auto-folder-row">
@@ -347,6 +343,7 @@ import {
   LjField,
   LjIcon,
   LjInput,
+  LjSelect,
   LjSpinner,
 } from "@/components/ui";
 import { fetchWithTimeout, NET_TIMEOUT } from "@/helpers/Http";
@@ -428,6 +425,17 @@ const entryCategoryColor = computed(() => {
   const cat = categories.value.find((c) => String(c.id) === String(entryCategoryId.value));
   return (cat?.cor as string) || (cat?.color as string) || "#1976d2";
 });
+
+const categoryOptions = computed(() => [
+  { value: "", label: tm("pick_category") },
+  ...categories.value.map((c) => ({ value: c.id, label: c.nome })),
+]);
+
+const yearOptions = computed(() => yearRange.value.map((y) => ({ value: y, label: String(y) })));
+
+const monthOptions = computed(() =>
+  monthNames.value.map((m, idx) => ({ value: idx + 1, label: m }))
+);
 
 const autoCategoryColor = computed(() => {
   if (!autoPopulateTargetCat.value) return "#999";
@@ -1274,39 +1282,12 @@ async function removeEntry(): Promise<void> {
   }
 }
 
-/* ── Controles nativos ainda sem primitivo ─────────────────────────────
-   O <select> nativo permanece por escolha: o painel flutuante do LjSelect
-   é desenhado abaixo do diálogo (z-index 2400 contra 2501), e aqui ele
-   vive dentro de diálogos. O traço, o raio e o anel de foco vêm do mesmo
-   contrato dos primitivos para não destoar ao lado deles. */
-.si-select {
-  height: var(--lj-ui-h-md);
-  padding: 0 var(--lj-space-4);
-  border: var(--lj-ui-border);
-  border-radius: var(--lj-ui-radius);
-  background: var(--lj-surface-bg);
-  color: var(--lj-text);
-  font-family: inherit;
-  font-size: var(--lj-ui-font-md);
-  outline: none;
-  cursor: pointer;
-}
-.si-select:hover {
-  border-color: var(--lj-ui-accent);
-}
-.si-select:focus-visible {
-  border-color: var(--lj-ui-accent);
-  box-shadow: var(--lj-ui-focus);
-}
-.si-select--full {
-  width: 100%;
-}
 .si-ym-row {
   display: flex;
   align-items: center;
   gap: var(--lj-space-4);
 }
-.si-ym-row .si-select {
+.si-ym-row :deep(.lj-select) {
   flex: 1;
   min-width: 0;
 }

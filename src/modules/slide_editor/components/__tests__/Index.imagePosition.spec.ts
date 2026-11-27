@@ -67,6 +67,14 @@ describe("slide editor image position", () => {
             },
           }),
           LjIcon: true,
+          LjInput: true,
+          ColorField: true,
+          LjSelect: defineComponent({
+            props: { modelValue: [String, Number], items: { type: Array, default: () => [] } },
+            emits: ["update:modelValue"],
+            template:
+              '<select class="se-select" :value="modelValue" @change="$emit(\'update:modelValue\', Number($event.target.value))"><option v-for="i in items" :key="i.value" :value="i.value">{{ i.label }}</option></select>',
+          }),
           draggable: true,
         },
       },

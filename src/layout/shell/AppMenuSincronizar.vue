@@ -1,5 +1,5 @@
 <template>
-  <div class="opt">
+  <div class="opt" :style="{ '--lj-nav-x': tabDirection, '--lj-nav-y': 0 }">
     <section v-if="!canDownload" class="opt-section">
       <p class="opt-empty">{{ $t("options.collections_download.desktop_only") }}</p>
     </section>
@@ -64,7 +64,7 @@
         <section
           v-if="abaIniciada('collections')"
           v-show="activeTab === 'collections'"
-          class="opt-section"
+          class="opt-section lj-page-in"
         >
           <div class="opt-section-top">
             <p class="opt-hint">{{ $t("options.collections_download.hint") }}</p>
@@ -494,7 +494,11 @@
         </section>
 
         <!-- Bíblia -->
-        <section v-if="abaIniciada('bible')" v-show="activeTab === 'bible'" class="opt-section">
+        <section
+          v-if="abaIniciada('bible')"
+          v-show="activeTab === 'bible'"
+          class="opt-section lj-page-in"
+        >
           <div class="opt-section-top">
             <p class="opt-hint">{{ $t("options.bible_download.download_hint") }}</p>
 
@@ -658,7 +662,7 @@
         <section
           v-if="abaIniciada('web_storage')"
           v-show="activeTab === 'web_storage'"
-          class="opt-section"
+          class="opt-section lj-page-in"
         >
           <p class="opt-hint">{{ $t("options.storage.web.hint") }}</p>
           <div class="opt-stats">
@@ -718,7 +722,7 @@
         <section
           v-if="abaIniciada('storage')"
           v-show="activeTab === 'storage'"
-          class="opt-section sinc-storage"
+          class="opt-section lj-page-in sinc-storage"
         >
           <StorageLocations class="sinc-storage-locations" @changed="onStorageLocationsChanged" />
 
@@ -820,34 +824,23 @@
           </div>
 
           <div class="opt-row">
-            <label class="opt-checkbox">
-              <input
-                type="checkbox"
-                :checked="autoCache"
-                @change="toggleAutoCache(($event.target as HTMLInputElement).checked)"
-              />
-              <span>{{ $t("options.storage.auto_cache") }}</span>
-            </label>
+            <LjCheckbox
+              :model-value="autoCache"
+              :label="$t('options.storage.auto_cache')"
+              @update:model-value="toggleAutoCache"
+            />
           </div>
           <p class="opt-hint">{{ $t("options.storage.auto_cache_hint") }}</p>
 
           <div class="opt-row">
             <label class="opt-label" for="opt-quota">{{ $t("options.storage.quota") }}</label>
-            <select
+            <LjSelect
               id="opt-quota"
-              class="opt-select"
-              :value="quotaGb"
+              :model-value="quotaGb"
+              :items="quotaOptions"
               :disabled="!canMaintainMedia"
-              @change="setQuotaGb(Number(($event.target as HTMLSelectElement).value))"
-            >
-              <option :value="0">{{ $t("options.storage.no_limit") }}</option>
-              <option :value="1">1 GB</option>
-              <option :value="2">2 GB</option>
-              <option :value="5">5 GB</option>
-              <option :value="10">10 GB</option>
-              <option :value="20">20 GB</option>
-              <option :value="50">50 GB</option>
-            </select>
+              @update:model-value="setQuotaGb(Number($event))"
+            />
           </div>
           <p v-if="canMaintainMedia || mediaMaintenanceHint" class="opt-hint">
             {{ mediaMaintenanceHint || $t("options.storage.quota_hint") }}
@@ -908,6 +901,7 @@
 </template>
 
 <script setup lang="ts">
+import { useNavDirection } from "@/composables/useNavDirection";
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Platform from "@/helpers/Platform";
@@ -918,7 +912,7 @@ import $alert from "@/helpers/Alert";
 import { clearDatabaseCache } from "@/helpers/DatabaseCache";
 import { KEYS, moduleShowInMainMenu } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
-import { LjButton, LjIcon, LjProgress, LjTabs } from "@/components/ui";
+import { LjButton, LjCheckbox, LjIcon, LjProgress, LjSelect, LjTabs } from "@/components/ui";
 import type { LjTab } from "@/components/ui";
 import {
   useSyncManager,
@@ -1051,6 +1045,20 @@ const cachedHymnalBaseline = ref<boolean>(false);
 const cachedHymnal1996Baseline = ref<boolean>(false);
 
 const activeTab = ref<string>("collections");
+const quotaOptions = computed(() => [
+  { value: 0, label: t("options.storage.no_limit") },
+  { value: 1, label: "1 GB" },
+  { value: 2, label: "2 GB" },
+  { value: 5, label: "5 GB" },
+  { value: 10, label: "10 GB" },
+  { value: 20, label: "20 GB" },
+  { value: 50, label: "50 GB" },
+]);
+// De que lado o painel novo entra: pela posição da aba (`.lj-page-in`, ui.css).
+const tabDirection = useNavDirection(
+  () => activeTab.value,
+  () => abas.value.map((aba) => aba.value)
+);
 
 const abas = computed<LjTab[]>(() => [
   {

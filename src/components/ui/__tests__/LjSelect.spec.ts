@@ -263,6 +263,24 @@ describe("LjSelect", () => {
     await abrir();
     expect(opcoes().map((o) => o.textContent?.trim())).toEqual(["[Mesma janela]", "[Monitor 1]"]);
   });
+
+  it("respeita item individual com disabled: true", async () => {
+    const w = montar({
+      items: [
+        { value: "copy", label: "Copiar" },
+        { value: "move", label: "Mover", disabled: true },
+      ],
+      modelValue: "copy",
+    });
+
+    await abrir();
+    const [, mover] = opcoes();
+    expect(mover.hasAttribute("data-disabled")).toBe(true);
+    expect(mover.getAttribute("aria-disabled")).toBe("true");
+
+    await escolher(mover);
+    expect(w.emitted("update:modelValue")).toBeUndefined();
+  });
 });
 
 /*

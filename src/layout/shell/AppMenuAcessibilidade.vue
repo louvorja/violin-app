@@ -1,5 +1,5 @@
 <template>
-  <div class="opt">
+  <div class="opt" :style="{ '--lj-nav-x': tabDirection, '--lj-nav-y': 0 }">
     <section class="opt-section">
       <h3 class="opt-section-title">
         <LjIcon :icon="ICONS.UI.ACCESSIBILITY" :size="18" />
@@ -45,7 +45,11 @@
 
     <div class="acc-panes">
       <!-- ═══ Aba Avatar ═══ -->
-      <section v-if="isBooted('avatar')" v-show="activeTab === 'avatar'" class="opt-section">
+      <section
+        v-if="isBooted('avatar')"
+        v-show="activeTab === 'avatar'"
+        class="opt-section lj-page-in"
+      >
         <div class="acc-grid acc-grid--3">
           <div>
             <div class="opt-row">
@@ -106,39 +110,15 @@
               />
             </div>
 
-            <!-- Sem primitivo de cor no catálogo: seletor nativo do sistema,
-                 paleta em botões e alfa em slider. O valor gravado continua
-                 sendo o mesmo hex de 8 dígitos de antes. -->
             <div v-if="!transparentBg" class="acc-color">
-              <div class="acc-color__pick">
-                <input
-                  type="color"
-                  class="opt-color"
-                  :value="bgColorHex"
-                  :aria-label="$t('accessibility.avatar.background_color')"
-                  @input="setBgColorHex(($event.target as HTMLInputElement).value)"
-                />
-                <span class="acc-color__value">{{ bgColorHex }}</span>
-              </div>
-
-              <div
-                class="acc-color__swatches"
-                role="group"
-                :aria-label="$t('accessibility.avatar.bg_swatches')"
-              >
-                <button
-                  v-for="hex in bgSwatchHexes"
-                  :key="hex"
-                  type="button"
-                  class="acc-color__swatch"
-                  :class="{ 'acc-color__swatch--active': bgColorHex === hex }"
-                  :style="{ background: hex }"
-                  :title="hex"
-                  :aria-label="hex"
-                  :aria-pressed="bgColorHex === hex"
-                  @click="setBgColorHex(hex)"
-                />
-              </div>
+              <ColorField
+                :model-value="bgColorHex"
+                :presets="bgSwatchHexes"
+                :aria-label="$t('accessibility.avatar.background_color')"
+                size="sm"
+                show-hex
+                @update:model-value="setBgColorHex"
+              />
 
               <LjField :label="$t('accessibility.avatar.bg_opacity')" layout="column">
                 <LjSlider
@@ -325,7 +305,11 @@
       </section>
 
       <!-- ═══ Aba Músicas ═══ -->
-      <section v-if="isBooted('musics')" v-show="activeTab === 'musics'" class="opt-section">
+      <section
+        v-if="isBooted('musics')"
+        v-show="activeTab === 'musics'"
+        class="opt-section lj-page-in"
+      >
         <p class="opt-hint">{{ $t("accessibility.musics.hint") }}</p>
 
         <div class="opt-folder-actions acc-actions--below">
@@ -566,7 +550,11 @@
       </section>
 
       <!-- ═══ Aba Bíblia ═══ -->
-      <section v-if="isBooted('bible')" v-show="activeTab === 'bible'" class="opt-section">
+      <section
+        v-if="isBooted('bible')"
+        v-show="activeTab === 'bible'"
+        class="opt-section lj-page-in"
+      >
         <p class="opt-hint">{{ $t("accessibility.bible.hint") }}</p>
 
         <div v-if="loadingBible" class="opt-hint">
@@ -679,7 +667,11 @@
       </section>
 
       <!-- ═══ Aba Armazenamento ═══ -->
-      <section v-if="isBooted('storage')" v-show="activeTab === 'storage'" class="opt-section">
+      <section
+        v-if="isBooted('storage')"
+        v-show="activeTab === 'storage'"
+        class="opt-section lj-page-in"
+      >
         <div class="opt-stats opt-stats--compact">
           <div class="opt-stat">
             <span class="opt-stat-label">{{ $t("accessibility.storage.gloss_entries") }}</span>
@@ -709,6 +701,7 @@
 </template>
 
 <script setup lang="ts">
+import { useNavDirection } from "@/composables/useNavDirection";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ICONS } from "@/config/Icons";
@@ -720,6 +713,7 @@ import { useSyncManager } from "@/composables/useSyncManager";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { formatBackgroundTaskDetail } from "@/helpers/BackgroundTaskDetail";
 import ProgressBar from "@/components/ProgressBar.vue";
+import ColorField from "@/components/inputs/ColorField.vue";
 import {
   LjAlert,
   LjButton,
@@ -756,6 +750,11 @@ const { t, locale } = useI18n();
 const sync = useSyncManager();
 const bgTasks = useBackgroundTasks();
 const activeTab = ref("avatar");
+// De que lado o painel novo entra: pela posição da aba (`.lj-page-in`, ui.css).
+const tabDirection = useNavDirection(
+  () => activeTab.value,
+  () => tabItems.value.map((item) => item.value)
+);
 
 // O v-alert fechava a si mesmo; o LjAlert só avisa que o operador dispensou,
 // e quem esconde é esta tela.
@@ -1068,9 +1067,9 @@ function setBgColor(c: string) {
   $userdata.set(KEYS.MODULES.LIBRAS.BACKGROUND_COLOR, c);
 }
 
-// Sem primitivo de cor no catálogo, o v-color-input vira três peças: o seletor
-// nativo do sistema, a paleta em botões e o alfa num slider. O que é gravado
-// continua sendo o mesmo hex de 8 dígitos (#rrggbbaa) que a projeção já lê.
+// Cor (ColorField / LjColorPicker) e opacidade (LjSlider) em peças separadas;
+// o valor gravado continua sendo o mesmo hex de 8 dígitos (#rrggbbaa) que a
+// projeção já lê.
 const BG_COLOR_FALLBACK = "#000000ff";
 
 function toHex2(n: number): string {
@@ -1083,9 +1082,7 @@ const bgSwatchHexes = computed(() =>
   bgSwatches.flat().map((c) => `#${toHex2(c.r)}${toHex2(c.g)}${toHex2(c.b)}`)
 );
 
-// Minúsculas porque é assim que o <input type="color"> devolve o valor: sem
-// normalizar, uma cor gravada em maiúsculas não casaria com a amostra da
-// paleta nem com o que o seletor nativo mostra.
+// Minúsculas para casar com a paleta e o valor normalizado pelo ColorField.
 const bgColorHex = computed(() => (bgColor.value || BG_COLOR_FALLBACK).slice(0, 7).toLowerCase());
 
 const bgAlphaPercent = computed(() => {
@@ -1896,59 +1893,19 @@ async function clearLibrasCache(): Promise<void> {
   max-width: 300px;
 }
 
-/* ─── Cor de fundo do avatar ──────────────────────────────────────────────
-   Sem primitivo de cor no catálogo: seletor nativo, paleta e alfa em peças
-   separadas, sobre os mesmos tokens dos demais controles. */
+/* ─── Cor de fundo do avatar ──────────────────────────────────────────────── */
 
 .acc-color {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--lj-space-4);
   margin-top: var(--lj-space-4);
   max-width: 340px;
 }
 
-.acc-color__pick {
-  display: flex;
-  align-items: center;
-  gap: var(--lj-space-4);
-}
-
-.acc-color__value {
-  color: var(--lj-text-muted);
-  font-family: var(--lj-font-mono);
-  font-size: var(--lj-ui-font-sm);
-  text-transform: uppercase;
-}
-
-.acc-color__swatches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--lj-space-2);
-}
-
-.acc-color__swatch {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 1px solid var(--lj-surface-border-strong);
-  border-radius: var(--lj-radius-sm);
-  cursor: pointer;
-  transition: box-shadow var(--lj-transition-fast);
-}
-
-.acc-color__swatch:hover {
-  border-color: var(--lj-ui-accent);
-}
-
-.acc-color__swatch:focus-visible {
-  outline: none;
-  box-shadow: var(--lj-ui-focus);
-}
-
-.acc-color__swatch--active {
-  border-color: var(--lj-ui-accent);
-  box-shadow: var(--lj-ui-focus);
+.acc-color :deep(.lj-field) {
+  width: 100%;
 }
 
 /* O campo numérico nasce com a largura natural do <input>; dentro da grade ele
@@ -2026,7 +1983,11 @@ async function clearLibrasCache(): Promise<void> {
   border-radius: var(--lj-radius-md);
   background: transparent;
   cursor: pointer;
-  transition: all var(--lj-transition-fast);
+  transition:
+    border-color var(--lj-transition-fast),
+    background-color var(--lj-transition-fast),
+    color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast);
   color: var(--lj-text-muted);
   font-size: var(--lj-text-sm);
 }
