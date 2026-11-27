@@ -10,6 +10,10 @@ interface ExtractRequest {
   buffer: ArrayBuffer;
 }
 
+/** Um lote limita as idas e voltas com a janela sem acumular a Bíblia inteira nela. */
+const BATCH_MAX_FILES = 256;
+const BATCH_MAX_BYTES = 1024 * 1024;
+
 interface BundleExtractWorkerScope {
   onmessage: ((_event: MessageEvent<ExtractRequest | { type: "continue" }>) => void) | null;
   postMessage(_message: unknown): void;
@@ -26,7 +30,8 @@ export function installBundleExtractWorker(scope: BundleExtractWorkerScope): voi
   }
 
   async function extract({ kind, buffer }: ExtractRequest): Promise<void> {
-    const zip = await JSZip.loadAsync(buffer, { checkCRC32: true });
+    // Cada arquivo confere tamanho e SHA-256 do manifesto; o CRC descompactava tudo duas vezes.
+    const zip = await JSZip.loadAsync(buffer, { checkCRC32: false });
     const descriptor = zip.file(BUNDLE_MANIFEST_FILE);
     if (!descriptor) throw new Error("Bundle inválido: manifesto ausente");
     const entries = Object.keys(zip.files).filter(
@@ -43,6 +48,14 @@ export function installBundleExtractWorker(scope: BundleExtractWorkerScope): voi
       entries
     );
     const hashes = new Map(manifest.files.map((file) => [file.name, file]));
+    let batch: Array<{ key: string; data: unknown; current: number }> = [];
+    let batchBytes = 0;
+    const flush = async () => {
+      scope.postMessage({ type: "entries", entries: batch, total: entries.length });
+      batch = [];
+      batchBytes = 0;
+      await waitForContinue();
+    };
     for (let index = 0; index < entries.length; index++) {
       const path = entries[index];
       const key = path.replace(/\.json$/, "");
@@ -64,9 +77,11 @@ export function installBundleExtractWorker(scope: BundleExtractWorkerScope): voi
       ) {
         throw new Error(`Bundle inválido: capítulo ${path}`);
       }
-      scope.postMessage({ type: "entry", key, data, current: index + 1, total: entries.length });
-      await waitForContinue();
+      batch.push({ key, data, current: index + 1 });
+      batchBytes += bytes.byteLength;
+      if (batch.length >= BATCH_MAX_FILES || batchBytes >= BATCH_MAX_BYTES) await flush();
     }
+    if (batch.length) await flush();
     scope.postMessage({ type: "done" });
   }
 

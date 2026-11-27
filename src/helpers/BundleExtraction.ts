@@ -1,9 +1,9 @@
 /**
  * Bridge para a extração de bundles ZIP fora do renderer.
  *
- * O worker devolve um item e espera o "continue" antes de avançar. Isso é
- * importante para a Bíblia: ela grava um capítulo por vez e não acumula os
- * ~15 mil JSONs na memória da janela que abriu a tela bíblica.
+ * O worker devolve um lote (até 256 arquivos ou 1 MB) e espera o "continue"
+ * antes de avançar. Isso é importante para a Bíblia: ela não acumula os ~15 mil
+ * JSONs na memória da janela que abriu a tela bíblica.
  */
 import type { BundleKind } from "@/types/Bundle";
 export type BundleExtractionKind = BundleKind;
@@ -16,12 +16,16 @@ export interface ExtractedBundleEntry {
 }
 
 interface WorkerMessage {
-  type: "entry" | "done" | "error";
-  key?: unknown;
-  data?: unknown;
-  current?: unknown;
+  type: "entries" | "done" | "error";
+  entries?: unknown;
   total?: unknown;
   message?: unknown;
+}
+
+function isBatchEntry(entry: unknown): entry is { key: string; data: unknown; current: number } {
+  if (!entry || typeof entry !== "object") return false;
+  const { key, current } = entry as { key?: unknown; current?: unknown };
+  return typeof key === "string" && typeof current === "number" && Number.isInteger(current);
 }
 
 export interface ExtractBundleOptions {
@@ -88,27 +92,22 @@ export function extractBundleEntries(
         finish();
         return;
       }
-      const current = message.current;
-      const total = message.total;
+      const { entries, total } = message;
       if (
-        message.type !== "entry" ||
-        typeof message.key !== "string" ||
-        typeof current !== "number" ||
+        message.type !== "entries" ||
+        !Array.isArray(entries) ||
+        !entries.every(isBatchEntry) ||
         typeof total !== "number" ||
-        !Number.isInteger(current) ||
         !Number.isInteger(total)
       ) {
         finish(workerError("Entrada inválida do extrator de bundle"));
         return;
       }
       try {
-        aborted(signal);
-        await onEntry({
-          key: message.key,
-          data: message.data,
-          current,
-          total,
-        });
+        for (const { key, data, current } of entries) {
+          aborted(signal);
+          await onEntry({ key, data, current, total });
+        }
         aborted(signal);
         worker.postMessage({ type: "continue" });
       } catch (error) {
