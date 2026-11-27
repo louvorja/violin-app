@@ -13,7 +13,9 @@ export function useLiturgyAutoLoad() {
       if (matches) {
         const currentId = $liturgy.getCurrentLiturgyId();
         if (currentId === item.id) return;
-        $liturgy.set(item.items, $liturgy.getActiveDay());
+        const activeDay = $liturgy.getActiveDay();
+        $liturgy.set(item.items, activeDay);
+        $liturgy.setDayLiturgyId(activeDay, item.id);
         $liturgy.setCurrentLiturgyId(item.id);
         return;
       }

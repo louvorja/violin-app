@@ -10,10 +10,11 @@
     </LjField>
 
     <template #footer>
-      <LjButton variant="ghost" @click="internalShow = false">
+      <LjButton size="sm" variant="ghost" @click="internalShow = false">
         {{ t("actions.cancel") }}
       </LjButton>
       <LjButton
+        size="sm"
         variant="primary"
         :icon="ICONS.ACTIONS.SAVE"
         :disabled="!name.trim()"
@@ -30,7 +31,8 @@ import { useLiturgyI18n } from "../i18n";
 import { LjButton, LjDialog, LjField, LjInput } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, watch } from "vue";
-import $alert from "@/helpers/Alert";
+import $alert, { escapeHtml } from "@/helpers/Alert";
+import $snackbar from "@/helpers/Snackbar";
 import $liturgy from "@/helpers/Liturgy";
 import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
 import type { LiturgyItem } from "@/types/Liturgy";
@@ -77,32 +79,44 @@ async function doSave() {
   if (!n) return;
   nameError.value = "";
   const currentId = $liturgy.getCurrentLiturgyId();
-  const existing = await library.getByName(n);
-  if (existing && existing.id !== currentId) {
-    nameError.value = t("library.name_exists");
-    return;
-  }
-  if (existing && existing.id === currentId) {
-    const ok = await new Promise<boolean>((resolve) => {
-      $alert.yesno(
-        { title: t("library.save_title"), text: t("library.save_overwrite_confirm") },
-        (btn?: string) => resolve(btn === "yes")
-      );
+  try {
+    let targetId = currentId ?? undefined;
+    if (targetId) {
+      const current = await library.get(targetId);
+      if (!current) {
+        $liturgy.clearLibraryReferences(targetId);
+        targetId = undefined;
+      }
+    }
+    const existing = await library.getByName(n);
+    if (existing && existing.id !== targetId) {
+      nameError.value = t("library.name_exists");
+      return;
+    }
+    if (existing && existing.id === targetId) {
+      const ok = await new Promise<boolean>((resolve) => {
+        $alert.yesno(
+          {
+            title: escapeHtml(t("library.save_title")),
+            text: escapeHtml(t("library.save_overwrite_confirm")),
+            translate: false,
+          },
+          (btn?: string) => resolve(btn === "yes")
+        );
+      });
+      if (!ok) return;
+    }
+    const saved = await library.save({
+      id: targetId,
+      name: n,
+      items: props.items,
     });
-    if (!ok) return;
+    $liturgy.setCurrentLiturgyId(saved.id);
+    internalShow.value = false;
+    emit("saved");
+  } catch (error) {
+    console.error("[Liturgia] save dialog falhou:", error);
+    $snackbar.error(t("library.save_error"));
   }
-  await library.save({
-    id: currentId ?? undefined,
-    name: n,
-    items: props.items,
-  });
-  if (currentId) {
-    $liturgy.setCurrentLiturgyId(currentId);
-  } else {
-    const saved = await library.getByName(n);
-    if (saved) $liturgy.setCurrentLiturgyId(saved.id);
-  }
-  internalShow.value = false;
-  emit("saved");
 }
 </script>

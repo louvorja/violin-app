@@ -32,10 +32,11 @@
     </div>
 
     <template #footer>
-      <LjButton variant="ghost" @click="internalShow = false">
+      <LjButton size="sm" variant="ghost" @click="internalShow = false">
         {{ t("actions.cancel") }}
       </LjButton>
       <LjButton
+        size="sm"
         variant="primary"
         :icon="ICONS.ACTIONS.EXPORT"
         data-testid="liturgy-export-confirm"

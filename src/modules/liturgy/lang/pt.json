@@ -51,7 +51,8 @@
     "prev_item": "Item anterior",
     "next_item": "Próximo item",
     "expand": "Expandir",
-    "collapse": "Recolher"
+    "collapse": "Recolher",
+    "more": "Mais ações"
   },
   "types": {
     "anotacao": "Anotação",
@@ -108,7 +109,11 @@
     "projection_select": "Projeção de Fundo",
     "projection_search_btn": "Pesquisar projeções…",
     "sound_select": "Som de fundo",
-    "sound_search_btn": "Pesquisar sons…"
+    "sound_search_btn": "Pesquisar sons…",
+    "or": "ou",
+    "site_prefix": "Site",
+    "folder_prefix": "Pasta",
+    "file_prefix": "Arquivo"
   },
   "data": {
     "empty": "Liturgia vazia",
@@ -138,7 +143,8 @@
     "align_center": "Centralizar",
     "align_right": "Alinhar à direita",
     "list_ul": "Lista com marcadores",
-    "list_ol": "Lista numerada"
+    "list_ol": "Lista numerada",
+    "clear_format": "Limpar formatação"
   },
   "timer": {
     "current_item": "Item em execução"
@@ -219,7 +225,7 @@
     "confirm": "Copiar",
     "same_day": "O dia de origem não pode ser o mesmo que o dia atual.",
     "confirm_title": "Copiar Liturgia",
-    "confirm_text": "Deseja copiar a liturgia de <b>{source}</b> e sobrescrever a liturgia de <b>{target}</b>?<br><b>Esta ação não pode ser desfeita!<b>"
+    "confirm_text": "Deseja copiar a liturgia de <b>{source}</b> e sobrescrever a liturgia de <b>{target}</b>?<br><b>Esta ação não pode ser desfeita!</b>"
   },
   "clear": {
     "confirm_title": "Limpar Liturgia",
@@ -318,11 +324,27 @@
     "uncategorized": "Sem categoria",
     "keyboard_hint": "Use as setas e Enter",
     "empty": "Nenhum item disponível.",
-    "empty_search": "Nenhum item encontrado para esta busca."
+    "empty_search": "Nenhum item encontrado para esta busca.",
+    "type_image": "IMAGEM",
+    "type_video": "VÍDEO",
+    "type_audio": "ÁUDIO",
+    "type_pdf": "PDF"
   },
   "anuncios": {
     "select_label": "Selecione os anúncios a projetar:",
-    "all": "Todos"
+    "all": "Todos",
+    "count_one": "1 anúncio",
+    "count_many": "{count} anúncios"
+  },
+  "day_tabs": {
+    "label": "Dias da semana",
+    "items_hint": "{count} itens"
+  },
+  "ribbon_info": {
+    "empty": "Nenhum item",
+    "item_one": "1 item",
+    "item_many": "{count} itens",
+    "done": "{done}/{total} concluídos"
   },
   "overlay": {
     "select_slot": "Sobreposição",

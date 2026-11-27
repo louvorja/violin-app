@@ -2,7 +2,7 @@
   <div
     v-if="module_ && module_.show && isActive"
     ref="el"
-    class="liturgy-page"
+    class="liturgy-page lj-page-in"
     @dragover.prevent="onDragOver"
     @dragleave="onDragLeaveCustom"
     @drop.prevent="onDrop"
@@ -31,56 +31,48 @@
     <LiturgyDayTabs
       :active-day="activeDay"
       :day-labels="dayLabels"
+      :day-item-counts="dayItemCounts"
       :today-index="todayIndex"
       :set-active-day="setActiveDay"
     />
 
-    <nav class="liturgy-mobile-views" :aria-label="t('title')">
-      <button
-        type="button"
-        class="liturgy-mobile-views__button"
-        :aria-pressed="activeMobilePane === 'timeline'"
-        aria-controls="liturgy-mobile-timeline"
-        @click="selectMobilePane('timeline')"
-      >
-        {{ t("title") }}
-      </button>
-      <button
-        type="button"
-        class="liturgy-mobile-views__button"
-        :aria-pressed="activeMobilePane === 'notes'"
-        aria-controls="liturgy-mobile-notes"
-        @click="selectMobilePane('notes')"
-      >
-        {{ t("notes.title") }}
-      </button>
-    </nav>
+    <div class="liturgy-mobile-views">
+      <LjTabs
+        :model-value="activeMobilePane"
+        :tabs="mobilePaneTabs"
+        :aria-label="t('title')"
+        @update:model-value="selectMobilePane($event as 'timeline' | 'notes')"
+      />
+    </div>
 
     <div
       class="liturgy-body"
       :class="{ 'liturgy-body--mobile-notes': activeMobilePane === 'notes' }"
+      :style="{ '--lj-nav-x': dayDirection, '--lj-nav-y': 0 }"
     >
-      <LiturgyTimeline
-        id="liturgy-mobile-timeline"
-        class="liturgy-body__timeline"
-        :items="safeItems"
-        :locked="locked ?? false"
-        :default-color="defaultColor"
-        :total-duration="totalDuration"
-        :is-checked="isChecked"
-        :subtitle-for="subtitleFor"
-        :overlay-slots="overlaySlots"
-        :on-reorder="onReorder"
-        :on-bloco-assign="adjustBlocoAssignment"
-        :open-item-dialog="openItemDialog"
-        :clone-item="cloneItem"
-        :confirm-remove="confirmRemove"
-        :execute-item="executeItemMaybeMark"
-        :play-music="playMusicMaybeChoose"
-        :open-lyric="openLyricMaybeChoose"
-        :change-color="changeColor"
-        :toggle-checked="toggleChecked"
-      />
+      <div id="liturgy-mobile-timeline" class="liturgy-body__timeline">
+        <LiturgyTimeline
+          :key="activeDay"
+          :class="{ 'lj-page-in': dayDirection !== 0 }"
+          :items="safeItems"
+          :locked="locked ?? false"
+          :default-color="defaultColor"
+          :total-duration="totalDuration"
+          :is-checked="isChecked"
+          :subtitle-for="subtitleFor"
+          :overlay-slots="overlaySlots"
+          :on-reorder="onReorder"
+          :on-bloco-assign="adjustBlocoAssignment"
+          :open-item-dialog="openItemDialog"
+          :clone-item="cloneItem"
+          :confirm-remove="confirmRemove"
+          :execute-item="executeItemMaybeMark"
+          :play-music="playMusicMaybeChoose"
+          :open-lyric="openLyricMaybeChoose"
+          :change-color="changeColor"
+          :toggle-checked="toggleChecked"
+        />
+      </div>
 
       <LiturgyNotesPanel
         v-if="showNotes"
@@ -142,10 +134,10 @@
       </LjField>
 
       <template #footer>
-        <LjButton variant="ghost" :icon="ICONS.ACTIONS.CLOSE" @click="copyDialog = false">
+        <LjButton size="sm" variant="ghost" :icon="ICONS.ACTIONS.CLOSE" @click="copyDialog = false">
           {{ t("copy.cancel") }}
         </LjButton>
-        <LjButton variant="primary" :icon="ICONS.ACTIONS.COPY" @click="doCopyLiturgy">
+        <LjButton size="sm" variant="primary" :icon="ICONS.ACTIONS.COPY" @click="doCopyLiturgy">
           {{ t("copy.confirm") }}
         </LjButton>
       </template>
@@ -153,7 +145,12 @@
 
     <LiturgySaveDialog v-model="saveDialog" :items="safeItems" @saved="onLiturgySaved" />
     <LiturgyExportDialog v-model="exportDialog" :counts="exportCounts" @confirm="confirmExport" />
-    <LiturgyLoadDialog v-model="loadDialog" :items="safeItems" @loaded="onLiturgyLoaded" />
+    <LiturgyLoadDialog
+      v-model="loadDialog"
+      :items="safeItems"
+      @loaded="onLiturgyLoaded"
+      @deleted="onLiturgyDeleted"
+    />
     <LiturgyManageDialog v-model="manageDialog" @managed="onLiturgyManaged" />
 
     <LiturgyMusicChooser ref="musicChooser" @chosen="onChooseLaterMusicChosen" />
@@ -162,7 +159,16 @@
 
 <script setup lang="ts">
 import { useLiturgyI18n } from "../i18n";
-import { LjButton, LjDialog, LjField, LjIcon, LjSelect, LjSpinner } from "@/components/ui";
+import {
+  LjButton,
+  LjDialog,
+  LjField,
+  LjIcon,
+  LjSelect,
+  LjSpinner,
+  LjTabs,
+  type LjTab,
+} from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -193,6 +199,8 @@ import { countExportFiles, useLiturgyExport } from "../composables/useLiturgyExp
 import { DEFAULT_EXPORT_OPTIONS, type ExportCounts, type ExportOptions } from "../package/collect";
 import { pendingLiturgyFiles, returnLiturgyImport, takeLiturgyImport } from "../openRequests";
 import { useLiturgyAutoLoad } from "../composables/useLiturgyAutoLoad";
+import { agendaParaPersistir, calcularHorarioFim } from "../agenda";
+import { useNavDirection } from "@/composables/useNavDirection";
 import Telemetry from "@/helpers/Telemetry";
 
 const { t } = useLiturgyI18n();
@@ -235,6 +243,11 @@ const {
 const activeMobilePane = computed(() =>
   showNotes.value && mobilePane.value === "notes" ? "notes" : "timeline"
 );
+
+const mobilePaneTabs = computed<LjTab[]>(() => [
+  { value: "timeline", label: t("title"), icon: ICONS.LITURGY.SCRIPT },
+  { value: "notes", label: t("notes.title"), icon: ICONS.UI.NOTE_EDIT },
+]);
 
 function selectMobilePane(pane: "timeline" | "notes") {
   if (pane === "notes" && !showNotes.value) toggleNotes();
@@ -362,7 +375,42 @@ const copyDialog = ref(false);
 const copySourceDay = ref(0);
 const copyDayOptions = computed(() => dayLabels.value.map((label, i) => ({ label, value: i })));
 
-const todayIndex = computed(() => new Date().getDay());
+const todayIndex = ref(new Date().getDay());
+let _midnightTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleMidnightRefresh(): void {
+  if (_midnightTimer) clearTimeout(_midnightTimer);
+  const now = new Date();
+  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+  _midnightTimer = setTimeout(
+    () => {
+      todayIndex.value = new Date().getDay();
+      scheduleMidnightRefresh();
+    },
+    Math.max(1000, nextMidnight.getTime() - now.getTime())
+  );
+}
+
+const DAY_ORDER = [0, 1, 2, 3, 4, 5, 6] as const;
+const dayDirection = useNavDirection(
+  () => activeDay.value,
+  () => DAY_ORDER
+);
+// Ao sair/reabrir a aba Liturgia, quem anima a entrada é `.liturgy-page.lj-page-in`.
+// Zerar `dayDirection` evita que a timeline anime em sentido contrário ao da aba.
+watch(
+  isActive,
+  (active) => {
+    if (!active) dayDirection.value = 0;
+  },
+  { flush: "sync" }
+);
+
+const dayItemCounts = computed(() =>
+  DIAS.map(
+    (_, day) => $liturgy.list(day).filter((item) => item.tipo !== LiturgyItemTypeEnum.BLOCO).length
+  )
+);
 
 const saveDialog = ref(false);
 const loadDialog = ref(false);
@@ -485,8 +533,8 @@ watch([importing, exporting, importLock], () => {
 });
 
 watch(
-  [items, () => $liturgy.getCurrentLiturgyId()],
-  ([_items, id]) => {
+  [items, activeDay, () => $liturgy.getCurrentLiturgyId()],
+  ([_items, _day, id]) => {
     updateAppDataLiturgyInfo(_items, id);
   },
   { immediate: true }
@@ -517,12 +565,24 @@ async function updateAppDataLiturgyInfo(_items: LiturgyItem[], liturgyId: string
     }
   }
 
+  const executables = _items.filter((i) => i.tipo !== LiturgyItemTypeEnum.BLOCO);
+  const itemCount = executables.length;
+  const doneCount = executables.filter((i) => isChecked(i)).length;
   const times = _items.map((i) => i.time).filter(Boolean) as string[];
   const startTime = times[0] || "";
-  const endTime = times.length > 0 ? times[times.length - 1] : "";
+  const endTime = calcularHorarioFim(_items);
   const duration = _items.reduce((sum, i) => sum + (Number(i.duration) || 0), 0);
 
-  $appdata.set("liturgy_info", { name, color, startTime, endTime, duration });
+  $appdata.set("liturgy_info", {
+    name,
+    dayLabel: dayLabels.value[activeDay.value] || "",
+    color,
+    itemCount,
+    doneCount,
+    startTime,
+    endTime,
+    duration,
+  });
 }
 
 async function onLiturgySaved() {
@@ -579,6 +639,10 @@ async function onLiturgyManaged() {
   if (id) $liturgy.setDayLiturgyId(activeDay.value, id);
   await updateAppDataLiturgyInfo(safeItems.value, $liturgy.getCurrentLiturgyId());
   $snackbar.success(t("library.manage_success"));
+}
+
+async function onLiturgyDeleted() {
+  await updateAppDataLiturgyInfo(safeItems.value, $liturgy.getCurrentLiturgyId());
 }
 
 let _broadcastUnlisten: (() => void) | null = null;
@@ -639,28 +703,58 @@ function doCopyLiturgy() {
     $snackbar.warning(t("copy.same_day"));
     return;
   }
-  const sourceLabel = dayLabels.value[source];
-  const targetLabel = dayLabels.value[target];
+  const sourceLabel = escapeHtml(dayLabels.value[source]);
+  const targetLabel = escapeHtml(dayLabels.value[target]);
   const confirmText = t("copy.confirm_text")
     .replace("{source}", sourceLabel)
     .replace("{target}", targetLabel);
-  $alert.yesno({ title: t("copy.confirm_title"), text: confirmText }, (btn?: string) => {
-    if (btn !== "yes") return;
-    const items = $liturgy.list(source);
-    $liturgy.set(items, target);
-    copyDialog.value = false;
-  });
+  $alert.yesno(
+    {
+      title: escapeHtml(t("copy.confirm_title")),
+      text: confirmText,
+      translate: false,
+      destructive: true,
+    },
+    (btn?: string) => {
+      if (btn !== "yes") return;
+      const sourceItems = agendaParaPersistir($liturgy.list(source));
+      const idMap = new Map<string, string>();
+      const cloned: LiturgyItem[] = sourceItems.map((entry) => {
+        const nextId =
+          crypto.randomUUID?.() ?? `item_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        if (entry.id) idMap.set(entry.id, nextId);
+        return { ...entry, id: nextId, checked: "" };
+      });
+      const remapped = cloned.map((entry) =>
+        entry.blocoId && idMap.has(entry.blocoId)
+          ? { ...entry, blocoId: idMap.get(entry.blocoId) }
+          : entry
+      );
+      $liturgy.set(remapped, target);
+      $liturgy.setDayLiturgyId(target, null);
+      $liturgy.setCurrentLiturgyId(null);
+      copyDialog.value = false;
+    }
+  );
 }
 
 function clearDayDialog() {
-  const dayLabel = dayLabels.value[activeDay.value];
+  const dayLabel = escapeHtml(dayLabels.value[activeDay.value]);
   const confirmText = t("clear.confirm_text").replace("{day}", dayLabel);
-  $alert.yesno({ title: t("clear.confirm_title"), text: confirmText }, (btn?: string) => {
-    if (btn !== "yes") return;
-    $liturgy.clear(activeDay.value);
-    $liturgy.setDayLiturgyId(activeDay.value, null);
-    $liturgy.setCurrentLiturgyId(null);
-  });
+  $alert.yesno(
+    {
+      title: escapeHtml(t("clear.confirm_title")),
+      text: confirmText,
+      translate: false,
+      destructive: true,
+    },
+    (btn?: string) => {
+      if (btn !== "yes") return;
+      $liturgy.clear(activeDay.value);
+      $liturgy.setDayLiturgyId(activeDay.value, null);
+      $liturgy.setCurrentLiturgyId(null);
+    }
+  );
 }
 
 const exportDialog = ref(false);
@@ -739,6 +833,7 @@ let _warmTimer: ReturnType<typeof setTimeout> | null = null;
 const yieldFrame = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 onMounted(async () => {
+  scheduleMidnightRefresh();
   // Exibe a liturgia do dia antes de carregar catálogos grandes para não
   // travar a thread principal durante module.open:liturgy.
   await syncLiturgyForDay(activeDay.value);
@@ -751,6 +846,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  if (_midnightTimer) clearTimeout(_midnightTimer);
   if (_warmTimer) clearTimeout(_warmTimer);
   if (_broadcastUnlisten) _broadcastUnlisten();
 });
@@ -781,43 +877,29 @@ function onDragLeaveCustom(e: DragEvent) {
   min-height: 0;
 }
 
+.liturgy-body__timeline {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .liturgy-mobile-views {
   display: none;
 }
 
 @media (max-width: 600px) {
   .liturgy-mobile-views {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--lj-space-2);
+    display: block;
     flex-shrink: 0;
-    padding: var(--lj-space-2) var(--lj-space-3);
-    border-bottom: 1px solid var(--lj-surface-border);
     background: var(--lj-surface-bg);
   }
 
-  .liturgy-mobile-views__button {
-    min-width: 0;
-    min-height: 44px;
-    padding: var(--lj-space-2) var(--lj-space-3);
-    border: var(--lj-ui-border);
-    border-radius: var(--lj-ui-radius);
-    background: var(--lj-surface-bg);
-    color: var(--lj-text);
-    font: inherit;
-    font-weight: var(--lj-weight-medium);
-    cursor: pointer;
-  }
-
-  .liturgy-mobile-views__button[aria-pressed="true"] {
-    border-color: var(--lj-ui-accent);
-    background: var(--lj-ui-accent-soft);
-    color: var(--lj-ui-accent-text);
-  }
-
-  .liturgy-mobile-views__button:focus-visible {
-    outline: none;
-    box-shadow: var(--lj-ui-focus);
+  .liturgy-mobile-views :deep(.lj-tabs__trigger) {
+    flex: 1;
+    justify-content: center;
+    height: 44px;
   }
 
   .liturgy-body__timeline,
@@ -878,7 +960,7 @@ function onDragLeaveCustom(e: DragEvent) {
 
 .liturgy-busy-enter-active,
 .liturgy-busy-leave-active {
-  transition: opacity 0.15s ease;
+  transition: opacity var(--lj-transition-fast);
 }
 
 .liturgy-busy-enter-from,

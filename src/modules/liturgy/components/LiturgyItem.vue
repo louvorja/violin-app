@@ -6,92 +6,136 @@
         'lit-card--checked': checked,
         'lit-card--locked': locked,
       }"
+      :style="{ '--item-color': itemColor }"
     >
-      <!-- Checkbox + Icon -->
-      <!-- A cor do item vira o acento do controle: o primitivo não expõe `color`,
-           e a variável cascateia para dentro dele sem precisar de :deep(). -->
-      <span class="lit-card-check" :style="{ '--lj-ui-accent': itemColor }">
-        <LjCheckbox :model-value="checked" @update:model-value="$emit('toggle-checked', element)" />
+      <span
+        v-if="!locked"
+        class="lit-card-grip"
+        data-handle="true"
+        :title="t('actions.drag')"
+        aria-hidden="true"
+      >
+        <LjIcon :icon="ICONS.ACTIONS.DRAG" :size="14" />
       </span>
 
+      <!-- Checkbox usa o acento do tema para garantir contraste nos temas claro e escuro. -->
+      <span class="lit-card-check">
+        <LjCheckbox
+          :model-value="checked"
+          :aria-label="t('actions.mark_done')"
+          @update:model-value="$emit('toggle-checked', element)"
+        />
+      </span>
+
+      <span
+        class="lit-card-badge"
+        :class="{ 'lit-card-icon--checked': checked }"
+        aria-hidden="true"
+      >
+        <LjIcon :icon="$liturgy.iconForItem(element)" :size="20" class="lit-card-icon" />
+      </span>
+
+      <!-- Texto — também é o punho de arraste (data-handle) do vuedraggable -->
+      <button type="button" class="lit-card-text" data-handle="true" @click="onCardClick">
+        <span class="lit-card-title">
+          {{ element.item || t("placeholders.untitled") }}
+        </span>
+        <span v-if="subtitleParsed.text || chip || linkedOverlay" class="lit-card-meta">
+          <span v-if="subtitleParsed.text" class="lit-card-subtitle">
+            <LjIcon
+              v-if="subtitleParsed.icon"
+              :icon="subtitleParsed.icon"
+              :size="13"
+              class="lit-card-sub-icon"
+            />
+            <span class="lit-card-subtitle-text">{{ subtitleParsed.text }}</span>
+          </span>
+          <span v-if="chip || linkedOverlay" class="lit-card-chips">
+            <LjChip
+              v-if="chip"
+              variant="primary"
+              size="sm"
+              :icon="chip.icon"
+              class="lit-card-sub-chip lit-card-sub-chip--colored"
+              :style="chipColorVars(chip.color)"
+            >
+              {{ t(`inputs.music_version_${chip.action}`) }}
+            </LjChip>
+            <LjChip
+              v-if="linkedOverlay"
+              variant="primary"
+              size="sm"
+              :icon="ICONS.MODULES.OVERLAY"
+              class="lit-card-sub-chip"
+            >
+              {{ linkedOverlay.name }}
+            </LjChip>
+          </span>
+        </span>
+      </button>
+
       <LjChip
-        variant="primary"
+        v-if="Number(element.duration) > 0"
+        variant="neutral"
+        size="sm"
         :icon="ICONS.TIMER.CLOCK"
         class="lit-card-duration"
         :class="{ 'lit-card-icon--checked': checked }"
       >
-        {{ props.element.duration }} {{ t("units.min") }}
+        {{ element.duration }} {{ t("units.min") }}
       </LjChip>
-      <LjIcon
-        :icon="$liturgy.iconForItem(element)"
-        size="40"
-        :color="itemColor"
-        class="lit-card-icon"
-        :class="{ 'lit-card-icon--checked': checked }"
-      />
 
-      <!-- Texto — também é o punho de arraste (data-handle) do vuedraggable -->
-      <button class="lit-card-text" data-handle="true" @click="onCardClick">
-        <span class="lit-card-title">
-          {{ element.item || t("placeholders.untitled") }}
-        </span>
-        <span v-if="subtitleFor(element)" class="lit-card-subtitle">
-          <template v-if="parsedSubtitle(element).icon">
-            <LjIcon :icon="parsedSubtitle(element).icon" :size="14" class="lit-card-sub-icon" />
-          </template>
-          {{ parsedSubtitle(element).text }}
-          <LjChip
-            v-if="chip"
-            variant="primary"
-            :icon="chip.icon"
-            class="lit-card-sub-chip"
-            :style="chipColorVars(chip.color)"
-          >
-            {{ t(`inputs.music_version_${chip.action}`) }}
-          </LjChip>
-          <LjChip
-            v-if="linkedOverlay"
-            variant="primary"
+      <!-- Ações desktop: editar + duplicar + excluir -->
+      <div v-if="!locked" class="lit-card-end lit-card-end--desktop">
+        <LjTooltip :text="t('actions.edit')" :delay="500">
+          <LjButton
             size="sm"
-            :icon="ICONS.MODULES.OVERLAY"
-            class="lit-card-sub-chip"
-          >
-            {{ linkedOverlay.name }}
-          </LjChip>
-        </span>
-      </button>
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.EDIT"
+            :aria-label="t('actions.edit')"
+            @click.stop="$emit('edit', index)"
+          />
+        </LjTooltip>
 
-      <!-- Ação de vídeo on-line -->
-      <div v-if="element.tipo === 'video-online'" class="lit-card-music-actions">
-        <LjTooltip :text="t('video.play')" :delay="700">
-          <button class="lit-music-btn lit-music-btn--play" @click.stop="$emit('execute', element)">
-            <LjIcon :icon="ICONS.PLAYER.PLAY" :size="SIZE_ICON_MEDIA" />
-          </button>
+        <LjTooltip :text="t('actions.clone')" :delay="500">
+          <LjButton
+            size="sm"
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.COPY"
+            :aria-label="t('actions.clone')"
+            @click.stop="$emit('clone', index)"
+          />
+        </LjTooltip>
+
+        <LjTooltip :text="t('actions.delete')" :delay="500">
+          <LjButton
+            size="sm"
+            variant="ghost"
+            icon-only
+            class="lit-card-action--danger"
+            :icon="ICONS.ACTIONS.DELETE"
+            :aria-label="t('actions.delete')"
+            @click.stop="$emit('confirm-remove', index)"
+          />
         </LjTooltip>
       </div>
 
-      <!-- Ações: editar + reordenar (sem X — exclusão pelo ribbon "Apagar Selecionados") -->
-      <div class="lit-card-end">
-        <LjTooltip v-if="!locked" :text="t('actions.edit')" :delay="500">
-          <button class="lit-card-action" @click.stop="$emit('edit', index)">
-            <LjIcon :icon="ICONS.ACTIONS.EDIT" :size="SIZE_ICON_TOOLS" />
-          </button>
-        </LjTooltip>
-
-        <LjTooltip v-if="!locked" :text="t('actions.clone')" :delay="500">
-          <button class="lit-card-action" @click.stop="$emit('clone', index)">
-            <LjIcon :icon="ICONS.ACTIONS.COPY" :size="SIZE_ICON_TOOLS" />
-          </button>
-        </LjTooltip>
-
-        <LjTooltip v-if="!locked" :text="t('actions.delete')" :delay="500">
-          <button
-            class="lit-card-action lit-card-action--danger"
-            @click.stop="$emit('confirm-remove', index)"
-          >
-            <LjIcon :icon="ICONS.ACTIONS.DELETE" :size="SIZE_ICON_TOOLS" />
-          </button>
-        </LjTooltip>
+      <!-- Ações mobile: menu compacto com alvo de toque 44px -->
+      <div v-if="!locked" class="lit-card-end lit-card-end--mobile">
+        <LjMenu :items="mobileMenuItems" align="end" lazy-content>
+          <template #trigger>
+            <LjButton
+              variant="ghost"
+              icon-only
+              class="lit-card-mobile-menu"
+              :icon="ICONS.UI.DOTS_VERTICAL"
+              :aria-label="t('actions.more')"
+              @click.stop
+            />
+          </template>
+        </LjMenu>
       </div>
     </div>
 
@@ -118,11 +162,21 @@ import { computed, ref, toRef } from "vue";
 import type { LiturgyItem } from "@/types/Liturgy";
 import type { OverlaySlot } from "@/types/Overlay";
 import { ICONS } from "@/config/Icons";
-import { LjCheckbox, LjChip, LjDialog, LjIcon, LjTooltip } from "@/components/ui";
+import {
+  LjButton,
+  LjCheckbox,
+  LjChip,
+  LjDialog,
+  LjIcon,
+  LjMenu,
+  LjTooltip,
+  type LjMenuItem,
+} from "@/components/ui";
 import { MUSIC_ACTION, MusicAction } from "@/config/MusicAction";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import $liturgy from "@/helpers/Liturgy";
 import { canLinkOverlay } from "../overlayLink";
+import { parseSubitem } from "../agenda";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
@@ -134,9 +188,6 @@ interface ActionOption {
   color: string;
   labelKey: string;
 }
-
-const SIZE_ICON_TOOLS = "16";
-const SIZE_ICON_MEDIA = "20";
 
 const versionPickerOpen = ref(false);
 
@@ -157,7 +208,10 @@ const linkedOverlay = computed((): OverlaySlot | null => {
   if (!props.element?.linked_overlay_id) return null;
   const scheduled =
     props.element.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS
-      ? $liturgy.findScheduledForToday(props.element.id, $liturgy.getActiveDate())
+      ? $liturgy.findScheduledForToday(
+          props.element.ref_id || props.element.id,
+          $liturgy.getActiveDate()
+        )
       : null;
   if (
     !canLinkOverlay(props.element, {
@@ -172,11 +226,11 @@ const linkedOverlay = computed((): OverlaySlot | null => {
 });
 
 const availableActions = computed((): ActionOption[] => {
-  const canPlayback = !!(
+  const hasMusicRef = !!(
     props.element?.id_music ||
-    (props.element?.musica && props.element?.musica > 0)
+    (props.element?.musica && props.element?.musica !== -1 && props.element?.musica !== 0)
   );
-  if (!canPlayback) {
+  if (!hasMusicRef) {
     return [
       {
         action: "sung",
@@ -195,19 +249,24 @@ const availableActions = computed((): ActionOption[] => {
 
   // `action` é a versão da liturgia que o `playMusic` entende, não a ação do player:
   // aqui "audio" é "Somente áudio", e a cantada é "sung".
-  return [
+  const hasInstrumental = props.element?.has_instrumental_music !== false;
+  const options: ActionOption[] = [
     {
       action: "sung",
       icon: MUSIC_ACTION[MusicActionEnum.AUDIO].icon || ICONS.MUSIC.SING,
       color: MUSIC_ACTION[MusicActionEnum.AUDIO].color || "#c0392b",
       labelKey: "inputs.music_version_sung",
     },
-    {
+  ];
+  if (hasInstrumental) {
+    options.push({
       action: "pb",
       icon: MUSIC_ACTION[MusicActionEnum.PLAYBACK].icon || ICONS.MUSIC.PLAYBACK,
       color: MUSIC_ACTION[MusicActionEnum.PLAYBACK].color || "#1b4f8a",
       labelKey: "inputs.music_version_pb",
-    },
+    });
+  }
+  options.push(
     {
       action: "lyric",
       icon: MUSIC_ACTION[MusicActionEnum.LYRIC].icon || ICONS.MUSIC.LYRIC,
@@ -219,14 +278,17 @@ const availableActions = computed((): ActionOption[] => {
       icon: MUSIC_ACTION[MusicActionEnum.AUDIO_ONLY].icon || ICONS.MUSIC.AUDIO_PLAYBACK,
       color: MUSIC_ACTION[MusicActionEnum.AUDIO_ONLY].color || "#27ae60",
       labelKey: "inputs.music_version_audio-only",
-    },
-    {
+    }
+  );
+  if (hasInstrumental) {
+    options.push({
       action: "audio_pb",
       icon: MUSIC_ACTION[MusicActionEnum.PLAYBACK_ONLY].icon || ICONS.MUSIC.NO_AUDIO,
       color: MUSIC_ACTION[MusicActionEnum.PLAYBACK_ONLY].color || "#8e44ad",
       labelKey: "inputs.music_version_playback-only",
-    },
-  ];
+    });
+  }
+  return options;
 });
 
 function onCardClick() {
@@ -253,17 +315,37 @@ const props = withDefaults(
     index: number;
     locked?: boolean;
     defaultColor?: string;
-    hideCheckbox?: boolean;
     checked?: boolean;
     subtitleFor: (item: LiturgyItem) => string;
     overlaySlots?: OverlaySlot[];
   }>(),
-  { locked: false, defaultColor: "#00004F", hideCheckbox: false, overlaySlots: () => [] }
+  { locked: false, defaultColor: "#00004F", overlaySlots: () => [] }
 );
 const element = toRef(props, "element");
 
-/** Cor do item — usada no ícone e como acento da caixa de seleção. */
+/** Cor do item — usada no emblema do ícone. */
 const itemColor = computed(() => props.element.cor || props.defaultColor);
+
+const subtitleParsed = computed(() => parseSubitem(props.subtitleFor(props.element)));
+
+const mobileMenuItems = computed<LjMenuItem[]>(() => [
+  {
+    label: t("actions.edit"),
+    icon: ICONS.ACTIONS.EDIT,
+    action: () => emit("edit", props.index),
+  },
+  {
+    label: t("actions.clone"),
+    icon: ICONS.ACTIONS.COPY,
+    action: () => emit("clone", props.index),
+  },
+  { separator: true },
+  {
+    label: t("actions.delete"),
+    icon: ICONS.ACTIONS.DELETE,
+    action: () => emit("confirm-remove", props.index),
+  },
+]);
 
 /**
  * A cor de uma versão de música é um dado (vem de `MUSIC_ACTION`), não um token.
@@ -272,19 +354,10 @@ const itemColor = computed(() => props.element.cor || props.defaultColor);
  */
 function chipColorVars(color: string): Record<string, string> {
   return {
-    "--lj-ui-accent-soft": `color-mix(in srgb, ${color} 15%, transparent)`,
+    "--chip-color": color,
+    "--lj-ui-accent-soft": `color-mix(in oklab, ${color} 15%, transparent)`,
     "--lj-ui-accent-text": color,
   };
-}
-
-/** Parse o subitem: se contém "|||", separa icon path do texto. */
-function parsedSubtitle(item: LiturgyItem): { icon: string; text: string } {
-  const sub = props.subtitleFor(item) || "";
-  const idx = sub.indexOf("|||");
-  if (idx >= 0) {
-    return { icon: sub.slice(0, idx), text: sub.slice(idx + 3) };
-  }
-  return { icon: "", text: sub };
 }
 
 const emit = defineEmits<{
@@ -311,27 +384,73 @@ const { t } = useLiturgyI18n();
 .lit-card {
   display: flex;
   align-items: center;
+  gap: var(--lj-space-3);
   flex: 1;
+  min-width: 0;
   background: var(--lj-surface-bg);
-  border-radius: var(--lj-radius-md);
-  box-shadow: var(--lj-shadow-2);
-  min-height: 50px;
-  border: 1px solid transparent;
+  border-radius: var(--lj-radius-lg);
+  box-shadow: var(--lj-shadow-1);
+  min-height: 48px;
+  padding: 0 var(--lj-space-2) 0 var(--lj-space-3);
+  border: 1px solid var(--lj-surface-border);
   transition:
-    background var(--lj-transition-normal),
-    border-color var(--lj-transition-normal);
+    background-color var(--lj-transition-fast),
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast);
   overflow: hidden;
   position: relative;
 }
+
 .lit-card:hover {
   background: var(--lj-surface-bg-hover);
-}
-.lit-card--checked {
-  background: var(--lj-ui-accent-soft);
+  border-color: var(--lj-surface-border-strong);
 }
 
-.lit-card--locked {
-  border-left: 3px solid var(--lj-surface-border-strong);
+.lit-card--checked {
+  background: var(--lj-ui-accent-soft);
+  border-color: color-mix(in oklab, var(--lj-ui-accent) 25%, var(--lj-surface-border));
+}
+
+.lit-card-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lj-text-subtle);
+  cursor: grab;
+  opacity: 0.45;
+  flex-shrink: 0;
+  padding: var(--lj-space-1) 0;
+  transition: opacity var(--lj-transition-fast);
+}
+
+.lit-card:hover .lit-card-grip {
+  opacity: 0.9;
+}
+
+.lit-card-grip:active {
+  cursor: grabbing;
+}
+
+.lit-card-check {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.lit-card-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--lj-radius-md);
+  background: color-mix(in oklab, var(--item-color) 11%, transparent);
+  color: var(--item-color);
+  flex-shrink: 0;
+}
+
+.lit-card-icon--checked {
+  opacity: 0.55;
 }
 
 .lit-card-text {
@@ -339,142 +458,171 @@ const { t } = useLiturgyI18n();
   text-align: left;
   background: transparent;
   border: none;
-  padding: var(--lj-space-3) var(--lj-space-5);
+  padding: var(--lj-space-3) var(--lj-space-2);
   cursor: pointer;
   touch-action: pan-y;
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-width: 0;
+  color: var(--lj-text);
+  font-family: inherit;
 }
 
-.lit-card-check {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  padding: 0 var(--lj-space-1) 0 var(--lj-space-4);
-}
-.lit-card-duration {
-  margin-left: var(--lj-space-4);
-}
-.lit-card-icon {
-  flex-shrink: 0;
-  margin-right: var(--lj-space-2);
-  margin-left: var(--lj-space-5);
-}
-.lit-card-icon--checked {
-  text-decoration: line-through;
-  opacity: 0.6;
-}
 .lit-card-title {
   font-weight: var(--lj-weight-semibold);
   font-size: var(--lj-text-lg);
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .lit-card--checked .lit-card-title {
   text-decoration: line-through;
   opacity: 0.6;
 }
 
+.lit-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--lj-space-2) var(--lj-space-3);
+  margin-top: var(--lj-space-1);
+  min-width: 0;
+}
+
 .lit-card-subtitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  min-width: 0;
+  max-width: 100%;
   font-size: var(--lj-text-sm);
   color: var(--lj-text-muted);
-  white-space: nowrap;
+}
+
+.lit-card-subtitle-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: var(--lj-space-1);
+  white-space: nowrap;
 }
 
 .lit-card-sub-icon {
-  margin-right: var(--lj-space-2);
+  flex-shrink: 0;
 }
 
-.lit-card-sub-chip {
-  margin-left: var(--lj-space-4);
-  vertical-align: middle;
+.lit-card-chips {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--lj-space-2);
+  flex-shrink: 0;
 }
 
 .lit-card--checked .lit-card-subtitle {
   text-decoration: line-through;
+  opacity: 0.7;
 }
 
-.lit-card-music-actions {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  padding: 0 var(--lj-space-3);
-  border-left: 1px solid var(--lj-surface-border);
-}
-.lit-music-btn {
-  width: var(--lj-fixed-btn-width);
-  height: var(--lj-fixed-btn-width);
-  border: none;
-  background: transparent;
-  border-radius: var(--lj-radius-xs);
-  cursor: pointer;
-  color: var(--lj-text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.lit-music-btn:hover {
-  background: var(--lj-surface-bg-hover);
-}
-.lit-music-btn--play,
-.lit-music-btn--play:hover {
-  color: var(--lj-danger);
+.lit-card-duration {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .lit-card-end {
   display: flex;
   align-items: center;
-  border-left: 1px solid var(--lj-surface-border);
-  padding: 0 var(--lj-space-2);
   gap: var(--lj-space-1);
-}
-
-.lit-card-action {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--lj-radius-xs);
-  color: var(--lj-text-muted);
-  padding: 0;
-  user-select: none;
   flex-shrink: 0;
 }
-.lit-card-action:hover {
-  background: var(--lj-surface-bg-hover);
-  color: var(--lj-text);
+
+.lit-card-end--desktop {
+  opacity: 0.45;
+  transition: opacity var(--lj-transition-fast);
 }
 
-.lit-card-action:focus-visible,
-.lit-music-btn:focus-visible {
-  outline: none;
-  box-shadow: var(--lj-ui-focus);
+.lit-card:hover .lit-card-end--desktop,
+.lit-card:focus-within .lit-card-end--desktop {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .lit-card-end--desktop {
+    opacity: 1;
+  }
+}
+
+.lit-card-end--mobile {
+  display: none;
 }
 
 .lit-card-text:focus-visible {
   outline: none;
   box-shadow: inset var(--lj-ui-focus);
 }
-.lit-card-action--danger,
-.lit-card-action--danger:hover {
+
+@media (forced-colors: active) {
+  .lit-card-text:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+
+.lit-card-end .lit-card-action--danger:hover,
+.lit-card-end .lit-card-action--danger:focus-visible {
+  background: var(--lj-danger-soft);
   color: var(--lj-danger);
+}
+
+@media (max-width: 600px) {
+  .lit-card {
+    gap: var(--lj-space-2);
+    padding-left: var(--lj-space-3);
+  }
+
+  .lit-card-grip,
+  .lit-card-end--desktop {
+    display: none;
+  }
+
+  .lit-card-end--mobile {
+    display: flex;
+    border-left: 0;
+    padding: 0 var(--lj-space-1);
+  }
+
+  .lit-card-mobile-menu {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .lit-card-badge {
+    width: 30px;
+    height: 30px;
+  }
+
+  .lit-card-duration {
+    display: none;
+  }
 }
 </style>
 
-<!-- Sem `scoped`: o corpo do diálogo é emitido num portal no <body> e o Vue não
-     propaga o atributo de escopo para lá — regras scoped não casariam. O
-     isolamento vem do prefixo `lit-`. -->
+<!-- Sem `scoped`: regras do tema escuro e corpo do diálogo (portal no <body>).
+     O Vue SFC não preserva seletores após `:global([data-theme="dark"])` dentro de
+     `<style scoped>`, então o tema escuro fica aqui com o prefixo `lit-`. -->
 <style>
+html[data-theme="dark"] .lit-card-badge {
+  background: color-mix(in oklab, var(--item-color) 24%, var(--lj-surface-bg-active));
+  color: color-mix(in oklab, var(--item-color) 42%, var(--lj-white));
+}
+
+html[data-theme="dark"] .lit-card-sub-chip--colored {
+  --lj-ui-accent-soft: color-mix(in oklab, var(--chip-color) 24%, var(--lj-surface-bg-active));
+  --lj-ui-accent-text: color-mix(in oklab, var(--chip-color) 45%, var(--lj-white));
+}
+
 .lit-versions {
   display: flex;
   flex-direction: column;
@@ -495,6 +643,7 @@ const { t } = useLiturgyI18n();
   font-size: var(--lj-text-base);
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--lj-transition-fast);
 }
 .lit-version:hover {
   background: var(--lj-surface-bg-hover);

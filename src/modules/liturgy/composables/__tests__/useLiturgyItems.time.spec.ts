@@ -241,4 +241,17 @@ describe("campo Hora da liturgia", () => {
     expect(saved.value[0].blocoId).toBeUndefined();
     expect(ui.items.value[0].time).toBe("");
   });
+
+  it("digitar a hora em um item sem duração não propaga a mesma hora para os itens abaixo", () => {
+    saved.value = [
+      item("a", { item: "Abertura", duration: 0, time: "", time_mode: "auto" }),
+      item("b", { item: "Oração", duration: 0, time: "", time_mode: "auto" }),
+      item("c", { item: "Sermão", duration: 0, time: "", time_mode: "auto" }),
+    ];
+    const ui = useLiturgyItems(ref(0), ref([]));
+    ui.openItemDialog(0);
+    ui.setFormField("time", "09:00");
+    ui.saveItem();
+    expect(ui.items.value.map((entry) => entry.time)).toEqual(["09:00", "", ""]);
+  });
 });

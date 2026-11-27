@@ -9,7 +9,7 @@ import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { LiturgyItem, ScheduledCategory, ScheduledItem } from "@/types/Liturgy";
 import { ICONS } from "@/config/Icons";
 
-const DEFAULT_COLOR = "#4F0000";
+const DEFAULT_COLOR = "#00004F";
 
 /** Formata Date → "YYYY-MM-DD" no fuso local (evita o bug do toISOString em UTC). */
 export function toLocalDate(d: Date): string {
@@ -235,7 +235,7 @@ export default {
   },
 
   add(item: Partial<LiturgyItem>, day?: number): LiturgyItem {
-    const items = this.list(day);
+    const items = [...this.list(day)];
     const merged: LiturgyItem = {
       id: uid(),
       tipo: LiturgyItemTypeEnum.ANOTACAO,
@@ -413,7 +413,7 @@ export default {
         tipo: LiturgyItemTypeEnum.ITENS_AGENDADOS,
         item: categoriaNome,
         subitem: "",
-        id: categoriaId,
+        ref_id: categoriaId,
         cor,
       } as Partial<LiturgyItem>,
       day
@@ -435,15 +435,12 @@ export default {
   },
 
   setScheduledCategories(list: ScheduledCategory[]): void {
-    // Substituição completa (usada pela importação/exportação).
-    void Promise.all([
-      ...ScheduledStore.items().map((i) => ScheduledStore.deleteItem(i.id as string)),
-    ]).then(async () => {
+    // Substituição completa (usada pela importação/exportação): remove apenas
+    // categorias que saíram e salva as novas, preservando os itens agendados.
+    const nextIds = new Set(list.map((c) => String(c.id)));
+    const removed = ScheduledStore.categories().filter((c) => !nextIds.has(String(c.id)));
+    void Promise.all(removed.map((c) => ScheduledStore.deleteCategory(c.id))).then(async () => {
       for (const c of list) await ScheduledStore.saveCategory(c);
-      const cur = new Set(list.map((c) => String(c.id)));
-      for (const i of this.scheduledItems()) {
-        if (!cur.has(String(i.categoria))) continue;
-      }
     });
   },
 
@@ -535,7 +532,12 @@ export default {
   },
 
   setDayLiturgyId(day: number, id: string | null): void {
-    const map = $userdata.get<Record<number, string>>(KEYS.MODULES.LITURGY.DAY_LITURGIES, {}) as Record<number, string>;
+    const map = {
+      ...($userdata.get<Record<number, string>>(KEYS.MODULES.LITURGY.DAY_LITURGIES, {}) as Record<
+        number,
+        string
+      >),
+    };
     if (id) {
       map[clampDay(day)] = id;
     } else {

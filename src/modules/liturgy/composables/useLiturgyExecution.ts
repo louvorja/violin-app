@@ -2,7 +2,7 @@ import $liturgy from "@/helpers/Liturgy";
 import $media from "@/composables/useMedia";
 import { heicToJpeg } from "@/helpers/ImageConvert";
 import { KEYS } from "@/constants/UserDataKeys";
-import $alert from "@/helpers/Alert";
+import $alert, { escapeHtml } from "@/helpers/Alert";
 import $path from "@/helpers/Path";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -37,7 +37,7 @@ import { localFileStatus, type LocalFileStatus } from "@/helpers/LocalFileStatus
 import { isManagedLibraryPath, libraryFileInfo } from "@/helpers/LibraryFiles";
 import { mediaSourceDetails } from "@/helpers/MediaDiagnostics";
 import Telemetry from "@/helpers/Telemetry";
-import { useLiturgyI18n, chaveLiturgia } from "../i18n";
+import { chaveLiturgia } from "../i18n";
 import {
   resolveLiturgyFile,
   releaseLiturgyFileUrl,
@@ -93,8 +93,6 @@ let fileOpenIntent = 0;
  * janela de projeção, seu cache no IDB e seu jeito de morrer.
  */
 export function useLiturgyExecution() {
-  const { t } = useLiturgyI18n();
-
   function reportExecutionError(
     error: unknown,
     operation: string,
@@ -142,7 +140,7 @@ export function useLiturgyExecution() {
           break;
         case LiturgyItemTypeEnum.ITENS_AGENDADOS: {
           const activeDate = $liturgy.getActiveDate();
-          const sched = $liturgy.findScheduledForToday(item.id, activeDate);
+          const sched = $liturgy.findScheduledForToday(item.ref_id || item.id, activeDate);
           const arquivo = sched ? String((sched as Record<string, unknown>).arquivo || "") : "";
           if (arquivo) {
             projected = await openFile({
@@ -172,7 +170,11 @@ export function useLiturgyExecution() {
           projected = await executeAnnouncements(item);
           break;
         case LiturgyItemTypeEnum.ANOTACAO:
-          $alert.show({ title: item.item, text: item.subitem || "", translate: false });
+          $alert.show({
+            title: escapeHtml(item.item || ""),
+            text: escapeHtml(item.subitem || "").replace(/\r?\n/g, "<br>"),
+            translate: false,
+          });
           break;
         case LiturgyItemTypeEnum.OVERLAY:
           await toggleOverlay(item);
@@ -357,7 +359,7 @@ export function useLiturgyExecution() {
     if (isYoutube(url) && $userdata.get(KEYS.OPTIONS.YOUTUBE_ACTION, "video") === "video") {
       const embedUrl = buildEmbedUrl(url);
       if (embedUrl) {
-        $media.openYouTube(embedUrl, item.item || "");
+        await $media.openYouTube(embedUrl, item.item || "");
         return;
       }
     }
@@ -403,7 +405,7 @@ export function useLiturgyExecution() {
       }
       if (!target) {
         reportMissingResource("execute_media_library", "media_library_item");
-        $alert.error({ text: t("alerts.media_not_found") });
+        $alert.error({ text: chaveLiturgia("alerts.media_not_found") });
         return false;
       }
       // Blob URLs só valem no documento de origem — a projeção re-resolve
@@ -439,7 +441,7 @@ export function useLiturgyExecution() {
       const selected = Array.isArray(ids) ? all.filter((a) => ids.includes(String(a.id))) : all;
       if (!selected.length) {
         reportMissingResource("execute_announcements", "announcement");
-        $alert.error({ text: t("alerts.media_not_found") });
+        $alert.error({ text: chaveLiturgia("alerts.media_not_found") });
         return false;
       }
 
@@ -533,7 +535,7 @@ export function useLiturgyExecution() {
   async function executeBackgroundProjectionItem(item: LiturgyItem): Promise<boolean> {
     if (!item.ref_id) {
       reportMissingResource("execute_background_projection", "background_projection");
-      $alert.error({ text: t("alerts.media_not_found") });
+      $alert.error({ text: chaveLiturgia("alerts.media_not_found") });
       return false;
     }
     try {
@@ -543,7 +545,7 @@ export function useLiturgyExecution() {
       );
       if (!rec) {
         reportMissingResource("execute_background_projection", "background_projection");
-        $alert.error({ text: t("alerts.media_not_found") });
+        $alert.error({ text: chaveLiturgia("alerts.media_not_found") });
         return false;
       }
       return await activateBackgroundProjection(rec);
@@ -557,7 +559,7 @@ export function useLiturgyExecution() {
   async function executeBgSoundItem(item: LiturgyItem): Promise<void> {
     if (!item.ref_id) {
       reportMissingResource("execute_background_sound", "background_sound");
-      $alert.error({ text: t("alerts.media_not_found") });
+      $alert.error({ text: chaveLiturgia("alerts.media_not_found") });
       return;
     }
     // Mesmo arquivo tocando? Alterna stop/play.
@@ -576,7 +578,7 @@ export function useLiturgyExecution() {
       }>(DB_TABLE.BACKGROUND_SOUND_LIBRARY, item.ref_id);
       if (!rec) {
         reportMissingResource("execute_background_sound", "background_sound");
-        $alert.error({ text: t("alerts.media_not_found") });
+        $alert.error({ text: chaveLiturgia("alerts.media_not_found") });
         return;
       }
       const displayName = rec.fileName || rec.name;

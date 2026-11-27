@@ -91,7 +91,14 @@ vi.mock("@/helpers/Liturgy", () => ({
   },
 }));
 vi.mock("@/helpers/ImageConvert", () => ({ heicToJpeg: vi.fn() }));
-vi.mock("@/helpers/Alert", () => ({ default: { error: vi.fn(), info: vi.fn(), show: vi.fn() } }));
+vi.mock("@/helpers/Alert", () => ({
+  default: { error: vi.fn(), info: vi.fn(), show: vi.fn() },
+  escapeHtml: (text: unknown) =>
+    String(text ?? "").replace(
+      /[&<>"']/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] || c
+    ),
+}));
 vi.mock("@/helpers/Broadcast", () => ({
   default: {
     send: mocks.broadcastSend,
@@ -779,9 +786,14 @@ describe("liturgia — ciclo de vida do overlay vinculado", () => {
     await executeItem({
       id: "nota-1",
       tipo: LiturgyItemTypeEnum.ANOTACAO,
-      item: "Lembrete",
-      subitem: "Avisar o pastor",
+      item: "Lembrete <script>",
+      subitem: "Linha 1\n<b>Linha 2</b>",
     } as LiturgyItem);
+    expect($alert.show).toHaveBeenCalledWith({
+      title: "Lembrete &lt;script&gt;",
+      text: "Linha 1<br>&lt;b&gt;Linha 2&lt;/b&gt;",
+      translate: false,
+    });
     expect(slots[0].enabled).toBe(true);
 
     await executeItem({

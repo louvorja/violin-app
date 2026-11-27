@@ -63,15 +63,18 @@
               <span class="tl-bloco-line" />
               <span class="tl-bloco-text">
                 <span v-if="element.time" class="tl-bloco-time">{{ element.time }}</span>
-                {{ element.item || t("placeholders.bloco") }}
-                <button
+                <span class="tl-bloco-name">{{ element.item || t("placeholders.bloco") }}</span>
+                <LjButton
                   v-if="!locked"
+                  size="sm"
+                  variant="ghost"
+                  icon-only
                   class="tl-bloco-action"
+                  :icon="ICONS.ACTIONS.EDIT"
                   :title="t('actions.edit')"
+                  :aria-label="t('actions.edit')"
                   @click.stop="openItemDialog(index)"
-                >
-                  <LjIcon :icon="ICONS.ACTIONS.EDIT" size="14" />
-                </button>
+                />
               </span>
               <span class="tl-bloco-line" />
               <!--
@@ -80,8 +83,14 @@
                 (sem hover) não existia. O `click.stop` protege o arraste, já
                 que a faixa inteira é o punho.
               -->
-              <button
+              <LjButton
+                size="sm"
+                variant="ghost"
+                icon-only
                 class="tl-bloco-action tl-bloco-collapse"
+                :icon="
+                  collapsedBlocos.has(element.id) ? ICONS.UI.CHEVRON_DOWN : ICONS.UI.CHEVRON_UP
+                "
                 :aria-expanded="!collapsedBlocos.has(element.id)"
                 :aria-label="
                   collapsedBlocos.has(element.id) ? t('actions.expand') : t('actions.collapse')
@@ -90,14 +99,7 @@
                   collapsedBlocos.has(element.id) ? t('actions.expand') : t('actions.collapse')
                 "
                 @click.stop="toggleBlocoCollapse(element.id)"
-              >
-                <LjIcon
-                  :icon="
-                    collapsedBlocos.has(element.id) ? ICONS.UI.CHEVRON_DOWN : ICONS.UI.CHEVRON_UP
-                  "
-                  size="16"
-                />
-              </button>
+              />
             </div>
 
             <template v-else>
@@ -106,18 +108,21 @@
                 para `0fr`, o que anima a altura real sem ninguém medi-la. Antes o
                 cartão só ganhava `height: 0` por classe e sumia de um quadro para
                 o outro, enquanto o tempo já tinha a sua própria transição.
+                `inert` tira itens ocultos da ordem de Tab e da árvore de acessibilidade.
               -->
               <div
                 class="tl-collapse"
                 :class="{
                   'tl-collapse--closed': element.blocoId && collapsedBlocos.has(element.blocoId),
                 }"
+                :inert="Boolean(element.blocoId && collapsedBlocos.has(element.blocoId))"
               >
                 <div class="tl-collapse-inner">
-                  <div class="tl-meta-collapse">
+                  <div v-if="hasAnyTime" class="tl-meta-collapse">
                     <div class="tl-item-meta">
+                      <span v-if="hasTopConnector(index)" class="tl-line tl-line--top" />
                       <div v-if="element.time" class="tl-time">{{ element.time }}</div>
-                      <div class="tl-line" />
+                      <span v-if="hasBottomConnector(index)" class="tl-line tl-line--bottom" />
                     </div>
                   </div>
                   <div class="tl-card">
@@ -153,9 +158,9 @@
 import { useLiturgyI18n } from "../i18n";
 import { useCollapsedBlocos } from "../composables/useCollapsedBlocos";
 import { setScrollPosition, restoreScrollPosition } from "@/helpers/ScrollMemory";
-import { LjButton, LjEmpty, LjIcon } from "@/components/ui";
+import { LjButton, LjEmpty } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
-import { nextTick, onActivated, onMounted, ref } from "vue";
+import { computed, nextTick, onActivated, onMounted, ref } from "vue";
 import draggable from "vuedraggable";
 import LiturgyItemComponent from "./LiturgyItem.vue";
 import type { LiturgyItem } from "@/types/Liturgy";
@@ -217,6 +222,40 @@ function getBlocoColor(blocoId: string): string {
   return bloco?.cor || props.defaultColor;
 }
 
+const hasAnyTime = computed(() =>
+  props.items.some((i) => i.tipo !== LiturgyItemTypeEnum.BLOCO && Boolean(i.time))
+);
+
+function sameTimelineSection(a: LiturgyItem | undefined, b: LiturgyItem | undefined): boolean {
+  if (!a || !b) return false;
+  if (a.tipo === LiturgyItemTypeEnum.BLOCO || b.tipo === LiturgyItemTypeEnum.BLOCO) return false;
+  if ((a.blocoId || "") !== (b.blocoId || "")) return false;
+  return true;
+}
+
+function hasBottomConnector(index: number): boolean {
+  const current = props.items[index];
+  const next = props.items[index + 1];
+  if (!sameTimelineSection(current, next)) return false;
+
+  let hasAtOrBefore = Boolean(current.time);
+  for (let i = index - 1; !hasAtOrBefore && i >= 0; i--) {
+    if (!sameTimelineSection(current, props.items[i])) break;
+    if (props.items[i].time) hasAtOrBefore = true;
+  }
+  if (!hasAtOrBefore) return false;
+
+  for (let i = index + 1; i < props.items.length; i++) {
+    if (!sameTimelineSection(current, props.items[i])) break;
+    if (props.items[i].time) return true;
+  }
+  return false;
+}
+
+function hasTopConnector(index: number): boolean {
+  return index > 0 && hasBottomConnector(index - 1);
+}
+
 function onDragStart(evt: { item: HTMLElement; oldIndex: number }) {
   const element = props.items[evt.oldIndex];
   if (!element || element.tipo !== LiturgyItemTypeEnum.BLOCO) return;
@@ -261,13 +300,14 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   overflow: hidden;
   min-width: 0;
   min-height: 0;
+  background: var(--lj-surface-bg-soft);
 }
 .liturgy-tl-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--lj-space-4) 0;
+  padding: var(--lj-space-4) 0 var(--lj-space-6);
 }
 
 /* ── Estado vazio ── */
@@ -304,103 +344,98 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
  *   solto, que não tem faixa, ficaria 12px à esquerda de todos os outros.
 */
 .tl-item--in-bloco {
-  padding: var(--lj-space-2) 0;
-  background: color-mix(in srgb, var(--bloco-color, var(--lj-surface-border)) 6%, transparent);
-  /* O padding/margem somem junto com o conteúdo ao recolher; sem transição, o
-     último frame do cartão "pula" um degrau. */
+  padding: var(--lj-space-1) 0;
+  background: color-mix(in oklab, var(--bloco-color, var(--lj-surface-border)) 7%, transparent);
+  /* Layout (padding/margin) usa o par curto de reflow. */
   transition:
-    padding var(--lj-transition-normal),
-    margin var(--lj-transition-normal);
+    padding var(--lj-reflow-enter),
+    margin var(--lj-reflow-enter);
 }
-.tl-item--bloco-collapsed {
-  padding: 0 !important;
-  border-left: 0 !important;
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
+.tl-item.tl-item--in-bloco.tl-item--bloco-collapsed {
+  padding: 0;
+  border-left: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  transition:
+    padding var(--lj-reflow-exit),
+    margin var(--lj-reflow-exit);
 }
 
-/* ── Timeline meta (time + dot + line) ── */
-/* A altura só é animável a partir de uma linha de grade: `0fr` a `1fr` vai de
-   zero à altura do conteúdo sem ninguém precisar medi-la. Por isso o invólucro
-   existe — ele carrega a posição na linha do item, e o miolo continua sendo a
-   coluna de tempo. */
+/* ── Timeline meta (time + line) ── */
 .tl-meta-collapse {
   display: grid;
   grid-template-rows: 1fr;
-  align-self: center;
-  width: 64px;
+  align-self: stretch;
+  width: 60px;
   flex-shrink: 0;
   z-index: 1;
 }
 .tl-item-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  align-items: stretch;
+  justify-items: center;
   min-height: 0;
   overflow: hidden;
+  padding: 0;
 }
-/* Recolher/expandir o conteúdo do item: `0fr` → `1fr` anima a altura real. */
+/* Recolher/expandir o conteúdo do item: `0fr` → `1fr` anima a altura real via reflow. */
 .tl-collapse {
-  /*
-   * É o único filho flex do `.tl-item`: sem `flex` ele encolhe para o conteúdo
-   * e o item deixa de ocupar a linha inteira. `min-width: 0` devolve o
-   * truncamento do texto do cartão.
-   */
   flex: 1;
   min-width: 0;
   display: grid;
   grid-template-rows: 1fr;
   transition:
-    grid-template-rows var(--lj-transition-normal),
+    grid-template-rows var(--lj-reflow-enter),
     opacity var(--lj-transition-normal);
 }
 .tl-collapse--closed {
   grid-template-rows: 0fr;
   opacity: 0;
   pointer-events: none;
+  transition:
+    grid-template-rows var(--lj-reflow-exit),
+    opacity var(--lj-exit-fast);
 }
-/*
- * A linha [tempo 64px][cartão flex:1] vivia no `.tl-item`; com o invólucro, ela
- * precisa ser repetida aqui — senão tempo e cartão empilham na vertical e o
- * `flex: 1` do cartão deixa de valer. O `min-height: 0` + `overflow: hidden`
- * são o que permitem o miolo ser cortado na animação.
- */
 .tl-collapse-inner {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 0;
   min-height: 0;
   overflow: hidden;
 }
-@media (prefers-reduced-motion: reduce) {
-  .tl-collapse {
-    transition: none;
-  }
-}
 .tl-time {
-  font-size: var(--lj-text-lg);
-  font-weight: var(--lj-weight-bold);
+  grid-row: 2;
+  font-size: var(--lj-text-sm);
+  font-weight: var(--lj-weight-semibold);
+  font-variant-numeric: tabular-nums;
   color: var(--lj-ui-accent-text);
   text-align: center;
-  margin-bottom: var(--lj-space-2);
+  padding: var(--lj-space-2) var(--lj-space-1);
   line-height: 1;
 }
 .tl-line {
   width: 2px;
-  flex: 1;
-  background: var(--lj-divider);
-  min-height: var(--lj-space-5);
+  height: 100%;
+  background: var(--lj-surface-border-strong);
+  opacity: 0.45;
+}
+.tl-line--top {
+  grid-row: 1;
+}
+.tl-line--bottom {
+  grid-row: 3;
 }
 .tl-item--checked .tl-time {
   text-decoration: line-through;
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
 /* ── Card ── */
 .tl-card {
   flex: 1;
   min-width: 0;
-  padding: var(--lj-space-2) var(--lj-space-5);
+  padding: var(--lj-space-2) var(--lj-space-4);
 }
 
 /* ── Bloco (divider style) ── */
@@ -408,55 +443,70 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--lj-space-5);
+  gap: var(--lj-space-4);
   margin: var(--lj-space-6) 0 var(--lj-space-2);
-  padding: var(--lj-space-3) var(--lj-space-5);
+  padding: var(--lj-space-3) calc(var(--lj-space-5) + var(--lj-ui-h-sm)) var(--lj-space-3)
+    var(--lj-space-5);
   cursor: grab;
   touch-action: pan-y;
   user-select: none;
-  background: color-mix(in srgb, var(--cat-color, var(--lj-divider)) 10%, transparent);
-  border-radius: var(--lj-radius-lg);
+  background: color-mix(in oklab, var(--cat-color, var(--lj-divider)) 10%, var(--lj-surface-bg));
+  border: 1px solid color-mix(in oklab, var(--cat-color, var(--lj-surface-border)) 22%, transparent);
+  border-radius: var(--lj-radius-md);
 }
-/* Reserva a faixa do botão de recolher, que fica fora do fluxo (canto direito):
-   sem isso, um nome de bloco comprido correria por baixo dele. */
-.tl-bloco {
-  padding-right: calc(var(--lj-space-5) + var(--lj-ui-h-sm));
+.liturgy-tl-area--locked .tl-bloco {
+  cursor: default;
 }
 .tl-bloco:active {
   cursor: grabbing;
 }
+.liturgy-tl-area--locked .tl-bloco:active {
+  cursor: default;
+}
 .tl-bloco-line {
   flex: 1;
-  height: 3px;
+  min-width: var(--lj-space-4);
+  height: 2px;
   background: var(--cat-color, var(--lj-divider));
-  opacity: 0.7;
+  opacity: 0.5;
 }
 .tl-bloco-text {
   display: flex;
   align-items: center;
-  gap: var(--lj-space-4);
-  font-size: var(--lj-text-lg);
+  gap: var(--lj-space-3);
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--lj-text-md);
   font-weight: var(--lj-weight-bold);
   color: var(--cat-color, var(--lj-text));
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+.tl-bloco-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .tl-bloco-time {
-  font-size: var(--lj-text-md);
+  font-size: var(--lj-text-sm);
   font-weight: var(--lj-weight-semibold);
+  font-variant-numeric: tabular-nums;
   color: var(--lj-ui-accent-text);
   background: var(--lj-ui-accent-soft);
-  padding: var(--lj-space-1) var(--lj-space-4);
+  padding: var(--lj-space-1) var(--lj-space-3);
   border-radius: var(--lj-radius-sm);
   text-transform: none;
   letter-spacing: 0;
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
 }
 .tl-bloco-action {
   opacity: 0;
-  transition: opacity var(--lj-transition-normal);
+  transition:
+    opacity var(--lj-transition-fast),
+    background-color var(--lj-transition-fast);
   border: none;
   background: transparent;
   cursor: pointer;
@@ -464,8 +514,8 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--lj-ui-h-sm);
-  height: var(--lj-ui-h-sm);
+  min-width: 24px;
+  min-height: 24px;
   border-radius: var(--lj-radius-xs);
   flex-shrink: 0;
 }
@@ -482,10 +532,10 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
  */
 .tl-bloco-action.tl-bloco-collapse {
   position: absolute;
-  right: var(--lj-space-4);
+  right: var(--lj-space-3);
   top: 50%;
   transform: translateY(-50%);
-  opacity: 0.65;
+  opacity: 0.7;
 }
 .tl-bloco-action.tl-bloco-collapse:hover,
 .tl-bloco-action.tl-bloco-collapse:focus-visible {
@@ -504,17 +554,66 @@ function onDragMove(evt: Record<string, unknown>): boolean | void {
 }
 
 /* ── Bloco drag ghost feedback ── */
-.tl-item--dragging-with-bloco {
-  height: 0 !important;
-  overflow: hidden !important;
-  opacity: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  border: 0 !important;
+.tl-item.tl-item--dragging-with-bloco {
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 /* ── Bloco collapse ── */
 .tl-bloco--collapsed {
-  margin-bottom: var(--lj-space-5);
+  margin-bottom: var(--lj-space-4);
+}
+
+@media (max-width: 600px) {
+  .liturgy-tl-list {
+    padding: 0 var(--lj-space-2);
+  }
+
+  .tl-meta-collapse {
+    width: 44px;
+  }
+
+  .tl-time {
+    font-size: var(--lj-text-sm);
+  }
+
+  .tl-card {
+    padding: var(--lj-space-2) var(--lj-space-2);
+  }
+
+  .tl-bloco {
+    gap: var(--lj-space-2);
+    padding: var(--lj-space-3) 48px var(--lj-space-3) var(--lj-space-3);
+  }
+
+  .tl-bloco-action {
+    opacity: 0.85;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .tl-bloco-action.tl-bloco-collapse {
+    min-width: 44px;
+    min-height: 44px;
+    right: var(--lj-space-1);
+  }
+}
+</style>
+
+<style>
+html[data-theme="dark"] .tl-bloco {
+  background: color-mix(in oklab, var(--cat-color, var(--lj-divider)) 20%, var(--lj-surface-bg));
+  border-color: color-mix(in oklab, var(--cat-color, var(--lj-surface-border)) 35%, transparent);
+}
+html[data-theme="dark"] .tl-bloco-text,
+html[data-theme="dark"] .tl-bloco-action {
+  color: color-mix(in oklab, var(--cat-color, var(--lj-text)) 42%, var(--lj-white));
+}
+html[data-theme="dark"] .tl-bloco-line {
+  background: color-mix(in oklab, var(--cat-color, var(--lj-divider)) 50%, var(--lj-white));
 }
 </style>

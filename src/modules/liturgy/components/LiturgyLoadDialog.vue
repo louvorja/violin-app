@@ -14,12 +14,13 @@
     <div v-if="filtered.length" class="llo-list">
       <div v-for="item in filtered" :key="item.id" class="llo-item">
         <button type="button" class="llo-item__main" @click="doLoad(item)">
-          <LjIcon
-            :icon="ICONS.MODULES.LITURGY"
-            :size="18"
-            :color="item.color || DEFAULT_COLOR"
+          <span
             class="llo-item__icon"
-          />
+            :style="{ '--llo-color': item.color || DEFAULT_COLOR }"
+            aria-hidden="true"
+          >
+            <LjIcon :icon="ICONS.MODULES.LITURGY" :size="18" />
+          </span>
           <span class="llo-item__text">
             <span class="llo-item__name">{{ item.name }}</span>
             <span v-if="item.updatedAt" class="llo-item__date">
@@ -50,11 +51,11 @@
       </div>
     </div>
 
-    <LjAlert
+    <LjEmpty
       v-else-if="!library.loading.value"
       class="llo-feedback"
-      variant="info"
-      :text="t('library.load_empty')"
+      :icon="ICONS.LITURGY.SCRIPT"
+      :title="t('library.load_empty')"
     />
 
     <LjProgress v-if="library.loading.value" class="llo-feedback" indeterminate />
@@ -64,8 +65,8 @@
 <script setup lang="ts">
 import { useLiturgyI18n } from "../i18n";
 import { ref, computed, watch } from "vue";
-import { LjAlert, LjButton, LjDialog, LjIcon, LjInput, LjProgress } from "@/components/ui";
-import $alert from "@/helpers/Alert";
+import { LjButton, LjDialog, LjEmpty, LjIcon, LjInput, LjProgress } from "@/components/ui";
+import $alert, { escapeHtml } from "@/helpers/Alert";
 import $liturgy from "@/helpers/Liturgy";
 import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
 import { DEFAULT_COLOR } from "../composables/useLiturgyItems";
@@ -80,6 +81,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:modelValue", v: boolean): void;
   (e: "loaded"): void;
+  (e: "deleted", id: string): void;
 }>();
 
 const { t, locale } = useLiturgyI18n();
@@ -118,7 +120,11 @@ async function doLoad(item: Awaited<ReturnType<typeof library.list>>[number]) {
   const full = await library.get(item.id);
   if (!full) return;
   $alert.yesno(
-    { title: t("library.load_title"), text: t("library.load_confirm") },
+    {
+      title: escapeHtml(t("library.load_title")),
+      text: escapeHtml(t("library.load_confirm")),
+      translate: false,
+    },
     (btn?: string) => {
       if (btn !== "yes") return;
       $liturgy.set(full.items, $liturgy.getActiveDay());
@@ -139,17 +145,26 @@ async function duplicateItem(item: Awaited<ReturnType<typeof library.list>>[numb
     name = `${t("library.duplicate_prefix_n").replace("{n}", String(n))} ${full.name}`;
   }
   const saved = await library.save({ name, items: full.items, color: full.color, binding: null });
-  $alert.info({ text: t("library.duplicate_success").replace("{name}", saved.name) });
+  $alert.info({
+    text: escapeHtml(t("library.duplicate_success").replace("{name}", saved.name)),
+    translate: false,
+  });
   allItems.value = await library.list();
 }
 
 async function deleteItem(item: Awaited<ReturnType<typeof library.list>>[number]) {
   $alert.yesno(
-    { title: t("actions.delete"), text: t("library.delete_confirm").replace("{name}", item.name) },
+    {
+      title: escapeHtml(t("actions.delete")),
+      text: t("library.delete_confirm").replace("{name}", escapeHtml(item.name)),
+      translate: false,
+      destructive: true,
+    },
     async (btn?: string) => {
       if (btn !== "yes") return;
       await library.remove(item.id);
       allItems.value = await library.list();
+      emit("deleted", item.id);
     }
   );
 }
@@ -220,6 +235,9 @@ async function deleteItem(item: Awaited<ReturnType<typeof library.list>>[number]
 }
 
 .llo-item__icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--llo-color, var(--lj-ui-accent));
   flex-shrink: 0;
 }
 
@@ -244,18 +262,19 @@ async function deleteItem(item: Awaited<ReturnType<typeof library.list>>[number]
   font-size: var(--lj-text-sm);
 }
 
-/* Exclusão discreta: mantém o fantasma do LjButton e só troca a cor. O seletor
-   descendente supera a regra `.lj-btn--ghost` do próprio primitivo. */
-.llo-item .llo-btn-danger {
-  color: var(--lj-danger);
-}
-
-.llo-item .llo-btn-danger:hover {
+.llo-item .llo-btn-danger:hover,
+.llo-item .llo-btn-danger:focus-visible {
   background: var(--lj-danger-soft);
   color: var(--lj-danger);
 }
 
 .llo-feedback {
   margin-top: var(--lj-space-4);
+}
+</style>
+
+<style>
+html[data-theme="dark"] .llo-item__icon {
+  color: color-mix(in oklab, var(--llo-color, var(--lj-ui-accent)) 42%, var(--lj-white));
 }
 </style>

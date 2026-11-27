@@ -256,4 +256,42 @@ describe("parseJaImport", () => {
     expect(parsed.items[1].time_mode).toBeUndefined();
     expect(prepararAgenda(parsed.items)[0]).toMatchObject({ time: "19:00", time_mode: "manual" });
   });
+
+  it("extrai o horário do título ao importar .ja e JSON sem hora explícita, sem alterar o título", () => {
+    const ja = parseJaImport(JA_SAMPLE)!;
+    const culto = ja.find((l) => l.name.includes("18h55"))!;
+    expect(culto.items[0]).toMatchObject({
+      item: "18h55: Cronometro",
+      time: "18:55",
+      time_mode: "manual",
+    });
+    expect(culto.items[1]).toMatchObject({
+      item: "19h00: Louvor",
+      time: "19:00",
+      time_mode: "manual",
+    });
+
+    const escola = ja.find((l) => l.name === "Escola Sabatina")!;
+    expect(escola.items[0].time).toBeUndefined();
+    expect(escola.items[1]).toMatchObject({
+      item: "08h50: Cronômetro E.S.",
+      time: "08:50",
+      time_mode: "manual",
+    });
+
+    const library = useLiturgyLibrary();
+    const classicJson = library.parseImport(
+      JSON.stringify({
+        name: "Classic",
+        items: [
+          { id: "a", tipo: "anotacao", item: "09:00 - Boas-vindas", time: "" },
+          { id: "b", tipo: "anotacao", item: "10:00 - Limpo no Violin", time: "", time_mode: "auto" },
+          { id: "c", tipo: "anotacao", item: "09:30 Filho", blocoId: "b1" },
+        ],
+      })
+    )!;
+    expect(classicJson.items[0]).toMatchObject({ time: "09:00", time_mode: "manual" });
+    expect(classicJson.items[1]).toMatchObject({ time: "", time_mode: "auto" });
+    expect(classicJson.items[2].time).toBeUndefined();
+  });
 });

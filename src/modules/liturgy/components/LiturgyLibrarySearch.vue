@@ -17,26 +17,30 @@
         @keydown="onKeydown"
       />
       <div class="llb-view-toggle" role="group" :aria-label="t('library_search.view_label')">
-        <button
-          type="button"
+        <LjButton
+          size="sm"
+          variant="ghost"
+          icon-only
           class="llb-view"
           :class="{ 'llb-view--active': viewMode === 'thumbnails' }"
           :aria-pressed="viewMode === 'thumbnails'"
+          :icon="ICONS.UI.VIEW_GRID"
           :title="t('library_search.view_thumbnails')"
+          :aria-label="t('library_search.view_thumbnails')"
           @click="viewMode = 'thumbnails'"
-        >
-          <LjIcon :icon="ICONS.UI.VIEW_GRID" :size="16" />
-        </button>
-        <button
-          type="button"
+        />
+        <LjButton
+          size="sm"
+          variant="ghost"
+          icon-only
           class="llb-view"
           :class="{ 'llb-view--active': viewMode === 'list' }"
           :aria-pressed="viewMode === 'list'"
+          :icon="ICONS.UI.VIEW_LIST"
           :title="t('library_search.view_list')"
+          :aria-label="t('library_search.view_list')"
           @click="viewMode = 'list'"
-        >
-          <LjIcon :icon="ICONS.UI.VIEW_LIST" :size="16" />
-        </button>
+        />
       </div>
     </div>
 
@@ -74,9 +78,11 @@
     </div>
 
     <div ref="viewport" class="llb-body">
-      <div v-if="!flatItems.length" class="llb-empty">
-        {{ query ? t("library_search.empty_search") : t("library_search.empty") }}
-      </div>
+      <LjEmpty
+        v-if="!flatItems.length"
+        :icon="icon"
+        :title="query ? t('library_search.empty_search') : t('library_search.empty')"
+      />
       <template v-else>
         <LibraryGroupedView :groups="groups" :view="viewMode === 'thumbnails' ? 'grid' : 'list'">
           <template #grid-item="{ item }">
@@ -137,7 +143,7 @@
       <span class="llb-count">{{ flatItems.length }} / {{ items.length }}</span>
       <span class="lj-u-spacer" />
       <span class="llb-hint">{{ t("library_search.keyboard_hint") }}</span>
-      <LjButton size="sm" @click="$emit('update:modelValue', false)">
+      <LjButton size="sm" variant="ghost" @click="$emit('update:modelValue', false)">
         {{ t("actions.cancel") }}
       </LjButton>
     </template>
@@ -154,7 +160,7 @@
  * teclado. O padrão é miniaturas.
  */
 import { computed, nextTick, ref, watch } from "vue";
-import { LjButton, LjDialog, LjIcon, LjInput } from "@/components/ui";
+import { LjButton, LjDialog, LjEmpty, LjIcon, LjInput } from "@/components/ui";
 import LibraryGroupedView from "@/components/LibraryGroupedView.vue";
 import { ICONS } from "@/config/Icons";
 import { useListNavigation } from "@/composables/useListNavigation";
@@ -391,23 +397,16 @@ watch(
   flex-shrink: 0;
   gap: 2px;
 }
-.llb-view {
-  width: 30px;
-  height: 30px;
-  border: 1px solid transparent;
-  border-radius: var(--lj-radius-xs);
-  background: transparent;
-  color: var(--lj-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.llb-view:hover,
 .llb-view--active {
   border-color: var(--lj-surface-border);
   background: var(--lj-surface-bg-soft);
   color: var(--lj-text);
+}
+.llb-chip:focus-visible,
+.llb-thumb:focus-visible,
+.llb-row:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
 }
 .llb-chips {
   display: flex;
@@ -418,11 +417,11 @@ watch(
 .llb-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--lj-space-2);
   max-width: 220px;
-  padding: 4px 9px;
+  padding: var(--lj-space-2) var(--lj-space-4);
   border: 1px solid var(--lj-surface-border);
-  border-radius: 999px;
+  border-radius: var(--lj-radius-pill);
   background: transparent;
   color: var(--lj-text-muted);
   font: inherit;
@@ -431,12 +430,16 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    background-color var(--lj-transition-fast),
+    border-color var(--lj-transition-fast),
+    color var(--lj-transition-fast);
 }
 .llb-chip:hover,
 .llb-chip--active {
-  border-color: var(--lj-navy);
-  background: color-mix(in srgb, var(--lj-navy) 10%, transparent);
-  color: var(--lj-text);
+  border-color: var(--lj-ui-accent);
+  background: var(--lj-ui-accent-soft);
+  color: var(--lj-ui-accent-text);
 }
 .llb-chip-icon {
   width: 14px;
@@ -447,29 +450,6 @@ watch(
   max-height: 54vh;
   overflow-y: auto;
   padding-right: 2px;
-}
-.llb-empty {
-  padding: var(--lj-space-5);
-  text-align: center;
-  color: var(--lj-text-muted);
-  font-size: var(--lj-text-sm);
-}
-.llb-group {
-  margin-top: var(--lj-space-4);
-}
-.llb-group:first-child {
-  margin-top: 0;
-}
-.llb-group-title {
-  margin: 0 0 var(--lj-space-2);
-  color: var(--lj-text-muted);
-  font-size: var(--lj-text-sm);
-  font-weight: var(--lj-weight-semibold);
-}
-.llb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
-  gap: var(--lj-space-3);
 }
 .llb-thumb {
   display: flex;
@@ -489,12 +469,12 @@ watch(
   border-color: var(--lj-surface-border);
   background: color-mix(
     in srgb,
-    var(--llb-item-color, var(--lj-navy)) 18%,
+    var(--llb-item-color, var(--lj-ui-accent)) 18%,
     var(--lj-surface-bg-soft)
   );
 }
 .llb-thumb--selected {
-  border-color: var(--lj-navy);
+  border-color: var(--lj-ui-accent);
 }
 .llb-thumb-media {
   position: relative;
@@ -514,13 +494,13 @@ watch(
 }
 .llb-thumb-detail {
   position: absolute;
-  right: 4px;
-  bottom: 4px;
-  padding: 1px 4px;
+  right: var(--lj-space-2);
+  bottom: var(--lj-space-2);
+  padding: 1px var(--lj-space-2);
   border-radius: var(--lj-radius-xs);
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-size: 10px;
+  background: var(--lj-black-alpha-75);
+  color: var(--lj-white);
+  font-size: var(--lj-text-xs);
 }
 .llb-thumb-name {
   overflow: hidden;
@@ -533,12 +513,7 @@ watch(
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--lj-text-muted);
-  font-size: 10px;
-}
-.llb-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  font-size: var(--lj-text-xs);
 }
 .llb-row {
   display: flex;
@@ -559,12 +534,12 @@ watch(
   border-color: var(--lj-surface-border);
   background: color-mix(
     in srgb,
-    var(--llb-item-color, var(--lj-navy)) 18%,
+    var(--llb-item-color, var(--lj-ui-accent)) 18%,
     var(--lj-surface-bg-soft)
   );
 }
 .llb-row--selected {
-  border-color: var(--lj-navy);
+  border-color: var(--lj-ui-accent);
 }
 .llb-row-icon {
   display: inline-flex;

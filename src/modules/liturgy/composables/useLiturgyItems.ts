@@ -311,7 +311,7 @@ export function useLiturgyItems(
     // ITENS_AGENDADOS: re-resolve dinamicamente contra a data ativa (não snapshot).
     if (item.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS) {
       const activeDate = $liturgy.getActiveDate();
-      const sched = $liturgy.findScheduledForToday(item.id, activeDate);
+      const sched = $liturgy.findScheduledForToday(item.ref_id || item.id, activeDate);
       const arquivo = sched ? String((sched as Record<string, unknown>).arquivo || "") : "";
       if (arquivo) {
         const ext = arquivo.split(".").pop()?.toLowerCase() || "";
@@ -381,6 +381,14 @@ export function useLiturgyItems(
     fileImporting.value = false;
     editIndex.value = index;
     form.value = index >= 0 ? { ...DEFAULT_FORM(), ...items.value[index] } : DEFAULT_FORM();
+    // Compatibilidade com itens agendados legados que guardavam a categoria em `id`.
+    if (
+      form.value.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS &&
+      !form.value.ref_id &&
+      form.value.id
+    ) {
+      form.value.ref_id = form.value.id;
+    }
     if (!form.value.blocoId && form.value.time_mode === "auto") form.value.time = "";
     const original = $liturgy.list(activeDay.value).find((entry) => entry.id === form.value.id);
     // Abrir preserva também a escolha de deixar Hora vazia. Editar o título
@@ -403,6 +411,7 @@ export function useLiturgyItems(
 
   function onTypeChange(): void {
     selectedFile = null;
+    if (editIndex.value < 0) form.value.id = "";
     if (form.value.tipo !== LiturgyItemTypeEnum.MUSICA) {
       form.value.musica = -1;
       form.value.escolha = false;
@@ -444,11 +453,12 @@ export function useLiturgyItems(
   }
 
   function onScheduledCategoryChange(): void {
-    const c = scheduledCategories.value.find((x) => x.id === form.value.id);
+    const catId = form.value.ref_id || "";
+    const c = scheduledCategories.value.find((x) => String(x.id) === String(catId));
     if (c) setFormField("item", c.nome);
     // Atualiza a duração com base no item agendado do dia ativo.
     const activeDate = $liturgy.getActiveDate();
-    const sched = $liturgy.findScheduledForToday(form.value.id, activeDate);
+    const sched = catId ? $liturgy.findScheduledForToday(catId, activeDate) : undefined;
     const arquivo = sched ? String((sched as Record<string, unknown>).arquivo || "") : "";
     const ext = arquivo.split(".").pop()?.toLowerCase() || "";
     const isMedia = [...VIDEO_EXT, ...AUDIO_EXT].includes(ext);
@@ -497,8 +507,8 @@ export function useLiturgyItems(
       formErrors.value = { item: t("dialog.set_name") };
       return;
     }
-    if (f.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS && !f.id) {
-      formErrors.value = { id: t("dialog.choose_scheduled") };
+    if (f.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS && !(f.ref_id || f.id)) {
+      formErrors.value = { ref_id: t("dialog.choose_scheduled") };
       return;
     }
 
@@ -527,8 +537,11 @@ export function useLiturgyItems(
     }
 
     const hora = lerHorario(f.time);
+    const rawDuration = Number(f.duration);
+    const duration = Number.isFinite(rawDuration) && rawDuration > 0 ? Math.round(rawDuration) : 0;
     const built: Partial<LiturgyItem> = {
       ...f,
+      duration,
       time: f.blocoId ? "" : hora,
       time_mode: !f.blocoId && hora ? "manual" : "auto",
     };
@@ -538,12 +551,12 @@ export function useLiturgyItems(
         break;
       case LiturgyItemTypeEnum.SITE:
         built.url = $liturgy.validateUrl(f.url);
-        built.subitem = "Site " + built.url;
+        built.subitem = `${t("inputs.site_prefix")} ${built.url}`;
         break;
       case LiturgyItemTypeEnum.ARQUIVO: {
         const isDir = f.dir.endsWith("/") || f.dir.endsWith("\\");
         built.subtipo = isDir ? "dir" : "arq";
-        built.subitem = (isDir ? "Pasta " : "Arquivo ") + f.dir;
+        built.subitem = `${isDir ? t("inputs.folder_prefix") : t("inputs.file_prefix")} ${f.dir}`;
         break;
       }
       case LiturgyItemTypeEnum.MUSICA: {
@@ -568,39 +581,16 @@ export function useLiturgyItems(
         break;
       }
       case LiturgyItemTypeEnum.ITENS_AGENDADOS: {
-        const c = scheduledCategories.value.find((x) => x.id === f.id);
-        built.item = c?.nome || "";
+        const catId = f.ref_id || f.id;
+        const c = scheduledCategories.value.find((x) => String(x.id) === String(catId));
+        built.ref_id = String(catId || "");
+        built.item = c?.nome || f.item || "";
         // Resolve o item agendado do dia ativo para extrair ícone + nome do arquivo.
         const activeDate = $liturgy.getActiveDate();
-        const sched = $liturgy.findScheduledForToday(f.id, activeDate);
+        const sched = catId ? $liturgy.findScheduledForToday(catId, activeDate) : undefined;
         const arquivo = sched ? String((sched as Record<string, unknown>).arquivo || "") : "";
         if (arquivo) {
           const ext = arquivo.split(".").pop()?.toLowerCase() || "";
-          const ICON_MAP: Record<string, string> = {
-            mp4: ICONS.MEDIA.VIDEO,
-            webm: ICONS.MEDIA.VIDEO,
-            mkv: ICONS.MEDIA.VIDEO,
-            mov: ICONS.MEDIA.VIDEO,
-            avi: ICONS.MEDIA.VIDEO,
-            m4v: ICONS.MEDIA.VIDEO,
-            mp3: ICONS.MEDIA.AUDIO,
-            wav: ICONS.MEDIA.AUDIO,
-            ogg: ICONS.MEDIA.AUDIO,
-            flac: ICONS.MEDIA.AUDIO,
-            aac: ICONS.MEDIA.AUDIO,
-            m4a: ICONS.MEDIA.AUDIO,
-            opus: ICONS.MEDIA.AUDIO,
-            wma: ICONS.MEDIA.AUDIO,
-            jpg: ICONS.MEDIA.IMAGE,
-            jpeg: ICONS.MEDIA.IMAGE,
-            png: ICONS.MEDIA.IMAGE,
-            webp: ICONS.MEDIA.IMAGE,
-            gif: ICONS.MEDIA.IMAGE,
-            bmp: ICONS.MEDIA.IMAGE,
-            heic: ICONS.MEDIA.IMAGE,
-            heif: ICONS.MEDIA.IMAGE,
-            pdf: ICONS.UI.FILE,
-          };
           const icon = ICON_MAP[ext] || ICONS.UI.FILE;
           const filename = arquivo.split(/[\\/]/).pop() || arquivo;
           built.subitem = `${icon}|||${filename}`;
@@ -643,19 +633,24 @@ export function useLiturgyItems(
         const ids = Array.isArray(f.anuncios_ids) ? f.anuncios_ids : [];
         built.anuncios_ids = ids;
         built.item = f.item || t("types.anuncios");
-        built.subitem = ids.length
-          ? `${ids.length} ${ids.length === 1 ? "anúncio" : "anúncios"}`
-          : "";
+        built.subitem =
+          ids.length === 1
+            ? t("anuncios.count_one")
+            : ids.length > 1
+              ? t("anuncios.count_many", { count: ids.length })
+              : "";
         break;
       }
       case LiturgyItemTypeEnum.OVERLAY: {
         const slot = overlaySlots.value.find((s) => s.id === f.overlay_id);
         built.overlay_id = f.overlay_id || "";
         built.overlay_action = f.overlay_action || "activate";
-        built.item =
-          (f.overlay_action === "activate" ? t("overlay.activate") : t("overlay.deactivate")) +
+        const defaultLabel =
+          (built.overlay_action === "activate" ? t("overlay.activate") : t("overlay.deactivate")) +
           ": " +
           (slot?.name || built.overlay_id);
+        // Preserva o nome que o operador escolheu; gera o padrão só quando vazio.
+        built.item = String(f.item || "").trim() || defaultLabel;
         built.subitem = slot?.name || built.overlay_id;
         break;
       }
@@ -845,7 +840,7 @@ export function useLiturgyItems(
               {
                 tipo: LiturgyItemTypeEnum.ARQUIVO,
                 item: entry.name,
-                subitem: "Pasta " + (realPath || entry.name),
+                subitem: `${t("inputs.folder_prefix")} ${realPath || entry.name}`,
                 subtipo: "dir",
                 dir: dirPath,
                 dir_info: "E",
@@ -891,7 +886,7 @@ export function useLiturgyItems(
         {
           tipo: LiturgyItemTypeEnum.ARQUIVO,
           item: name.replace(/\.[^.]+$/, ""),
-          subitem: "Arquivo " + (filePath !== name ? filePath : name),
+          subitem: `${t("inputs.file_prefix")} ${filePath !== name ? filePath : name}`,
           subtipo: "arq",
           dir: filePath,
           ...stored,

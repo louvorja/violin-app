@@ -137,6 +137,34 @@ describe("horários da agenda", () => {
     expect(agendaParaPersistir(list)[1].time).toBe("");
   });
 
+  it("item sem duração não repete a mesma hora para os itens abaixo dele", () => {
+    const list = [
+      item("inicio", { time: "09:00", time_mode: "manual", duration: 0 }),
+      item("sem-hora-1", { time_mode: "auto", duration: 0 }),
+      item("sem-hora-2", { time_mode: "auto", duration: 5 }),
+      item("ancora", { time: "10:00", time_mode: "manual", duration: 15 }),
+      item("calculado-sem-dur", { time_mode: "auto", duration: 0 }),
+      item("depois-sem-dur", { time_mode: "auto", duration: 5 }),
+    ];
+    expect(prepararAgenda(list).map((entry) => entry.time)).toEqual([
+      "09:00",
+      "",
+      "",
+      "10:00",
+      "10:15",
+      "",
+    ]);
+  });
+
+  it("bloco com hora passa o início ao primeiro filho, mas para se ele não tiver duração", () => {
+    const list = [
+      item("bloco", { tipo: LiturgyItemTypeEnum.BLOCO, time: "09:00", time_mode: "manual" }),
+      item("f1", { blocoId: "bloco", duration: 0 }),
+      item("f2", { blocoId: "bloco", duration: 5 }),
+    ];
+    expect(prepararAgenda(list).map((entry) => entry.time)).toEqual(["09:00", "09:00", ""]);
+  });
+
   it("valida o horário recebido de arquivo", () => {
     expect(lerHorario("08:30:00")).toBe("08:30");
     for (const value of [null, {}, "25:00", "08:99", "x", "08:30<script>"]) {

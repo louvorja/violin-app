@@ -79,4 +79,62 @@ describe("LiturgyItem — seletor de versão", () => {
     expect(modes).toHaveLength(5);
     for (const mode of modes) expect(Object.keys(LITURGY_VERSION_ACTION)).toContain(mode);
   });
+
+  it("oculta opções de playback quando a música não tem instrumental", async () => {
+    const wrapper = mount(LiturgyItemCard, {
+      props: {
+        element: {
+          id: "m2",
+          tipo: LiturgyItemTypeEnum.MUSICA,
+          subtipo: "div",
+          item: "Hino sem playback",
+          subitem: "",
+          musica: 43,
+          id_music: 43,
+          escolha: false,
+          has_instrumental_music: false,
+          cor: "#00004F",
+          duration: 0,
+        } as LiturgyItem,
+        index: 0,
+        subtitleFor: () => "",
+      },
+      global: { stubs: { LjDialog: DialogStub, LjTooltip: TooltipStub } },
+    });
+
+    // Duração 0 não renderiza o chip de tempo
+    expect(wrapper.find(".lit-card-duration").exists()).toBe(false);
+
+    await wrapper.find(".lit-card-text").trigger("click");
+    const labels = wrapper.findAll(".lit-version").map((b) => b.text());
+    expect(labels).toEqual([
+      "inputs.music_version_sung",
+      "inputs.music_version_lyric",
+      "inputs.music_version_audio-only",
+    ]);
+  });
+
+  it("exibe o chip de sobreposição vinculada mesmo quando o item não tem subtítulo", () => {
+    const wrapper = mount(LiturgyItemCard, {
+      props: {
+        element: {
+          id: "bg1",
+          tipo: LiturgyItemTypeEnum.BG_PROJECTION,
+          subtipo: "image",
+          item: "Fundo",
+          subitem: "",
+          ref_id: "bg-rec-1",
+          linked_overlay_id: "slot-1",
+          cor: "#00004F",
+          duration: 0,
+        } as LiturgyItem,
+        index: 0,
+        subtitleFor: () => "",
+        overlaySlots: [{ id: "slot-1", name: "Letreiro" } as never],
+      },
+      global: { stubs: { LjDialog: DialogStub, LjTooltip: TooltipStub } },
+    });
+
+    expect(wrapper.text()).toContain("Letreiro");
+  });
 });

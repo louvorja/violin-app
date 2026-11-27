@@ -60,7 +60,7 @@ export const contextualPages: RibbonPage[] = [
         id: `${moduleCtxId}_delete`,
         title: "ribbon.groups.delete",
         buttons: [
-          { id: "delete_selected", icon: ICONS.ACTIONS.DELETE, label: "ribbon.btn.delete_selected", action: "lit_delete", color: "#e74c3c" },
+          { id: "delete_selected", icon: ICONS.ACTIONS.DELETE, label: "ribbon.btn.delete_selected", action: "lit_delete", color: COLORS.DANGER },
         ],
       },
       {
@@ -87,7 +87,8 @@ export const contextualPages: RibbonPage[] = [
         buttons: [
           { id: "save_liturgy", icon: ICONS.ACTIONS.SAVE, label: modulePath+".library.save_title", action: "lit_save", size: "small" },
           { id: "load_liturgy", icon: ICONS.ACTIONS.FOLDER_OPEN, label: modulePath+".library.load_title", action: "lit_load", size: "small" },
-          { id: "clear_liturgy", icon: ICONS.ACTIONS.CLEAN, label: "ribbon.btn.clear_liturgy", action: "lit_clear", size: "small", color: "#e74c3c" },
+          { id: "copy_liturgy", icon: ICONS.ACTIONS.COPY, label: "ribbon.btn.copy_liturgy", action: "lit_copy", size: "small" },
+          { id: "clear_liturgy", icon: ICONS.ACTIONS.CLEAN, label: "ribbon.btn.clear_liturgy", action: "lit_clear", size: "small", color: COLORS.DANGER },
           { id: "export_liturgy", icon: ICONS.ACTIONS.EXPORT, label: modulePath+".library.export_title", action: "lit_export", size: "small" },
           { id: "import_liturgy", icon: ICONS.ACTIONS.IMPORT, label: modulePath+".library.import_title", action: "lit_import", size: "small" },
           { id: "manage_liturgy", icon: ICONS.ACTIONS.FILE_SETTINGS, label: modulePath+".library.manage_title", action: "lit_manage", size: "small" },

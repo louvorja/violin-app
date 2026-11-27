@@ -38,35 +38,24 @@
       </LjField>
 
       <LjField class="lif-field lif-field--color" :label="t('inputs.color')">
-        <div class="lif-color">
-          <input
-            :value="form.cor"
-            type="color"
-            class="lif-color__swatch"
-            :aria-label="t('inputs.color')"
-            @input="setFormField('cor', ($event.target as HTMLInputElement).value)"
+        <LjPopover :title="t('inputs.color')">
+          <template #trigger>
+            <LjButton
+              size="md"
+              class="lif-color-trigger"
+              :icon-end="ICONS.UI.MENU_DOWN"
+              :aria-label="t('inputs.color')"
+            >
+              <span class="lif-color-trigger__dot" :style="{ background: form.cor }" />
+            </LjButton>
+          </template>
+          <LjColorPicker
+            :model-value="form.cor"
+            :presets="colors"
+            :label="t('inputs.color')"
+            @update:model-value="setFormField('cor', $event)"
           />
-          <button
-            type="button"
-            class="lif-color__toggle"
-            :title="t('inputs.color')"
-            :aria-expanded="presetsOpen"
-            :aria-label="t('inputs.color')"
-            @click.stop="presetsOpen = !presetsOpen"
-          >
-            <LjIcon :icon="ICONS.UI.MENU_DOWN" :size="14" />
-          </button>
-          <div v-if="presetsOpen" class="lif-color__presets" @click="presetsOpen = false">
-            <span
-              v-for="c in colors"
-              :key="c"
-              class="lif-color__preset"
-              :class="{ 'is-active': form.cor?.toLowerCase() === c.toLowerCase() }"
-              :style="{ background: c }"
-              @click="setFormField('cor', c)"
-            />
-          </div>
-        </div>
+        </LjPopover>
       </LjField>
 
       <LjField class="lif-field lif-field--time" :label="t('inputs.time')">
@@ -90,7 +79,7 @@
           :model-value="form.duration"
           type="number"
           min="0"
-          @update:model-value="setFormField('duration', Number($event))"
+          @update:model-value="setFormField('duration', Math.max(0, Number($event) || 0))"
         />
       </LjField>
     </div>
@@ -203,14 +192,18 @@
     <!-- ─── Painel ITENS AGENDADOS ─── -->
     <section v-if="form.tipo === 'itens-agendados'" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.itens-agendados") }}</h3>
-      <LjField layout="column" :label="t('inputs.scheduled_category')" :error="formErrors?.id">
+      <LjField
+        layout="column"
+        :label="t('inputs.scheduled_category')"
+        :error="formErrors?.ref_id || formErrors?.id"
+      >
         <div class="lif-inline lif-inline--half">
           <LjSelect
-            :model-value="String(form.id ?? '')"
+            :model-value="String(form.ref_id || form.id || '')"
             :items="scheduledOptions"
             :placeholder="t('inputs.scheduled_pick')"
             @update:model-value="
-              setFormField('id', $event);
+              setFormField('ref_id', $event);
               onScheduledCategoryChange();
             "
           />
@@ -234,7 +227,7 @@
       <h3 class="lif-panel__title">{{ t("types.video-online") }}</h3>
 
       <LjField layout="column" class="lif-spaced">
-        <div>
+        <div class="lif-pick-row">
           <LjButton variant="primary" :icon="ICONS.ACTIONS.SEARCH" @click="videoSearchOpen = true">
             {{ t("inputs.video_search_btn") }}
           </LjButton>
@@ -246,7 +239,6 @@
           <LjChip
             v-if="form.url"
             class="lif-selected"
-            style="margin-left: 10px"
             :icon="ICONS.MEDIA.YOUTUBE"
             removable
             @remove="clearVideoSelection"
@@ -256,7 +248,7 @@
         </div>
       </LjField>
       <p v-if="!videosList?.length" class="lif-hint lif-spaced">
-        {{ t("inputs.video_empty") }}
+        {{ t("video_search.empty") }}
       </p>
       <LiturgyVideoSearch
         v-model="videoSearchOpen"
@@ -264,7 +256,11 @@
         :selected-url="form.url"
         @pick="onVideoSearchPicked"
       />
-      <div style="margin: 20px 0 20px 0">OU</div>
+      <div class="lif-or">
+        <LjDivider />
+        <span>{{ t("inputs.or") }}</span>
+        <LjDivider />
+      </div>
 
       <!--
         Em vez de procurar no catálogo: cola o link. Não há botão "Usar" aqui
@@ -299,15 +295,21 @@
     <section v-if="form.tipo === LiturgyItemTypeEnum.MEDIA_LIBRARY" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.biblioteca-midia") }}</h3>
       <LjField layout="column" :label="t('inputs.library_select')">
-        <div>
-          <LjButton variant="ghost" :icon="ICONS.ACTIONS.SEARCH" @click="openMediaLibrarySearch">
+        <div class="lif-pick-row">
+          <LjButton variant="primary" :icon="ICONS.ACTIONS.SEARCH" @click="openMediaLibrarySearch">
             {{ t("inputs.library_search_btn") }}
           </LjButton>
+          <LjChip
+            v-if="form.ref_id"
+            class="lif-selected"
+            :icon="mediaIconFor(form.subtipo)"
+            removable
+            @remove="clearLibrarySelection"
+          >
+            <span class="lif-selected__name">{{ form.subitem || form.item }}</span>
+          </LjChip>
         </div>
       </LjField>
-      <LjChip v-if="form.ref_id" class="lif-selected" :icon="mediaIconFor(form.subtipo)">
-        <span class="lif-selected__name">{{ form.item || form.subitem }}</span>
-      </LjChip>
       <LiturgyLibrarySearch
         v-model="librarySearchOpen"
         :title="t('library_search.title_media')"
@@ -323,15 +325,21 @@
     <section v-if="form.tipo === LiturgyItemTypeEnum.BG_PROJECTION" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.projecao-de-fundo") }}</h3>
       <LjField layout="column" :label="t('inputs.projection_select')">
-        <div>
+        <div class="lif-pick-row">
           <LjButton variant="primary" :icon="ICONS.ACTIONS.SEARCH" @click="openProjectionSearch">
             {{ t("inputs.projection_search_btn") }}
           </LjButton>
+          <LjChip
+            v-if="form.ref_id"
+            class="lif-selected"
+            :icon="ICONS.MODULES.BACKGROUND_PROJECTION"
+            removable
+            @remove="clearLibrarySelection"
+          >
+            <span class="lif-selected__name">{{ form.subitem || form.item }}</span>
+          </LjChip>
         </div>
       </LjField>
-      <LjChip v-if="form.ref_id" class="lif-selected" :icon="ICONS.MODULES.BACKGROUND_PROJECTION">
-        <span class="lif-selected__name">{{ form.item || form.subitem }}</span>
-      </LjChip>
       <LiturgyLibrarySearch
         v-model="projectionSearchOpen"
         :title="t('library_search.title_projection')"
@@ -347,15 +355,21 @@
     <section v-if="form.tipo === LiturgyItemTypeEnum.BG_SOUND" class="lif-panel">
       <h3 class="lif-panel__title">{{ t("types.som-de-fundo") }}</h3>
       <LjField layout="column" :label="t('inputs.sound_select')">
-        <div>
+        <div class="lif-pick-row">
           <LjButton variant="primary" :icon="ICONS.ACTIONS.SEARCH" @click="openBgSoundSearch">
             {{ t("inputs.sound_search_btn") }}
           </LjButton>
+          <LjChip
+            v-if="form.ref_id"
+            class="lif-selected"
+            :icon="ICONS.MUSIC.PLAYBACK"
+            removable
+            @remove="clearLibrarySelection"
+          >
+            <span class="lif-selected__name">{{ form.subitem || form.item }}</span>
+          </LjChip>
         </div>
       </LjField>
-      <LjChip v-if="form.ref_id" class="lif-selected" :icon="ICONS.MUSIC.PLAYBACK">
-        <span class="lif-selected__name">{{ form.item || form.subitem }}</span>
-      </LjChip>
       <LiturgyLibrarySearch
         v-model="bgSoundSearchOpen"
         :title="t('library_search.title_sound')"
@@ -395,7 +409,7 @@
         <LjSelect
           :model-value="form.overlay_id ?? ''"
           :items="overlayOptions"
-          @update:model-value="setFormField('overlay_id', $event)"
+          @update:model-value="onOverlaySlotChange(String($event))"
         />
       </LjField>
       <LjField layout="column" :label="t('overlay.action')" group>
@@ -458,7 +472,7 @@
         {{ t("actions.delete") }}
       </LjButton>
       <span class="lj-u-spacer" />
-      <LjButton size="sm" @click="$emit('update:modelValue', false)">
+      <LjButton size="sm" variant="ghost" @click="$emit('update:modelValue', false)">
         {{ t("actions.cancel") }}
       </LjButton>
       <LjButton
@@ -483,11 +497,13 @@ import {
   LjButton,
   LjCheckbox,
   LjChip,
+  LjColorPicker,
   LjCombobox,
   LjDialog,
+  LjDivider,
   LjField,
-  LjIcon,
   LjInput,
+  LjPopover,
   LjSelect,
   LjTextarea,
   LjTooltip,
@@ -646,7 +662,28 @@ const musicOptions = computed(() =>
 );
 
 const musicOptionById = computed(() => new Map(musicOptions.value.map((o) => [o.value, o])));
-const selectedMusic = computed(() => musicOptionById.value.get(Number(props.form.musica)) ?? null);
+const selectedMusic = computed(() => {
+  // Música personalizada tem UUID em `ref_id`: resolve por ele primeiro para
+  // não depender da ordem de listagem entre sessões.
+  if (props.form.ref_id && Number(props.form.musica) < 0) {
+    const custom = availableMusics.value.find((m) => m.custom_song_id === props.form.ref_id);
+    if (custom) {
+      const opt = musicOptionById.value.get(Number(custom.id_music));
+      if (opt) return opt;
+    }
+  }
+  return musicOptionById.value.get(Number(props.form.musica)) ?? null;
+});
+
+function onOverlaySlotChange(slotId: string) {
+  props.setFormField("overlay_id", slotId);
+  const slot = props.overlaySlots.find((s) => s.id === slotId);
+  if (slot) {
+    const actionLabel =
+      props.form.overlay_action === "deactivate" ? t("overlay.deactivate") : t("overlay.activate");
+    preencherNomeSeVazio(`${actionLabel}: ${slot.name || slot.id}`);
+  }
+}
 
 function onMusicSelected(option: MusicOption) {
   props.setFormField("musica", option.value);
@@ -668,8 +705,6 @@ function hasInstrumental(musicId: number): boolean {
   if (!m) return false;
   return !!(m as Record<string, unknown>).has_instrumental_music;
 }
-
-const presetsOpen = ref(false);
 
 function updateDurationForVersion(version: string) {
   if (version === "lyric") return;
@@ -935,6 +970,16 @@ function mediaCategories(records: LibrarySearchCategory[]): LibrarySearchCategor
   }));
 }
 
+function mediaTypeLabel(type: "image" | "video" | "audio" | "pdf"): string {
+  const map: Record<string, string> = {
+    image: t("library_search.type_image"),
+    video: t("library_search.type_video"),
+    audio: t("library_search.type_audio"),
+    pdf: t("library_search.type_pdf"),
+  };
+  return map[type] || type.toUpperCase();
+}
+
 async function openMediaLibrarySearch(): Promise<void> {
   releaseLibraryObjectUrls();
   const [all, categories] = await Promise.all([
@@ -957,7 +1002,7 @@ async function openMediaLibrarySearch(): Promise<void> {
     icon: mediaIconFor(f.type),
     categoryId: f.categoryId,
     type: f.type,
-    typeLabel: f.type.toUpperCase(),
+    typeLabel: mediaTypeLabel(f.type),
     thumbnail: libraryThumbnail(
       f.thumb || (f.type === "image" ? f.path : ""),
       f.data,
@@ -1016,7 +1061,7 @@ async function openProjectionSearch(): Promise<void> {
     icon: f.type === "video" ? ICONS.MEDIA.VIDEO_FILE : ICONS.MEDIA.IMAGE,
     categoryId: f.categoryId,
     type: f.type,
-    typeLabel: f.type === "video" ? "VIDEO" : "IMAGE",
+    typeLabel: mediaTypeLabel(f.type),
     thumbnail: libraryThumbnail(
       f.thumb || (f.type === "image" ? f.path : ""),
       f.data,
@@ -1029,7 +1074,7 @@ async function openProjectionSearch(): Promise<void> {
 
 function onLibraryPicked(item: LibrarySearchItem): void {
   props.setFormField("ref_id", item.id);
-  props.setFormField("item", item.name);
+  preencherNomeSeVazio(item.name);
   props.setFormField("subitem", item.name);
   props.setFormField(
     "subtipo",
@@ -1039,16 +1084,22 @@ function onLibraryPicked(item: LibrarySearchItem): void {
 
 function onBgSoundPicked(item: LibrarySearchItem): void {
   props.setFormField("ref_id", item.id);
-  props.setFormField("item", item.name);
+  preencherNomeSeVazio(item.name);
   props.setFormField("subitem", item.name);
   props.setFormField("subtipo", "audio");
 }
 
 function onProjectionPicked(item: LibrarySearchItem): void {
   props.setFormField("ref_id", item.id);
-  props.setFormField("item", item.name);
+  preencherNomeSeVazio(item.name);
   props.setFormField("subitem", item.name);
   props.setFormField("subtipo", item.type || "");
+}
+
+function clearLibrarySelection(): void {
+  props.setFormField("ref_id", undefined);
+  props.setFormField("subitem", "");
+  props.setFormField("subtipo", "");
 }
 
 watch(
@@ -1072,7 +1123,7 @@ const announcementItems = ref<AnnouncementOption[]>([]);
 const canShowOverlayLink = computed(() => {
   const scheduled =
     props.form.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS
-      ? Liturgy.findScheduledForToday(props.form.id, Liturgy.getActiveDate())
+      ? Liturgy.findScheduledForToday(props.form.ref_id || props.form.id, Liturgy.getActiveDate())
       : null;
   const selectedMusicRecord =
     props.form.tipo === LiturgyItemTypeEnum.MUSICA
@@ -1331,6 +1382,30 @@ function onVersionChange(version: string) {
   gap: var(--lj-space-3);
 }
 
+.lif-pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lj-space-4);
+}
+
+.lif-or {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-4);
+  margin: var(--lj-space-5) 0;
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-xs);
+  font-weight: var(--lj-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.lif-or :deep(.lj-divider) {
+  flex: 1;
+  width: auto;
+}
+
 /* Item já escolhido nos painéis de busca — nome longo trunca em vez de
    empurrar a largura do diálogo. */
 .lif-selected {
@@ -1343,79 +1418,18 @@ function onVersionChange(version: string) {
   text-overflow: ellipsis;
 }
 
-/* ====================== Seletor de cor ======================
-   Sem primitivo equivalente no catálogo: o <input type="color"> nativo abre o
-   seletor do sistema e a paleta ao lado é atalho para as cores da liturgia. */
-.lif-color {
-  display: inline-flex;
-  align-items: center;
-  position: relative;
+/* ====================== Seletor de cor ====================== */
+.lif-color-trigger {
+  padding-inline: var(--lj-space-3);
 }
 
-.lif-color__swatch {
-  width: var(--lj-fixed-btn-width);
-  height: var(--lj-ui-h-md);
-  padding: 0;
-  background: transparent;
-  border: var(--lj-ui-border);
-  border-right: 0;
-  border-radius: var(--lj-ui-radius) 0 0 var(--lj-ui-radius);
-  cursor: pointer;
-}
-
-.lif-color__toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: var(--lj-ui-h-md);
-  padding: 0;
-  background: var(--lj-surface-bg);
-  border: var(--lj-ui-border);
-  border-radius: 0 var(--lj-ui-radius) var(--lj-ui-radius) 0;
-  color: var(--lj-text);
-  cursor: pointer;
-}
-
-.lif-color__toggle:hover {
-  background: var(--lj-surface-bg-hover);
-}
-
-.lif-color__toggle:focus-visible {
-  outline: none;
-  box-shadow: var(--lj-ui-focus);
-  border-color: var(--lj-ui-accent);
-}
-
-.lif-color__presets {
-  position: absolute;
-  top: calc(100% + var(--lj-space-2));
-  left: 0;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: var(--lj-space-2);
-  padding: var(--lj-space-3);
-  background: var(--lj-surface-bg);
-  border: var(--lj-ui-float-border);
-  border-radius: var(--lj-radius-md);
-  box-shadow: var(--lj-ui-float-shadow);
-}
-
-.lif-color__preset {
-  width: 18px;
-  height: 18px;
-  border: var(--lj-ui-border);
-  border-radius: var(--lj-radius-xs);
-  cursor: pointer;
-}
-
-.lif-color__preset:hover {
-  transform: scale(1.15);
-}
-
-.lif-color__preset.is-active {
-  border-color: var(--lj-white);
-  box-shadow: 0 0 0 2px var(--lj-ui-accent);
+.lif-color-trigger__dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--lj-on-surface-ch), 0.2);
+  flex-shrink: 0;
+  forced-color-adjust: none;
 }
 </style>

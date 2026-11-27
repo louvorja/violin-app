@@ -17,26 +17,30 @@
         @keydown="onKeydown"
       />
       <div class="vls-view-toggle" role="group" :aria-label="t('video_search.view')">
-        <button
-          type="button"
+        <LjButton
+          size="sm"
+          variant="ghost"
+          icon-only
           class="vls-view"
           :class="{ 'vls-view--active': viewMode === 'thumbnails' }"
           :aria-pressed="viewMode === 'thumbnails'"
+          :icon="ICONS.UI.VIEW_GRID"
           :title="t('video_search.thumbnails')"
+          :aria-label="t('video_search.thumbnails')"
           @click="viewMode = 'thumbnails'"
-        >
-          <LjIcon :icon="ICONS.UI.VIEW_GRID" :size="16" />
-        </button>
-        <button
-          type="button"
+        />
+        <LjButton
+          size="sm"
+          variant="ghost"
+          icon-only
           class="vls-view"
           :class="{ 'vls-view--active': viewMode === 'list' }"
           :aria-pressed="viewMode === 'list'"
+          :icon="ICONS.UI.VIEW_LIST"
           :title="t('video_search.list')"
+          :aria-label="t('video_search.list')"
           @click="viewMode = 'list'"
-        >
-          <LjIcon :icon="ICONS.UI.VIEW_LIST" :size="16" />
-        </button>
+        />
       </div>
     </div>
 
@@ -106,9 +110,11 @@
     </div>
 
     <div ref="viewport" class="vls-body">
-      <div v-if="!flatItems.length" class="vls-empty">
-        {{ query ? t("video_search.empty_search") : t("video_search.empty") }}
-      </div>
+      <LjEmpty
+        v-if="!flatItems.length"
+        :icon="ICONS.MEDIA.YOUTUBE"
+        :title="query ? t('video_search.empty_search') : t('video_search.empty')"
+      />
       <template v-else>
         <section v-if="programGroups.length" class="vls-section">
           <h4 class="vls-section-title">{{ t("video_search.program_section") }}</h4>
@@ -230,7 +236,7 @@
       <span class="vls-count">{{ flatItems.length }} / {{ videosList.length }}</span>
       <span class="lj-u-spacer" />
       <span class="vls-hint">{{ t("library_search.keyboard_hint") }}</span>
-      <LjButton size="sm" @click="$emit('update:modelValue', false)">
+      <LjButton size="sm" variant="ghost" @click="$emit('update:modelValue', false)">
         {{ t("actions.cancel") }}
       </LjButton>
     </template>
@@ -239,7 +245,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import { LjButton, LjDialog, LjIcon, LjInput } from "@/components/ui";
+import { LjButton, LjDialog, LjEmpty, LjIcon, LjInput } from "@/components/ui";
 import LibraryGroupedView from "@/components/LibraryGroupedView.vue";
 import { ICONS } from "@/config/Icons";
 import { useListNavigation } from "@/composables/useListNavigation";
@@ -542,23 +548,16 @@ watch(
   display: inline-flex;
   gap: 2px;
 }
-.vls-view {
-  width: 30px;
-  height: 30px;
-  border: 1px solid transparent;
-  border-radius: var(--lj-radius-xs);
-  background: transparent;
-  color: var(--lj-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.vls-view:hover,
 .vls-view--active {
   border-color: var(--lj-surface-border);
   background: var(--lj-surface-bg-soft);
   color: var(--lj-text);
+}
+.vls-chip:focus-visible,
+.vls-card:focus-visible,
+.vls-row:focus-visible {
+  outline: none;
+  box-shadow: var(--lj-ui-focus);
 }
 .vls-chip-row {
   display: flex;
@@ -577,11 +576,11 @@ watch(
 .vls-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--lj-space-2);
   max-width: 240px;
-  padding: 4px 9px;
+  padding: var(--lj-space-2) var(--lj-space-4);
   border: 1px solid var(--lj-surface-border);
-  border-radius: 999px;
+  border-radius: var(--lj-radius-pill);
   background: transparent;
   color: var(--lj-text-muted);
   font: inherit;
@@ -590,12 +589,16 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    background-color var(--lj-transition-fast),
+    border-color var(--lj-transition-fast),
+    color var(--lj-transition-fast);
 }
 .vls-chip:hover,
 .vls-chip--active {
-  border-color: var(--lj-navy);
-  background: color-mix(in srgb, var(--lj-navy) 10%, transparent);
-  color: var(--lj-text);
+  border-color: var(--lj-ui-accent);
+  background: var(--lj-ui-accent-soft);
+  color: var(--lj-ui-accent-text);
 }
 .vls-chip-image {
   width: 14px;
@@ -656,13 +659,13 @@ watch(
   border-color: var(--lj-surface-border);
   background: color-mix(
     in srgb,
-    var(--vls-item-color, var(--lj-navy)) 18%,
+    var(--vls-item-color, var(--lj-ui-accent)) 18%,
     var(--lj-surface-bg-soft)
   );
 }
 .vls-card--selected,
 .vls-row--selected {
-  border-color: var(--lj-navy);
+  border-color: var(--lj-ui-accent);
 }
 .vls-card-thumb {
   position: relative;
@@ -682,14 +685,14 @@ watch(
 }
 .vls-card-detail {
   position: absolute;
-  right: 4px;
-  bottom: 4px;
-  max-width: calc(100% - 8px);
-  padding: 1px 4px;
+  right: var(--lj-space-2);
+  bottom: var(--lj-space-2);
+  max-width: calc(100% - var(--lj-space-4));
+  padding: 1px var(--lj-space-2);
   border-radius: var(--lj-radius-xs);
-  background: rgba(0, 0, 0, 0.62);
-  color: #fff;
-  font-size: 10px;
+  background: var(--lj-black-alpha-75);
+  color: var(--lj-white);
+  font-size: var(--lj-text-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -731,12 +734,6 @@ watch(
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 40%;
-}
-.vls-empty {
-  padding: var(--lj-space-5);
-  text-align: center;
-  color: var(--lj-text-muted);
-  font-size: var(--lj-text-sm);
 }
 .vls-count {
   color: var(--lj-text-muted);

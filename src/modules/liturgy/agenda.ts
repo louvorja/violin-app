@@ -106,14 +106,52 @@ export function reposicionarParaBloco(
   return nova;
 }
 
-function somarMinutos(time: string, minutes: number): string {
+export function somarMinutos(time: string, minutes: number): string {
   if (!time) return "";
   const [h, m] = time.split(":").map(Number);
   if (isNaN(h) || isNaN(m)) return time;
-  const total = h * 60 + m + minutes;
-  const newH = Math.floor(total / 60) % 24;
+  const delta = Number.isFinite(minutes) ? Math.round(minutes) : 0;
+  const total = (((h * 60 + m + delta) % 1440) + 1440) % 1440;
+  const newH = Math.floor(total / 60);
   const newM = total % 60;
   return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
+}
+
+/**
+ * Hora real de término da liturgia: pega o último item com horário válido e
+ * soma a duração dele (quando não é um cabeçalho de bloco).
+ */
+export function calcularHorarioFim(items: LiturgyItem[]): string {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    const hora = lerHorario(item?.time);
+    if (!hora) continue;
+    if (item.tipo === LiturgyItemTypeEnum.BLOCO) return hora;
+    const dur = Number(item.duration) || 0;
+    return dur > 0 ? somarMinutos(hora, dur) : hora;
+  }
+  return "";
+}
+
+/** Formata minutos totais para exibição compacta ("45min", "1h", "1h 15min"). */
+export function formatarDuracao(minutes: number): string {
+  const total = Math.max(0, Math.round(Number(minutes) || 0));
+  if (total <= 0) return "";
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}min`;
+  if (h > 0) return `${h}h`;
+  return `${m}min`;
+}
+
+/** Separa subtítulo no formato `"<icon>|||<texto>"` (usado por itens agendados). */
+export function parseSubitem(sub: string | undefined | null): { icon: string; text: string } {
+  const raw = sub || "";
+  const idx = raw.indexOf("|||");
+  if (idx >= 0) {
+    return { icon: raw.slice(0, idx), text: raw.slice(idx + 3) };
+  }
+  return { icon: "", text: raw };
 }
 
 /** A hora vem também de arquivos importados; valores inválidos não viram âncoras. */
@@ -153,8 +191,11 @@ function atribuirHorarios(list: LiturgyItem[]): LiturgyItem[] {
       continue;
     }
 
-    const dur = Number(item.duration) || 0;
-    prevEnd = inicio ? somarMinutos(inicio, dur) : "";
+    const rawDur = Number(item.duration);
+    const dur = Number.isFinite(rawDur) && rawDur > 0 ? Math.round(rawDur) : 0;
+    // Sem duração definida não sabemos quando o item termina — propagar a mesma
+    // hora para todos os itens seguintes criava horários repetidos falsos.
+    prevEnd = inicio && dur > 0 ? somarMinutos(inicio, dur) : "";
     result.push({ ...item, time: inicio, time_mode: modo });
   }
 
