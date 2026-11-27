@@ -331,7 +331,7 @@ test(".ja com várias liturgias: cada uma vai para o seu dia da semana", async (
   await expect(ask).toContainText("Colocar cada uma das 2 liturgias no seu dia");
   await ask.getByRole("button", { name: "Sim", exact: true }).click();
 
-  const tabs = page.locator(".lit-daytab");
+  const tabs = page.locator(".lit-daytabs").getByRole("tab");
   const list = page.locator(".liturgy-page");
   await tabs.nth(0).click();
   await expect(list).toContainText("Abertura de domingo");

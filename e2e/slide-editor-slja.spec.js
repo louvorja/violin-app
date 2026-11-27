@@ -58,9 +58,14 @@ test.describe("Editor de Slides & fluxo .slja (#59, #61, #62)", () => {
     await textArea.fill("Louvai ao Senhor");
 
     const formatPanel = page.locator("details.se-panel").nth(1);
-    const textColorInput = formatPanel.locator('input[type="color"]').nth(1);
-    await textColorInput.fill("#00cc66");
-    await textColorInput.dispatchEvent("change");
+    const textColorField = formatPanel.locator(".lj-color-field").nth(1);
+    await textColorField.click();
+    await page.getByRole("button", { name: "Personalizada" }).click();
+    const hexInput = page.getByRole("textbox", { name: "HEX" });
+    await hexInput.fill("#00cc66");
+    await hexInput.press("Enter");
+    await hexInput.press("Escape");
+    await expect(hexInput).toBeHidden();
 
     const fontSizeInput = formatPanel.locator('input[type="number"]').nth(0);
     await fontSizeInput.fill("38");

@@ -257,6 +257,8 @@ for (const viewport of [
     await page.locator("#ribbon-tab-worship").tap();
     await page.getByTestId("ribbon-btn-liturgy").tap();
     await expect(page.locator(".liturgy-page")).toBeVisible({ timeout: 15_000 });
+    // Vinda da Bíblia, a página entra deslizando; medir antes do fim da troca pega o deslocamento.
+    await expect(page.locator(".liturgy-page:not([data-page])")).toBeVisible();
     await expectInsideViewport(page.locator(".liturgy-page"), page);
     await expectNoPageOverflow(page);
     await page.getByTestId("liturgy-add-item").last().tap({ timeout: 8_000 });

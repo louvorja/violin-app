@@ -43,7 +43,7 @@ test("preenche Hora ao editar o título de um item existente sem horário", asyn
     .locator(".liturgy-page [data-item-id]")
     .filter({ hasText: "Item existente para horário" });
   await expect(card.locator(".tl-time")).toHaveCount(0);
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   dialog = page.getByRole("dialog");
   await dialog.getByTestId("item-name").fill("08:30 Item existente para horário");
   await expect(dialog.locator('input[type="time"]')).toHaveValue("08:30");
@@ -96,7 +96,7 @@ test("preenche Hora pelo título e preserva ajuste ou limpeza depois de salvar e
   await page.reload();
   await page.getByTestId("modules-ready").waitFor({ state: "attached" });
   await page.getByRole("button", { name: "Editar liturgia" }).click();
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   dialog = page.getByRole("dialog");
   await expect(dialog.locator('input[type="time"]')).toHaveValue("08:30");
   await dialog.getByTestId("item-name").fill("9h30 Louvor do título");
@@ -112,7 +112,7 @@ test("preenche Hora pelo título e preserva ajuste ou limpeza depois de salvar e
   await page.reload();
   await page.getByTestId("modules-ready").waitFor({ state: "attached" });
   await page.getByRole("button", { name: "Editar liturgia" }).click();
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   await expect(page.getByRole("dialog").locator('input[type="time"]')).toHaveValue("");
 });
 
@@ -140,7 +140,7 @@ test("salva a hora manual ao criar e editar um item, inclusive depois de recarre
     page.locator(".liturgy-item").filter({ hasText: "Item com hora manual" })
   ).toContainText("19:30");
   await page.getByRole("button", { name: "Editar liturgia" }).click();
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   dialog = page.getByRole("dialog");
   await expect(dialog.locator('input[type="time"]')).toHaveValue("19:30");
   await dialog.locator('input[type="time"]').fill("20:15");
@@ -165,13 +165,13 @@ test("salva a hora manual ao criar e editar um item, inclusive depois de recarre
   ).toContainText("20:15");
   await page.getByRole("button", { name: "Editar liturgia" }).click();
   await expect(card.locator(".tl-time")).toHaveText("20:15");
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   dialog = page.getByRole("dialog");
   await expect(dialog.locator('input[type="time"]')).toHaveValue("20:15");
   await dialog.locator('input[type="time"]').fill("");
   await dialog.getByTestId("item-save").click();
   await expect(card.locator(".tl-time")).toHaveCount(0);
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   await expect(page.getByRole("dialog").locator('input[type="time"]')).toHaveValue("");
 });
 
@@ -207,7 +207,7 @@ test("recalcula horários automáticos depois de editar duração e mantém a ho
     .filter({ hasText: "Continuação automática" });
   await expect(child.locator(".tl-time")).toHaveText("08:00");
   await expect(continuation.locator(".tl-time")).toHaveText("08:05");
-  await child.locator(".lit-card-action").first().click();
+  await child.getByRole("button", { name: "Editar", exact: true }).first().click();
   dialog = page.getByRole("dialog");
   await expect(dialog.locator('input[type="time"]')).toBeDisabled();
   await expect(dialog.locator('input[type="time"]')).toHaveValue("08:00");
@@ -216,7 +216,7 @@ test("recalcula horários automáticos depois de editar duração e mantém a ho
   await dialog.locator('input[type="number"]').fill("15");
   await dialog.getByTestId("item-save").click();
   await expect(continuation.locator(".tl-time")).toHaveText("08:15");
-  await continuation.locator(".lit-card-action").first().click();
+  await continuation.getByRole("button", { name: "Editar", exact: true }).first().click();
   dialog = page.getByRole("dialog");
   await expect(dialog.locator('input[type="time"]')).toHaveValue("");
   await dialog.getByTestId("item-save").click();
@@ -442,7 +442,7 @@ test("permite remover um vínculo depois que o slot é excluído", async ({ page
     await deleteSlot("liturgy-link-test");
     Broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {});
   });
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   dialog = page.getByRole("dialog");
   const orphanLink = dialog.getByRole("checkbox", { name: "Vincular sobreposição" });
   await expect(orphanLink).toBeChecked();
@@ -451,7 +451,7 @@ test("permite remover um vínculo depois que o slot é excluído", async ({ page
   await expect(orphanLink).toHaveCount(0);
   await dialog.locator('[data-testid="item-save"]').click();
 
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   await expect(
     page.getByRole("dialog").getByRole("checkbox", { name: "Vincular sobreposição" })
   ).toHaveCount(0);
@@ -531,7 +531,7 @@ test("oculta vínculo antigo de anúncios sem apagar os dados do item", async ({
 
   await page.getByRole("button", { name: "Editar liturgia" }).click();
   const card = page.locator("[data-item-id]").filter({ hasText: "Anúncio legado" });
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("checkbox", { name: "Vincular sobreposição" })).toHaveCount(0);
   await dialog.locator('[data-testid="item-name"]').fill("Anúncio legado editado");
@@ -565,7 +565,7 @@ test("trocar o bloco de um item na edição leva ele para o fim do bloco escolhi
   await expect(page.locator(".liturgy-page")).toBeVisible();
 
   const card = page.locator(".liturgy-page [data-item-id]").filter({ hasText: "Item do Alfa" });
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("combobox", { name: "Bloco" }).click();
   await page.getByRole("option", { name: /Bloco Beta/ }).click();
@@ -607,7 +607,7 @@ test("item sem bloco que entra num bloco vai logo abaixo do cabeçalho, acima do
   await expect(page.locator(".liturgy-page")).toBeVisible();
 
   const card = page.locator(".liturgy-page [data-item-id]").filter({ hasText: "Item sem bloco 4" });
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("combobox", { name: "Bloco" }).click();
   await page.getByRole("option", { name: /Bloco 1/ }).click();

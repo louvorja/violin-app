@@ -65,9 +65,15 @@ test("excluir da biblioteca e trocar de dia permite salvar novamente sem perder 
   await expect(dialog.locator(".llo-item")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
-  const active = await page.locator(".lit-daytab.is-active").getAttribute("title");
-  await page.locator(".lit-daytab:not(.is-active)").first().click();
-  await page.locator(".lit-daytabs").getByTitle(active, { exact: true }).click();
+  const dayTabs = page.locator(".lit-daytabs").getByRole("tab");
+  const activeIndex = await dayTabs.evaluateAll((els) =>
+    els.findIndex((el) => el.getAttribute("aria-selected") === "true")
+  );
+  expect(activeIndex).toBeGreaterThanOrEqual(0);
+  await page.locator(".lit-daytabs").getByRole("tab", { selected: false }).first().click();
+  await expect(dayTabs.nth(activeIndex)).toHaveAttribute("aria-selected", "false");
+  await dayTabs.nth(activeIndex).click();
+  await expect(dayTabs.nth(activeIndex)).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".liturgy-page [data-item-id]")).toContainText("Aviso preservado");
   await saveAsNew(page, oldId);
 });
