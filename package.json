@@ -65,6 +65,7 @@
     "@zip.js/zip.js": "^2.25.0",
     "electron-updater": "^6.8.9",
     "express": "^4.22.1",
+    "fflate": "^0.8.2",
     "fs-extra": "^11.2.0",
     "heic-to": "^1.5.2",
     "jszip": "^3.10.2",

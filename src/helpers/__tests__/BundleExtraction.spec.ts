@@ -101,6 +101,38 @@ describe("extractBundleEntries", () => {
       /integridade de bible_1_1_1/
     );
   });
+  it("recusa caminho com ../ mesmo quando o nome final consta no manifesto", async () => {
+    const zip = await JSZip.loadAsync(
+      await zipWithManifest({ "bible_1_1_1.json": { 1: "Texto" } }, "bible")
+    );
+    const body = await zip.file("bible_1_1_1.json")!.async("uint8array");
+    zip.remove("bible_1_1_1.json");
+    zip.file("../bible_1_1_1.json", body);
+    const onEntry = vi.fn();
+    await expect(
+      extractBundleEntries(await zip.generateAsync({ type: "arraybuffer" }), {
+        kind: "bible",
+        onEntry,
+      })
+    ).rejects.toThrow(/Bundle inválido/);
+    expect(onEntry).not.toHaveBeenCalled();
+  });
+  it("recusa tamanho diferente do manifesto", async () => {
+    const zip = await JSZip.loadAsync(
+      await zipWithManifest({ "bible_1_1_1.json": { 1: "Texto" } }, "bible")
+    );
+    const manifest = JSON.parse(await zip.file("_bundle_manifest.json")!.async("text"));
+    manifest.files[0].bytes += 1;
+    zip.file("_bundle_manifest.json", JSON.stringify(manifest));
+    const onEntry = vi.fn();
+    await expect(
+      extractBundleEntries(await zip.generateAsync({ type: "arraybuffer" }), {
+        kind: "bible",
+        onEntry,
+      })
+    ).rejects.toThrow(/integridade de bible_1_1_1/);
+    expect(onEntry).not.toHaveBeenCalled();
+  });
   it("não aceita catálogo no lugar do pacote completo", async () => {
     const buffer = await zipWithManifest(
       { ...catalogFiles(), "config.json": { version_number: 185 } },
