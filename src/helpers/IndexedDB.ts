@@ -25,6 +25,9 @@ export interface CatalogChange {
   }>;
 }
 
+/** A cada quantos pedidos o catálogo espera o banco alcançar a fila. */
+const CATALOG_WAIT_EVERY = 500;
+
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
 function createMissingTables(db: IDBPDatabase): void {
@@ -155,7 +158,9 @@ export default {
   /**
    * Publica um bundle completo e seu marcador na mesma transação. Uma falha de
    * escrita ou AbortSignal faz o IndexedDB restaurar todas as linhas anteriores.
-   * Não há timers/yields aqui: cada request IDB mantém a transação ativa.
+   * Os pedidos saem sem esperar um por um (esperar cada `put` custava uma ida e
+   * volta por linha); só se espera o último pedido de cada lote, e nada além de
+   * pedidos IDB, para a transação não fechar sozinha no meio.
    */
   async applyCatalogBatch(
     changes: readonly CatalogChange[],
@@ -181,42 +186,71 @@ export default {
       }
     };
     options.signal?.addEventListener("abort", abort, { once: true });
+    let failure: { error: unknown } | null = null;
+    let lastSettled: Promise<void> = Promise.resolve();
+    const enqueue = (request: Promise<unknown>): Promise<unknown> => {
+      lastSettled = request.then(
+        () => undefined,
+        (error: unknown) => {
+          failure ??= { error };
+        }
+      );
+      return request;
+    };
+    // Os pedidos de uma transação terminam em ordem: esperar o último basta.
+    const settle = async () => {
+      await lastSettled;
+      if (failure) throw failure.error;
+    };
+    const report = (current: number, key: string) => {
+      try {
+        options.onApplied?.(current, changes.length, key);
+      } catch {
+        // Progresso é diagnóstico/UI, não pode abortar a persistência.
+      }
+    };
     try {
+      let sinceWait = 0;
       for (let i = 0; i < changes.length; i++) {
         options.signal?.throwIfAborted();
         const change = changes[i];
+        let lastRequest: Promise<unknown> | null = null;
         for (const write of change.writes) {
           const store = tx.objectStore(write.table);
           if (write.replacePrefix) {
-            const oldIds = await store.getAllKeys(
-              IDBKeyRange.bound(write.replacePrefix, `${write.replacePrefix}\uffff`)
+            // Um pedido por dataset. Não é `clear()`: as tabelas guardam também linhas
+            // que o bundle não traz (marcador da Bíblia na `cache`, datasets à parte).
+            lastRequest = enqueue(
+              store.delete(IDBKeyRange.bound(write.replacePrefix, `${write.replacePrefix}\uffff`))
             );
-            for (const id of oldIds) await store.delete(id);
           }
           for (const row of write.rows) {
-            options.signal?.throwIfAborted();
-            await store.put(row);
+            lastRequest = enqueue(store.put(row));
+            if (++sinceWait >= CATALOG_WAIT_EVERY) {
+              sinceWait = 0;
+              await settle();
+              options.signal?.throwIfAborted();
+            }
           }
         }
         if (i + 1 < changes.length) {
-          try {
-            options.onApplied?.(i + 1, changes.length, change.key);
-          } catch {
-            // Progresso é diagnóstico/UI, não pode abortar a persistência.
-          }
+          const current = i + 1;
+          if (lastRequest)
+            void lastRequest.then(
+              () => report(current, change.key),
+              () => {}
+            );
+          else report(current, change.key);
         }
       }
+      await settle();
       options.signal?.throwIfAborted();
-      await tx.objectStore(DB_TABLE.CACHE).put(marker);
+      enqueue(tx.objectStore(DB_TABLE.CACHE).put(marker));
+      await settle();
       await tx.done;
       const last = changes.at(-1);
-      if (last) {
-        try {
-          options.onApplied?.(changes.length, changes.length, last.key);
-        } catch {
-          // O commit já terminou; um callback de progresso falho não o desfaz.
-        }
-      }
+      // Só depois do commit: o último progresso diz que o catálogo novo já vale.
+      if (last) report(changes.length, last.key);
     } catch (error) {
       abort();
       try {
@@ -294,11 +328,7 @@ export default {
     commitMarker?: { table: string; row: { id: string } }
   ): Promise<void> {
     const stores = [
-      ...new Set([
-        ...clearTables,
-        ...data.keys(),
-        ...(commitMarker ? [commitMarker.table] : []),
-      ]),
+      ...new Set([...clearTables, ...data.keys(), ...(commitMarker ? [commitMarker.table] : [])]),
     ];
     const tx = (await getDb()).transaction(stores, "readwrite");
     try {

@@ -19,5 +19,6 @@ describe.each(["native", "fallback"])("SHA-256 (%s)", (mode) => {
 it("propaga falhas de um WebCrypto disponível", async () => {
   const error = new Error("digest falhou");
   vi.stubGlobal("crypto", { subtle: { digest: vi.fn().mockRejectedValue(error) } });
-  await expect(sha256Hex(new Uint8Array())).rejects.toBe(error);
+  // Abaixo de 64 KB o hash nem passa pelo WebCrypto.
+  await expect(sha256Hex(new Uint8Array(64 * 1024))).rejects.toBe(error);
 });

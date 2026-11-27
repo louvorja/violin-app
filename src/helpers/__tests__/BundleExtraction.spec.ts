@@ -58,7 +58,7 @@ describe("extractBundleEntries", () => {
     expect(onEntry).toHaveBeenCalledTimes(12);
     expect(
       worker.posted.filter(({ message }) => (message as { type: string }).type === "continue")
-    ).toHaveLength(12);
+    ).toHaveLength(1);
     expect(worker.terminated).toBe(true);
   });
   it("recusa um ZIP com apenas um capítulo sem manifesto antes de gravar", async () => {
@@ -90,7 +90,7 @@ describe("extractBundleEntries", () => {
       ).rejects.toThrow(/Bundle inválido/);
     }
   });
-  it("recusa CRC incorreto mesmo quando o JSON continua válido", async () => {
+  it("recusa conteúdo corrompido mesmo quando o JSON continua válido", async () => {
     const buffer = await zipWithManifest({ "bible_1_1_1.json": { 1: "Texto" } }, "bible");
     const bytes = new Uint8Array(buffer);
     const needle = new TextEncoder().encode("Texto");
@@ -98,7 +98,7 @@ describe("extractBundleEntries", () => {
     expect(offset).toBeGreaterThan(0);
     bytes[offset] = 66;
     await expect(extractBundleEntries(buffer, { kind: "bible", onEntry: vi.fn() })).rejects.toThrow(
-      /CRC32/
+      /integridade de bible_1_1_1/
     );
   });
   it("não aceita catálogo no lugar do pacote completo", async () => {
