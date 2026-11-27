@@ -24,7 +24,7 @@
   <div
     v-else-if="show"
     v-show="isActiveEmbedded"
-    class="module-embedded"
+    class="module-embedded lj-page-in"
     :class="{ 'module-embedded--web': !Platform.isDesktop }"
   >
     <header v-if="$slots.header" class="module-embedded-header">
@@ -74,6 +74,7 @@ import UserData from "@/helpers/UserData";
 import Telemetry from "@/helpers/Telemetry";
 import Platform from "@/helpers/Platform";
 import { setScrollPosition, getScrollPosition } from "@/helpers/ScrollMemory";
+import { heldModuleId } from "@/composables/useModuleSwap";
 
 const props = defineProps({
   manifest: { type: Object, required: true },
@@ -125,6 +126,10 @@ const show = computed({
 const isActiveEmbedded = computed(() => {
   if (props.popup) return true;
   if (!moduleId.value) return false;
+
+  // Enquanto o próximo módulo carrega, este continua na tela — senão o lugar
+  // fica vazio e a cor do tema pisca atrás (composables/useModuleSwap.ts).
+  if (heldModuleId.value === moduleId.value) return true;
 
   return AppData.get("active_module") === moduleId.value;
 });

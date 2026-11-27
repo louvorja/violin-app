@@ -87,7 +87,7 @@
               >
                 <input
                   type="checkbox"
-                  class="draw-option__check"
+                  class="lj-native-check draw-option__check"
                   :checked="isOptionDrawn(option)"
                   tabindex="-1"
                   aria-hidden="true"

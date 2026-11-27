@@ -79,12 +79,17 @@
    * a interface terminar de se mexer. A saída é mais rápida que a entrada
    * porque ninguém olha para o que está fechando.
    *
+   * A entrada é uma mola (`--lj-motion-normal`, ver tokens.css): cumpre 95% do
+   * percurso em ~0,15s e gasta o resto pousando. A camada já recebe clique e
+   * tecla desde o primeiro quadro — a animação não segura ninguém. A saída é a curva seca de
+   * `--lj-exit-fast`: mola na saída só prolongaria o que ninguém está olhando.
+   *
    * Continua valendo o `prefers-reduced-motion` global de main.css, que zera
    * a duração — a Reka só remove a camada no animationend, e um keyframe de
    * 0.01ms ainda dispara o evento. */
-  --lj-ui-float-shift: 4px;
-  --lj-ui-float-enter: 0.14s var(--lj-ease-out);
-  --lj-ui-float-exit: 0.1s var(--lj-ease-in);
+  --lj-ui-float-shift: var(--lj-enter-layer-shift);
+  --lj-ui-float-enter: var(--lj-motion-normal);
+  --lj-ui-float-exit: var(--lj-exit-fast);
 
   /* ---------------------------------------------------------------------
    * Camadas
@@ -182,7 +187,7 @@
   border-radius: var(--lj-ui-radius);
   outline: none;
   transition:
-    background var(--lj-transition-fast),
+    background-color var(--lj-transition-fast),
     border-color var(--lj-transition-fast),
     box-shadow var(--lj-transition-fast);
 }
@@ -258,64 +263,330 @@
 /* O tooltip nao usa `open`: a Reka marca `delayed-open` quando ele venceu o
    atraso de hover, e `instant-open` quando outro tooltip do grupo ja estava
    aberto e o ponteiro so trocou de alvo. Os tres sao o estado visivel. */
-.lj-ui-float[data-state="open"],
+.lj-ui-float[data-state="open"] {
+  animation: lj-float-in var(--lj-ui-float-enter) both;
+}
+
+.lj-ui-float[data-state="closed"] {
+  animation: lj-float-out var(--lj-ui-float-exit) both;
+}
+
+/* Tooltips são leves e aparecem com frequência ao varrer barras de ferramentas:
+   `delayed-open` faz um fade+shift mínimo (2px, sem scale); `instant-open`
+   (troca entre botões vizinhos) é imediato para não piscar a cada ícone. */
 .lj-tooltip[data-state="open"],
-.lj-tooltip[data-state="delayed-open"],
+.lj-tooltip[data-state="delayed-open"] {
+  animation: lj-tooltip-in 100ms var(--lj-ease-out) both;
+}
+
 .lj-tooltip[data-state="instant-open"] {
-  animation: lj-float-in var(--lj-ui-float-enter);
+  animation: none;
 }
 
-.lj-ui-float[data-state="closed"],
 .lj-tooltip[data-state="closed"] {
-  animation: lj-float-out var(--lj-ui-float-exit);
+  animation: lj-tooltip-out 70ms var(--lj-ease-in) both;
 }
 
-.lj-ui-float[data-side="top"],
-.lj-tooltip[data-side="top"] {
+.lj-ui-float[data-side="top"] {
   --lj-float-from-x: 0;
   --lj-float-from-y: var(--lj-ui-float-shift);
 }
-.lj-ui-float[data-side="bottom"],
-.lj-tooltip[data-side="bottom"] {
+.lj-ui-float[data-side="bottom"] {
   --lj-float-from-x: 0;
   --lj-float-from-y: calc(-1 * var(--lj-ui-float-shift));
 }
-.lj-ui-float[data-side="left"],
-.lj-tooltip[data-side="left"] {
+.lj-ui-float[data-side="left"] {
   --lj-float-from-x: var(--lj-ui-float-shift);
   --lj-float-from-y: 0;
 }
-.lj-ui-float[data-side="right"],
-.lj-tooltip[data-side="right"] {
+.lj-ui-float[data-side="right"] {
   --lj-float-from-x: calc(-1 * var(--lj-ui-float-shift));
   --lj-float-from-y: 0;
+}
+
+.lj-tooltip[data-side="top"] {
+  --lj-tooltip-from-x: 0;
+  --lj-tooltip-from-y: 2px;
+}
+.lj-tooltip[data-side="bottom"] {
+  --lj-tooltip-from-x: 0;
+  --lj-tooltip-from-y: -2px;
+}
+.lj-tooltip[data-side="left"] {
+  --lj-tooltip-from-x: 2px;
+  --lj-tooltip-from-y: 0;
+}
+.lj-tooltip[data-side="right"] {
+  --lj-tooltip-from-x: -2px;
+  --lj-tooltip-from-y: 0;
 }
 
 @keyframes lj-float-in {
   from {
     opacity: 0;
-    transform: translate(var(--lj-float-from-x, 0), var(--lj-float-from-y, 0)) scale(0.97);
+    transform: translate(var(--lj-float-from-x, 0), var(--lj-float-from-y, 0))
+      scale(var(--lj-enter-layer-scale));
   }
 }
 
 @keyframes lj-float-out {
   to {
     opacity: 0;
-    transform: translate(var(--lj-float-from-x, 0), var(--lj-float-from-y, 0)) scale(0.97);
+    transform: translate(
+        calc(var(--lj-float-from-x, 0) * 0.5),
+        calc(var(--lj-float-from-y, 0) * 0.5)
+      )
+      scale(0.98);
+  }
+}
+
+@keyframes lj-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--lj-tooltip-from-x, 0), var(--lj-tooltip-from-y, 0));
+  }
+}
+
+@keyframes lj-tooltip-out {
+  to {
+    opacity: 0;
   }
 }
 
 /* Realce dos itens dentro das camadas. A Reka marca com [data-highlighted]
    tanto o item sob o ponteiro quanto o navegado pelo teclado, então uma regra
-   só cobre mouse e setas — e o mesmo tempo do :hover dos controles mantém o
-   sistema coerente. Só a cor faz a transição: animar o fundo de um item que
-   troca a cada tecla de seta deixaria o realce arrastando atrás da seleção. */
+   só cobre mouse e setas — 60ms mantém o teclado imediato sem arrastar. */
 .lj-menu__item,
 .lj-select__item,
 .lj-combobox__item {
   transition:
-    background var(--lj-transition-fast),
-    color var(--lj-transition-fast);
+    background-color 60ms var(--lj-ease-out),
+    color 60ms var(--lj-ease-out);
+}
+
+/* ---------------------------------------------------------------------------
+ * Checkbox nativo
+ *
+ * `LjCheckbox` é o primitivo. Isto aqui é para o `<input type="checkbox">` que
+ * ainda existe solto em tela antiga (as opções do menu do app, campos da
+ * ribbon): mesma caixa, mesmo gesto, sem depender de quem migra o quê e quando.
+ * Antes cada um era de um jeito — parte com a caixa do sistema operacional,
+ * parte com uma marca que só aparecia e sumia.
+ *
+ * A marca é DESENHADA, como no primitivo: dois traços que crescem a partir de
+ * onde a mão começaria — o curto primeiro, o longo em seguida — e são
+ * recolhidos na ordem inversa ao desmarcar. São dois pseudo-elementos escalando
+ * em `transform` (um `<input>` não tem filho para um SVG), em transição: não
+ * roda na primeira pintura, então uma tela cheia de caixas marcadas abre parada.
+ * ------------------------------------------------------------------------- */
+.lj-native-check,
+.opt-checkbox input {
+  appearance: none;
+  position: relative;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  margin: 0;
+  border: var(--lj-ui-border);
+  border-radius: var(--lj-radius-xs);
+  background: var(--lj-surface-bg);
+  cursor: pointer;
+  transition:
+    background-color var(--lj-transition-fast),
+    border-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast),
+    transform var(--lj-transition-fast);
+}
+
+.lj-native-check:checked,
+.opt-checkbox input:checked {
+  border-color: var(--lj-ui-accent);
+  background: var(--lj-ui-accent);
+}
+
+.lj-native-check:hover:not(:disabled),
+.opt-checkbox input:hover:not(:disabled) {
+  border-color: var(--lj-ui-accent);
+}
+
+.lj-native-check:active:not(:disabled),
+.opt-checkbox input:active:not(:disabled) {
+  transform: scale(0.88);
+}
+
+.lj-native-check:focus-visible,
+.opt-checkbox input:focus-visible {
+  border-color: var(--lj-ui-accent);
+  box-shadow: var(--lj-ui-focus);
+  outline: none;
+}
+
+.lj-native-check:disabled,
+.opt-checkbox input:disabled {
+  opacity: var(--lj-ui-disabled-opacity);
+  cursor: not-allowed;
+}
+
+/* Os dois traços do tique, cada um ancorado no ponto em que começa. */
+.lj-native-check::before,
+.lj-native-check::after,
+.opt-checkbox input::before,
+.opt-checkbox input::after {
+  content: "";
+  position: absolute;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--lj-ui-accent-fg);
+  transform-origin: 0 50%;
+}
+
+/* Curto: desce até o vértice. Ao desmarcar é o último a sair. */
+.lj-native-check::before,
+.opt-checkbox input::before {
+  top: 5.5px;
+  left: 2.5px;
+  width: 4.3px;
+  transform: rotate(45deg) scaleX(0);
+  transition: transform calc(var(--lj-draw-back-time) * 0.35) var(--lj-ease-in)
+    calc(var(--lj-draw-back-time) * 0.65);
+}
+
+/* Longo: sobe do vértice. Ao desmarcar é o primeiro a sair. */
+.lj-native-check::after,
+.opt-checkbox input::after {
+  top: 8.5px;
+  left: 5.5px;
+  width: 8px;
+  transform: rotate(-48deg) scaleX(0);
+  transition: transform calc(var(--lj-draw-back-time) * 0.65) var(--lj-ease-in);
+}
+
+.lj-native-check:checked::before,
+.opt-checkbox input:checked::before {
+  transform: rotate(45deg) scaleX(1);
+  transition: transform calc(var(--lj-draw-time) * 0.35) var(--lj-ease-in);
+}
+
+.lj-native-check:checked::after,
+.opt-checkbox input:checked::after {
+  transform: rotate(-48deg) scaleX(1);
+  transition: transform calc(var(--lj-draw-time) * 0.65) var(--lj-ease-out)
+    calc(var(--lj-draw-time) * 0.35);
+}
+
+/* ---------------------------------------------------------------------------
+ * Troca de página
+ *
+ * Conteúdo que troca NO MESMO LUGAR — o módulo aberto, o corpo da ribbon, o
+ * painel de uma aba, a tela do menu do app. Sem isto a tela nova aparece de um
+ * quadro para o outro, que é o que dá ao app cara de cru.
+ *
+ * O painel novo desliza um pouco, vindo do lado para onde se navegou, e
+ * esmaece. Entre dois módulos NÃO esmaece (ver `entering-over` abaixo).
+ *
+ * - Direção: quem navega publica de que lado se veio — `--lj-nav-x` para abas
+ *   lado a lado (-1 esquerda, 1 direita), `--lj-nav-y` para itens empilhados
+ *   (-1 acima, 1 abaixo); ver composables/useNavDirection.ts. Sem direção
+ *   conhecida (as duas em 0, o padrão) o painel só esmaece: um deslize que não
+ *   diz para onde se foi é enfeite.
+ * - Rolagem: um painel deslocado para baixo ou para a direita aumenta a área de
+ *   rolagem do container enquanto anima, e a barra de rolagem pisca. O pai do
+ *   painel animado precisa cortar (`overflow: clip`) — `.shell-content` para os
+ *   módulos, `.app-menu-screen-clip` para as telas do menu.
+ * - Duas animações, não uma: o deslize usa mola e a opacidade usa curva. Mola
+ *   em opacidade não existe; e separadas cada uma termina no seu tempo.
+ * - SEM `forwards`/`both`: uma animação de `transform` que continua "em vigor"
+ *   depois de acabar mantém o elemento como bloco de referência dos filhos
+ *   `position: fixed` (a tela cheia do sorteio, o palco do YouTube) — eles
+ *   passariam a se posicionar pelo módulo, e não pela janela, para sempre.
+ * - A animação reinicia sozinha quando o elemento entra no DOM ou sai de
+ *   `display: none`, então serve igual para `v-if`, `v-show` e KeepAlive, sem
+ *   `<Transition>` e sem JavaScript.
+ * - Quem fica atrás durante a entrada precisa ter a cor da superfície, não a
+ *   do tema — ver `.shell-content--has-module` em Shell.vue. Foi um fade sobre
+ *   o fundo do tema que fazia a tela piscar a cada troca de aba.
+ * ------------------------------------------------------------------------- */
+.lj-page-in {
+  animation:
+    lj-page-slide var(--lj-motion-normal),
+    lj-page-fade var(--lj-transition-normal);
+}
+
+/* Só a esmaecida, para o que troca dentro de um container que rola na
+   horizontal (o corpo da ribbon): ali qualquer deslize mexe na rolagem. */
+.lj-fade-in {
+  animation: lj-page-fade var(--lj-transition-normal);
+}
+
+/* O papel de cada módulo durante a troca — `data-page` é posto por
+   `Modules.vue` no elemento raiz (ver o comentário lá).
+   O `z-index` vale só durante a troca: fixo, ele prenderia dentro do módulo os
+   filhos que precisam cobrir a janela inteira (a tela cheia da mídia). */
+[data-page^="entering"] {
+  z-index: 1;
+}
+
+/* Entrando por cima de outro módulo a página desliza OPACA: `Modules.vue` põe
+   `--lj-page-from-opacity: 1` nela. Esmaecer ali mistura as duas telas — por
+   alguns quadros o texto de uma aparece atravessado no da outra. Opaca, cada
+   ponto da tela mostra uma página só, e a anterior some na hora (ver
+   `[data-page="leaving"]` acima).
+   É uma variável lida pelo keyframe, e não uma regra que troca a lista de
+   animações, de propósito: trocar a lista no fim da entrada (quando `data-page`
+   sai) faria a esmaecida começar do zero ali, e a página piscaria. */
+
+[data-page^="leaving"],
+[data-page="closing"] {
+  pointer-events: none;
+  /* Quem sai não reencena a própria entrada. */
+  animation: none;
+}
+
+/* Trocado por outro módulo, quem sai deixa de ser desenhado na hora. A página
+   nova entra opaca, mas deslocada 12px, e na faixa que ela ainda não cobriu
+   aparecia um pedaço da tela anterior — a borda de uma barra da outra tela, por
+   alguns quadros. Escondida, o que aparece ali é o fundo da área, que tem a
+   mesma cor da superfície do módulo (`.shell-content--has-module`): a faixa
+   some dentro da própria página.
+   O `z-index: 0` isola os filhos dela abaixo de quem entra, para o caso de o
+   `visibility` de algum deles ser reposto (um cabeçalho fixo com `z-index`). */
+[data-page="leaving"] {
+  z-index: 0;
+  visibility: hidden;
+}
+
+/* Fechar é diferente de trocar. A aba fechada não é coberta pela vizinha: ela
+   própria some — recua um pouco e esmaece, por cima — e revela o que já está
+   no lugar atrás dela (a aba vizinha, ou a tela inicial). É o gesto de fechar
+   de qualquer janela, e é o que faz o clique no X ter resposta na tela.
+   O `both` com `transform` aqui não prende filho nenhum: o elemento sai do DOM
+   em seguida. */
+[data-page="closing"],
+[data-page="leaving-home"] {
+  z-index: 2;
+  animation: lj-page-close var(--lj-exit-panel) both;
+}
+
+@keyframes lj-page-close {
+  to {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+@keyframes lj-page-slide {
+  from {
+    transform: translate(
+      calc(var(--lj-nav-x, 0) * var(--lj-enter-page-shift)),
+      calc(var(--lj-nav-y, 0) * var(--lj-enter-page-shift))
+    );
+  }
+}
+
+@keyframes lj-page-fade {
+  from {
+    opacity: var(--lj-page-from-opacity, 0);
+  }
 }
 
 /* ---------------------------------------------------------------------------

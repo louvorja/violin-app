@@ -1,5 +1,5 @@
 <template>
-  <section class="desktop-download" :aria-labelledby="titleId">
+  <section class="desktop-download lj-page-in" :aria-labelledby="titleId">
     <div class="desktop-download__mark" aria-hidden="true">
       <img src="/ico/favicon-180x180.png" alt="" />
     </div>
@@ -153,8 +153,8 @@ const primaryLabel = computed(() => desktopDownloadLabel(platform, t));
   font-weight: var(--lj-weight-semibold);
   text-decoration: none;
   transition:
-    background-color 120ms var(--lj-ease-out),
-    border-color 120ms var(--lj-ease-out);
+    background-color var(--lj-transition-fast),
+    border-color var(--lj-transition-fast);
 }
 
 .desktop-download__primary {

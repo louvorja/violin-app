@@ -388,22 +388,29 @@ watch(
 }
 
 /* ---------------------------------------------------------------------------
- * Transição — mesma duração do ModuleFormatDrawer (0.35s)
- * Só anima no modo overlay; no modo pinado o flex layout já cuida.
+ * Transição
  * ------------------------------------------------------------------------- */
-.chat-drawer-slide-enter-active,
+/* Flutuando sobre o conteúdo, o painel chega com mola — o percurso é a largura
+   inteira dele — e sai seco. É a mola sem ultrapassagem: passar do alvo
+   descolaria o painel da borda da janela. */
+.chat-drawer-slide-enter-active {
+  transition: transform var(--lj-motion-normal);
+}
 .chat-drawer-slide-leave-active {
-  transition: transform 0.5s var(--lj-ease);
+  transition: transform var(--lj-exit-panel);
 }
 .chat-drawer-slide-enter-from,
 .chat-drawer-slide-leave-to {
   transform: translateX(-100%);
 }
 
-/* No modo pinado, repetimos a transição */
+/* Pinado, o painel não anda sozinho: o conteúdo ao lado abre espaço com
+   `margin-left var(--lj-reflow-enter)` (.shell-center, em Shell.vue). Os dois
+   precisam do MESMO token nas duas direções, ou aparece uma fresta entre eles
+   no meio do caminho — por isso aqui não há mola nem saída mais curta. */
 .chat-drawer-panel--pinned.chat-drawer-slide-enter-active,
 .chat-drawer-panel--pinned.chat-drawer-slide-leave-active {
-  transition: transform 0.5s var(--lj-ease);
+  transition: transform var(--lj-reflow-enter);
 }
 .chat-drawer-panel--pinned.chat-drawer-slide-enter-from,
 .chat-drawer-panel--pinned.chat-drawer-slide-leave-to {

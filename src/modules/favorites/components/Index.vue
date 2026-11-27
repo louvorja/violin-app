@@ -13,6 +13,7 @@
       v-model="pageFavorites"
       item-key="id_music"
       handle=".drag-handle"
+      :animation="150"
       class="music-list"
       role="list"
     >

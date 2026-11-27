@@ -366,6 +366,7 @@ Não há escolha de pastas nativas nem mudança nesse contrato do web/PWA.
 | `helpers/SljaConverter.js`   | helper-puro           | Conversão de slides `.slja`                                                 |
 | `types/Module.ts` + `scripts/validate-manifests.ts` | contrato/validador | Tipos e validação dos `manifest.ts`                         |
 | `helpers/Libras.ts`          | helper-puro           | Tradução PT-BR → Libras (API VLibras, cache IndexedDB)                      |
+| `helpers/MotionOrigin.ts`    | helper-puro           | Ponto do último toque, para a camada modal crescer a partir dele            |
 | `helpers/AppData.ts`         | deve-virar-composable | Camada de acesso ao Pinia (dot-notation); candidato a `useAppState`         |
 | `helpers/UserData.ts`        | deve-virar-composable | Preferências persistidas via AppData                                        |
 | `helpers/Modules.js`         | deve-virar-composable | Runtime open/close de módulos                                               |
@@ -569,6 +570,147 @@ cujos sufixos são os mesmos valores já salvos em UserData.
 Espaçamento não tem utilitário de propósito: a escala do Material é 4px×n e a
 daqui é a do Delphi (`--lj-space-1..8` = 2, 4, 6, 8, 12, 16, 20, 24px). Margem
 entre irmãos é `gap` no container; padding de bloco é CSS `scoped` com token.
+
+### Nomes em inglês, prosa em português
+
+Identificadores e nomes de arquivo novos são em inglês: variáveis, funções,
+props, composables, classes CSS, tokens, scripts e specs (`useModuleSwap`,
+`heldModuleId`, `Motion.spec.ts`). Comentários, descrições de teste (`describe`
+/ `it`), documentação e mensagens de commit seguem em português. O repositório
+ainda tem nomes antigos em português (`useSobreposicaoGlobal`,
+`CamadasTeleportadas.spec.ts`); não os renomeie de passagem, mas não crie novos.
+
+### Movimento — quatro famílias de tokens
+
+Uma pergunta escolhe o token: **o que está mudando?** Detalhes e tempos em
+`docs/design-system.md`, "Animações e Transições".
+
+| O que muda                                    | Token                 |
+| --------------------------------------------- | --------------------- |
+| Cor, opacidade, sombra                        | `--lj-transition-*`   |
+| Lugar ou tamanho, ao entrar (`transform`)     | `--lj-motion-*` (mola) |
+| Qualquer coisa, ao sair                       | `--lj-exit-*`         |
+| Layout, e `transform` que anda junto com ele  | `--lj-reflow-*`       |
+
+```css
+/* ✅ entra com mola, sai seco */
+.painel-enter-active {
+  transition: transform var(--lj-motion-normal);
+}
+.painel-leave-active {
+  transition: transform var(--lj-exit-panel);
+}
+
+/* ✅ mesmo elemento muda de lugar e esmaece: duas transições */
+transition:
+  opacity var(--lj-transition-normal),
+  transform var(--lj-motion-fast);
+
+/* ❌ mola em layout — refaz a tela a cada quadro */
+transition: height var(--lj-motion-normal);
+
+/* ❌ tempo e curva escritos à mão — o próximo ajuste não chega aqui */
+transition: transform 170ms cubic-bezier(0.16, 1, 0.3, 1);
+```
+
+| Token                | Quando                                                            |
+| -------------------- | ----------------------------------------------------------------- |
+| `--lj-motion-fast`   | Filho de `<Transition>` (alerta, paleta, loading); seta e marca de select |
+| `--lj-motion-normal` | Menu, select, combobox, diálogo, janela, painel, troca de página  |
+| `--lj-motion-bounce` | Só peça pequena e solta: pino do switch, toast                    |
+| `--lj-exit-fast`     | Saída de camada pequena                                           |
+| `--lj-exit-panel`    | Saída de painel que cruza a própria largura                       |
+| `--lj-reflow-enter` / `-exit` | `width`, `height`, `margin`, `padding`                   |
+
+O que **não** se faz, e por quê:
+
+- **Mola em layout, cor ou opacidade.** Layout refaz a tela a cada quadro — o
+  app roda em PC de igreja. A mola de quique faria a opacidade "passar" de 1.
+- **Mola na saída, ou `bounce` no que está encostado numa borda.** Passar do
+  alvo abre uma fresta atrás do painel.
+- **Reajustar `--lj-ease`.** O sorteio usa essa curva no telão. Curva nova de
+  interface ganha nome próprio.
+- **Mexer na projeção** (`/projection`, `/obs`, `transitions.css`,
+  `OverlayRenderer`): a transição ali é escolha do operador.
+- **Fade sobre o vazio.** Quem entra transparente mostra o que está atrás. Na
+  troca de módulo isso já foi a cor do tema piscando (12 de 18 trocas, medido)
+  e um clarão branco ao sair do Relógio. `Modules.vue` segura o módulo que saiu
+  desenhado por baixo enquanto o próximo entra (`composables/useModuleSwap.ts`).
+- **Amplitude à mão.** `4px` e `scale(0.97)` passam sem o olho registrar: a
+  tela fica "animada" e parece cortar seco. Use `--lj-enter-*`.
+- **Lista em cascata.** Bonita com dez linhas, pesada com o hinário inteiro.
+- **Animar o que o operador repete sob pressão** — troca de slide, navegação
+  por seta. Ali só a cor do realce muda.
+
+Conteúdo que troca **no mesmo lugar** (módulo, painel de aba, tela do AppMenu,
+painel do controle remoto) recebe a classe `lj-page-in`: desliza com mola e
+esmaece, e reinicia sozinha em `v-if`, `v-show` e KeepAlive. **A direção é
+sempre a do contexto**: quem navega publica de que lado se veio com
+`useNavDirection()` — `--lj-nav-x` para abas lado a lado, `--lj-nav-y` para itens
+empilhados — e zera o outro eixo. Sem ordem conhecida o painel só esmaece; um
+deslize igual em todo lugar é enfeite. Entre dois módulos a página entra opaca
+(semitransparente, uma tela aparece atravessada na outra), e a que sai deixa de
+ser desenhada na hora, para não sobrar um pedaço dela na borda. **Fechar
+não é trocar**: a página fechada recua e esmaece por cima, e a vizinha é
+revelada parada. Dentro de um container que rola na horizontal use
+`lj-fade-in`.
+
+Checkbox novo é `LjCheckbox`. Um `<input type="checkbox">` que ainda exista
+solto leva a classe `lj-native-check`, para ter a mesma caixa e o mesmo tique
+desenhado — nunca a caixa do sistema nem uma marca que só aparece e some.
+
+Diálogo, janela, alerta e paleta **crescem a partir do clique que os abriu**
+(`applyMotionOrigin()` de `helpers/MotionOrigin.ts`, no `open-auto-focus`), sem
+deslocamento fixo. Camada modal nova chama a mesma função.
+
+A tabela completa de qual animação fica em cada lugar está em
+`docs/design-system.md`, "Onde cada animação fica" — consulte antes de animar
+uma tela nova, para ela não destoar das outras.
+
+Dez armadilhas que não dão erro no console:
+
+1. **Filho de `<Transition>`.** O Vue encerra pelo elemento raiz. Se a mola de
+   um filho durar mais que a transição da raiz, ela é cortada no meio e o
+   elemento salta. Por isso `--lj-motion-fast` e `--lj-transition-normal` têm
+   os mesmos 0,18s — é o par do alerta, da paleta de comandos e do loading.
+2. **Aperto mexe na área de clique.** `transform` no `:active` faz quem solta
+   o ponteiro na borda acertar o elemento pai: o botão afunda e o `click` não
+   chega. `LjButton` tem um `::after` de guarda; qualquer outro controle que
+   ganhe aperto precisa do mesmo. E escala só em alvo de tamanho fixo e pequeno
+   (o botão só-ícone) — num botão esticado pelo layout, 3% são dezenas de
+   pixels; com texto, o botão afunda `--lj-press-shift`.
+3. **O que anda junto usa o mesmo token.** O rodapé do player sobe enquanto o
+   conteúdo ganha `padding-bottom`; o chat pinado desliza enquanto o conteúdo
+   ganha `margin-left`. Os dois lados de cada dupla usam `--lj-reflow-enter`
+   nas duas direções — tempos diferentes abrem uma faixa vazia no meio do
+   caminho.
+4. **`transform` inline da Reka vence o seu.** O pino do `LjSlider` é
+   posicionado com `transform` inline; para escalar no hover use a propriedade
+   `scale`, que é independente.
+5. **Saída sem `both` pisca.** Entre o fim da animação de `data-state="closed"`
+   e a Reka desmontar a camada, ela volta um quadro ao estado visível.
+6. **Entrada com `both`/`forwards` em `transform` prende os filhos.** A
+   animação continua em vigor depois de acabar, e o elemento vira bloco de
+   referência de todo `position: fixed` dentro dele. `.lj-page-in` não usa
+   preenchimento por isso.
+7. **Deslize dentro de container que rola.** Um elemento deslocado para baixo ou
+   para a direita aumenta a área de rolagem enquanto anima, e a barra de
+   rolagem pisca. O pai do painel animado precisa de `overflow: clip`.
+8. **Trocar a lista de animações no meio.** Uma regra que acrescenta uma
+   animação quando um atributo muda faz ela começar do zero ali. O que varia
+   entre os casos vai numa variável lida pelo keyframe
+   (`--lj-page-from-opacity`).
+9. **Variável de direção herdada.** `--lj-nav-x`/`--lj-nav-y` descem pela
+   cascata: quem publica um eixo zera o outro, ou o painel de dentro desliza na
+   diagonal com a direção do container de fora.
+10. **`<TransitionGroup>` em volta do vuedraggable.** O Vue clona os filhos com
+    chave e o vuedraggable 4.1 nunca cria o Sortable: a lista para de aceitar
+    arrasto, sem erro (o `errorHandler` da telemetria engole). A faixa de abas
+    anima à mão por isso (`OpenModulesTabs.vue`).
+
+`src/__tests__/Motion.spec.ts` trava o contrato, e a seção "Movimento" do
+catálogo (`/ui`) mostra os tokens lado a lado. As curvas de mola são geradas por
+`scripts/spring-curves.mjs` — não edite os números do `linear()` à mão.
 
 ### `KEYS.*` — UserData sempre por constante
 

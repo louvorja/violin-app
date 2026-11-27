@@ -152,7 +152,7 @@ function aoMudar(valor: string | string[] | undefined): void {
 
 .lj-accordion__chevron {
   color: var(--lj-text-muted);
-  transition: transform var(--lj-transition-fast);
+  transition: transform var(--lj-motion-fast);
 }
 
 .lj-accordion__trigger[data-state="open"] .lj-accordion__chevron {
@@ -182,11 +182,11 @@ function aoMudar(valor: string | string[] | undefined): void {
 }
 
 .lj-accordion__content[data-state="open"] {
-  animation: lj-accordion-abre var(--lj-ui-float-enter);
+  animation: lj-accordion-abre var(--lj-reflow-enter) both;
 }
 
 .lj-accordion__content[data-state="closed"] {
-  animation: lj-accordion-fecha var(--lj-ui-float-exit);
+  animation: lj-accordion-fecha var(--lj-reflow-exit) both;
 }
 
 /* O respiro mora aqui, e não no elemento animado: `height: 0` não zera padding,

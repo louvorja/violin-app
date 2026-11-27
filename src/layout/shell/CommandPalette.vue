@@ -6,7 +6,7 @@
           <DialogContent
             class="cmd-palette"
             :aria-describedby="undefined"
-            @open-auto-focus="focusSearch"
+            @open-auto-focus="onPaletteOpen"
           >
             <VisuallyHidden>
               <DialogTitle>{{ t("shell.search_placeholder") }}</DialogTitle>
@@ -124,6 +124,7 @@ let lastQuery = "";
 </script>
 
 <script setup>
+import { applyMotionOrigin } from "@/helpers/MotionOrigin";
 import { LjButton, LjDivider, LjIcon, LjSpinner } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ref, computed, watch, nextTick } from "vue";
@@ -179,6 +180,13 @@ const open = computed({
   get: () => props.modelValue,
   set: (v) => emit("update:modelValue", v),
 });
+
+// Aberta pelo botão de busca, a paleta cresce a partir dele; pelo atalho, a
+// partir do topo, que é onde ela mora (`transform-origin` no CSS).
+function onPaletteOpen(event) {
+  applyMotionOrigin(event.currentTarget, "none");
+  focusSearch(event);
+}
 
 function focusSearch(event) {
   event.preventDefault();
@@ -414,6 +422,7 @@ function highlightParts(text) {
   box-shadow: var(--lj-shadow-3);
   color: var(--lj-text);
   font-family: var(--lj-font-shell);
+  transform-origin: top center;
 }
 
 .cmd-search {
@@ -594,14 +603,22 @@ function highlightParts(text) {
   color: var(--lj-text);
 }
 
-.cmd-enter-active,
-.cmd-leave-active {
+/* O Vue encerra a transição quando termina a do elemento raiz (o véu), não a
+   do filho. Por isso a mola da paleta tem a MESMA duração da opacidade do véu
+   (`--lj-motion-fast` e `--lj-transition-normal`): se fosse mais longa, a
+   classe `-active` sairia no meio do caminho e a paleta saltaria para o lugar. */
+.cmd-enter-active {
   transition: opacity var(--lj-transition-normal);
 }
+.cmd-enter-active .cmd-palette {
+  transition: transform var(--lj-motion-fast);
+}
 
-.cmd-enter-active .cmd-palette,
+.cmd-leave-active {
+  transition: opacity var(--lj-exit-fast);
+}
 .cmd-leave-active .cmd-palette {
-  transition: transform var(--lj-transition-normal);
+  transition: transform var(--lj-exit-fast);
 }
 
 .cmd-enter-from,
@@ -609,8 +626,10 @@ function highlightParts(text) {
   opacity: 0;
 }
 
-.cmd-enter-from .cmd-palette,
+.cmd-enter-from .cmd-palette {
+  transform: scale(var(--lj-enter-dialog-scale));
+}
 .cmd-leave-to .cmd-palette {
-  transform: translateY(-12px);
+  transform: scale(0.98);
 }
 </style>

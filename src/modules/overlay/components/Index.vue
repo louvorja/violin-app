@@ -564,6 +564,9 @@ onBeforeUnmount(() => {
 .overlay-slot-editor {
   padding: var(--lj-space-5);
   border-top: 1px solid var(--lj-surface-divider);
+  /* O painel de aba do editor entra deslizando de lado (`.lj-page-in`); sem
+     isto ele criaria rolagem horizontal na lista por um instante. */
+  overflow-x: clip;
 }
 
 /* Lado a lado só quando a lista comporta a fileira de abas do editor (369px

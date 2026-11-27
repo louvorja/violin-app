@@ -23,8 +23,8 @@
         @mousedown="onMouseDown"
         @focus="onFocus"
       />
-      <ComboboxTrigger class="lj-combobox__trigger">
-        <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="iconSize" />
+      <ComboboxTrigger class="lj-combobox__trigger" :data-state="open ? 'open' : 'closed'">
+        <LjIcon :icon="ICONS.UI.CHEVRON_DOWN" :size="iconSize" class="lj-combobox__caret" />
       </ComboboxTrigger>
     </ComboboxAnchor>
 
@@ -297,6 +297,19 @@ function displayValue(item: unknown): string {
   color: var(--lj-text-subtle);
   cursor: pointer;
   flex-shrink: 0;
+  transition: color var(--lj-transition-fast);
+}
+
+.lj-combobox__trigger:hover {
+  color: var(--lj-text);
+}
+
+.lj-combobox__caret {
+  transition: transform var(--lj-motion-fast);
+}
+
+.lj-combobox__trigger[data-state="open"] .lj-combobox__caret {
+  transform: rotate(180deg);
 }
 
 /* A camada é teleportada para o <body>, que não carrega a cor do app. */
@@ -363,11 +376,16 @@ function displayValue(item: unknown): string {
   width: 14px;
   flex-shrink: 0;
   color: var(--lj-ui-accent-text);
-  visibility: hidden;
+  opacity: 0;
+  transform: scale(0.75);
+  transition:
+    opacity var(--lj-transition-fast),
+    transform var(--lj-motion-fast);
 }
 
 .lj-combobox__item[data-state="checked"] .lj-combobox__check {
-  visibility: visible;
+  opacity: 1;
+  transform: scale(1);
 }
 
 .lj-combobox__empty {

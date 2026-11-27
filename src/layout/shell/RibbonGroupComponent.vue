@@ -1,5 +1,5 @@
 <template>
-  <div class="ribbon-group" :class="{ 'ribbon-group--web': !Platform.isDesktop }">
+  <div class="ribbon-group lj-fade-in" :class="{ 'ribbon-group--web': !Platform.isDesktop }">
     <div class="ribbon-group-content">
       <slot />
     </div>

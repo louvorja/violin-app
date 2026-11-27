@@ -27,6 +27,7 @@ Em caso de conflito, siga esta ordem:
 - Valide entradas e respostas de fronteira antes de usá-las. Para novos formatos de dados, defina um tipo, valide em runtime quando vier de rede/IPC/arquivo e mantenha um fallback seguro.
 - No Electron, exponha uma operação IPC específica e tipada. Não amplie APIs genéricas de canal/argumentos nem passe dados não confiáveis ao processo principal.
 - Variáveis `VITE_*` chegam ao renderer: nunca ponha segredos de provedor, tokens de IA ou credenciais nelas.
+- Movimento: quatro famílias de tokens — `--lj-transition-*` (cor, opacidade), `--lj-motion-*` (mola, só em `transform`, na entrada), `--lj-exit-*` (saída) e `--lj-reflow-*` (layout). Amplitude de entrada em `--lj-enter-*`; conteúdo que troca no mesmo lugar usa a classe `lj-page-in`, com a direção do contexto (`useNavDirection`); camada modal cresce a partir do clique (`applyMotionOrigin`). Sem tempo, curva ou amplitude escritos à mão, sem fade sobre o vazio, sem reajustar `--lj-ease`, sem mola na projeção. Antes de animar uma tela nova, veja a tabela "Onde cada animação fica". Regras e armadilhas em `docs/design-system.md` ("Animações e Transições"); `src/__tests__/Motion.spec.ts` trava o contrato.
 - Não entregue conteúdo externo ou gerado por modelo a `v-html`. Uma futura integração de IA deve ter gateway no servidor, saída estruturada validada, ferramentas mínimas e confirmação humana para ações destrutivas.
 
 ## Verificação mínima

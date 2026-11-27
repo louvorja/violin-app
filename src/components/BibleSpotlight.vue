@@ -2,7 +2,11 @@
   <DialogRoot v-model:open="model">
     <DialogPortal>
       <DialogOverlay class="quicknav-overlay" />
-      <DialogContent as-child v-bind="{ 'aria-describedby': undefined }">
+      <DialogContent
+        as-child
+        v-bind="{ 'aria-describedby': undefined }"
+        @open-auto-focus="applyMotionOrigin($event.currentTarget)"
+      >
         <div
           ref="cardRef"
           class="quicknav-card"
@@ -112,6 +116,7 @@
 </template>
 
 <script setup lang="ts">
+import { applyMotionOrigin } from "@/helpers/MotionOrigin";
 import { ICONS } from "@/config/Icons";
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import {
@@ -614,6 +619,11 @@ onUnmounted(reset);
   inset: 0;
   z-index: var(--lj-z-dialog);
   background: var(--lj-black-alpha-40);
+  animation: quicknav-fade-in var(--lj-transition-normal) both;
+}
+
+.quicknav-overlay[data-state="closed"] {
+  animation: quicknav-fade-out var(--lj-ui-float-exit) both;
 }
 
 .quicknav-card {
@@ -634,6 +644,46 @@ onUnmounted(reset);
   align-items: center;
   gap: 28px;
   outline: none;
+  animation: quicknav-in var(--lj-ui-float-enter) both;
+}
+
+.quicknav-card[data-state="closed"] {
+  animation: quicknav-out var(--lj-ui-float-exit) both;
+}
+
+@keyframes quicknav-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes quicknav-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes quicknav-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(var(--lj-enter-dialog-scale));
+  }
+}
+
+@keyframes quicknav-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quicknav-overlay,
+  .quicknav-overlay[data-state],
+  .quicknav-card,
+  .quicknav-card[data-state] {
+    animation: none;
+  }
 }
 
 .quicknav-steps {
@@ -652,7 +702,10 @@ onUnmounted(reset);
   font-weight: 500;
   color: var(--lj-text-muted, #888);
   background: transparent;
-  transition: all var(--lj-transition-normal);
+  transition:
+    color var(--lj-transition-fast),
+    background-color var(--lj-transition-fast),
+    box-shadow var(--lj-transition-fast);
 }
 
 .quicknav-step.current {

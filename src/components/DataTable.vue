@@ -472,7 +472,16 @@ function searchableKeys() {
     : [];
 }
 
+function currentFilterSnapshot() {
+  return {
+    searchable_fields: props.searchable_fields,
+    filter: props.filter,
+    letter: props.letter,
+  };
+}
+
 function filterData() {
+  last_filter.value = currentFilterSnapshot();
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   const reportFilter = () => {
     const durationMs = Math.max(
@@ -670,11 +679,8 @@ function paginateData() {
 }
 
 function compareFilterData() {
-  const filter = {
-    searchable_fields: props.searchable_fields,
-    filter: props.filter,
-    letter: props.letter,
-  };
+  if (!fileData) return;
+  const filter = currentFilterSnapshot();
 
   if (JSON.stringify(filter) === JSON.stringify(last_filter.value)) {
     return;

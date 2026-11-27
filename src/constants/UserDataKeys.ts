@@ -111,6 +111,7 @@ export const KEYS = {
       SHOW: `${MODULES_LITURGY}.show`,
     },
     MUSICS: {
+      ROOT: `${MODULES}.${ModuleEnum.MUSICS}`,
       SELECTED_PLAYLIST: `${MODULES}.${ModuleEnum.MUSICS}.selected_playlist`,
       PLAYLIST_SHUFFLE: `${MODULES}.${ModuleEnum.MUSICS}.playlist_shuffle`,
       PLAYLIST_REPEAT: `${MODULES}.${ModuleEnum.MUSICS}.playlist_repeat`,

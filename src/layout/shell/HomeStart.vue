@@ -1,5 +1,5 @@
 <template>
-  <section class="home-start" :aria-label="$t('shell.home_title')">
+  <section class="home-start lj-page-in" :aria-label="$t('shell.home_title')">
     <LjLogo :size="88" class="home-start__logo" />
     <h1>{{ $t("shell.home_title") }}</h1>
     <p>{{ $t("shell.home_description") }}</p>

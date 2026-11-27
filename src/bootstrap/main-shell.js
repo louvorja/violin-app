@@ -1733,7 +1733,10 @@ $storage.hydrate().then(async () => {
                   }
                   case "itens-agendados": {
                     const activeDate = Liturgy.getActiveDate();
-                    const sched = Liturgy.findScheduledForToday(litItem.id, activeDate);
+                    const sched = Liturgy.findScheduledForToday(
+                      litItem.ref_id || litItem.id,
+                      activeDate
+                    );
                     const arquivo = sched ? String((sched && sched.arquivo) || "") : "";
                     if (arquivo) {
                       overlayContext.scheduledPath = arquivo;

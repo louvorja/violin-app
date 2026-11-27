@@ -1097,7 +1097,7 @@ onMounted(async () => {
   color: var(--lj-text);
   outline: none;
   width: 100px;
-  transition: border-color 150ms;
+  transition: border-color var(--lj-transition-fast);
 }
 .tx-token-input:focus {
   border-color: var(--lj-accent);
@@ -1314,7 +1314,7 @@ onMounted(async () => {
   height: 32px;
   cursor: pointer;
   opacity: 0.85;
-  transition: opacity 0.2s;
+  transition: opacity var(--lj-transition-fast);
 }
 .store-badge:hover {
   opacity: 1;
