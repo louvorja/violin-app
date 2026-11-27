@@ -35,6 +35,28 @@
           playsinline
           preload="metadata"
         />
+        <template v-else-if="view.kind === 'online'">
+          <video
+            v-if="onlineFileUrl"
+            class="pm-preview__media"
+            :src="onlineFileUrl"
+            autoplay
+            muted
+            loop
+            playsinline
+            preload="auto"
+            @error="onlineFileFailed = true"
+          />
+          <iframe
+            v-else
+            class="pm-preview__media pm-preview__embed"
+            :src="onlineEmbedUrl"
+            :title="view.title"
+            allow="autoplay; encrypted-media; picture-in-picture"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allowfullscreen
+          />
+        </template>
         <div v-else-if="view.kind === 'text'" class="pm-preview__text">
           <p>{{ view.text }}</p>
           <span v-if="view.reference">{{ view.reference }}</span>
@@ -47,7 +69,10 @@
           <span>{{ view.title }}</span>
         </div>
 
-        <div v-if="view.kind === 'image' || view.kind === 'video'" class="pm-preview__actions">
+        <div
+          v-if="view.kind === 'image' || view.kind === 'video' || view.kind === 'online'"
+          class="pm-preview__actions"
+        >
           <LjButton
             v-if="view.kind === 'video'"
             size="sm"
@@ -101,6 +126,7 @@ import { ModuleEnum } from "@/enums/ModuleEnum";
 import $database from "@/helpers/Database";
 import Telemetry from "@/helpers/Telemetry";
 import { buildSlidesFrom } from "@/composables/useMedia";
+import { isDownloaded, youtubeEmbedUrl } from "@/helpers/OnlineVideo";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import { useHasStageMonitor } from "../composables/useOutputs";
 import type { Music } from "@/types/Music";
@@ -113,7 +139,7 @@ import SlideGrid from "./SlideGrid.vue";
  */
 
 export interface PreviewView {
-  kind: "song" | "image" | "video" | "text" | "list" | "other";
+  kind: "song" | "image" | "video" | "online" | "text" | "list" | "other";
   title: string;
   icon: string;
   playable: boolean;
@@ -125,6 +151,8 @@ export interface PreviewView {
   /** A música tem playback (para oferecer as versões com ele antes de ler o banco). */
   hasInstrumental?: boolean;
   url?: string;
+  /** ID do YouTube quando `kind === "online"`. */
+  videoId?: string;
   text?: string;
   reference?: string;
   items?: string[];
@@ -142,6 +170,44 @@ const hasStageMonitor = useHasStageMonitor();
 
 const songSlides = ref<Record<string, unknown>[]>([]);
 const songHasInstrumental = ref(false);
+
+/** Prévia de vídeo online: baixado toca do arquivo; senão, o player embutido. */
+const onlineDownloaded = ref(false);
+/** Arquivo baixado ilegível (disco removido, formato): volta ao player embutido. */
+const onlineFileFailed = ref(false);
+let onlineSeq = 0;
+watch(
+  () => (props.view.kind === "online" ? props.view.videoId : null),
+  async (videoId) => {
+    const seq = ++onlineSeq;
+    onlineDownloaded.value = false;
+    onlineFileFailed.value = false;
+    if (!videoId) return;
+    try {
+      const downloaded = await isDownloaded(videoId);
+      if (seq === onlineSeq) onlineDownloaded.value = downloaded;
+    } catch {
+      /* sem arquivo local: fica o embed */
+    }
+  },
+  { immediate: true }
+);
+
+const onlineFileUrl = computed(() =>
+  props.view.kind === "online" &&
+  onlineDownloaded.value &&
+  !onlineFileFailed.value &&
+  props.view.videoId
+    ? `louvorja://onlinevideo/${props.view.videoId}.mp4`
+    : ""
+);
+
+const onlineEmbedUrl = computed(() => {
+  const videoId = props.view.kind === "online" ? props.view.videoId : undefined;
+  if (!videoId) return "";
+  // O YouTube só libera autoplay sem som; a prévia é uma checagem rápida, não a projeção.
+  return `${youtubeEmbedUrl(videoId)}&mute=1&loop=1&playlist=${videoId}`;
+});
 
 const songModes = computed(() =>
   modesFor(songHasInstrumental.value || !!props.view.hasInstrumental)
@@ -260,6 +326,10 @@ watch(
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.pm-preview__embed {
+  border: 0;
 }
 
 .pm-preview__text,

@@ -1,5 +1,5 @@
 import $path from "@/helpers/Path";
-import { videoIdFromUrl, youtubeThumb } from "@/helpers/OnlineVideo";
+import { videoIdFromUrl } from "@/helpers/OnlineVideo";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { ProgramItem } from "@/types/Presentation";
 import type { PreviewView } from "../components/StagePreview.vue";
@@ -24,11 +24,11 @@ export function programView(item: ProgramItem): PreviewView {
     const videoId = videoIdFromUrl(src.url || src.subitem);
     if (videoId) {
       return {
-        kind: "image",
+        kind: "online",
         title: item.title,
         icon: KIND_ICONS.online_video,
         playable: true,
-        url: youtubeThumb(videoId),
+        videoId,
       };
     }
   }
@@ -59,7 +59,13 @@ export function previewViewOf(target: Playable, item: ProgramItem | null): Previ
     return child.path ? fileView(child.path, child.title) : { kind: "other", title: child.title, icon: KIND_ICONS[child.kind], playable: true };
   }
   if (target.type === "online") {
-    return { kind: "image", title: target.title, icon: KIND_ICONS.online_video, playable: true, url: youtubeThumb(target.videoId) };
+    return {
+      kind: "online",
+      title: target.title,
+      icon: KIND_ICONS.online_video,
+      playable: true,
+      videoId: target.videoId,
+    };
   }
   if (target.type === "canva") {
     return target.thumb

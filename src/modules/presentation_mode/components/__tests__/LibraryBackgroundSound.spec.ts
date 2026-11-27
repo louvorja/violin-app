@@ -43,6 +43,10 @@ function mount() {
       stubs: {
         LjInput: { props: ["modelValue"], template: '<input :value="modelValue" />' },
         LjButton: { template: '<button v-bind="$attrs"><slot /></button>' },
+        LjContextMenu: {
+          props: ["items", "quick"],
+          template: '<div class="pm-context-stub"><slot /></div>',
+        },
         LjIcon: true,
         LjEmpty: { props: ["title"], template: "<div>{{ title }}</div>" },
         BackgroundSoundPlayer: {

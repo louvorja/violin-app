@@ -81,6 +81,10 @@ vi.mock("@/modules/presentation_mode/composables/useCustomOnlineVideos", () => (
 vi.mock("@/composables/useOnlineVideoDownloads", () => ({
   useOnlineVideoDownloads: () => ({
     available: true,
+    stateOf: vi.fn(() => "none"),
+    download: vi.fn(async () => true),
+    cancel: vi.fn(),
+    remove: vi.fn(async () => true),
     refresh: mocks.refreshDownloads,
   }),
 }));
@@ -99,6 +103,9 @@ vi.mock("@/helpers/OnlineVideo", () => ({
   prepare: vi.fn(),
   fetchYoutubeTitle: vi.fn(async () => null),
   youtubeThumb: (id: string) => `thumb:${id}`,
+}));
+vi.mock("@/modules/presentation_mode/composables/useOutputs", () => ({
+  useHasStageMonitor: () => ({ value: false }),
 }));
 
 vi.mock("../CategoryListItem.vue", () => ({
@@ -130,6 +137,7 @@ vi.mock("../OnlineVideoAddDialog.vue", () => ({
 }));
 
 import LibraryOnlineVideos from "../LibraryOnlineVideos.vue";
+import { resetOnlineVideosSelection } from "../../composables/useOnlineVideosSelection";
 
 function mountPanel() {
   return mount(LibraryOnlineVideos, {
@@ -143,6 +151,10 @@ function mountPanel() {
             '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
         },
         LjButton: { template: '<button v-bind="$attrs"><slot /></button>' },
+        LjContextMenu: {
+          props: ["items", "quick"],
+          template: '<div class="pm-context-stub"><slot /></div>',
+        },
         LjIcon: true,
       },
     },
@@ -152,6 +164,7 @@ function mountPanel() {
 describe("LibraryOnlineVideos", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetOnlineVideosSelection();
   });
 
   it("tem a busca, o botão de adicionar e depois os dois grupos", () => {
@@ -161,11 +174,53 @@ describe("LibraryOnlineVideos", () => {
     expect(side.children[1]?.className).toContain("pm-ovl__add");
     expect(side.children[2]?.className).toContain("pm-ovl__groups");
 
-    expect(wrapper.find('[data-testid="pm-ovl-all"]').attributes("data-active")).toBe("true");
+    expect(wrapper.find('[data-testid="pm-ovl-welcome"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pm-ovl-all"]').attributes("data-active")).toBe("false");
     expect(wrapper.find('[data-testid="pm-ovl-channel-c1"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pm-ovl-custom-all"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pm-ovl-uncategorized"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pm-ovl-category-cc1"]').exists()).toBe(true);
+  });
+
+  it("o convite leva o foco para a primeira categoria da lateral", async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    const wrapper = mountPanel();
+
+    await wrapper.find('[data-testid="pm-ovl-welcome"]').trigger("click");
+
+    expect(focus).toHaveBeenCalled();
+    focus.mockRestore();
+  });
+
+  it("volta para a última seleção ao reabrir a aba", async () => {
+    const first = mountPanel();
+    await first.find('[data-testid="pm-ovl-channel-c1"]').trigger("click");
+    expect(first.find('[data-testid="pm-ovl-playlist-p1"]').exists()).toBe(true);
+    first.unmount();
+
+    const second = mountPanel();
+    expect(second.find('[data-testid="pm-ovl-welcome"]').exists()).toBe(false);
+    expect(second.find('[data-testid="pm-ovl-playlist-p1"]').exists()).toBe(true);
+  });
+
+  it("recolhe e expande os grupos de vídeos online e meus vídeos", async () => {
+    const wrapper = mountPanel();
+    const groups = wrapper.findAll(".pm-ovl__group-title--toggle");
+    expect(groups).toHaveLength(2);
+
+    const collapses = wrapper.findAll(".pm-collapse");
+    expect(collapses[0].classes()).toContain("pm-collapse--open");
+    expect(collapses[1].classes()).toContain("pm-collapse--open");
+
+    await groups[0].trigger("click");
+    expect(collapses[0].classes()).not.toContain("pm-collapse--open");
+    await groups[1].trigger("click");
+    expect(collapses[1].classes()).not.toContain("pm-collapse--open");
+
+    await groups[0].trigger("click");
+    await groups[1].trigger("click");
+    expect(collapses[0].classes()).toContain("pm-collapse--open");
+    expect(collapses[1].classes()).toContain("pm-collapse--open");
   });
 
   it("navega canal → playlist → vídeos e volta", async () => {
@@ -183,11 +238,12 @@ describe("LibraryOnlineVideos", () => {
     expect(wrapper.find('[data-testid="pm-ovl-playlist-p1"]').exists()).toBe(true);
 
     await wrapper.find('[data-testid="pm-ovl-back"]').trigger("click");
-    expect(wrapper.find('[data-testid="pm-ovl-all"]').attributes("data-active")).toBe("true");
+    expect(wrapper.find('[data-testid="pm-ovl-welcome"]').exists()).toBe(true);
   });
 
   it("filtra os vídeos pela busca", async () => {
     const wrapper = mountPanel();
+    await wrapper.find('[data-testid="pm-ovl-all"]').trigger("click");
     expect(wrapper.findAll(".ov-card-stub")).toHaveLength(2);
 
     await wrapper.find(".pm-ovl__search input").setValue("dois");
@@ -220,6 +276,7 @@ describe("LibraryOnlineVideos", () => {
 
   it("emite prévia, play e adicionar do card", async () => {
     const wrapper = mountPanel();
+    await wrapper.find('[data-testid="pm-ovl-all"]').trigger("click");
 
     await wrapper.find('[data-testid="pm-ovl-card-v1"]').trigger("click");
     expect(wrapper.emitted("preview")?.[0]?.[0]).toMatchObject({

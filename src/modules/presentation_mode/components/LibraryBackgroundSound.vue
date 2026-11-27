@@ -67,71 +67,75 @@
             {{ tm("library.background_sound_no_results") }}
           </p>
           <div v-else class="pm-bgs__grid">
-            <div
+            <LjContextMenu
               v-for="card in visibleCards"
               :key="card.record.id"
-              class="pm-bgs__card"
-              :class="{
-                'pm-bgs__card--current': card.record.id === currentId,
-                'pm-bgs__card--playing': card.record.id === currentId && bg.isPlaying.value,
-              }"
-              :style="{ '--pm-bgs-card-color': card.color }"
-              role="button"
-              tabindex="0"
-              :data-testid="`pm-bgs-card-${card.record.id}`"
-              :title="bgs.displayName(card.record)"
-              :aria-label="
-                (card.record.id === currentId && bg.isPlaying.value
-                  ? tm('library.background_sound_pause')
-                  : tm('library.background_sound_play')) +
-                ': ' +
-                bgs.displayName(card.record)
-              "
-              @click="toggle(card.record)"
-              @keydown.enter.prevent="toggle(card.record)"
-              @keydown.space.prevent="toggle(card.record)"
+              v-bind="menuFor(card.record)"
             >
-              <span class="pm-bgs__play">
-                <LjIcon
-                  :icon="
-                    card.record.id === currentId && bg.isPlaying.value
-                      ? ICONS.PLAYER.PAUSE
-                      : ICONS.PLAYER.PLAY
-                  "
-                  :size="17"
-                />
-              </span>
-              <span class="pm-bgs__info">
-                <span class="pm-bgs__name">{{ bgs.displayName(card.record) }}</span>
-                <span class="pm-bgs__category">
-                  <img
-                    v-if="card.iconType === 'image'"
-                    :src="card.icon"
-                    class="pm-bgs__category-icon"
-                    alt=""
-                  />
+              <div
+                class="pm-bgs__card"
+                :class="{
+                  'pm-bgs__card--current': card.record.id === currentId,
+                  'pm-bgs__card--playing': card.record.id === currentId && bg.isPlaying.value,
+                }"
+                :style="{ '--pm-bgs-card-color': card.color }"
+                role="button"
+                tabindex="0"
+                :data-testid="`pm-bgs-card-${card.record.id}`"
+                :title="bgs.displayName(card.record)"
+                :aria-label="
+                  (card.record.id === currentId && bg.isPlaying.value
+                    ? tm('library.background_sound_pause')
+                    : tm('library.background_sound_play')) +
+                  ': ' +
+                  bgs.displayName(card.record)
+                "
+                @click="toggle(card.record)"
+                @keydown.enter.prevent="toggle(card.record)"
+                @keydown.space.prevent="toggle(card.record)"
+              >
+                <span class="pm-bgs__play">
                   <LjIcon
-                    v-else
-                    :icon="card.icon"
-                    :size="12"
-                    :style="{ color: card.color }"
-                    class="pm-bgs__category-icon"
+                    :icon="
+                      card.record.id === currentId && bg.isPlaying.value
+                        ? ICONS.PLAYER.PAUSE
+                        : ICONS.PLAYER.PLAY
+                    "
+                    :size="17"
                   />
-                  <span class="pm-bgs__category-name">{{ card.categoryName }}</span>
                 </span>
-              </span>
-              <LjButton
-                size="sm"
-                variant="ghost"
-                icon-only
-                :icon="ICONS.ACTIONS.ADD"
-                :title="tm('library.add_to_program')"
-                :aria-label="tm('library.add_to_program')"
-                :data-testid="`pm-bgs-add-${card.record.id}`"
-                @click.stop="add(card.record)"
-                @keydown.stop
-              />
-            </div>
+                <span class="pm-bgs__info">
+                  <span class="pm-bgs__name">{{ bgs.displayName(card.record) }}</span>
+                  <span class="pm-bgs__category">
+                    <img
+                      v-if="card.iconType === 'image'"
+                      :src="card.icon"
+                      class="pm-bgs__category-icon"
+                      alt=""
+                    />
+                    <LjIcon
+                      v-else
+                      :icon="card.icon"
+                      :size="12"
+                      :style="{ color: card.color }"
+                      class="pm-bgs__category-icon"
+                    />
+                    <span class="pm-bgs__category-name">{{ card.categoryName }}</span>
+                  </span>
+                </span>
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  :icon="ICONS.ACTIONS.ADD"
+                  :title="tm('library.add_to_program')"
+                  :aria-label="tm('library.add_to_program')"
+                  :data-testid="`pm-bgs-add-${card.record.id}`"
+                  @click.stop="add(card.record)"
+                  @keydown.stop
+                />
+              </div>
+            </LjContextMenu>
           </div>
         </div>
 
@@ -161,7 +165,14 @@
 
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onMounted, ref } from "vue";
-import { LjButton, LjEmpty, LjIcon, LjInput } from "@/components/ui";
+import {
+  LjButton,
+  LjContextMenu,
+  LjEmpty,
+  LjIcon,
+  LjInput,
+  type LjMenuItem,
+} from "@/components/ui";
 import BackgroundSoundPlayer from "@/components/BackgroundSoundPlayer.vue";
 import CategoryListItem from "./CategoryListItem.vue";
 import { ICONS } from "@/config/Icons";
@@ -262,6 +273,45 @@ function toggle(record: BackgroundSoundRecord): void {
     mime: record.mime,
     size: record.size,
   });
+}
+
+function menuFor(record: BackgroundSoundRecord): {
+  quick: LjMenuItem[];
+  items: LjMenuItem[];
+} {
+  const isCurrent = currentId.value === record.id;
+  const playing = isCurrent && bg.isPlaying.value;
+  return {
+    quick: [
+      {
+        label: playing ? tm("library.background_sound_pause") : tm("library.background_sound_play"),
+        icon: playing ? ICONS.PLAYER.PAUSE : ICONS.PLAYER.PLAY,
+        action: () => toggle(record),
+      },
+      {
+        label: tm("library.add_to_program"),
+        icon: ICONS.ACTIONS.ADD,
+        action: () => add(record),
+      },
+    ],
+    items: [
+      ...(isCurrent
+        ? [
+            {
+              label: tm("library.stop"),
+              icon: ICONS.PLAYER.STOP_CIRCLE,
+              action: () => bg.stop(),
+            },
+          ]
+        : []),
+      { separator: true },
+      {
+        label: tm("library.background_sound_manage"),
+        icon: ICONS.UI.OPEN_IN_NEW,
+        action: openModule,
+      },
+    ],
+  };
 }
 
 function add(record: BackgroundSoundRecord): void {

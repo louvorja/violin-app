@@ -81,6 +81,10 @@ function mount() {
           template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
         },
         LjButton: { template: '<button v-bind="$attrs"><slot /></button>' },
+        LjContextMenu: {
+          props: ["items", "quick"],
+          template: '<div class="pm-context-stub"><slot /></div>',
+        },
         LjIcon: true,
         LjEmpty: { props: ["title"], template: "<div>{{ title }}</div>" },
         LjTabs: {

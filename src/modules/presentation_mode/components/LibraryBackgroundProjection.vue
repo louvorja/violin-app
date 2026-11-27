@@ -76,72 +76,76 @@
             {{ tm("library.background_projection_no_results") }}
           </p>
           <div v-else class="pm-bgp__grid">
-            <div
+            <LjContextMenu
               v-for="card in visibleCards"
               :key="card.file.id"
-              class="pm-bgp__card"
-              :class="{ 'pm-bgp__card--active': isActive(card.file.id) }"
-              :style="{ '--pm-bgp-card-color': card.color }"
-              role="button"
-              tabindex="0"
-              :data-testid="`pm-bgp-card-${card.file.id}`"
-              :title="bgp.displayName(card.file)"
-              :aria-label="bgp.displayName(card.file)"
-              @click="activate(card.file)"
-              @keydown.enter.prevent="activate(card.file)"
-              @keydown.space.prevent="activate(card.file)"
+              v-bind="menuFor(card.file)"
             >
-              <span class="pm-bgp__thumb">
-                <img
-                  v-if="card.thumb"
-                  :src="card.thumb"
-                  class="pm-bgp__thumb-img"
-                  :alt="bgp.displayName(card.file)"
-                  loading="lazy"
-                />
-                <LjIcon
-                  v-else
-                  :icon="card.file.type === 'video' ? ICONS.MEDIA.VIDEO_FILE : ICONS.MEDIA.IMAGE"
-                  :size="28"
-                />
-                <span v-if="card.file.type === 'video'" class="pm-bgp__play-badge">
-                  <LjIcon :icon="ICONS.PLAYER.PLAY" :size="13" />
-                </span>
-                <span v-if="isActive(card.file.id)" class="pm-bgp__live">
-                  {{ tm("library.background_projection_live") }}
-                </span>
-              </span>
-              <span class="pm-bgp__info">
-                <span class="pm-bgp__name">{{ bgp.displayName(card.file) }}</span>
-                <span class="pm-bgp__category">
+              <div
+                class="pm-bgp__card"
+                :class="{ 'pm-bgp__card--active': isActive(card.file.id) }"
+                :style="{ '--pm-bgp-card-color': card.color }"
+                role="button"
+                tabindex="0"
+                :data-testid="`pm-bgp-card-${card.file.id}`"
+                :title="bgp.displayName(card.file)"
+                :aria-label="bgp.displayName(card.file)"
+                @click="activate(card.file)"
+                @keydown.enter.prevent="activate(card.file)"
+                @keydown.space.prevent="activate(card.file)"
+              >
+                <span class="pm-bgp__thumb">
                   <img
-                    v-if="card.iconType === 'image'"
-                    :src="card.icon"
-                    class="pm-bgp__category-icon"
-                    alt=""
+                    v-if="card.thumb"
+                    :src="card.thumb"
+                    class="pm-bgp__thumb-img"
+                    :alt="bgp.displayName(card.file)"
+                    loading="lazy"
                   />
                   <LjIcon
                     v-else
-                    :icon="card.icon"
-                    :size="12"
-                    :style="{ color: card.color }"
-                    class="pm-bgp__category-icon"
+                    :icon="card.file.type === 'video' ? ICONS.MEDIA.VIDEO_FILE : ICONS.MEDIA.IMAGE"
+                    :size="28"
                   />
-                  <span class="pm-bgp__category-name">{{ card.categoryName }}</span>
+                  <span v-if="card.file.type === 'video'" class="pm-bgp__play-badge">
+                    <LjIcon :icon="ICONS.PLAYER.PLAY" :size="13" />
+                  </span>
+                  <span v-if="isActive(card.file.id)" class="pm-bgp__live">
+                    {{ tm("library.background_projection_live") }}
+                  </span>
                 </span>
-              </span>
-              <LjButton
-                size="sm"
-                variant="ghost"
-                icon-only
-                :icon="ICONS.ACTIONS.ADD"
-                :title="tm('library.add_to_program')"
-                :aria-label="tm('library.add_to_program')"
-                :data-testid="`pm-bgp-add-${card.file.id}`"
-                @click.stop="add(card.file)"
-                @keydown.stop
-              />
-            </div>
+                <span class="pm-bgp__info">
+                  <span class="pm-bgp__name">{{ bgp.displayName(card.file) }}</span>
+                  <span class="pm-bgp__category">
+                    <img
+                      v-if="card.iconType === 'image'"
+                      :src="card.icon"
+                      class="pm-bgp__category-icon"
+                      alt=""
+                    />
+                    <LjIcon
+                      v-else
+                      :icon="card.icon"
+                      :size="12"
+                      :style="{ color: card.color }"
+                      class="pm-bgp__category-icon"
+                    />
+                    <span class="pm-bgp__category-name">{{ card.categoryName }}</span>
+                  </span>
+                </span>
+                <LjButton
+                  size="sm"
+                  variant="ghost"
+                  icon-only
+                  :icon="ICONS.ACTIONS.ADD"
+                  :title="tm('library.add_to_program')"
+                  :aria-label="tm('library.add_to_program')"
+                  :data-testid="`pm-bgp-add-${card.file.id}`"
+                  @click.stop="add(card.file)"
+                  @keydown.stop
+                />
+              </div>
+            </LjContextMenu>
           </div>
         </div>
 
@@ -206,7 +210,16 @@
 
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onMounted, ref } from "vue";
-import { LjButton, LjEmpty, LjIcon, LjInput, LjTabs, type LjTab } from "@/components/ui";
+import {
+  LjButton,
+  LjContextMenu,
+  LjEmpty,
+  LjIcon,
+  LjInput,
+  LjTabs,
+  type LjMenuItem,
+  type LjTab,
+} from "@/components/ui";
 import CategoryListItem from "./CategoryListItem.vue";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
@@ -358,6 +371,54 @@ async function activate(file: BackgroundProjectionFile): Promise<void> {
   } catch {
     $snackbar.error(tm("library.background_projection_unplayable"));
   }
+}
+
+function menuFor(file: BackgroundProjectionFile): {
+  quick: LjMenuItem[];
+  items: LjMenuItem[];
+} {
+  const active = isActive(file.id);
+  return {
+    quick: [
+      {
+        label: active
+          ? tm("library.background_projection_stop")
+          : tm("library.background_projection_activate"),
+        icon: active ? ICONS.PROJECTION.STOP : ICONS.PLAYER.PLAY,
+        action: () => void (active ? stopProjection() : activate(file)),
+      },
+      {
+        label: tm("library.add_to_program"),
+        icon: ICONS.ACTIONS.ADD,
+        action: () => add(file),
+      },
+    ],
+    items: [
+      ...(active
+        ? [
+            {
+              label: tm("library.background_projection_clear"),
+              icon: ICONS.PROJECTION.CLEAN,
+              action: clearProjection,
+            },
+          ]
+        : isProjectionOpen.value
+          ? [
+              {
+                label: tm("library.background_projection_stop"),
+                icon: ICONS.PROJECTION.STOP,
+                action: () => void stopProjection(),
+              },
+            ]
+          : []),
+      { separator: true },
+      {
+        label: tm("library.background_projection_manage"),
+        icon: ICONS.UI.OPEN_IN_NEW,
+        action: openModule,
+      },
+    ],
+  };
 }
 
 function add(file: BackgroundProjectionFile): void {

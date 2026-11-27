@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
-import { youtubeThumb } from "@/helpers/OnlineVideo";
 import { newItem } from "@/modules/liturgy/item";
 import type { ProgramItem } from "@/types/Presentation";
 import { programView } from "../previewView";
@@ -19,20 +18,21 @@ function onlineVideo(url: string): ProgramItem {
 }
 
 describe("prévia do item do programa", () => {
-  it("mostra a thumbnail do YouTube para um vídeo online", () => {
+  it("leva o vídeo on-line para a prévia tocar, não só a miniatura", () => {
     expect(
       programView(onlineVideo("https://www.youtube.com/watch?v=abc12345678"))
-    ).toMatchObject({
-      kind: "image",
+    ).toEqual({
+      kind: "online",
       title: "Vídeo do culto",
+      icon: expect.any(String),
       playable: true,
-      url: youtubeThumb("abc12345678"),
+      videoId: "abc12345678",
     });
   });
 
   it("aceita o link curto do YouTube", () => {
-    expect(programView(onlineVideo("https://youtu.be/xyz78901234")).url).toBe(
-      youtubeThumb("xyz78901234")
+    expect(programView(onlineVideo("https://youtu.be/xyz78901234")).videoId).toBe(
+      "xyz78901234"
     );
   });
 

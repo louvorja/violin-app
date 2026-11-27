@@ -78,7 +78,9 @@
     <LibraryOnlineVideos
       v-else-if="tab === 'online_videos'"
       :live-video-id="liveVideoId"
+      :return-path="returnPath"
       v-bind="relay"
+      @show-on-return="(target: Playable | null) => emit('show-on-return', target)"
     />
     <LibraryMedia
       v-else-if="tab === 'media'"
