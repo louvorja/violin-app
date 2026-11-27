@@ -18,17 +18,25 @@ async function openLibrary(page) {
 
 const NAMES = [
   "Abertura da Escola Sabatina",
+  "Abertura da Escola Sabatina (Clássico)",
   "5 minutos para a Lição",
+  "5 minutos para a Lição (Clássico)",
   "1 minuto para a Lição",
+  "1 minuto para a Lição (Clássico)",
+  "Anúncios v1",
+  "Anúncios v2",
   "Oração Intercessória",
-  "Encerramento do Culto",
+  "Encerramento do Culto (sábado)",
+  "Encerramento do Culto (quarta e domingo)",
 ];
 
 test("a biblioteca já vem com os Litúrgicos, e o que for apagado não volta", async ({ page }) => {
   await openLibrary(page);
   for (const name of NAMES) {
-    await expect(page.locator(".media-grid-item").filter({ hasText: name })).toBeVisible();
+    // "Abertura..." também casa com "Abertura... (Clássico)": basta um visível.
+    await expect(page.locator(".media-grid-item").filter({ hasText: name }).first()).toBeVisible();
   }
+  await expect(page.locator(".media-grid-item").filter({ hasText: "(Clássico)" })).toHaveCount(3);
   await expect(page.locator(".media-grid-item-category").first()).toHaveText("Litúrgicos");
 
   // Apaga um e reabre: não é recriado.
