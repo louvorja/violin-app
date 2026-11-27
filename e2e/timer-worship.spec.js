@@ -63,8 +63,9 @@ test("duração: pausar congela e retomar continua de onde parou", async ({ page
   await toggle(page).click();
   await page.clock.runFor(60_000);
   await expect(display(page)).toContainText(/00:0[89]:\d\d/);
-  const atPause = await display(page).innerText();
+  // Lê depois de pausar: entre ler e clicar o relógio da página ainda anda.
   await toggle(page).click();
+  const atPause = await display(page).innerText();
   await page.clock.runFor(120_000);
   await expect(display(page)).toContainText(atPause.split("\n")[0]);
   await toggle(page).click();
@@ -109,15 +110,18 @@ test("rodando, tirar minutos não toca o aviso de 5 min fora de hora", async ({ 
 test("Exibir: relógio, os dois e nada", async ({ page }) => {
   await openWorship(page);
   await setTarget(page, "11:00");
-  const exibir = page.locator('[data-testid="ribbon-btn-timer_worship_second_line"] select');
+  const exibir = async (label) => {
+    await page.getByTestId("ribbon-btn-timer_worship_second_line").getByRole("combobox").click();
+    await page.getByRole("option", { name: label, exact: true }).click();
+  };
   const extra = page.getByTestId("timer-worship-extra");
   await expect(extra).toHaveText("11:00");
-  await exibir.selectOption("clock");
+  await exibir("Relógio");
   await expect(extra).toHaveText(/10:58:\d\d/);
-  await exibir.selectOption("both");
+  await exibir("Os dois");
   await expect(extra).toContainText("11:00");
   await expect(extra).toContainText(/10:58:\d\d/);
-  await exibir.selectOption("none");
+  await exibir("Nada");
   await expect(extra).toHaveCount(0);
 });
 
