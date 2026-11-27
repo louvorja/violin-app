@@ -258,6 +258,37 @@ describe("Temporizador de Culto — duração", () => {
   });
 });
 
+describe("Temporizador de Culto — duração sem pulo de 1 s", () => {
+  it("iniciar no meio do segundo não mostra um segundo a mais", () => {
+    const c = cfg({ defineBy: "duration", durationMinutes: 6 });
+    const s = createCountdownState();
+    const now = at(9, 0, 0, 700);
+    start(s, c, now);
+    expect(s.seconds).toBe(360);
+    tick(s, c, now + 50);
+    expect(s.seconds).toBe(360);
+    tick(s, c, at(9, 0, 1, 0));
+    expect(s.seconds).toBe(359);
+  });
+
+  it("retomar no meio do segundo não sobe 1 s e volta", () => {
+    const c = cfg({ defineBy: "duration", durationMinutes: 6 });
+    const s = createCountdownState();
+    start(s, c, at(9, 0, 0, 0));
+    tick(s, c, at(9, 0, 30, 0));
+    pause(s, c, at(9, 0, 30, 100));
+    expect(s.seconds).toBe(330);
+    // Retoma com 0,7 s do segundo andado: a tela não pode mostrar 331.
+    const resumeAt = at(9, 2, 0, 700);
+    start(s, c, resumeAt);
+    expect(s.seconds).toBe(330);
+    tick(s, c, resumeAt + 50);
+    expect(s.seconds).toBe(330);
+    tick(s, c, at(9, 2, 1, 0));
+    expect(s.seconds).toBe(329);
+  });
+});
+
 describe("shiftTarget", () => {
   it("dá a volta na meia-noite", () => {
     expect(shiftTarget("23:55", 10)).toBe("00:05");

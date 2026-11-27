@@ -136,8 +136,10 @@ export function start(state: CountdownState, cfg: CountdownConfig, now: number):
   if (state.started && !finished(state, cfg)) {
     // Retomar. Por duração, continua de onde parou; por hora de término, o
     // relógio andou durante a pausa e `endAt` continua valendo.
+    // O zero cai na virada do segundo do relógio, como o resto da tela: a
+    // primeira volta fica um pouco mais curta, mas nunca mostra 1 s a mais.
     if (cfg.defineBy === "duration") {
-      state.endAt = Math.round(now / 1000) * 1000 + state.frozenLeft * 1000;
+      state.endAt = wholeSecond(now) + state.frozenLeft * 1000;
     }
     state.running = true;
     state.lastLeft = secondsLeft(state.endAt, now);
@@ -149,7 +151,7 @@ export function start(state: CountdownState, cfg: CountdownConfig, now: number):
   let left: number;
   if (cfg.defineBy === "duration") {
     left = cfg.durationMinutes * 60;
-    state.endAt = Math.round(now / 1000) * 1000 + left * 1000;
+    state.endAt = startAt + left * 1000;
   } else {
     left = secondsUntilTarget(cfg.target, startAt);
     // Regressivo aceita horário já passado: começa no excedido, ou no zero sem ele.
