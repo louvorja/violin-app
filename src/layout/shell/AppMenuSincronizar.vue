@@ -459,6 +459,16 @@
               </template>
             </ProgressBar>
 
+            <!-- Fora da barra de progresso, o resultado sumia junto com ela: um
+                 "Continuar" recusado ou com falhas voltava à tela sem dizer nada. -->
+            <p
+              v-if="completedMsg && !downloading && !preparing"
+              class="opt-folder-path sinc-download-result"
+              role="status"
+            >
+              {{ completedMsg }}
+            </p>
+
             <p v-if="!ftpOk && !downloading && !preparing" class="opt-hint sinc-hint-gap">
               {{ $t("options.collections_download.no_connection_hint") }}
             </p>
@@ -1449,7 +1459,7 @@ async function startDownloads(): Promise<void> {
     return;
   }
 
-  await sync.startDownloads(files);
+  await sync.startDownloads(files, { source: "sync_menu" });
   await sync.waitForDownloadQueue();
   await scanLocalCache({ force: true });
 }
@@ -1606,9 +1616,12 @@ async function continuePartial(target: PartialTarget): Promise<void> {
   } finally {
     preparing.value = false;
   }
-  if (files.length === 0) return;
+  if (files.length === 0) {
+    sync.downloadCompletedMsg.value = t("options.collections_download.no_files");
+    return;
+  }
 
-  await sync.startDownloads(files);
+  await sync.startDownloads(files, { source: "sync_continue" });
   await sync.waitForDownloadQueue();
   await scanLocalCache({ force: true });
 }

@@ -76,6 +76,8 @@ describe("processo utilitário das ferramentas de vídeo", () => {
       host.execFile(process.execPath, ["-e", "setTimeout(() => {}, 30_000)"], { timeout: 200 }, resolve)
     );
     expect(error.message).toMatch(/não respondeu em 200 ms/);
+    // As ferramentas distinguem "demorou" (antivírus) de "não executa" por esta marca.
+    expect(error.timedOut).toBe(true);
     expect(Date.now() - started).toBeLessThan(10_000);
   });
 

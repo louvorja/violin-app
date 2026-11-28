@@ -376,6 +376,8 @@ describe("ensure — ffmpeg conferido antes de baixar", () => {
     const res = await manager.ensure(A);
     expect(res).toMatchObject({ ok: true, installedTools: true });
     expect(tools.reset).toHaveBeenCalledTimes(1);
+    // Só o ffmpeg: o yt-dlp e o provedor de PO token ficam, sem rebaixar ~60 MB.
+    expect(tools.reset).toHaveBeenCalledWith({ only: "ffmpeg" });
     expect(tools.ensure).toHaveBeenCalledTimes(1);
     expect(run).toHaveBeenCalledTimes(1);
     expect(tools.reset.mock.invocationCallOrder[0]).toBeLessThan(run.mock.invocationCallOrder[0]);
@@ -428,6 +430,41 @@ describe("ensure — ffmpeg conferido antes de baixar", () => {
     expect(await manager.ensure(A)).toMatchObject({ ok: false, error: { kind: "tool" } });
     expect(tools.reset).toHaveBeenCalledTimes(1); // só o reparo prévio
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("ferramenta que falha na instalação devolve qual e por quê, em código fechado", async () => {
+    const error = Object.assign(new OnlineVideoError("tool", "C:\\Users\\x\\ffmpeg.exe não respondeu"), {
+      tool: "ffmpeg",
+      toolFailure: "probe_timeout",
+    });
+    const tools = fakeTools({
+      ready: vi.fn(() => false),
+      ensure: vi.fn(async () => {
+        throw error;
+      }),
+    });
+    const { manager, run } = make({ tools });
+    const res = await manager.ensure(A);
+    expect(res).toMatchObject({
+      ok: false,
+      error: { kind: "tool" },
+      diagnostic: { failure_phase: "tools", tool_failure: "probe_timeout", failed_tool: "ffmpeg" },
+    });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("código de falha fora da lista não vai para o diagnóstico", async () => {
+    const error = Object.assign(new OnlineVideoError("tool", "x"), { tool: "/bin/sh", toolFailure: "livre" });
+    const tools = fakeTools({
+      ready: vi.fn(() => false),
+      ensure: vi.fn(async () => {
+        throw error;
+      }),
+    });
+    const { manager } = make({ tools });
+    const res = await manager.ensure(A);
+    expect(res.diagnostic).not.toHaveProperty("tool_failure");
+    expect(res.diagnostic).not.toHaveProperty("failed_tool");
   });
 
   it("a barra reserva o começo para as ferramentas também no reparo prévio", async () => {

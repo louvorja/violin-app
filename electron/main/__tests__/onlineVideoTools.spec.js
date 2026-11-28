@@ -8,9 +8,35 @@ import fs from "fs";
 import zlib from "zlib";
 import crypto from "crypto";
 import JSZip from "jszip";
+import { execFile } from "child_process";
 
 const require = createRequire(import.meta.url);
-const { createTools, parseSums, YTDLP_ASSETS, FFMPEG_ASSETS } = require("../onlineVideo/tools.js");
+const {
+  createTools,
+  parseSums,
+  YTDLP_ASSETS,
+  FFMPEG_ASSETS,
+  FIRST_RUN_TIMEOUT_MS,
+  HEALTH_TIMEOUT_MS,
+} = require("../onlineVideo/tools.js");
+
+/**
+ * `execFile` que finge o antivírus segurando a primeira execução: quem casar com `slow`
+ * "estoura o tempo" do jeito que o processo utilitário avisa. Os outros rodam de verdade.
+ * Guarda o tempo-limite pedido em cada chamada.
+ */
+function antivirusExec(slow) {
+  const calls = [];
+  const impl = (bin, args, opts, cb) => {
+    calls.push({ bin: path.basename(bin), args, timeout: opts.timeout });
+    if (slow(bin, args)) {
+      setImmediate(() => cb(Object.assign(new Error(`não respondeu em ${opts.timeout} ms`), { timedOut: true }), "", ""));
+      return;
+    }
+    execFile(bin, args, opts, cb);
+  };
+  return { impl, calls };
+}
 
 const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 
@@ -202,7 +228,7 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     const tools = make({
       ffmpegAssets: { "linux-x64": { name: "ffmpeg-fake.gz", sha256: "0".repeat(64) } },
     });
-    await expect(tools.ensure()).rejects.toMatchObject({ kind: "tool" });
+    await expect(tools.ensure()).rejects.toMatchObject({ kind: "tool", tool: "ffmpeg", toolFailure: "checksum" });
     expect(fs.existsSync(path.join(binDir, "ffmpeg"))).toBe(false);
     expect(fs.readdirSync(binDir).filter((n) => n.endsWith(".download"))).toEqual([]);
   });
@@ -247,6 +273,38 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
     });
     await expect(tools.ensure()).rejects.toMatchObject({ kind: "tool" });
     expect(fs.existsSync(path.join(binDir, "ffmpeg"))).toBe(false);
+  });
+
+  it("ffmpeg novo que demora na primeira execução (antivírus) fica instalado, com o mesmo prazo do yt-dlp", async () => {
+    const av = antivirusExec((bin) => path.basename(bin).startsWith("ffmpeg"));
+    const tools = make({ execFileImpl: av.impl });
+    const paths = await tools.ensure();
+    expect(tools.ready()).toBe(true);
+    expect(fs.readFileSync(paths.ffmpeg)).toEqual(FFMPEG);
+    expect(fs.readdirSync(binDir).filter((n) => n.endsWith(".download"))).toEqual([]);
+    const probe = av.calls.find((c) => c.bin.startsWith("ffmpeg"));
+    expect(probe.timeout).toBe(FIRST_RUN_TIMEOUT_MS);
+    // O próximo pedido não rebaixa nada.
+    hits.length = 0;
+    await tools.ensure();
+    expect(hits).toEqual([]);
+  });
+
+  it("yt-dlp novo que demora na primeira execução fica instalado, sem versão anotada", async () => {
+    const av = antivirusExec((bin) => path.basename(bin) === "yt-dlp_fake");
+    const tools = make({ execFileImpl: av.impl });
+    await tools.ensure();
+    expect(tools.ready()).toBe(true);
+    expect((await tools.info()).ytdlpVersion).toBeNull();
+    expect(hits.filter((u) => u.startsWith("/yt/yt-dlp_fake"))).toEqual(["/yt/yt-dlp_fake.zip"]);
+  });
+
+  it("binário que não executa continua recusado, com a ferramenta e o motivo", async () => {
+    const tools = make({
+      execFileImpl: (bin, args, opts, cb) => setImmediate(() => cb(Object.assign(new Error("EACCES"), { code: "EACCES" }), "", "")),
+    });
+    await expect(tools.ensure()).rejects.toMatchObject({ kind: "tool", tool: "yt-dlp", toolFailure: "probe_failed" });
+    expect(tools.ready()).toBe(false);
   });
 
   it("HTTP de erro vira falha de rede", async () => {
@@ -422,6 +480,33 @@ describe.skipIf(process.platform === "win32")("createTools", () => {
 
     fs.writeFileSync(path.join(binDir, "ffmpeg"), Buffer.from([0, 1, 2, 3]), { mode: 0o755 });
     expect(await tools.ffmpegWorks()).toBe(false);
+  });
+
+  it("ffmpeg que demora a responder (antivírus) não é dado como quebrado", async () => {
+    const tools = make();
+    await tools.ensure();
+    const av = antivirusExec((bin) => path.basename(bin) === "ffmpeg");
+    const slow = make({ execFileImpl: av.impl });
+    expect(await slow.ffmpegWorks()).toBe(true);
+    expect(await slow.works()).toBe(true);
+    expect(av.calls.find((c) => c.bin === "ffmpeg").timeout).toBe(HEALTH_TIMEOUT_MS);
+    // Não executar continua sendo quebrado.
+    fs.writeFileSync(path.join(binDir, "ffmpeg"), Buffer.from([0, 1, 2, 3]), { mode: 0o755 });
+    expect(await make().ffmpegWorks()).toBe(false);
+  });
+
+  it("reset só do ffmpeg mantém o yt-dlp: a reinstalação baixa só o ffmpeg", async () => {
+    const tools = make();
+    await tools.ensure();
+    const ytdlp = tools.paths().ytdlp;
+    await tools.reset({ only: "ffmpeg" });
+    expect(fs.existsSync(path.join(binDir, "ffmpeg"))).toBe(false);
+    expect(fs.existsSync(ytdlp)).toBe(true);
+    expect((await tools.info()).ytdlpVersion).toBe("2026.01.02");
+    hits.length = 0;
+    await tools.ensure();
+    expect(hits).toEqual(["/ff/ffmpeg-fake.gz"]);
+    expect(tools.ready()).toBe(true);
   });
 
   it("works: verdadeiro com tudo instalado", async () => {

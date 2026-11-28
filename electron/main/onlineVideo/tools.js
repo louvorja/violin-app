@@ -39,8 +39,18 @@ const YTDLP_ASSETS = {
   "linux-arm64": { zip: "yt-dlp_linux_aarch64.zip", exe: "yt-dlp_linux_aarch64", file: "yt-dlp_linux_aarch64" },
 };
 
-/** A primeira execução de uma pasta nova espera o antivírus examinar cada arquivo (6 s no macOS). */
+/**
+ * A primeira execução de um binário novo espera o antivírus examinar cada arquivo (6 s no
+ * macOS; num Windows lento, com o Defender, passa de minuto). Vale para o yt-dlp e para o
+ * ffmpeg: os dois chegam do mesmo jeito, recém-baixados e sem assinatura.
+ */
 const FIRST_RUN_TIMEOUT_MS = 120_000;
+/**
+ * Conferência de um binário já instalado. O antivírus volta a examiná-lo depois de uma
+ * atualização de definições, e a primeira execução do dia num PC lento demora: 15 s davam
+ * "quebrado" para um ffmpeg são, e o reparo apagava tudo e rebaixava pela rede.
+ */
+const HEALTH_TIMEOUT_MS = 60_000;
 /** Checar se há yt-dlp novo custa ~1,5 KB; baixar custa 24–54 MB. */
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 /** Uma versão com menos que isso não é trocada pela checagem periódica, só por uma falha. */
@@ -126,8 +136,25 @@ const POT_ASSETS = {
   },
 };
 
-function toolError(message) {
-  return new OnlineVideoError("tool", message);
+/**
+ * Por que a ferramenta falhou, num código fechado que vai para a telemetria (a mensagem
+ * não vai): `probe_timeout` não respondeu a tempo, `probe_failed` não executou,
+ * `unexpected_output` respondeu outra coisa, `checksum` SHA-256 não confere,
+ * `no_checksum` a release não publica o SHA-256, `archive` o zip não abriu,
+ * `missing_exe` o zip não traz o executável.
+ */
+const TOOL_FAILURES = ["probe_timeout", "probe_failed", "unexpected_output", "checksum", "no_checksum", "archive", "missing_exe"];
+
+function toolError(message, toolFailure) {
+  const error = new OnlineVideoError("tool", message);
+  if (toolFailure) error.toolFailure = toolFailure;
+  return error;
+}
+
+/** Anota qual ferramenta falhou, sem sobrescrever quem já anotou. */
+function blame(error, tool) {
+  if (error instanceof OnlineVideoError && error.kind === "tool" && !error.tool) error.tool = tool;
+  return error;
 }
 
 function networkError(message) {
@@ -226,7 +253,7 @@ async function downloadTo(url, dest, { expectedSha256, gunzip = false, onProgres
   const sha256 = hash.digest("hex");
   if (expectedSha256 && sha256 !== expectedSha256.toLowerCase()) {
     await fs.remove(tmp);
-    throw toolError(`SHA-256 não confere para ${path.basename(dest)}`);
+    throw toolError(`SHA-256 não confere para ${path.basename(dest)}`, "checksum");
   }
   return { tmp, sha256, bytes: received };
 }
@@ -244,10 +271,35 @@ const VERSION_RE = /^\d{4}\.\d{2}\.\d{2}/;
 function run(bin, args, { timeout = 15_000, execFileImpl = execFile } = {}) {
   return new Promise((resolve, reject) => {
     execFileImpl(bin, args, { timeout, windowsHide: true }, (err, stdout, stderr) => {
-      if (err) reject(toolError(`${path.basename(bin)} não executa: ${err.message}`));
-      else resolve(`${stdout}${stderr}`);
+      if (!err) {
+        resolve(`${stdout}${stderr}`);
+        return;
+      }
+      // `child_process.execFile` marca `killed` ao estourar o tempo; o processo utilitário, `timedOut`.
+      const timedOut = err.timedOut === true || (err.killed === true && timeout > 0);
+      reject(
+        timedOut
+          ? toolError(`${path.basename(bin)} não respondeu em ${timeout} ms`, "probe_timeout")
+          : toolError(`${path.basename(bin)} não executa: ${err.message}`, "probe_failed")
+      );
     });
   });
+}
+
+/**
+ * Primeira execução de um binário cujo SHA-256 acabou de conferir. Se só o tempo estourou,
+ * o arquivo é o certo e quem demorou foi o antivírus: fica instalado (devolve null) em vez
+ * de ir para o lixo e ser rebaixado no próximo pedido, para estourar o tempo de novo.
+ * Não executar, ou responder outra coisa, continua recusando.
+ */
+async function firstRun(bin, args, { execFileImpl }) {
+  try {
+    return await run(bin, args, { execFileImpl, timeout: FIRST_RUN_TIMEOUT_MS });
+  } catch (error) {
+    if (error?.toolFailure !== "probe_timeout") throw error;
+    console.warn(`[onlineVideo] ${path.basename(bin)} demorou a responder na primeira execução; mantido (SHA-256 conferido)`);
+    return null;
+  }
 }
 
 /**
@@ -353,10 +405,12 @@ function createTools(cfg) {
     return result;
   }
 
+  /** Versão do yt-dlp recém-baixado; null se ele demorou demais para responder (antivírus). */
   async function probeYtdlp(file) {
-    const out = await run(file, ["--version"], { execFileImpl, timeout: FIRST_RUN_TIMEOUT_MS });
+    const out = await firstRun(file, ["--version"], { execFileImpl });
+    if (out === null) return null;
     const version = out.trim().split(/\s+/)[0];
-    if (!VERSION_RE.test(version)) throw toolError(`Versão inesperada do yt-dlp: ${version}`);
+    if (!VERSION_RE.test(version)) throw toolError(`Versão inesperada do yt-dlp: ${version}`, "unexpected_output");
     return version;
   }
 
@@ -385,11 +439,11 @@ function createTools(cfg) {
           await extractZip(tmp, target, { signal });
         } catch (error) {
           if (signal?.aborted) throw new OnlineVideoError("cancelled", "Cancelado");
-          throw toolError(`O zip do yt-dlp não abriu: ${error.message}`);
+          throw toolError(`O zip do yt-dlp não abriu: ${error.message}`, "archive");
         } finally {
           await fs.remove(tmp).catch(() => {});
         }
-        if (!(await fs.pathExists(file))) throw toolError(`O zip do yt-dlp não traz ${exeName}`);
+        if (!(await fs.pathExists(file))) throw toolError(`O zip do yt-dlp não traz ${exeName}`, "missing_exe");
         await fs.chmod(file, 0o755);
         return { dir, exe: exeName, asset: assetName, sha256, version: await probeYtdlp(file) };
       }
@@ -442,7 +496,7 @@ function createTools(cfg) {
       }
       if (!result) {
         const fileSha = asset.file ? parseSums(sums, asset.file) : null;
-        if (!fileSha) throw zipError || toolError(`Sem checksum publicado para ${asset.zip}`);
+        if (!fileSha) throw zipError || toolError(`Sem checksum publicado para ${asset.zip}`, "no_checksum");
         result = await installVersion(asset.file, fileSha, {
           zip: false,
           exeName: `yt-dlp${exe}`,
@@ -480,8 +534,12 @@ function createTools(cfg) {
     });
     try {
       await fs.chmod(tmp, 0o755);
-      const out = await run(tmp, ["-version"], { execFileImpl });
-      if (!/ffmpeg version/i.test(out)) throw toolError("O ffmpeg baixado não respondeu como esperado");
+      // Antes, 15 s: o ffmpeg novo (~80 MB) reprovava enquanto o antivírus o examinava, ia
+      // para o lixo e era rebaixado a cada pedido, para reprovar de novo.
+      const out = await firstRun(tmp, ["-version"], { execFileImpl });
+      if (out !== null && !/ffmpeg version/i.test(out)) {
+        throw toolError("O ffmpeg baixado não respondeu como esperado", "unexpected_output");
+      }
       await fs.move(tmp, ffmpegPath, { overwrite: true });
       await writeMeta({ ffmpeg: { sha256, installedAt: Date.now() } });
     } catch (error) {
@@ -529,8 +587,10 @@ function createTools(cfg) {
     });
     try {
       await fs.chmod(tmp, 0o755);
-      const out = await run(tmp, ["--version"], { execFileImpl });
-      if (!/bgutil-pot/i.test(out)) throw toolError("O provedor de PO token não respondeu como esperado");
+      const out = await firstRun(tmp, ["--version"], { execFileImpl });
+      if (out !== null && !/bgutil-pot/i.test(out)) {
+        throw toolError("O provedor de PO token não respondeu como esperado", "unexpected_output");
+      }
       await fs.move(tmp, potPath, { overwrite: true });
       await writeMeta({ pot: { version: POT_VERSION, sha256, installedAt: Date.now() } });
     } catch (error) {
@@ -619,8 +679,16 @@ function createTools(cfg) {
               }
             }
           };
-          if (!fs.pathExistsSync(ytdlpPath())) await installYtdlp({ onProgress: notify });
-          if (!fs.pathExistsSync(ffmpegPath)) await installFfmpeg({ onProgress: notify });
+          if (!fs.pathExistsSync(ytdlpPath())) {
+            await installYtdlp({ onProgress: notify }).catch((error) => {
+              throw blame(error, "yt-dlp");
+            });
+          }
+          if (!fs.pathExistsSync(ffmpegPath)) {
+            await installFfmpeg({ onProgress: notify }).catch((error) => {
+              throw blame(error, "ffmpeg");
+            });
+          }
           if (needsPot()) {
             try {
               // Provedor é opcional: sem ele o yt-dlp/ffmpeg continuam válidos e
@@ -748,27 +816,47 @@ function createTools(cfg) {
    * um ffmpeg quebrado não faz o yt-dlp falhar ao subir, só ao juntar as trilhas,
    * e o erro chega igual ao de um yt-dlp desatualizado.
    */
-  async function ffmpegWorks() {
+  /**
+   * Quebrado é não executar ou responder outra coisa. Demorar não é: o binário que já
+   * funcionou e só esperou o antivírus fica, porque descartá-lo custa rebaixar tudo pela
+   * rede e o mesmo exame do antivírus no arquivo novo.
+   */
+  async function healthy(file, args, pattern) {
+    if (!fs.pathExistsSync(file)) return false;
     try {
-      const out = await run(ffmpegPath, ["-version"], { execFileImpl });
-      return /ffmpeg version/i.test(out);
-    } catch {
-      return false;
+      return pattern.test((await run(file, args, { execFileImpl, timeout: HEALTH_TIMEOUT_MS })).trim());
+    } catch (error) {
+      if (error?.toolFailure !== "probe_timeout") return false;
+      console.warn(`[onlineVideo] ${path.basename(file)} demorou a responder; mantido`);
+      return true;
     }
+  }
+
+  function ffmpegWorks() {
+    return healthy(ffmpegPath, ["-version"], /ffmpeg version/i);
   }
 
   async function works() {
-    try {
-      const yt = await run(ytdlpPath(), ["--version"], { execFileImpl });
-      if (!VERSION_RE.test(yt.trim())) return false;
-    } catch {
-      return false;
-    }
+    if (!(await healthy(ytdlpPath(), ["--version"], VERSION_RE))) return false;
     return ffmpegWorks();
   }
 
-  /** Descarta os binários para o próximo `ensure` recomeçar do zero (arquivo corrompido, arquitetura errada). */
-  async function reset() {
+  /**
+   * Descarta os binários para o próximo `ensure` recomeçar do zero (arquivo corrompido,
+   * arquitetura errada). Com `only: "ffmpeg"`, só o ffmpeg: um ffmpeg quebrado não é motivo
+   * para jogar fora o yt-dlp e o provedor de PO token, que custam outros ~60 MB de rede.
+   */
+  async function reset({ only } = {}) {
+    if (only === "ffmpeg") {
+      await fs.remove(ffmpegPath);
+      await fs.remove(`${ffmpegPath}.download`);
+      await updateMeta((meta) => {
+        const next = { ...meta };
+        delete next.ffmpeg;
+        return next;
+      }).catch(() => {});
+      return;
+    }
     await exclusive(async () => {
       _current = null;
       await fs.remove(ytdlpRoot);
@@ -827,6 +915,9 @@ function createTools(cfg) {
 
 module.exports = {
   createTools,
+  TOOL_FAILURES,
+  FIRST_RUN_TIMEOUT_MS,
+  HEALTH_TIMEOUT_MS,
   parseSums,
   downloadTo,
   fetchText,

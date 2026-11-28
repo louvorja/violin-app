@@ -23,6 +23,33 @@ const _retiringQueues = new Set();
 let _filesUrl = "";
 let _apiUrl = "";
 let _apiToken = "";
+// Quanto um novo início espera o processo da fila anterior sair. O renderer
+// recebe "terminou" antes de o utility encerrar; sem esta espera, "Continuar"
+// clicado logo depois era recusado e a tela voltava como se nada acontecesse.
+const TIMING = { retireWaitMs: 10000 };
+
+/** Resolve `true` quando todas as filas anteriores saíram, `false` no prazo. */
+function _awaitRetiredQueues(timeoutMs) {
+  const pending = [..._retiringQueues].filter((queue) => !queue.workerExitObserved);
+  for (const queue of _retiringQueues) if (queue.workerExitObserved) _retiringQueues.delete(queue);
+  if (!pending.length) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let left = pending.length;
+    const listeners = new Map();
+    const finish = (value) => {
+      clearTimeout(timer);
+      for (const [queue, listener] of listeners) queue.off("worker-exited", listener);
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    timer.unref?.();
+    for (const queue of pending) {
+      const listener = () => { if (--left === 0) finish(true); };
+      listeners.set(queue, listener);
+      queue.once("worker-exited", listener);
+    }
+  });
+}
 
 function _validatedFiles(files, filesDir, filesUrl) {
   const entries = validateDownloadEntries(files, {
@@ -156,12 +183,16 @@ async function checkConnection() {
 async function startDownload(files, webContents) {
   if (_shuttingDown) throw new Error("O aplicativo está encerrando; não é possível iniciar outro download.");
   require("../storageAccess.js").assertWritable("media");
-  if (_activeQueue || _startingDownload || _retiringQueues.size) throw new Error("Download já em andamento ou aguardando o encerramento do processo anterior.");
+  if (_activeQueue || _startingDownload) throw new Error("Download já em andamento.");
   if (!_filesUrl) throw new Error("filesUrl não configurada — chame setApiConfig antes");
 
   _startingDownload = true;
   const generation = _shutdownGeneration;
   try {
+    if (_retiringQueues.size && !(await _awaitRetiredQueues(TIMING.retireWaitMs))) {
+      throw new Error("O processo anterior de download ainda não encerrou. Tente de novo em alguns segundos.");
+    }
+    if (_shuttingDown || generation !== _shutdownGeneration) throw new Error("O preparo do download foi cancelado pelo encerramento do aplicativo.");
     const filesDir = paths.filesDir();
     const filesUrl = _filesUrl;
     const apiToken = _apiToken;
@@ -276,6 +307,7 @@ module.exports = {
   shutdown,
   resumeAfterShutdownFailure,
   checkFiles,
+  TIMING,
   getChildProcessContext: workerDiagnostics.getChildProcessContext,
   setWorkerDiagnosticsEnabled: workerDiagnostics.setEnabled,
 };

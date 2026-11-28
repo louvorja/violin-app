@@ -255,6 +255,12 @@
 
     <!-- Baixando -->
     <div v-else class="sc-download">
+      <!-- Entre o clique e o início da fila a lista de arquivos ainda está sendo montada. -->
+      <div v-if="downloadRunning && !isBusy" class="sc-scanning">
+        <LjSpinner :size="32" class="sc-scanning__spinner" />
+        <span class="sc-scanning__label">{{ $t("startup_check.preparing_download") }}</span>
+      </div>
+
       <section v-if="sync.downloading.value" class="sc-progress">
         <header class="sc-section-head">
           <LjIcon :icon="ICONS.MEDIA.DISC" :size="18" class="sc-section-head__icon" />
@@ -306,9 +312,9 @@
         </div>
       </section>
 
-      <div v-if="!isBusy" class="sc-done">
+      <div v-if="!downloadPending" class="sc-done">
         <LjIcon :icon="ICONS.UI.CHECK_CIRCLE" :size="48" class="sc-done__icon" />
-        <div class="sc-done__title">{{ $t("options.collections_download.completed") }}</div>
+        <div class="sc-done__title">{{ doneTitle }}</div>
         <div v-if="sync.downloadCompletedMsg.value" class="sc-done__detail">
           {{ sync.downloadCompletedMsg.value }}
         </div>
@@ -383,7 +389,7 @@
 
       <template v-else>
         <LjButton
-          v-if="isBusy"
+          v-if="downloadPending"
           size="sm"
           variant="ghost"
           class="sc-footer__left"
@@ -392,7 +398,7 @@
         >
           {{ $t("startup_check.minimize") }}
         </LjButton>
-        <LjButton v-if="!isBusy" size="sm" :icon="ICONS.UI.CHECK" @click="onClose">
+        <LjButton v-if="!downloadPending" size="sm" :icon="ICONS.UI.CHECK" @click="onClose">
           {{ $t("actions.close") }}
         </LjButton>
         <LjButton
@@ -410,7 +416,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -433,6 +439,11 @@ import {
 import { formatBibleDownloadDetail } from "@/helpers/BackgroundTaskDetail";
 import { formatEta } from "@/helpers/Eta";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import {
+  openStartupCheckSession,
+  type StartupCheckCloseVia,
+  type StartupCheckSession,
+} from "@/helpers/DownloadTelemetry";
 
 interface Album {
   id_album: number;
@@ -457,9 +468,14 @@ interface ScanData {
   albumsTotal: number;
 }
 
-const props = defineProps<{
-  modelValue: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean;
+    /** Aberta pelo boot ou pelo botão em Sincronizar (só para a telemetria). */
+    source?: "boot" | "menu";
+  }>(),
+  { source: "boot" }
+);
 
 const emit = defineEmits<{
   (e: "update:modelValue", v: boolean): void;
@@ -476,6 +492,12 @@ const expandedCategory = ref<number | null>(null);
 const catalogAvailable = ref(false);
 const detailedScan = ref(false);
 const catalogActionFailed = ref(false);
+/** A rodada de "Baixar" do diálogo, da montagem da lista até a última versão da Bíblia. */
+const downloadRunning = ref(false);
+/** O operador pediu Cancelar durante a rodada; nada mais deve começar depois disso. */
+const downloadCancelled = ref(false);
+/** A rodada atual pôs coletâneas na fila (o progresso do sync é compartilhado entre rodadas). */
+const collectionsQueued = ref(false);
 const scanData = ref<ScanData>({
   categories: [],
   hymnalIds: [],
@@ -489,6 +511,23 @@ const scanData = ref<ScanData>({
 
 const sync = useSyncManager();
 const bgTasks = useBackgroundTasks();
+
+// Uma sessão de telemetria por abertura: abriu, terminou a verificação, travou
+// em "Verificando…", fechou (e por onde). Sem dados por coletânea ou música.
+let checkSession: StartupCheckSession | null = null;
+function openCheckSession(): void {
+  checkSession?.closed("unmounted");
+  checkSession = openStartupCheckSession(props.source, () => ({
+    bundleInstalling: sync.bundleInstalling.value,
+    ftpChecking: sync.ftpChecking.value,
+    busy: isBusy.value,
+  }));
+}
+function closeCheckSession(via: StartupCheckCloseVia): void {
+  checkSession?.closed(via);
+  checkSession = null;
+}
+watch(view, (v) => checkSession?.view(v));
 const bundleEta = computed(() => {
   const seconds = bgTasks.tasks.value.find((task) => task.id === "db-bundle")?.etaSeconds;
   return seconds == null ? "" : t("shell.background_tasks.eta", { time: formatEta(seconds) });
@@ -500,6 +539,19 @@ const canDownload = computed(() => sync.ftpOk.value && !sync.ftpChecking.value);
 const isBusy = computed(
   () => sync.bundleInstalling.value || sync.downloading.value || sync.bibleDownloading.value
 );
+
+/**
+ * A tela de download só pode dizer "concluído" depois da rodada inteira: entre a
+ * lista de arquivos e a fila, e entre a fila e a Bíblia, nada está baixando, e
+ * `isBusy` sozinho mostraria o fim antes da hora.
+ */
+const downloadPending = computed(() => downloadRunning.value || isBusy.value);
+
+const doneTitle = computed(() => {
+  const { total, done, failed } = sync.downloadProgress.value;
+  if (!collectionsQueued.value || total <= 0) return t("startup_check.download_done");
+  return t("options.collections_download.completed", { downloaded: done, failed });
+});
 
 const ftpLabel = computed(() =>
   sync.ftpChecking.value
@@ -537,6 +589,7 @@ watch(
   (v) => {
     model.value = v;
     if (v) {
+      openCheckSession();
       view.value = "scanning";
       startScan();
     }
@@ -562,16 +615,21 @@ function toggleExpandedCategory(id: number): void {
 }
 
 function onClose(): void {
+  closeCheckSession("close_button");
   emit("update:modelValue", false);
 }
 
 /** Fechamento vindo do próprio diálogo (clique fora / ESC). */
 function onDialogModel(v: boolean): void {
   model.value = v;
-  if (!v) onClose();
+  if (!v) {
+    closeCheckSession("dismiss");
+    onClose();
+  }
 }
 
 function minimizeToBackground(): void {
+  closeCheckSession("background");
   emit("update:modelValue", false);
 }
 
@@ -580,6 +638,8 @@ async function startScan({ detailed = false }: { detailed?: boolean } = {}): Pro
 
   view.value = "scanning";
   catalogActionFailed.value = false;
+  const scanStartedAt = performance.now();
+  let scanOutcome: "ok" | "catalog_unavailable" | "failed" = "failed";
   try {
     // Compartilha a instalação com a Shell, inclusive se ela já começou.
     // A leitura detalhada continua opcional e usa somente o catálogo local.
@@ -606,11 +666,18 @@ async function startScan({ detailed = false }: { detailed?: boolean } = {}): Pro
     selectedAlbums.value = [...result.cachedAlbums];
     selectedHymnal.value = result.hymnalCached;
     selectedBibles.value = result.downloadedBibles;
+    scanOutcome = result.catalogAvailable ? "ok" : "catalog_unavailable";
   } catch (error) {
     console.error("[StartupCheck] scan:", error);
     catalogActionFailed.value = true;
     detailedScan.value = false;
   } finally {
+    checkSession?.scanFinished(scanOutcome, {
+      durationMs: performance.now() - scanStartedAt,
+      detailed,
+      albumsTotal: scanData.value.albumsTotal,
+      cachedAlbums: scanData.value.cachedAlbums.size,
+    });
     view.value = "summary";
     void sync.checkFtp();
   }
@@ -633,6 +700,7 @@ async function prepareCatalog(): Promise<void> {
 }
 
 function cancelActiveWork(): void {
+  if (downloadRunning.value) downloadCancelled.value = true;
   sync.cancelBundle();
   sync.cancelDownloads();
 }
@@ -711,16 +779,24 @@ async function performDownload(
   selectedAlbums.value = [...albums];
   selectedHymnal.value = hymnal;
   selectedBibles.value = bibles;
+  downloadRunning.value = true;
+  downloadCancelled.value = false;
+  collectionsQueued.value = false;
+  // O sync é singleton: sem limpar, uma rodada só de Bíblia herdava a mensagem da anterior.
+  sync.downloadCompletedMsg.value = "";
 
   try {
     const files = await sync.collectFiles(albums, hymnal, scanData.value.hymnalIds, false, []);
 
-    if (files.length > 0) {
-      await sync.startDownloads(files);
+    if (files.length > 0 || bibles.length > 0) checkSession?.downloadStarted();
+    if (files.length > 0 && !downloadCancelled.value) {
+      collectionsQueued.value = true;
+      await sync.startDownloads(files, { source: "startup_check" });
       await sync.waitForDownloadQueue();
     }
 
-    if (bibles.length > 0) {
+    // Cancelar durante as coletâneas não pode deixar a Bíblia começar em seguida.
+    if (bibles.length > 0 && !downloadCancelled.value) {
       const lang = $userdata.get(KEYS.OPTIONS.LANGUAGE, "pt") || "pt";
       await sync.downloadBibleVersions(bibles, scanData.value.bibleVersions, lang);
     }
@@ -734,17 +810,31 @@ async function performDownload(
       e instanceof CatalogIncompleteError
         ? t("options.collections_download.catalog_incomplete")
         : (e as Error).message || t("options.collections_download.collect_failed");
+  } finally {
+    downloadRunning.value = false;
   }
 
-  view.value = "summary";
+  if (downloadCancelled.value) {
+    // Volta ao resumo com o que de fato ficou no disco, para baixar o resto depois.
+    downloadCancelled.value = false;
+    await startScan({ detailed: true });
+    return;
+  }
+  // Fica na tela de download, que agora mostra a conclusão e o botão Fechar. Voltar
+  // ao resumo exibia os números de antes do download (0/68, "Baixar Tudo"), como se
+  // nada tivesse sido baixado.
 }
 
 onMounted(() => {
   if (model.value) {
+    openCheckSession();
     view.value = "scanning";
     startScan();
   }
 });
+
+// O pai também desmonta o diálogo (v-if); sem fechamento registrado, conta assim.
+onBeforeUnmount(() => closeCheckSession("unmounted"));
 </script>
 
 <style scoped>

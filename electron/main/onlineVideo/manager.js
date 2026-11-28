@@ -10,6 +10,7 @@ const collections = require("./collections.js");
 const { createLinkCache } = require("./linkCache.js");
 const progressive = require("./progressive.js");
 const { isVideoId } = require("./ids.js");
+const { TOOL_FAILURES } = require("./tools.js");
 const { WorkPriority, canStartWork } = require("../presentationAdmission.js");
 const { ensureCollectionDirectory } = require("../sharedCollectionDirs.js");
 const { publishCollectionFile } = require("../collectionPublication.js");
@@ -86,11 +87,24 @@ function waitForFirstData(promise, timeoutMs, signal) {
   });
 }
 
+const FAILED_TOOLS = ["yt-dlp", "ffmpeg", "pot"];
+
+/** Qual ferramenta e por quê, em códigos fechados: a mensagem (com caminhos) não sai do main. */
+function toolFailureDiagnostic(error) {
+  if (!(error instanceof OnlineVideoError) || error.kind !== "tool") return null;
+  const out = {};
+  if (TOOL_FAILURES.includes(error.toolFailure)) out.tool_failure = error.toolFailure;
+  if (FAILED_TOOLS.includes(error.tool)) out.failed_tool = error.tool;
+  return Object.keys(out).length ? out : null;
+}
+
 function fail(error, diagnostic) {
   const kind = error instanceof OnlineVideoError ? error.kind : "unknown";
   const status = Number.isInteger(error?.httpStatus) && error.httpStatus >= 400 && error.httpStatus <= 599 ? error.httpStatus : undefined;
+  const toolInfo = toolFailureDiagnostic(error);
+  const detail = toolInfo ? { ...(diagnostic || {}), ...toolInfo } : diagnostic;
   return { ok: false, error: { kind, message: error?.message || String(error), ...(status ? { http_status: status } : {}) },
-    ...(diagnostic ? { diagnostic } : {}) };
+    ...(detail ? { diagnostic: detail } : {}) };
 }
 
 async function settleCancelled(promises) {
@@ -432,8 +446,10 @@ function createManager(cfg) {
       // despercebido: sem ele o yt-dlp NÃO falha — cai para o melhor formato que já
       // vem inteiro (360p) e o telão sairia borrado sem nenhum aviso. Conferir custa
       // ~50 ms. (O yt-dlp quebrado, esse, falha alto e é tratado mais abaixo.)
+      // Só o ffmpeg: apagar também o yt-dlp e o provedor por causa dele obrigava a
+      // rebaixar tudo pela rede — num PC lento, minutos, e o pedido falhava no meio.
       if (!installedCore && !(await tools.ffmpegWorks())) {
-        await tools.reset();
+        await tools.reset({ only: "ffmpeg" });
         needsInstall = true;
         toolsFresh = true;
       }

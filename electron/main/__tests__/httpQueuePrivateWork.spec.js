@@ -23,7 +23,7 @@ async function fixture() {
 }
 
 async function start(baseUrl, folders) {
-  const queue = new HttpQueue({ baseUrl, ...folders, concurrency: 1, retryDelaysMs: [] });
+  const queue = new HttpQueue({ baseUrl, ...folders, concurrency: 1, retryDelaysMs: [], roundDelaysMs: [] });
   queue.add([{ remote: "/audio.opus", local: "audio.opus" }]);
   let result;
   queue.on("queue-done", (value) => { result = value; });

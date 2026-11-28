@@ -21,6 +21,10 @@ import type { Music } from "@/types/Music";
 import type { BibleBook } from "@/types/Bible";
 import { resolveMediaReference } from "@/helpers/MediaUrl";
 import { reportReliabilityEvent, reportReliabilityFailure } from "@/helpers/ReliabilityDiagnostics";
+import {
+  startCollectionDownloadRun,
+  type CollectionDownloadSource,
+} from "@/helpers/DownloadTelemetry";
 
 interface FileEntry {
   remote: string;
@@ -957,13 +961,17 @@ export function useSyncManager() {
       bibleCancelled.value = false;
       bgTasks.updateTask("sync-bible", { status: "cancelled" });
     } else {
-      const completedVersionIds = versionIds.filter((versionId) => !incompleteVersions.has(versionId));
+      const completedVersionIds = versionIds.filter(
+        (versionId) => !incompleteVersions.has(versionId)
+      );
       const previous = $userdata.get<number[]>(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, []) || [];
       $userdata.set(KEYS.STORAGE.BIBLE_DOWNLOADED_VERSIONS, [
         ...new Set([...previous.filter((id) => !versionIds.includes(id)), ...completedVersionIds]),
       ]);
       if (failedKeys.size > 0 || abortedByFailure) {
-        const reason = rateLimited ? "HTTP 429" : `${failedKeys.size} capítulo(s) indisponível(eis)`;
+        const reason = rateLimited
+          ? "HTTP 429"
+          : `${failedKeys.size} capítulo(s) indisponível(eis)`;
         bibleCompletedMsg.value = reason;
         bgTasks.updateTask("sync-bible", { status: "error", detail: reason, error: reason });
       } else {
@@ -1034,7 +1042,8 @@ export function useSyncManager() {
     hymnalIds: number[],
     selectedHymnal1996 = false,
     hymnal1996Ids: number[] = [],
-    onProgress?: (done: number, total: number) => void
+    onProgress?: (done: number, total: number) => void,
+    { includeDisabled = false }: { includeDisabled?: boolean } = {}
   ): Promise<FileEntry[]> {
     const attempt = () =>
       untilStalled(
@@ -1046,7 +1055,8 @@ export function useSyncManager() {
             selectedHymnal1996,
             hymnal1996Ids,
             alive,
-            onProgress
+            onProgress,
+            includeDisabled
           ),
         COLLECT_STALL_MS
       );
@@ -1097,7 +1107,8 @@ export function useSyncManager() {
     selectedHymnal1996: boolean,
     hymnal1996Ids: number[],
     alive: () => void,
-    onProgress?: (done: number, total: number) => void
+    onProgress?: (done: number, total: number) => void,
+    includeDisabled = false
   ): Promise<FileEntry[]> {
     await refreshCatalogBounded();
     alive();
@@ -1105,8 +1116,11 @@ export function useSyncManager() {
     const albumIds = [...selectedAlbums];
     const allMusicIds = new Set<number>();
 
-    // Álbuns desativados pelo usuário não devem ser baixados.
-    const disabled = $userdata.get<number[]>(KEYS.OPTIONS.DISABLED_ALBUMS, []) || [];
+    // Álbuns desativados pelo usuário não entram numa seleção ampla. Quem pede
+    // um álbum pelo nome ("Continuar" daquela linha) quer esse álbum.
+    const disabled = includeDisabled
+      ? []
+      : $userdata.get<number[]>(KEYS.OPTIONS.DISABLED_ALBUMS, []) || [];
 
     await Promise.all(
       albumIds
@@ -1148,7 +1162,13 @@ export function useSyncManager() {
   ): Promise<FileEntry[]> {
     // Montar a lista a partir de um catálogo de versão anterior baixaria pelos
     // endereços antigos; a leitura local do scan não deve gerar rede.
-    if (!localOnly) return collectFiles(new Set([albumId]), false, []);
+    // A lista de um álbum é pedida por ele mesmo: a verificação local já o
+    // mostra como parcial mesmo desativado, e o "Continuar" precisa achar os
+    // mesmos arquivos, ou volta à tela sem baixar nada.
+    if (!localOnly)
+      return collectFiles(new Set([albumId]), false, [], false, [], undefined, {
+        includeDisabled: true,
+      });
     const files = new Map<string, FileEntry>();
     const album = await fetchJson<MusicData>(`album_${albumId}`, { localOnly });
     if (!album) throw new CatalogIncompleteError(`album_${albumId}`);
@@ -1287,9 +1307,14 @@ export function useSyncManager() {
     invalidateScanCache();
   }
 
-  async function startDownloads(files: FileEntry[]): Promise<void> {
+  async function startDownloads(
+    files: FileEntry[],
+    { source = "unknown" }: { source?: CollectionDownloadSource } = {}
+  ): Promise<void> {
     if (!Platform.download || files.length === 0) return;
     invalidateScanCache();
+    // Um evento por rodada (início e desfecho), nunca por arquivo.
+    const run = startCollectionDownloadRun(source, files.length);
 
     downloading.value = true;
     downloadProgress.value = { done: 0, failed: 0, total: files.length, currentFile: "" };
@@ -1322,6 +1347,7 @@ export function useSyncManager() {
 
     cleanupFns.push(
       Platform.download.onProgress((d: any) => {
+        run.activity();
         downloadProgress.value = {
           ...downloadProgress.value,
           currentFile: d.file ? (d.file.split("/").pop() ?? "") : "",
@@ -1330,6 +1356,7 @@ export function useSyncManager() {
     );
     cleanupFns.push(
       Platform.download.onFileDone(() => {
+        run.fileDone();
         downloadProgress.value = {
           ...downloadProgress.value,
           done: downloadProgress.value.done + 1,
@@ -1340,6 +1367,7 @@ export function useSyncManager() {
     cleanupFns.push(
       Platform.download.onFileError((d: { error?: unknown } | null) => {
         firstError ??= downloadErrorKind(d?.error);
+        run.fileError();
         downloadFailedCount.value += 1;
         downloadProgress.value = {
           ...downloadProgress.value,
@@ -1386,8 +1414,10 @@ export function useSyncManager() {
                 });
               })
               .catch(() => {});
+            run.finish("failed", { downloaded: result?.downloaded, failed, code, firstError });
           } else {
             bgTasks.completeTask("sync-collections");
+            run.finish("completed", { downloaded: result?.downloaded });
           }
           releaseListeners();
         }
@@ -1397,6 +1427,7 @@ export function useSyncManager() {
       Platform.download.onQueueCancelled(() => {
         downloading.value = false;
         bgTasks.updateTask("sync-collections", { status: "cancelled" });
+        run.finish("cancelled", { firstError });
         releaseListeners();
       })
     );
@@ -1412,8 +1443,10 @@ export function useSyncManager() {
         downloadProgress.value = { done: 0, failed: 0, total: 0, currentFile: "" };
         downloadCompletedMsg.value = result.message || "Já está atualizado.";
         bgTasks.dismissTask("sync-collections");
+        run.finish("nothing_to_do");
         releaseListeners();
       } else if (result?.queued != null) {
+        run.queued(result.queued);
         downloadProgress.value = { ...downloadProgress.value, total: result.queued };
         bgTasks.updateTask("sync-collections", { _total: result.queued });
         if (result.queued > 0) {
@@ -1424,6 +1457,7 @@ export function useSyncManager() {
       downloading.value = false;
       downloadCompletedMsg.value = (e as Error).message;
       bgTasks.dismissTask("sync-collections");
+      run.finish("start_failed", { firstError: downloadErrorKind((e as Error)?.message) });
       releaseListeners();
     }
   }

@@ -1025,7 +1025,8 @@ function createWindow() {
     updater.init({
       channel: "latest",
       autoCheck: false,
-      autoDownload: opts.auto_download_updates === true,
+      // Ligado por padrão; só um "não" salvo desliga (updateChannel.js).
+      autoDownload: updateChannel.resolveAutoDownload(opts.auto_download_updates),
       useBeta,
     });
   }

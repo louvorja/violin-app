@@ -363,6 +363,7 @@ import {
 } from "reka-ui";
 import { module as manifest } from "../manifest";
 import { aplicarOrdemDoDrag } from "../dragOrder";
+import { duplicarAnuncio } from "../duplicate";
 import { loadAnnouncements } from "../storage";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ColorField from "@/components/inputs/ColorField.vue";
@@ -744,25 +745,15 @@ function ctxEdit(): void {
 function ctxDuplicate(): void {
   const a = contextMenuItem.value;
   if (!a) return;
-  const max = sorted.value.length ? Math.max(...sorted.value.map((x) => x.ordem)) : 0;
-  const dup: Announcement = {
-    ...structuredClone(a),
-    id: crypto.randomUUID(),
-    nome: `${a.nome} (cópia)`,
-    ordem: max + 1,
-  };
-  // structuredClone do plain (após des selecionar) — safe.
-  const plain: Announcement = {
-    id: dup.id,
-    nome: dup.nome,
-    ordem: dup.ordem,
-    texto: dup.texto || "",
-    style: { ...dup.style },
-  };
-  announcements.value.push(plain);
-  selectedId.value = plain.id;
+  const dup = duplicarAnuncio(
+    a,
+    sorted.value.map((x) => x.ordem),
+    crypto.randomUUID()
+  );
+  announcements.value.push(dup);
+  selectedId.value = dup.id;
   if (mobileLayout.value) mobilePane.value = "edit";
-  void saveItem(plain);
+  void saveItem(dup);
 }
 
 function ctxDelete(): void {
