@@ -230,3 +230,27 @@ test("Tocar Todas toca o CD inteiro, na ordem das faixas (#50)", async ({ page }
   const media = page.locator(".lj-window").filter({ has: page.locator(".media-body") });
   await expect(media.locator(".lj-window-title")).toHaveText("Música 1");
 });
+
+test("duplo clique na faixa toca a música e fecha o álbum; em cima de um botão, não", async ({
+  page,
+}) => {
+  await start(page);
+  const dialog = await openAlbum(page, 9876508, [music(993005, 1), music(993006, 2)]);
+  const opened = () =>
+    page.evaluate(async () => {
+      const appData = (await import("/src/helpers/AppData.ts")).default;
+      return appData.get("modules.album.show", false);
+    });
+
+  // Em cima do botão da linha o duplo clique é do botão: o álbum continua aberto.
+  const row = dialog.locator("tbody tr").first();
+  await row.hover();
+  await row
+    .getByTestId("mmt-btn-sing")
+    .evaluate((el) => el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+  await expect(dialog).toBeVisible();
+
+  await dialog.locator("tbody tr").nth(1).locator(".album-track-name").dblclick();
+  await expect(dialog).not.toBeVisible();
+  expect(await opened()).toBe(false);
+});

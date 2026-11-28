@@ -243,3 +243,36 @@ test("confirmação de excluir não abre armada: Enter não exclui", async ({ pa
   await expect(question(page)).toHaveCount(0);
   await expect(item).toHaveCount(0);
 });
+
+test("Músicas: duplo clique na faixa toca o cantado; Shift+duplo clique pede o playback", async ({
+  page,
+}) => {
+  await start(page);
+  await page.locator("#ribbon-tab-collections").click();
+  await page.locator('[data-testid="ribbon-btn-musics"]').click();
+  const row = page.locator('[data-testid="music-row-3"]');
+  await expect(row).toBeVisible();
+
+  // Sem playback no acervo de teste: o Shift avisa e não toca a voz no lugar.
+  await row
+    .locator("td")
+    .first()
+    .dblclick({ modifiers: ["Shift"] });
+  await expect(page.getByText("não tem playback")).toBeVisible();
+  await expectNothingPlays(page);
+
+  await row.locator("td").first().dblclick();
+  await expect(slide(page)).toContainText("Grandioso És Tu");
+  // O duplo clique não deixa o título "pintado" de seleção.
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? "")).toBe("");
+});
+
+test("Hinário: duplo clique no hino toca e deixa a linha selecionada", async ({ page }) => {
+  await start(page);
+  await page.locator("#ribbon-tab-collections").click();
+  await page.locator('[data-testid="ribbon-btn-hymnal"]').click();
+  const row = page.locator("tr").filter({ hasText: "Castelo de Glória" });
+  await row.locator("td").nth(1).dblclick();
+  await expect(page.locator(".hymnal-row--selected")).toContainText("Castelo de Glória");
+  await expect(slide(page)).toContainText("Castelo de Glória");
+});

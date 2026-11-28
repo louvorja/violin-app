@@ -291,3 +291,14 @@ test("cartões e tabela respeitam os temas e a largura de 390 px", async ({ page
   await expect(dialog).toContainText("Canções para a Família");
   await expect(dialog).toContainText("A luz chegou para cantar");
 });
+
+test("duplo clique na faixa toca o cantado", async ({ page }) => {
+  await start(page);
+  await page.getByRole("button", { name: albums[0].name, exact: true }).click();
+  // Sem áudio no acervo de teste: tocar aparece como o pedido da música ao banco.
+  const requested = page.waitForRequest((req) =>
+    /\/music_9876801$/.test(new URL(req.url()).pathname)
+  );
+  await page.locator(".ch-table tbody tr").first().locator(".ch-music-name").dblclick();
+  await requested;
+});

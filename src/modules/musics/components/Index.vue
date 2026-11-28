@@ -140,6 +140,7 @@
           :class="{ 'lj-music-row--active': index === nav.index.value }"
           :data-testid="`music-row-${item.id_music}`"
           @mousemove="nav.setActive(index)"
+          @dblclick="onRowDblClick($event, item)"
         >
           <td class="musics-name-cell">
             {{ item.name }}
@@ -266,7 +267,7 @@ import Platform from "@/helpers/Platform";
 import Media from "@/composables/useMedia";
 import { useQuickSearch } from "@/composables/useQuickSearch";
 import { useListNavigation } from "@/composables/useListNavigation";
-import { isQuickPlayEnter, quickPlay } from "@/helpers/QuickPlay";
+import { isQuickPlayEnter, quickPlay, quickPlayFromRow } from "@/helpers/QuickPlay";
 import AppData from "@/helpers/AppData";
 import DateTime from "@/helpers/DateTime";
 import $userdata from "@/helpers/UserData";
@@ -461,6 +462,11 @@ async function onSearchKey(event) {
   if (nav.handleArrow(event)) return;
   const music = nav.active.value;
   if (music && quickPlay(music, event.shiftKey)) quickSearch.afterPlay();
+}
+
+// Duplo clique na faixa toca o cantado (Shift: playback), como o Enter da busca.
+function onRowDblClick(event, item) {
+  if (quickPlayFromRow(event, item)) quickSearch.afterPlay();
 }
 const scroll = ref({});
 const has_scroll = ref(false);
