@@ -6,7 +6,8 @@
     "title_ctx": "Configurar Biblia",
     "show_reference": "Mostrar Referencia",
     "show_version": "Mostrar Versión",
-    "reference_only": "Mostrar Solo Referencia"
+    "reference_only": "Mostrar Solo Referencia",
+    "grid_layout": "Diseño en cuadrícula"
   },
   "project_start": "Iniciar Proyección",
   "project_stop": "Detener Proyección",

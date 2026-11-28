@@ -227,3 +227,57 @@ test("trocar A para B e voltar para A durante a carga preserva o capítulo", asy
     .poll(() => selected(page))
     .toMatchObject({ id_bible_version: 1, chapter: 1, verses: [4], text: "A: Gênesis 1:4" });
 });
+
+/** Referências que a Bíblia mandou projetar, na ordem (canal das janelas de projeção). */
+async function watchProjected(page) {
+  await page.evaluate(() => {
+    window.__projected = [];
+    const ch = new BroadcastChannel("louvorja");
+    ch.onmessage = (e) => {
+      if (e.data?.type === "bible_verse_intent" && e.data.payload?.reference) {
+        window.__projected.push(e.data.payload.reference);
+      }
+    };
+  });
+  return () => page.evaluate(() => window.__projected);
+}
+
+async function setGridLayout(page, on) {
+  await page.evaluate(async (on) => {
+    const { default: userData } = await import("/src/helpers/UserData.ts");
+    const { KEYS } = await import("/src/constants/UserDataKeys.ts");
+    userData.set(KEYS.MODULES.BIBLE.GRID_LAYOUT, on);
+  }, on);
+}
+
+test("layout em grade: livro, capítulo e versículo pelos botões; desligado volta às colunas", async ({
+  page,
+}) => {
+  await start(page);
+  const projected = await watchProjected(page);
+  await expect(page.getByTestId("bible-grid")).toHaveCount(0);
+  await setGridLayout(page, true);
+  const grid = page.getByTestId("bible-grid");
+  await expect(grid).toBeVisible();
+  await expect(page.locator(".bible-col--books")).toHaveCount(0);
+
+  // Livro e capítulo pela grade; o texto do capítulo continua à direita.
+  await grid.locator("#listBook_43").click();
+  await grid.locator("#listChapter_2").click();
+  await expect(page.locator("#listVerse_1")).toContainText("A: João 2:1");
+
+  // Versículo pelo número projeta (padrão), e Shift monta intervalo como na lista.
+  await page.getByTestId("bible-verse-num-4").click();
+  await page.getByTestId("bible-verse-num-6").click({ modifiers: ["Shift"] });
+  await expect.poll(async () => (await projected()).at(-1)).toBe("João 2:4-6 (A)");
+  await expect(page.locator(".bible-verse--active")).toHaveCount(3);
+
+  // Histórico vira painel por cima e começa fechado.
+  await expect(page.locator(".bible-col--history")).toHaveCount(0);
+  await page.getByText("Exibir Histórico").click();
+  await expect(page.locator(".bible-col--history")).toBeVisible();
+
+  await setGridLayout(page, false);
+  await expect(page.getByTestId("bible-grid")).toHaveCount(0);
+  await expect(page.locator(".bible-col--books")).toBeVisible();
+});
