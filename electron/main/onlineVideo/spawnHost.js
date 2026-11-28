@@ -169,7 +169,7 @@ function createSpawnHost({
     child.stderr.setEncoding("utf8").on("data", (chunk) => (stderr += chunk));
     const timer = timeout
       ? setTimeout(() => {
-          failure = new Error(`não respondeu em ${timeout} ms`);
+          failure = Object.assign(new Error(`não respondeu em ${timeout} ms`), { timedOut: true });
           child.killTree();
         }, timeout)
       : null;

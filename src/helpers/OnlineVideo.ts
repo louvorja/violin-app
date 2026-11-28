@@ -45,6 +45,10 @@ export interface OnlineVideoDiagnostic {
   tool_repaired?: boolean;
   delivery_path?: string;
   failure_phase?: string;
+  /** Por que a ferramenta falhou (só em falhas `tool`): código fechado, nunca a mensagem. */
+  tool_failure?: string;
+  /** Qual ferramenta falhou: yt-dlp, ffmpeg ou o provedor de PO token. */
+  failed_tool?: string;
 }
 
 /** IPC diagnostics are an allowlist, never raw provider output, paths or headers. */
@@ -63,6 +67,16 @@ export function telemetryDiagnostics(value: unknown): OnlineVideoDiagnostic {
     tool_version_source: ["installed_metadata", "unavailable", "not_used"],
     delivery_path: ["cache", "download", "progressive", "ytdlp_fallback"],
     failure_phase: ["tools", "extraction", "cdn_download", "ytdlp_download", "mux"],
+    tool_failure: [
+      "probe_timeout",
+      "probe_failed",
+      "unexpected_output",
+      "checksum",
+      "no_checksum",
+      "archive",
+      "missing_exe",
+    ],
+    failed_tool: ["yt-dlp", "ffmpeg", "pot"],
   } as const;
   for (const key of Object.keys(allowed) as Array<keyof typeof allowed>) {
     if (typeof raw[key] === "string" && (allowed[key] as readonly string[]).includes(raw[key]))

@@ -817,3 +817,42 @@ it("correlaciona origem, fase, HTTP e versão sem enviar campos arbitrários do 
   });
   expect(JSON.stringify(failed)).not.toMatch(/private|never-send/);
 });
+
+it("falha de ferramenta diz qual e por quê, só em códigos fechados", async () => {
+  h.platform.onlineVideo = fakeApi({
+    ensure: vi.fn(async () => ({
+      ok: false,
+      error: { kind: "tool", message: "C:\\Users\\Fulano\\AppData\\ffmpeg.exe não respondeu" },
+      diagnostic: {
+        failure_phase: "tools",
+        tool_failure: "probe_timeout",
+        failed_tool: "ffmpeg",
+      },
+    })),
+  });
+  await ensure(ID, () => {});
+  const failed = h.track.mock.calls.find(
+    ([event]) => event === "online_video_download_failed"
+  )?.[1];
+  expect(failed).toMatchObject({
+    kind: "tool",
+    tool_failure: "probe_timeout",
+    failed_tool: "ffmpeg",
+  });
+  expect(JSON.stringify(failed)).not.toMatch(/Fulano/);
+
+  h.track.mockClear();
+  h.platform.onlineVideo = fakeApi({
+    ensure: vi.fn(async () => ({
+      ok: false,
+      error: { kind: "tool", message: "x" },
+      diagnostic: { tool_failure: "C:\\caminho\\livre", failed_tool: "outra" },
+    })),
+  });
+  await ensure(ID, () => {});
+  const invalid = h.track.mock.calls.find(
+    ([event]) => event === "online_video_download_failed"
+  )?.[1];
+  expect(invalid).not.toHaveProperty("tool_failure");
+  expect(invalid).not.toHaveProperty("failed_tool");
+});
