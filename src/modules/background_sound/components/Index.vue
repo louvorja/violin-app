@@ -1044,13 +1044,6 @@ watch(
   }
 );
 
-watch(
-  () => bg.isPlaying.value,
-  (playing) => {
-    $userdata.set(KEYS.MODULES.BACKGROUND_SOUND.IS_PLAYING, playing);
-  }
-);
-
 function seekProgress(pct: number): void {
   bg.seek(pct);
 }

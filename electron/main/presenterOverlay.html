@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>LouvorJA — laser e lousa</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+      #board {
+        position: fixed;
+        display: none;
+        background: #ffffff;
+      }
+      #ink {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      /* Grande o bastante para uma TV vista do fundo da igreja. */
+      #laser {
+        position: fixed;
+        width: 44px;
+        height: 44px;
+        margin: -22px 0 0 -22px;
+        border-radius: 50%;
+        background: radial-gradient(circle, #fff 0 14%, #ff2020 30%, rgba(255, 30, 30, 0.6) 55%, rgba(255, 0, 0, 0) 72%);
+        box-shadow: 0 0 28px 10px rgba(255, 40, 40, 0.7);
+        display: none;
+        pointer-events: none;
+        transition: left 40ms linear, top 40ms linear;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="board"></div>
+    <canvas id="ink"></canvas>
+    <div id="laser"></div>
+    <script src="presenterOverlay.page.js"></script>
+  </body>
+</html>

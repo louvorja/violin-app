@@ -1,5 +1,5 @@
 <template>
-  <ContextMenuRoot>
+  <ContextMenuRoot :open="menuOpen" @update:open="onMenuOpenChange">
     <ContextMenuTrigger as-child>
       <div
         v-bind="$attrs"
@@ -26,7 +26,7 @@
       </div>
     </ContextMenuTrigger>
 
-    <ContextMenuPortal>
+    <ContextMenuPortal v-if="showMenu">
       <ContextMenuContent class="lj-ui-float lj-menu lj-category-chip__menu">
         <ContextMenuItem
           v-if="addAllLabel && count > 0"
@@ -62,6 +62,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue";
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -74,7 +75,7 @@ import { ICONS } from "@/config/Icons";
 
 defineOptions({ inheritAttrs: false });
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     categoryId?: string;
     name?: string;
@@ -90,6 +91,8 @@ withDefaults(
     showPlay?: boolean;
     editLabel?: string;
     editable?: boolean;
+    /** Em contextos de filtro, o chip não abre o menu de ações. */
+    showMenu?: boolean;
   }>(),
   {
     categoryId: "",
@@ -106,8 +109,15 @@ withDefaults(
     showPlay: false,
     editLabel: "",
     editable: true,
+    showMenu: true,
   }
 );
+
+const menuOpen = ref(false);
+
+function onMenuOpenChange(open: boolean): void {
+  menuOpen.value = props.showMenu ? open : false;
+}
 
 defineEmits<{
   select: [];
@@ -125,7 +135,7 @@ defineEmits<{
   gap: var(--lj-space-2);
   padding: 3px 10px;
   border: 1.5px solid var(--category-chip-color);
-  border-radius: var(--lj-radius-pill);
+  border-radius: var(--lj-radius-lg);
   background: transparent;
   color: var(--category-chip-color);
   cursor: pointer;

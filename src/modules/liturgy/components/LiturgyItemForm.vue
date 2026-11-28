@@ -3,10 +3,24 @@
     :model-value="modelValue"
     :title="isEditing ? t('dialog.edit_title') : t('dialog.add_title')"
     :icon="isEditing ? ICONS.ACTIONS.EDIT : ICONS.ACTIONS.ADD"
-    size="lg"
+    size="md"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <!-- ─── Campos comuns a todos os tipos ─── -->
+    <div v-if="form.tipo !== LiturgyItemTypeEnum.ITENS_AGENDADOS" class="lif-row">
+      <LjField
+        class="lif-field lif-field--grow"
+        :label="t('inputs.item_name')"
+        :error="formErrors?.item"
+      >
+        <LjInput
+          :model-value="form.item"
+          data-testid="item-name"
+          :placeholder="t('inputs.item_name_placeholder')"
+          @update:model-value="setFormField('item', $event)"
+        />
+      </LjField>
+    </div>
     <div class="lif-row">
       <LjField
         class="lif-field lif-field--type"
@@ -20,20 +34,6 @@
             setFormField('tipo', $event);
             onTypeChange();
           "
-        />
-      </LjField>
-
-      <LjField
-        v-if="form.tipo !== LiturgyItemTypeEnum.ITENS_AGENDADOS"
-        class="lif-field lif-field--grow"
-        :label="t('inputs.item_name')"
-        :error="formErrors?.item"
-      >
-        <LjInput
-          :model-value="form.item"
-          data-testid="item-name"
-          :placeholder="t('inputs.item_name_placeholder')"
-          @update:model-value="setFormField('item', $event)"
         />
       </LjField>
 
@@ -57,7 +57,8 @@
           />
         </LjPopover>
       </LjField>
-
+    </div>
+    <div class="lif-row">
       <LjField class="lif-field lif-field--time" :label="t('inputs.time')">
         <!-- Um <input disabled> não dispara eventos de ponteiro, então o gatilho
              do tooltip é o invólucro, não o campo. -->
@@ -155,6 +156,45 @@
           />
         </div>
       </LjField>
+    </section>
+
+    <!-- ─── Painel BÍBLIA ─── -->
+    <section v-if="form.tipo === LiturgyItemTypeEnum.BIBLIA" class="lif-panel">
+      <h3 class="lif-panel__title">{{ t("types.biblia") }}</h3>
+      <LjField layout="column" :label="t('inputs.bible_version')">
+        <LjSelect
+          :model-value="bibleVersionId"
+          :items="bibleVersionOptions"
+          :placeholder="t('inputs.bible_version_pick')"
+          @update:model-value="onBibleVersionChange"
+        />
+      </LjField>
+      <LjField layout="column" :label="t('inputs.bible_verse')" :error="formErrors?.bible">
+        <div class="lif-inline">
+          <span class="lif-bible-ref" :title="form.bible?.reference || undefined">
+            {{ form.bible?.reference || t("inputs.bible_none") }}
+          </span>
+          <LjButton :icon="ICONS.ACTIONS.SEARCH" @click="biblePickerOpen = true">
+            {{ form.bible ? t("inputs.bible_change") : t("inputs.bible_pick") }}
+          </LjButton>
+          <LjButton
+            v-if="form.bible"
+            variant="ghost"
+            icon-only
+            :icon="ICONS.ACTIONS.CLOSE"
+            :title="t('inputs.bible_remove')"
+            :aria-label="t('inputs.bible_remove')"
+            @click="clearBibleSelection"
+          />
+        </div>
+        <p v-if="form.bible" class="lif-hint lif-bible-text">{{ form.bible.text }}</p>
+      </LjField>
+      <BibleSpotlight
+        v-model="biblePickerOpen"
+        :version-id="bibleVersionId"
+        :project-locally="false"
+        @select="onBibleSelected"
+      />
     </section>
 
     <!-- ─── Painel MÚSICA ─── -->
@@ -492,7 +532,7 @@
 
 <script setup lang="ts">
 import { useLiturgyI18n } from "../i18n";
-import { ref, watch, computed, nextTick, onBeforeUnmount } from "vue";
+import { ref, watch, computed, nextTick, onBeforeUnmount, defineAsyncComponent } from "vue";
 import {
   LjButton,
   LjCheckbox,
@@ -518,13 +558,17 @@ import LiturgyLibrarySearch, {
   type LibrarySearchItem,
 } from "./LiturgyLibrarySearch.vue";
 import $idb from "@/helpers/IndexedDB";
+import Database from "@/helpers/Database";
 import { DB_TABLE } from "@/constants/DbTables";
+import { bibleRefOf, type BibleChapter } from "@/helpers/BibleText";
+import type { BibleBook, BibleSearchResult, BibleVersion } from "@/types/Bible";
 import type { LiturgyItem, LiturgyMusicItem, ScheduledCategory } from "@/types/Liturgy";
 import type { OverlaySlot } from "@/types/Overlay";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import { canLinkOverlay } from "../overlayLink";
 import Platform from "@/helpers/Platform";
 import $userdata from "@/helpers/UserData";
+import $appdata from "@/helpers/AppData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { buildMusicOptions, musicMatches, type MusicOption } from "../musicOptions";
 import $snackbar from "@/helpers/Snackbar";
@@ -540,6 +584,8 @@ const props = withDefaults(
     editIndex?: number;
     form: LiturgyItem;
     formErrors?: Record<string, string>;
+    /** O nome atual foi preenchido pelo formulário ao trocar o tipo. */
+    isAutoItemTitle?: (value?: string | null) => boolean;
     fileImporting?: boolean;
     colors?: string[];
     musicsList?: LiturgyMusicItem[];
@@ -569,15 +615,252 @@ const props = withDefaults(
     blocoItems: () => [],
     videosList: () => [],
     overlaySlots: () => [],
+    isAutoItemTitle: () => false,
     reloadVideos: async () => {},
   }
 );
 
 defineEmits<{ "update:modelValue": [value: boolean] }>();
 
-const { t } = useLiturgyI18n();
+const { t, locale } = useLiturgyI18n();
+
+const BibleSpotlight = defineAsyncComponent(() => import("@/components/BibleSpotlight.vue"));
 
 const isEditing = computed(() => props.editIndex >= 0);
+
+/* ─── Bíblia ─── */
+
+const biblePickerOpen = ref(false);
+const bibleVersions = ref<BibleVersion[]>([]);
+const bibleBooks = ref<BibleBook[]>([]);
+const bibleVersionId = ref<number | null>(null);
+/** Versão salva no trecho que não está baixada: aparece no select em vez de sumir. */
+const bibleVersionMissing = ref<{ id: number; label: string } | null>(null);
+/** Descarta a resposta de uma troca de versão que o operador já desfez. */
+let bibleVersionToken = 0;
+
+/** A sigla e o nome da versão, já validados como texto vindo do banco. */
+function versionParts(version: BibleVersion | null | undefined): {
+  abbreviation: string;
+  name: string;
+} {
+  return {
+    abbreviation: typeof version?.abbreviation === "string" ? version.abbreviation.trim() : "",
+    name: typeof version?.name === "string" ? version.name.trim() : "",
+  };
+}
+
+const bibleVersionOptions = computed(() => {
+  const list = bibleVersions.value.map((v) => {
+    const { abbreviation, name } = versionParts(v);
+    return {
+      value: v.id_bible_version,
+      // A mesma forma do módulo Bíblia: "NVI - Nova Versão Internacional".
+      label: abbreviation && name ? `${abbreviation} - ${name}` : abbreviation || name,
+    };
+  });
+  const missing = bibleVersionMissing.value;
+  return missing ? [{ value: missing.id, label: missing.label }, ...list] : list;
+});
+
+/** Idioma das tabelas bíblicas; sem i18n montado (testes), cai no português. */
+function bibleLanguage(): string {
+  const current = locale?.value;
+  return typeof current === "string" && current !== "" ? current : "pt";
+}
+
+async function loadBibleData(): Promise<void> {
+  const lang = bibleLanguage();
+  const [versions, books] = await Promise.all([
+    Database.get<BibleVersion[]>(`${lang}_bible_version`).catch(() => null),
+    Database.get<BibleBook[]>(`${lang}_bible_book`).catch(() => null),
+  ]);
+  bibleVersions.value = (Array.isArray(versions) ? versions : []).filter(
+    (v) =>
+      Number.isSafeInteger(v?.id_bible_version) &&
+      v.id_bible_version > 0 &&
+      typeof v.abbreviation === "string"
+  );
+  bibleBooks.value = (Array.isArray(books) ? books : []).filter(
+    (b) =>
+      Number.isSafeInteger(b?.id_bible_book) && b.id_bible_book > 0 && typeof b.name === "string"
+  );
+  // A preferência do módulo Bíblia é só um palpite; sem AppData (testes de
+  // componente isolados) a primeira versão da lista serve.
+  let storedVersion = 0;
+  try {
+    storedVersion = Number($appdata.get(KEYS.MODULES.BIBLE.DATA.ID_BIBLE_VERSION, 0));
+  } catch {
+    storedVersion = 0;
+  }
+  const passageVersion = Number(props.form.bible?.version_id) || 0;
+  const preferred = passageVersion || storedVersion;
+  const match = bibleVersions.value.find((v) => v.id_bible_version === preferred);
+  if (passageVersion > 0 && !match) {
+    // O trecho salvo aponta para uma versão que este computador não tem: o
+    // select precisa mostrá-la, mesmo sem poder reconstruir o texto.
+    bibleVersionMissing.value = { id: passageVersion, label: t("inputs.bible_version_missing") };
+    bibleVersionId.value = passageVersion;
+  } else {
+    bibleVersionMissing.value = null;
+    bibleVersionId.value =
+      match?.id_bible_version ?? bibleVersions.value[0]?.id_bible_version ?? null;
+  }
+}
+
+watch(
+  () => props.modelValue,
+  (open) => {
+    // Fechar/reabrir cancela uma troca de versão que ainda esteja no banco.
+    bibleVersionToken++;
+    if (open && props.form.tipo === LiturgyItemTypeEnum.BIBLIA) void loadBibleData();
+  }
+);
+watch(
+  () => props.form.tipo,
+  (tipo) => {
+    // A resposta de uma troca antiga não pode cair no item do novo tipo.
+    bibleVersionToken++;
+    if (props.modelValue && tipo === LiturgyItemTypeEnum.BIBLIA) void loadBibleData();
+  }
+);
+watch(
+  () => props.form.bible?.version_id,
+  (id) => {
+    if (id) bibleVersionId.value = id;
+  }
+);
+watch(
+  () => bibleLanguage(),
+  () => {
+    bibleVersionToken++;
+    if (props.modelValue && props.form.tipo === LiturgyItemTypeEnum.BIBLIA) {
+      void loadBibleData();
+    }
+  }
+);
+
+/** O título acompanha a referência enquanto o operador não escrever o seu. */
+function syncBibleTitle(previous: string | undefined, reference: string): void {
+  const title = String(props.form.item || "").trim();
+  if (!title || props.isAutoItemTitle?.(title) || title === previous) {
+    props.setFormField("item", reference);
+  }
+}
+
+/** A sigla que o módulo usa na referência; vazia deixa o texto sem parênteses. */
+function bibleVersionLabel(versionId: number): string {
+  const version = bibleVersions.value.find((v) => v.id_bible_version === versionId);
+  const { abbreviation, name } = versionParts(version);
+  return abbreviation || name;
+}
+
+function referenceWithVersion(reference: string, versionId: number): string {
+  const label = bibleVersionLabel(versionId);
+  return label ? `${reference} (${label})` : reference;
+}
+
+function onBibleSelected(result: BibleSearchResult): void {
+  bibleVersionToken++;
+  const previous = props.form.bible?.reference;
+  const reference = referenceWithVersion(result.reference, result.id_bible_version);
+  const passage = {
+    reference,
+    text: result.text,
+    book_id: result.id_bible_book,
+    chapter: result.chapter,
+    verses: [result.verse],
+    version_id: result.id_bible_version,
+  };
+  props.setFormField("bible", passage);
+  props.setFormField("subitem", reference);
+  syncBibleTitle(previous, reference);
+  if (!Number(props.form.duration)) props.setFormField("duration", 1);
+  bibleVersionId.value = result.id_bible_version;
+  bibleVersionMissing.value = bibleVersions.value.some(
+    (v) => v.id_bible_version === result.id_bible_version
+  )
+    ? null
+    : { id: result.id_bible_version, label: t("inputs.bible_version_missing") };
+  biblePickerOpen.value = false;
+}
+
+function clearBibleSelection(): void {
+  bibleVersionToken++;
+  const previous = props.form.bible?.reference;
+  props.setFormField("bible", undefined);
+  props.setFormField("subitem", "");
+  // A referência antiga não pode ficar como título de um item sem versículo.
+  if (previous && String(props.form.item || "").trim() === previous) {
+    props.setFormField("item", "");
+  }
+}
+
+async function rebuildBibleForVersion(versionId: number): Promise<void> {
+  const token = ++bibleVersionToken;
+  const targetForm = props.form;
+  const current = targetForm.bible;
+  const version = bibleVersions.value.find((v) => v.id_bible_version === versionId);
+  const book = current
+    ? bibleBooks.value.find((b) => b.id_bible_book === current.book_id)
+    : undefined;
+  if (!current || !version || !book) {
+    if (current && bibleVersionMissing.value?.id === versionId) {
+      $snackbar.error(t("inputs.bible_version_failed"));
+    }
+    return;
+  }
+  const raw = await Database.get<Record<string, unknown>>(
+    `bible_${versionId}_${current.book_id}_${current.chapter}`
+  ).catch(() => null);
+  if (
+    token !== bibleVersionToken ||
+    props.form !== targetForm ||
+    props.form.tipo !== LiturgyItemTypeEnum.BIBLIA
+  ) {
+    return;
+  }
+  const verses =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? Object.fromEntries(
+          Object.entries(raw).filter(
+            (e): e is [string, string] => /^\d+$/.test(e[0]) && typeof e[1] === "string"
+          )
+        )
+      : {};
+  if (!Object.keys(verses).length) {
+    // A versão escolhida ainda não está baixada: não deixa a referência antiga
+    // apontando para um texto que não confere.
+    clearBibleSelection();
+    $snackbar.error(t("inputs.bible_version_failed"));
+    return;
+  }
+  const { abbreviation, name } = versionParts(version);
+  const chapter: BibleChapter = {
+    versionId,
+    version: abbreviation || name,
+    bookId: current.book_id,
+    book: book.name,
+    chapter: current.chapter,
+    verses,
+  };
+  const passage = bibleRefOf(chapter, current.verses);
+  props.setFormField("bible", passage);
+  props.setFormField("subitem", passage.reference);
+  syncBibleTitle(current.reference, passage.reference);
+}
+
+function onBibleVersionChange(value: string | number): void {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) return;
+  if (bibleVersionMissing.value?.id === id) {
+    $snackbar.error(t("inputs.bible_version_failed"));
+    return;
+  }
+  bibleVersionMissing.value = null;
+  bibleVersionId.value = id;
+  void rebuildBibleForVersion(id);
+}
 
 function onLinkOverlayToggle(checked: boolean) {
   props.setFormField("linked_overlay_id", checked ? props.overlaySlots?.[0]?.id || "" : "");
@@ -634,6 +917,7 @@ const typeOptions = computed(() => [
   { value: LiturgyItemTypeEnum.ANOTACAO, label: t("types.anotacao") },
   { value: LiturgyItemTypeEnum.ANUNCIOS, label: t("types.anuncios") },
   { value: LiturgyItemTypeEnum.ARQUIVO, label: t("types.arquivo") },
+  { value: LiturgyItemTypeEnum.BIBLIA, label: t("types.biblia") },
   { value: LiturgyItemTypeEnum.MEDIA_LIBRARY, label: t("types.biblioteca-midia") },
   { value: LiturgyItemTypeEnum.BLOCO, label: t("types.bloco") },
   { value: LiturgyItemTypeEnum.ITENS_AGENDADOS, label: t("types.itens-agendados") },
@@ -722,7 +1006,8 @@ function updateDurationForVersion(version: string) {
  * ainda está vazio — trocar o vídeo de um item já nomeado nunca o renomeia.
  */
 function preencherNomeSeVazio(nome: string): void {
-  if (!String(props.form.item || "").trim()) props.setFormField("item", nome);
+  const title = String(props.form.item || "").trim();
+  if (!title || props.isAutoItemTitle?.(title)) props.setFormField("item", nome);
 }
 
 function onVideoSearchPicked(v: { name: string; url: string }): void {
@@ -1248,7 +1533,7 @@ function onVersionChange(version: string) {
 }
 
 .lif-field--type :deep(.lj-select) {
-  width: 170px;
+  width: 200px;
 }
 
 .lif-field--time :deep(.lj-input) {
@@ -1304,6 +1589,24 @@ function onVersionChange(version: string) {
   padding: var(--lj-space-2) 0;
   color: var(--lj-text-subtle);
   font-size: var(--lj-text-sm);
+}
+
+/* Referência do trecho bíblico: o botão de escolher/trocar fica logo ao lado. */
+.lif-bible-ref {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--lj-text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Texto do versículo: duas linhas bastam para conferir o trecho escolhido. */
+.lif-bible-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .lif-spaced {

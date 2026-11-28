@@ -66,7 +66,8 @@
     "projecao-de-fundo": "Proyección de Fondo",
     "som-de-fundo": "Sonido de Fondo",
     "anuncios": "Anuncios",
-    "overlay": "Superposición"
+    "overlay": "Superposición",
+    "biblia": "Biblia"
   },
   "inputs": {
     "type": "Tipo",
@@ -110,6 +111,15 @@
     "projection_search_btn": "Buscar proyecciones…",
     "sound_select": "Sonido de fondo",
     "sound_search_btn": "Buscar sonidos…",
+    "bible_version": "Versión de la Biblia",
+    "bible_version_pick": "Selecciona la versión",
+    "bible_verse": "Versículo",
+    "bible_pick": "Elegir versículo",
+    "bible_change": "Cambiar versículo",
+    "bible_none": "Ningún versículo elegido",
+    "bible_remove": "Quitar versículo",
+    "bible_version_failed": "La versión elegida no está descargada. Elige el versículo de nuevo.",
+    "bible_version_missing": "Versión no descargada",
     "or": "o",
     "site_prefix": "Sitio",
     "folder_prefix": "Carpeta",
@@ -209,6 +219,7 @@
     "choose_type": "¡Elija el tipo de ítem!",
     "set_name": "¡Defina el nombre del ítem!",
     "choose_scheduled": "¡Elija la categoría de ítems programados!",
+    "choose_verse": "¡Elige el versículo!",
     "remove_confirm": "¿Desea realmente eliminar este ítem?",
     "clear_confirm": "¿Desea limpiar toda la liturgia?",
     "remove_done_confirm": "¿Borrar todos los ítems seleccionados (marcados)?",

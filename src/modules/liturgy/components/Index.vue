@@ -91,6 +91,7 @@
       :edit-index="editIndex"
       :form="form"
       :form-errors="formErrors"
+      :is-auto-item-title="isAutoItemTitle"
       :file-importing="fileImporting"
       :colors="colors"
       :musics-list="formMusicsList"
@@ -145,12 +146,7 @@
 
     <LiturgySaveDialog v-model="saveDialog" :items="safeItems" @saved="onLiturgySaved" />
     <LiturgyExportDialog v-model="exportDialog" :counts="exportCounts" @confirm="confirmExport" />
-    <LiturgyLoadDialog
-      v-model="loadDialog"
-      :items="safeItems"
-      @loaded="onLiturgyLoaded"
-      @deleted="onLiturgyDeleted"
-    />
+    <LiturgyLoadDialog v-model="loadDialog" @picked="onLiturgyPicked" @deleted="onLiturgyDeleted" />
     <LiturgyManageDialog v-model="manageDialog" @managed="onLiturgyManaged" />
 
     <LiturgyMusicChooser ref="musicChooser" @chosen="onChooseLaterMusicChosen" />
@@ -182,7 +178,7 @@ import LiturgyNotesPanel from "./LiturgyNotesPanel.vue";
 import LiturgyItemForm from "./LiturgyItemForm.vue";
 import LiturgySchedules from "./LiturgySchedules.vue";
 import $alert, { escapeHtml } from "@/helpers/Alert";
-import type { LiturgyLibraryItem } from "@/types/LiturgyLibrary";
+import type { LiturgyLibraryItem, LiturgyPick } from "@/types/LiturgyLibrary";
 import $snackbar from "@/helpers/Snackbar";
 import $liturgy from "@/helpers/Liturgy";
 import $appdata from "@/helpers/AppData";
@@ -259,6 +255,7 @@ const {
   editIndex,
   form,
   formErrors,
+  isAutoItemTitle,
   fileImporting,
   isDraggingOver,
   items,
@@ -632,6 +629,13 @@ async function onLiturgyLoaded() {
   const id = $liturgy.getCurrentLiturgyId();
   if (id) $liturgy.setDayLiturgyId(activeDay.value, id);
   await updateAppDataLiturgyInfo(safeItems.value, $liturgy.getCurrentLiturgyId());
+}
+
+/** O seletor devolveu a liturgia escolhida: ela entra no dia ativo do módulo. */
+function onLiturgyPicked(pick: LiturgyPick): void {
+  $liturgy.set(pick.items, $liturgy.getActiveDay());
+  if (pick.id) $liturgy.setCurrentLiturgyId(pick.id);
+  void onLiturgyLoaded();
 }
 
 async function onLiturgyManaged() {

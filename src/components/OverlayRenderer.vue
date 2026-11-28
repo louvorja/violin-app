@@ -1,5 +1,5 @@
 <template>
-  <div v-if="showCanvas" class="overlay-canvas">
+  <div v-if="showCanvas" class="overlay-canvas" :class="{ 'overlay-canvas--embedded': embedded }">
     <TransitionGroup @leave="onLeave" @after-leave="onAfterLeave">
       <div
         v-for="slot in activeSlots"
@@ -36,18 +36,29 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch, type Ref } from "vue";
 import { useOverlayState } from "@/composables/useOverlayState";
+import {
+  VIEWPORT_UNITS,
+  overlayImageStyle,
+  overlayTextStyle,
+  type OverlayUnits,
+} from "@/helpers/OverlayStyle";
 import type { OverlaySlot } from "@/types/Overlay";
 
-const {
-  enabled,
-  activeSlots,
-  mirrorText,
-  slotImage,
-  slotStyle,
-  imageStyle,
-  textStyle,
-  animationClass,
-} = useOverlayState();
+const props = withDefaults(
+  defineProps<{
+    /** Dentro de um palco (prévia), em vez de cobrir a janela inteira. */
+    embedded?: boolean;
+    /** Unidades do palco: viewport na projeção, container na prévia. */
+    units?: OverlayUnits;
+  }>(),
+  { embedded: false, units: () => VIEWPORT_UNITS }
+);
+
+const { enabled, activeSlots, mirrorText, mirrorColor, slotImage, slotStyle, animationClass } =
+  useOverlayState();
+
+const imageStyle = (slot: OverlaySlot) => overlayImageStyle(slot, props.units);
+const textStyle = (slot: OverlaySlot) => overlayTextStyle(slot, props.units, mirrorColor);
 
 const imageUrls = ref<Record<string, string>>({});
 const showCanvas: Ref<boolean> = ref(false);
@@ -144,6 +155,11 @@ function onAfterLeave(): void {
   z-index: 9999;
   pointer-events: none;
   overflow: hidden;
+}
+
+/* Prévia: o palco já é o recorte 16:9; cobrir a janela sairia do quadro. */
+.overlay-canvas--embedded {
+  position: absolute;
 }
 
 .overlay-slot {

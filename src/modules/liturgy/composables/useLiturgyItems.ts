@@ -121,6 +121,7 @@ export const DEFAULT_FORM = (): LiturgyItem => ({
   overlay_id: "",
   overlay_action: "activate",
   linked_overlay_id: "",
+  bible: undefined,
 });
 
 export function useLiturgyItems(
@@ -138,6 +139,8 @@ export function useLiturgyItems(
   const fileImporting = ref(false);
   let selectedFile: File | null = null;
   let fileSaveToken = 0;
+  /** Nome que o formulário preencheu a partir do tipo; um nome escrito pelo operador o substitui. */
+  let autoItemTitle = "";
   watch(
     dialog,
     (open) => {
@@ -381,6 +384,8 @@ export function useLiturgyItems(
     fileImporting.value = false;
     editIndex.value = index;
     form.value = index >= 0 ? { ...DEFAULT_FORM(), ...items.value[index] } : DEFAULT_FORM();
+    // O nome que veio do item é do operador, não do formulário.
+    autoItemTitle = "";
     // Compatibilidade com itens agendados legados que guardavam a categoria em `id`.
     if (
       form.value.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS &&
@@ -407,11 +412,21 @@ export function useLiturgyItems(
   function quickAdd(tipo: LiturgyItemTypeEnum): void {
     openItemDialog();
     form.value.tipo = tipo;
+    onTypeChange();
   }
 
   function onTypeChange(): void {
     selectedFile = null;
     if (editIndex.value < 0) form.value.id = "";
+    // Sem nome (ou ainda com o nome do tipo anterior), o tipo vira o nome:
+    // "Música", "Bíblia", "Bloco"…
+    const titulo = String(form.value.item ?? "").trim();
+    if (!titulo || form.value.item === autoItemTitle) {
+      autoItemTitle = t(`types.${form.value.tipo}`);
+      form.value.item = autoItemTitle;
+      // O nome que acabou de ser preenchido não é um erro do operador.
+      delete formErrors.value.item;
+    }
     if (form.value.tipo !== LiturgyItemTypeEnum.MUSICA) {
       form.value.musica = -1;
       form.value.escolha = false;
@@ -428,6 +443,7 @@ export function useLiturgyItems(
     form.value.dir = "";
     form.value.ref_id = undefined;
     form.value.subtipo = "";
+    if (form.value.tipo !== LiturgyItemTypeEnum.BIBLIA) form.value.bible = undefined;
     if (form.value.tipo === LiturgyItemTypeEnum.MUSICA && form.value.musica === -1) {
       form.value.escolha = true;
     }
@@ -503,12 +519,21 @@ export function useLiturgyItems(
       formErrors.value = { tipo: t("dialog.choose_type") };
       return;
     }
-    if (f.tipo !== LiturgyItemTypeEnum.ITENS_AGENDADOS && !String(f.item || "").trim()) {
+    // Bíblia tira o nome da referência do trecho, então o campo pode ficar vazio.
+    if (
+      f.tipo !== LiturgyItemTypeEnum.ITENS_AGENDADOS &&
+      f.tipo !== LiturgyItemTypeEnum.BIBLIA &&
+      !String(f.item || "").trim()
+    ) {
       formErrors.value = { item: t("dialog.set_name") };
       return;
     }
     if (f.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS && !(f.ref_id || f.id)) {
       formErrors.value = { ref_id: t("dialog.choose_scheduled") };
+      return;
+    }
+    if (f.tipo === LiturgyItemTypeEnum.BIBLIA && !f.bible) {
+      formErrors.value = { bible: t("dialog.choose_verse") };
       return;
     }
 
@@ -657,6 +682,10 @@ export function useLiturgyItems(
       case LiturgyItemTypeEnum.BLOCO:
         built.subitem = "";
         built.blocoId = undefined;
+        break;
+      case LiturgyItemTypeEnum.BIBLIA:
+        built.item = f.item || f.bible?.reference || t("types.biblia");
+        built.subitem = f.bible?.reference || "";
         break;
     }
 
@@ -1026,8 +1055,14 @@ export function useLiturgyItems(
     videosCache.value = all;
   }
 
+  /** O título ainda é o que o formulário preencheu ao trocar o tipo? */
+  function isAutoItemTitle(value?: string | null): boolean {
+    return !!autoItemTitle && String(value ?? "") === autoItemTitle;
+  }
+
   function setFormField(field: string, value: unknown): void {
     (form.value as Record<string, unknown>)[field] = value;
+    if (field === "item" && value !== autoItemTitle) autoItemTitle = "";
     if (field === "time") titleTimeEnabled = false;
     if (field === "dir" && form.value.tipo === LiturgyItemTypeEnum.ARQUIVO) {
       form.value.ref_id = undefined;
@@ -1056,6 +1091,7 @@ export function useLiturgyItems(
     editIndex,
     form,
     formErrors,
+    isAutoItemTitle,
     fileImporting,
     musicsCache,
     videosCache,

@@ -25,6 +25,35 @@ const devices = require("../devices.js");
 const { safeSend } = require("../safeWebContents.js");
 const transmissionRoutes = require("./transmissionRoutes.js");
 const remoteRoutes = require("./remoteRoutes");
+const presenterRoutes = require("./remoteRoutes/presenterRoutes.js");
+const { REMOTE_FEATURES } = require("./remoteRoutes/remoteFeatures.js");
+const { createPresenterOverlay } = require("../presenterOverlay.js");
+
+/**
+ * Janela do laser e da lousa sobre o telão (aba Apresentação do controle).
+ * Criada na primeira vez que alguém usa; o Electron só é carregado aqui, para
+ * os testes de rota rodarem em Node puro.
+ */
+let _presenterOverlay = null;
+function getPresenterOverlay() {
+  if (_presenterOverlay) return _presenterOverlay;
+  try {
+    const { BrowserWindow } = require("electron");
+    const displays = require("../displays.js");
+    _presenterOverlay = createPresenterOverlay({
+      BrowserWindow,
+      getBounds: () => {
+        // O mesmo telão em que o slide aparece (e o PowerPoint com animações).
+        const d = displays.getFileProjectionDisplay();
+        return d ? d.bounds : null;
+      },
+      log: console.log,
+    });
+  } catch {
+    return null;
+  }
+  return _presenterOverlay;
+}
 
 
 function isPlainObject(value) {
@@ -479,6 +508,24 @@ function setupRoutes(
     }
   }
 
+  /**
+   * O mesmo round-trip do `requestRenderer`, para trabalho que já respondeu ao
+   * HTTP (ex.: o PPTX do celular): não há `res` pendente para receber o erro.
+   */
+  async function requestRendererSilent(mainWindow, eventType, payload, options) {
+    const { EventEmitter } = require("events");
+    const res = new EventEmitter();
+    res.headersSent = true;
+    res.writableEnded = true;
+    res.destroyed = false;
+    res.status = () => res;
+    res.json = () => res;
+    res.send = () => res;
+    res.set = () => res;
+    res.end = () => res;
+    return requestRenderer(mainWindow, res, eventType, payload, options);
+  }
+
 
   function sendRendererError(res, error, timeoutMessage) {
     if (res.headersSent || res.writableEnded || res.destroyed) return;
@@ -510,6 +557,7 @@ function setupRoutes(
   remoteRoutes.register(app, {
     getValidMainWindow,
     requestRenderer,
+    requestRendererSilent,
     sendRendererError,
     getUserData,
     // Catálogo/hinários/álbuns: a rota baixa sob demanda o que ainda não está
@@ -533,6 +581,13 @@ function setupRoutes(
     isMediaLibraryImageResponse,
     hasDevicePermission,
   });
+  presenterRoutes.register(app, {
+    getValidMainWindow,
+    requestRenderer,
+    sendRendererError,
+    hasDevicePermission,
+    getOverlay: getPresenterOverlay,
+  });
 
 
   // ---------------------------------------------------------------
@@ -550,10 +605,11 @@ function setupRoutes(
       version: typeof getAppVersion === "function" ? getAppVersion() : "",
       authorized: info.authorized === true,
       permissions: Array.isArray(info.permissions) ? info.permissions : [],
-      // Features implementadas nesta versão. O app remoto esconde módulos que
-      // o desktop antigo não conhece (ex.: Player/Cronômetro no Violin 2.0).
+      // Módulos do controle remoto implementados nesta versão. O app remoto
+      // usa os mesmos ids para exibir os cards: sem esta lista (desktop antigo
+      // ou sem pareamento) mostra todos; com a lista, mostra só os anunciados.
       // O controle web é servido por esta mesma versão e não precisa filtrar.
-      features: ["player", "stopwatch"],
+      features: REMOTE_FEATURES,
     });
   });
 

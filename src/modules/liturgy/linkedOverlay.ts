@@ -83,6 +83,7 @@ export function itemAssumePalco(item: LiturgyItem | null | undefined, modo?: str
     case LiturgyItemTypeEnum.BG_PROJECTION:
     case LiturgyItemTypeEnum.SITE:
     case LiturgyItemTypeEnum.ANUNCIOS:
+    case LiturgyItemTypeEnum.BIBLIA:
       return true;
     default:
       return false;
@@ -157,7 +158,10 @@ export async function desativarOverlayVinculado(): Promise<void> {
       slot.enabled = false;
       await writeSlot(slot);
     }
-    if (!atual.masterJaEstavaLigado && masterLigado()) {
+    // Outra sobreposição ligada à mão pode continuar no ar: a chave geral só
+    // cai quando o slot do item era o único habilitado.
+    const otherEnabled = slots.some((item) => item.id !== atual.slotId && item.enabled);
+    if (!atual.masterJaEstavaLigado && masterLigado() && !otherEnabled) {
       $userdata.set(KEYS.MODULES.OVERLAY.ENABLED, false);
     }
     $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, { slot });

@@ -67,6 +67,12 @@ export interface FileProjectionState {
   url: string;
   title: string;
   playback_id?: string;
+  /**
+   * `"player"`: o vídeo segue o player da janela principal (é de lá que sai o
+   * som) — a tela não toca sozinha. Sem isso (o timer projetando um vídeo,
+   * por exemplo), a tela toca por conta própria.
+   */
+  clock?: "player";
   stage_epoch?: number;
   page?: number;
   totalPages?: number;

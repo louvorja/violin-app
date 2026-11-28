@@ -25,6 +25,9 @@ describe("BackgroundPresentationGate", () => {
     expect(readBackgroundState({ ...image(1), epoch: Infinity })).toBeNull();
     expect(readBackgroundState({ ...image(1), url: "" })).toBeNull();
     expect(readBackgroundState({ ...image(1), type: "pdf" })).toBeNull();
+    expect(readBackgroundState({ ...image(1), id: 7 })).toBeNull();
+    expect(readBackgroundState({ ...image(1), id: "x".repeat(129) })).toBeNull();
+    expect(readBackgroundState({ ...image(1), id: "bg-1" })).toMatchObject({ id: "bg-1" });
     expect(readStoredBackgroundState({ type: "image", url: "https://example.test/a.png" }))
       .toMatchObject({ active: true, epoch: 1, type: "image" });
     expect(readStoredBackgroundState({ type: "image", url: "" })).toBeNull();

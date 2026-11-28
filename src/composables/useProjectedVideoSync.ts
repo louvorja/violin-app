@@ -244,13 +244,15 @@ export function useProjectedVideoSync(options: ProjectedVideoSyncOptions) {
     });
   }
 
-  function handleVideoState(payload: unknown): void {
-    if (!options.isVideoActive()) return;
+  /** Aplica o estado do player; devolve se ele valia para o vídeo desta tela. */
+  function handleVideoState(payload: unknown): boolean {
+    if (!options.isVideoActive()) return false;
     const data = payload as VideoMediaState;
-    if (!videoStateGate.accepts(data)) return;
+    if (!videoStateGate.accepts(data)) return false;
     latestVideoState = data;
     videoFirstFrame.acceptRevision(data.revision, data.playback_id);
     applyState(data);
+    return true;
   }
 
   function dispose(): void {

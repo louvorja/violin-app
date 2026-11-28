@@ -1,5 +1,5 @@
 <template>
-  <LjDialog v-model="internalShow" :title="t('library.load_title')" size="md">
+  <LjDialog v-model="internalShow" :title="title || t('library.load_title')" size="md">
     <div class="llo-search">
       <LjInput
         v-model="search"
@@ -11,20 +11,40 @@
       />
     </div>
 
-    <div v-if="filtered.length" class="llo-list">
-      <div v-for="item in filtered" :key="item.id" class="llo-item">
-        <button type="button" class="llo-item__main" @click="doLoad(item)">
-          <span
+    <div v-if="hasAnything" class="llo-list">
+      <!-- A liturgia do dia da semana, mesmo sem estar salva na biblioteca. -->
+      <div v-if="filteredOption" class="llo-item" data-testid="llo-option-extra">
+        <button type="button" class="llo-item__main" @click="pickOption(filteredOption)">
+          <LjIcon
+            :icon="ICONS.MODULES.LITURGY"
+            :size="18"
+            :color="DEFAULT_COLOR"
             class="llo-item__icon"
-            :style="{ '--llo-color': item.color || DEFAULT_COLOR }"
-            aria-hidden="true"
-          >
-            <LjIcon :icon="ICONS.MODULES.LITURGY" :size="18" />
+          />
+          <span class="llo-item__text">
+            <span class="llo-item__name">{{ filteredOption.name }}</span>
+            <span v-if="filteredOption.subtitle" class="llo-item__date">
+              {{ filteredOption.subtitle }}
+            </span>
           </span>
+        </button>
+      </div>
+
+      <div v-for="item in filtered" :key="item.id" class="llo-item">
+        <button type="button" class="llo-item__main" @click="pickLibrary(item)">
+          <LjIcon
+            :icon="ICONS.MODULES.LITURGY"
+            :size="18"
+            :color="item.color || DEFAULT_COLOR"
+            class="llo-item__icon"
+          />
           <span class="llo-item__text">
             <span class="llo-item__name">{{ item.name }}</span>
-            <span v-if="item.updatedAt" class="llo-item__date">
-              {{ formatDate(item.updatedAt) }}
+            <span v-if="item.updatedAt || bindingLabel(item)" class="llo-item__date">
+              <span v-if="item.updatedAt">{{ formatDate(item.updatedAt) }}</span>
+              <span v-if="bindingLabel(item)" class="llo-item__binding">
+                {{ bindingLabel(item) }}
+              </span>
             </span>
           </span>
         </button>
@@ -67,21 +87,23 @@ import { useLiturgyI18n } from "../i18n";
 import { ref, computed, watch } from "vue";
 import { LjButton, LjDialog, LjEmpty, LjIcon, LjInput, LjProgress } from "@/components/ui";
 import $alert, { escapeHtml } from "@/helpers/Alert";
-import $liturgy from "@/helpers/Liturgy";
-import { useLiturgyLibrary } from "../composables/useLiturgyLibrary";
+import { useLiturgyLibrary, WEEKDAY_KEYS } from "../composables/useLiturgyLibrary";
 import { DEFAULT_COLOR } from "../composables/useLiturgyItems";
-import type { LiturgyItem } from "@/types/Liturgy";
 import { ICONS } from "@/config/Icons";
 import { localeTag } from "@/helpers/DateTime";
+import type { LiturgyOptionExtra, LiturgyLibraryItem, LiturgyPick } from "@/types/LiturgyLibrary";
 
 const props = defineProps<{
   modelValue: boolean;
-  items: LiturgyItem[];
+  /** Título alternativo (o Modo apresentação usa “Importar liturgia”). */
+  title?: string;
+  /** A liturgia do dia da semana, mostrada acima da biblioteca. */
+  optionExtra?: LiturgyOptionExtra | null;
 }>();
 const emit = defineEmits<{
-  (e: "update:modelValue", v: boolean): void;
-  (e: "loaded"): void;
-  (e: "deleted", id: string): void;
+  "update:modelValue": [v: boolean];
+  picked: [item: LiturgyPick];
+  deleted: [id: string];
 }>();
 
 const { t, locale } = useLiturgyI18n();
@@ -99,10 +121,20 @@ watch(internalShow, (v) => emit("update:modelValue", v));
 const search = ref("");
 const allItems = ref<Awaited<ReturnType<typeof library.list>>>([]);
 
+const filteredOption = computed(() => {
+  const option = props.optionExtra;
+  if (!option?.items.length) return null;
+  const q = search.value.trim().toLowerCase();
+  if (!q) return option;
+  return `${option.name} ${option.subtitle ?? ""}`.toLowerCase().includes(q) ? option : null;
+});
+
 const filtered = computed(() => {
   const q = search.value.toLowerCase();
   return q ? allItems.value?.filter((i) => i.name.toLowerCase().includes(q)) : allItems.value;
 });
+
+const hasAnything = computed(() => !!filteredOption.value || !!filtered.value?.length);
 
 watch(internalShow, async (v) => {
   if (v) {
@@ -116,47 +148,73 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString(localeTag(locale.value));
 }
 
-async function doLoad(item: Awaited<ReturnType<typeof library.list>>[number]) {
+/** O vínculo da liturgia, do jeito que ele decide a data do programa. */
+function bindingLabel(item: LiturgyLibraryItem): string {
+  const binding = item.binding;
+  if (!binding) return "";
+  if (binding.type === "day_of_week") {
+    const key = WEEKDAY_KEYS[Number(binding.value)];
+    return key ? t(`library.weekday_${key}`) : "";
+  }
+  if (binding.type === "date") {
+    const date = new Date(`${binding.value}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(localeTag(locale.value));
+  }
+  if (binding.type === "thirteenth_sabbath") return t("library.manage_binding_13th");
+  return "";
+}
+
+function pickOption(option: LiturgyOptionExtra): void {
+  confirmPick({ id: null, name: option.name, items: option.items, binding: null });
+}
+
+async function pickLibrary(item: LiturgyLibraryItem): Promise<void> {
   const full = await library.get(item.id);
   if (!full) return;
+  confirmPick({
+    id: full.id,
+    name: full.name,
+    items: full.items,
+    binding: full.binding ?? null,
+  });
+}
+
+function confirmPick(pick: LiturgyPick): void {
   $alert.yesno(
     {
-      title: escapeHtml(t("library.load_title")),
-      text: escapeHtml(t("library.load_confirm")),
-      translate: false,
+      title: props.title || t("library.load_title"),
+      text: t("library.load_confirm"),
     },
     (btn?: string) => {
       if (btn !== "yes") return;
-      $liturgy.set(full.items, $liturgy.getActiveDay());
-      $liturgy.setCurrentLiturgyId(full.id);
       internalShow.value = false;
-      emit("loaded");
+      emit("picked", pick);
     }
   );
 }
 
-async function duplicateItem(item: Awaited<ReturnType<typeof library.list>>[number]) {
+async function duplicateItem(item: LiturgyLibraryItem) {
   const full = await library.get(item.id);
   if (!full) return;
   let name = `${t("library.duplicate_prefix")} ${full.name}`;
   let n = 1;
   while (await library.getByName(name)) {
     n++;
-    name = `${t("library.duplicate_prefix_n").replace("{n}", String(n))} ${full.name}`;
+    name = `${t("library.duplicate_prefix_n", { n })} ${full.name}`;
   }
   const saved = await library.save({ name, items: full.items, color: full.color, binding: null });
   $alert.info({
-    text: escapeHtml(t("library.duplicate_success").replace("{name}", saved.name)),
+    text: t("library.duplicate_success", { name: escapeHtml(saved.name) }),
     translate: false,
   });
   allItems.value = await library.list();
 }
 
-async function deleteItem(item: Awaited<ReturnType<typeof library.list>>[number]) {
+async function deleteItem(item: LiturgyLibraryItem) {
   $alert.yesno(
     {
-      title: escapeHtml(t("actions.delete")),
-      text: t("library.delete_confirm").replace("{name}", escapeHtml(item.name)),
+      title: t("actions.delete"),
+      text: t("library.delete_confirm", { name: escapeHtml(item.name) }),
       translate: false,
       destructive: true,
     },
@@ -235,9 +293,6 @@ async function deleteItem(item: Awaited<ReturnType<typeof library.list>>[number]
 }
 
 .llo-item__icon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--llo-color, var(--lj-ui-accent));
   flex-shrink: 0;
 }
 
@@ -258,23 +313,34 @@ async function deleteItem(item: Awaited<ReturnType<typeof library.list>>[number]
 }
 
 .llo-item__date {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
   color: var(--lj-text-muted);
   font-size: var(--lj-text-sm);
 }
 
-.llo-item .llo-btn-danger:hover,
-.llo-item .llo-btn-danger:focus-visible {
+/* Vínculo da liturgia: é ele que decide a data ao importar no programa. */
+.llo-item__binding {
+  padding: 0 var(--lj-space-2);
+  border-radius: var(--lj-radius-sm);
+  background: var(--lj-surface-bg-soft);
+  color: var(--lj-text-muted);
+  font-size: var(--lj-text-xs);
+}
+
+/* Exclusão discreta: mantém o fantasma do LjButton e só troca a cor. O seletor
+   descendente supera a regra `.lj-btn--ghost` do próprio primitivo. */
+.llo-item .llo-btn-danger {
+  color: var(--lj-danger);
+}
+
+.llo-item .llo-btn-danger:hover {
   background: var(--lj-danger-soft);
   color: var(--lj-danger);
 }
 
 .llo-feedback {
   margin-top: var(--lj-space-4);
-}
-</style>
-
-<style>
-html[data-theme="dark"] .llo-item__icon {
-  color: color-mix(in oklab, var(--llo-color, var(--lj-ui-accent)) 42%, var(--lj-white));
 }
 </style>

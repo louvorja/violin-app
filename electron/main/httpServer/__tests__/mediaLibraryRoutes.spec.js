@@ -23,6 +23,8 @@ const handlers = { get: new Map(), post: new Map() };
 const requestedPrefixes = [];
 const enviados = [];
 let rendererReply = { status: "ok", items: [], categories: [] };
+/** Quando definido, o round-trip do renderer fica pendente até resolver (teste do 202 → done). */
+let rendererPending = null;
 /** userData servido pelo main (a playlist vive nele). */
 let userData = { modules: { media_library: { playlist: [] } } };
 
@@ -95,6 +97,13 @@ async function callUpload(chunks, headers, authInfo) {
   return res;
 }
 
+/** Rota com `:id` na URL (retry do PowerPoint do celular). */
+async function callPostParams(route, params, body, authInfo) {
+  const res = response();
+  await handlers.post.get(route)({ params, body, authInfo, headers: {} }, res);
+  return res;
+}
+
 const ITEMS = {
   status: "ok",
   items: [
@@ -150,7 +159,7 @@ beforeAll(async () => {
           requestedPrefixes.push(prefix);
           return {
             requestId: `${prefix}:00000000-0000-4000-8000-000000000009`,
-            promise: Promise.resolve(rendererReply),
+            promise: rendererPending ?? Promise.resolve(rendererReply),
             cancel: () => {},
           };
         },
@@ -178,6 +187,7 @@ beforeEach(() => {
   };
   requestedPrefixes.length = 0;
   enviados.length = 0;
+  rendererPending = null;
 });
 
 describe("permission media_library", () => {
@@ -583,5 +593,139 @@ describe("POST /api/media-library/upload", () => {
     expect(res.code).toBe(201);
     expect(res.body.item.type).toBe("pdf");
     expect(res.body.item.categoryId).toBe("cat-1");
+  });
+
+  it("PPTX responde 202 e só fica done depois de o renderer registrar", async () => {
+    const pptxReal = require("../../pptx/index.js");
+    const convertSpy = vi.spyOn(pptxReal, "convert").mockResolvedValue({
+      ok: true,
+      path: path.join(mocks.root, "private", "culto.pdf"),
+      fonts: [],
+      features: null,
+      nativeAvailable: false,
+    });
+    let liberarRegistro;
+    rendererPending = new Promise((resolve) => {
+      liberarRegistro = resolve;
+    });
+    try {
+      const res = await callUpload(
+        [Buffer.from("PPTX")],
+        { "x-file-name": "culto.pptx" },
+        COM_PERMISSAO
+      );
+
+      expect(res.code).toBe(202);
+      expect(res.body.status).toBe("converting");
+      const uploadId = res.body.uploadId;
+      expect(uploadId).toMatch(/^pu_/);
+
+      // A conversão terminou, mas o `saved` ainda não foi confirmado: continua converting.
+      await vi.waitFor(() => {
+        expect(convertSpy).toHaveBeenCalledOnce();
+      });
+      let lista = await callGet("/api/media-library/phone-uploads", {}, COM_PERMISSAO);
+      expect(lista.body.uploads.find((u) => u.id === uploadId)?.status).toBe("converting");
+
+      liberarRegistro({ status: "ok" });
+      await vi.waitFor(async () => {
+        const g = await callGet("/api/media-library/phone-uploads", {}, COM_PERMISSAO);
+        expect(g.body.uploads.find((u) => u.id === uploadId)?.status).toBe("done");
+      });
+      const done = enviados.find(
+        ([ch, p]) => ch === "http:media-library" && p.action === "phone-pptx" && p.status === "done"
+      );
+      expect(done).toBeTruthy();
+    } finally {
+      convertSpy.mockRestore();
+      rendererPending = null;
+    }
+  });
+
+  it("falha mantém o arquivo enviado e o retry reconverte sem reenviar", async () => {
+    const pptxReal = require("../../pptx/index.js");
+    const convertSpy = vi
+      .spyOn(pptxReal, "convert")
+      .mockResolvedValueOnce({ ok: false, error: "conversion_failed", message: "sem PowerPoint" })
+      .mockResolvedValueOnce({
+        ok: true,
+        path: path.join(mocks.root, "private", "culto.pdf"),
+        fonts: [],
+        features: null,
+        nativeAvailable: false,
+      });
+    try {
+      const media = path.join(mocks.root, "private", "library", "media");
+      const antes = new Set(await fs.readdir(media).catch(() => []));
+      const res = await callUpload(
+        [Buffer.from("PPTX")],
+        { "x-file-name": "culto.pptx", "x-category-id": "cat-1" },
+        COM_PERMISSAO
+      );
+      expect(res.code).toBe(202);
+      const uploadId = res.body.uploadId;
+
+      await vi.waitFor(() => {
+        const erro = enviados.find(
+          ([ch, p]) =>
+            ch === "http:media-library" && p.action === "phone-pptx" && p.status === "error"
+        );
+        expect(erro).toBeTruthy();
+      });
+      const novos = (await fs.readdir(media)).filter(
+        (f) => f.endsWith(".pptx") && !antes.has(f)
+      );
+      expect(novos).toHaveLength(1);
+      const arquivoEnviado = novos[0];
+
+      const retry = await callPostParams(
+        "/api/media-library/phone-uploads/:id/retry",
+        { id: uploadId },
+        {},
+        COM_PERMISSAO
+      );
+      expect(retry.code).toBe(202);
+      expect(retry.body.status).toBe("converting");
+
+      await vi.waitFor(async () => {
+        const g = await callGet("/api/media-library/phone-uploads", {}, COM_PERMISSAO);
+        expect(g.body.uploads.find((u) => u.id === uploadId)?.status).toBe("done");
+      });
+      expect(convertSpy).toHaveBeenCalledTimes(2);
+      expect(await fs.readdir(media)).toContain(arquivoEnviado);
+    } finally {
+      convertSpy.mockRestore();
+    }
+  });
+
+  it("retry sem permissão leva 403 e id desconhecido leva 404", async () => {
+    const semPermissao = await callPostParams(
+      "/api/media-library/phone-uploads/:id/retry",
+      { id: "pu_nao_existe" },
+      {},
+      SEM_PERMISSAO
+    );
+    expect(semPermissao.code).toBe(403);
+
+    const desconhecido = await callPostParams(
+      "/api/media-library/phone-uploads/:id/retry",
+      { id: "pu_nao_existe" },
+      {},
+      COM_PERMISSAO
+    );
+    expect(desconhecido.code).toBe(404);
+  });
+
+  it("PowerPoint com macros é recusado no upload do celular", async () => {
+    const media = path.join(mocks.root, "private", "library", "media");
+    const antes = new Set(await fs.readdir(media).catch(() => []));
+    for (const name of ["culto.pptm", "culto.ppt", "culto.pps"]) {
+      const res = await callUpload([Buffer.from("PPT")], { "x-file-name": name }, COM_PERMISSAO);
+      expect(res.code).toBe(415);
+      expect(res.body.macroEnabled).toBe(true);
+      expect(res.body.error).toContain(".pptx");
+    }
+    // Nem os bytes chegaram ao disco.
+    expect((await fs.readdir(media).catch(() => [])).filter((f) => !antes.has(f))).toEqual([]);
   });
 });

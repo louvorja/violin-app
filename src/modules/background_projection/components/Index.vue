@@ -256,11 +256,12 @@ import { reportLocalFileFailure } from "@/helpers/LocalFailureNotice";
 import { localPathOf } from "@/helpers/FilePath";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
+import { openBackgroundProjectionWindows } from "@/helpers/ProjectionWindows";
 import {
-  closeBackgroundProjectionWindows,
-  openBackgroundProjectionWindows,
-} from "@/helpers/ProjectionWindows";
-import { activateBackgroundProjection } from "@/helpers/BackgroundProjectionPlayback";
+  activateBackgroundProjection,
+  clearBackgroundProjection,
+  stopBackgroundProjection,
+} from "@/helpers/BackgroundProjectionPlayback";
 import Platform from "@/helpers/Platform";
 import $path from "@/helpers/Path";
 import { ICONS } from "@/config/Icons";
@@ -938,23 +939,13 @@ async function togglePlay(): Promise<void> {
 
 async function clearProjection(): Promise<void> {
   if (!isPlaying.value) return;
-  localStorage.removeItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
   selectedId.value = null;
-  $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
-    active: false,
-    epoch: nextBackgroundEpoch(),
-  });
+  clearBackgroundProjection();
 }
 
 async function stop(): Promise<void> {
-  isPlaying.value = false;
-  localStorage.removeItem(KEYS.PROJECTION.LJ_BACKGROUND_PROJECTION);
-  $broadcast.send(BROADCAST_TYPE.BACKGROUND_PROJECTION, {
-    active: false,
-    epoch: nextBackgroundEpoch(),
-  });
-  $broadcast.send(BROADCAST_TYPE.MEDIA_CLOSE, {});
-  await closeBackgroundProjectionWindows();
+  selectedId.value = null;
+  await stopBackgroundProjection();
 }
 
 // Ribbon actions

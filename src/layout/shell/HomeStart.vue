@@ -17,12 +17,25 @@
         {{ $t("shell.home_liturgy") }}
       </button>
     </div>
+    <p class="home-start__try">
+      {{ $t("shell.home_try") }}
+      <button
+        type="button"
+        class="home-start__link"
+        data-testid="home-presentation-mode"
+        @click="open(ModuleEnum.PRESENTATION_MODE)"
+      >
+        <LjIcon :icon="ICONS.MODULES.PRESENTATION_MODE" :size="15" color="currentColor" />
+        {{ $t("shell.home_presentation") }}
+      </button>
+      <LjChip size="sm" class="home-start__beta">{{ $t("shell.home_beta") }}</LjChip>
+    </p>
   </section>
 </template>
 
 <script setup lang="ts">
 import LjLogo from "@/components/LjLogo.vue";
-import { LjIcon } from "@/components/ui";
+import { LjChip, LjIcon } from "@/components/ui";
 import { ICONS } from "@/config/Icons";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import $modules from "@/helpers/Modules";
@@ -48,7 +61,7 @@ function open(id: ModuleEnum): void {
 }
 
 .home-start__logo {
-  margin-bottom: var(--lj-space-5);
+  margin-bottom: var(--lj-space-7);
 }
 
 .home-start h1 {
@@ -59,8 +72,8 @@ function open(id: ModuleEnum): void {
 }
 
 .home-start p {
-  margin: var(--lj-space-3) 0 var(--lj-space-7);
-  font-size: var(--lj-text-base);
+  margin: var(--lj-space-4) 0 var(--lj-space-8);
+  font-size: var(--lj-text-lg);
   line-height: 1.5;
 }
 
@@ -68,7 +81,7 @@ function open(id: ModuleEnum): void {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: var(--lj-space-3);
+  gap: var(--lj-space-4);
 }
 
 .home-start__actions button {
@@ -106,6 +119,52 @@ function open(id: ModuleEnum): void {
 .home-start__actions button:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 3px;
+}
+
+.home-start .home-start__try {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lj-space-3);
+  margin: var(--lj-space-8) 0 0;
+  font-size: var(--lj-text-base);
+}
+
+/* Link, não botão: o convite fica abaixo das ações principais sem competir com elas. */
+.home-start__try .home-start__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--lj-weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.home-start__try .home-start__link:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Cores invertidas da área inicial, como o botão principal: o selo some sobre o azul. */
+.home-start__try .home-start__beta {
+  border-color: transparent;
+  background: var(--lj-home-text);
+  color: var(--lj-home-bg);
+  font-weight: var(--lj-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.home-start__try .home-start__link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 @media (max-width: 600px) {

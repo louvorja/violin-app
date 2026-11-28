@@ -1,4 +1,12 @@
-import { ref, computed, onMounted, onUnmounted, type Ref, type ComputedRef } from "vue";
+import {
+  ref,
+  computed,
+  onActivated,
+  onMounted,
+  onUnmounted,
+  type Ref,
+  type ComputedRef,
+} from "vue";
 import { useBroadcastListener } from "@/composables/useBroadcastListener";
 import { useModuleMirror } from "@/composables/useModuleMirror";
 import $broadcast from "@/helpers/Broadcast";
@@ -12,6 +20,7 @@ import {
   overlaySlotStyle,
   overlayImageStyle,
   overlayTextStyle,
+  type OverlayMirrorColor,
 } from "@/helpers/OverlayStyle";
 import { OverlayVisibilityGate } from "@/presentation/OverlayVisibilityState";
 
@@ -20,6 +29,7 @@ interface OverlayStateReturn {
   slots: Ref<OverlaySlot[]>;
   activeSlots: ComputedRef<OverlaySlot[]>;
   mirrorText: (_source: string | null | undefined) => string;
+  mirrorColor: OverlayMirrorColor;
   slotImage: (_slot: OverlaySlot) => Promise<string>;
   slotStyle: (_slot: OverlaySlot) => Record<string, string>;
   imageStyle: (_slot: OverlaySlot) => Record<string, string>;
@@ -41,7 +51,9 @@ export function useOverlayState(): OverlayStateReturn {
   }
 
   function pruneImages(list: OverlaySlot[]): void {
-    const current = new Set(list.filter((slot) => slot.file_id).map((slot) => `${slot.id}:${slot.file_id}`));
+    const current = new Set(
+      list.filter((slot) => slot.file_id).map((slot) => `${slot.id}:${slot.file_id}`)
+    );
     for (const [key, url] of imageCache) {
       if (current.has(key)) continue;
       revokeImage(url);
@@ -75,6 +87,19 @@ export function useOverlayState(): OverlayStateReturn {
     $broadcast.send(BROADCAST_TYPE.REQUEST_OVERLAY_STATE);
   });
 
+  // A prévia vive dentro do módulo persistente: ao voltar, relê o que mudou
+  // enquanto a tela estava parada. No primeiro mount o KeepAlive também
+  // dispara `activated`, mas o `onMounted` acima já pediu o estado.
+  let activatedOnce = false;
+  onActivated(() => {
+    if (!activatedOnce) {
+      activatedOnce = true;
+      return;
+    }
+    void refresh();
+    $broadcast.send(BROADCAST_TYPE.REQUEST_OVERLAY_STATE);
+  });
+
   onUnmounted(() => {
     disposed = true;
     ++refreshGeneration;
@@ -96,7 +121,10 @@ export function useOverlayState(): OverlayStateReturn {
     const cached = imageCache.get(cacheKey);
     if (cached) return cached;
     const record = await getImage(slot.file_id);
-    if (disposed || !slots.value.some((current) => current.id === slot.id && current.file_id === slot.file_id)) {
+    if (
+      disposed ||
+      !slots.value.some((current) => current.id === slot.id && current.file_id === slot.file_id)
+    ) {
       return "";
     }
     const existing = imageCache.get(cacheKey);
@@ -135,6 +163,7 @@ export function useOverlayState(): OverlayStateReturn {
     slots,
     activeSlots,
     mirrorText,
+    mirrorColor,
     slotImage,
     slotStyle: overlaySlotStyle,
     imageStyle: (slot) => overlayImageStyle(slot),

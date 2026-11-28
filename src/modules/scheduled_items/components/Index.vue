@@ -378,8 +378,8 @@ function selectCategory(id: string | number): void {
   if (mobileLayout.value) mobileView.value = "calendar";
 }
 
-function tm(key: string): string {
-  return t(`modules.scheduled_items.${key}`);
+function tm(key: string, values?: Record<string, unknown>): string {
+  return values ? t(`modules.scheduled_items.${key}`, values) : t(`modules.scheduled_items.${key}`);
 }
 function uid(prefix = "item_"): string {
   const d = new Date();
@@ -712,8 +712,8 @@ async function executeAutoPopulate(): Promise<void> {
         });
       }
       const parts: string[] = [];
-      if (created) parts.push(tm("add_auto_created").replace("{n}", String(created)));
-      if (updated) parts.push(tm("add_auto_updated").replace("{n}", String(updated)));
+      if (created) parts.push(tm("add_auto_created", { n: created }));
+      if (updated) parts.push(tm("add_auto_updated", { n: updated }));
       autoPopulateResultOk.value = true;
       autoPopulateResult.value = parts.join(". \n") + ".";
       await refresh();

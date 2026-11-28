@@ -221,3 +221,135 @@ describe("item em relação ao bloco", () => {
     expect(ui.items.value[1]).toMatchObject({ id: "solto-4", blocoId: "bloco-1" });
   });
 });
+
+describe("item Bíblia", () => {
+  const passage = {
+    reference: "João 3:16 (NVI)",
+    text: "Porque Deus amou o mundo de tal maneira…",
+    book_id: 43,
+    chapter: 3,
+    verses: [16],
+    version_id: 1,
+  };
+
+  beforeEach(() => {
+    saved.value = [];
+    nextId = 0;
+  });
+
+  it("salva o trecho e usa a referência como nome quando o título fica vazio", () => {
+    const ui = useLiturgyItems(ref(0), ref([]));
+    ui.openItemDialog();
+    ui.setFormField("tipo", LiturgyItemTypeEnum.BIBLIA);
+    ui.setFormField("bible", passage);
+    ui.saveItem();
+
+    expect(saved.value[0]).toMatchObject({
+      tipo: LiturgyItemTypeEnum.BIBLIA,
+      item: passage.reference,
+      subitem: passage.reference,
+      bible: passage,
+    });
+  });
+
+  it("não salva sem o trecho escolhido", () => {
+    const ui = useLiturgyItems(ref(0), ref([]));
+    ui.openItemDialog();
+    ui.setFormField("tipo", LiturgyItemTypeEnum.BIBLIA);
+    ui.setFormField("item", "Leitura");
+    ui.saveItem();
+
+    expect(saved.value).toEqual([]);
+    expect(ui.formErrors.value.bible).toBe("dialog.choose_verse");
+  });
+
+  it("trocar para outro tipo descarta o trecho", () => {
+    const ui = useLiturgyItems(ref(0), ref([]));
+    ui.openItemDialog();
+    ui.setFormField("tipo", LiturgyItemTypeEnum.BIBLIA);
+    ui.setFormField("bible", passage);
+    ui.setFormField("tipo", LiturgyItemTypeEnum.SITE);
+    ui.onTypeChange();
+
+    expect(ui.form.value.bible).toBeUndefined();
+  });
+});
+
+describe("nome automático ao trocar o tipo", () => {
+  beforeEach(() => {
+    saved.value = [];
+    nextId = 0;
+  });
+
+  it("usa o tipo como nome quando o nome está vazio", () => {
+    const ui = useLiturgyItems(ref(0), ref([]));
+    ui.openItemDialog();
+    ui.setFormField("tipo", LiturgyItemTypeEnum.MUSICA);
+    ui.onTypeChange();
+
+    expect(ui.form.value.item).toBe("types.musica");
+  });
+
+  it("acompanha o tipo enquanto o nome é o automático", () => {
+    const ui = useLiturgyItems(ref(0), ref([]));
+    ui.openItemDialog();
+    ui.setFormField("tipo", LiturgyItemTypeEnum.MUSICA);
+    ui.onTypeChange();
+    ui.setFormField("tipo", LiturgyItemTypeEnum.BIBLIA);
+    ui.onTypeChange();
+
+    expect(ui.form.value.item).toBe("types.biblia");
+  });
+
+  it("não sobrescreve o nome escrito pelo operador", () => {
+    const ui = useLiturgyItems(ref(0), ref([]));
+    ui.openItemDialog();
+    ui.setFormField("item", "Oração inicial");
+    ui.setFormField("tipo", LiturgyItemTypeEnum.MUSICA);
+    ui.onTypeChange();
+
+    expect(ui.form.value.item).toBe("Oração inicial");
+  });
+
+  it("o caminho rápido também nomeia pelo tipo", () => {
+    const ui = useLiturgyItems(ref(0), ref([]));
+    ui.quickAdd(LiturgyItemTypeEnum.BLOCO);
+
+    expect(ui.form.value.item).toBe("types.bloco");
+  });
+});
+
+describe("título automático do tipo", () => {
+  beforeEach(() => {
+    saved.value = [];
+    nextId = 0;
+  });
+
+  it("limpa o erro de nome quando o tipo preenche o título", () => {
+    const ui = useLiturgyItems(ref(0), ref([]));
+    ui.openItemDialog();
+    ui.setFormField("tipo", LiturgyItemTypeEnum.ANUNCIOS);
+    ui.setFormField("item", "");
+    ui.saveItem();
+    expect(ui.formErrors.value.item).toBe("dialog.set_name");
+
+    ui.setFormField("tipo", LiturgyItemTypeEnum.MUSICA);
+    ui.setFormField("item", "");
+    ui.onTypeChange();
+
+    expect(ui.form.value.item).toBe("types.musica");
+    expect(ui.formErrors.value.item).toBeUndefined();
+  });
+
+  it("identifica o título automático e deixa de reconhecê-lo após edição", () => {
+    const ui = useLiturgyItems(ref(0), ref([]));
+    ui.openItemDialog();
+    ui.setFormField("tipo", LiturgyItemTypeEnum.BIBLIA);
+    ui.onTypeChange();
+
+    expect(ui.isAutoItemTitle("types.biblia")).toBe(true);
+
+    ui.setFormField("item", "Leitura da Palavra");
+    expect(ui.isAutoItemTitle("Leitura da Palavra")).toBe(false);
+  });
+});

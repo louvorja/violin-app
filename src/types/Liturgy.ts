@@ -1,6 +1,8 @@
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { AlbumItem } from "@/types/Album";
 
+import type { BiblePassage } from "./Bible";
+
 export interface LiturgyItem {
   id: string;
   tipo: LiturgyItemTypeEnum;
@@ -31,7 +33,29 @@ export interface LiturgyItem {
   overlay_action?: "activate" | "deactivate";
   /** Overlay vinculado — ativado automaticamente ao executar o item. */
   linked_overlay_id?: string;
+  /** Trecho bíblico do item (tipo Bíblia). */
+  bible?: BiblePassage;
 }
+
+/**
+ * O que um item da liturgia projeta: a classificação que a tela da liturgia e
+ * o programa do Modo apresentação compartilham. Sai de `kindOf` em
+ * `@/modules/liturgy/item`.
+ */
+export type LiturgyItemKind =
+  | "music"
+  | "video"
+  | "online_video"
+  | "image"
+  | "audio"
+  | "file"
+  | "presentation"
+  | "announcements"
+  | "note"
+  | "site"
+  | "overlay"
+  | "scheduled"
+  | "bible";
 
 export interface LiturgyMusicItem {
   id_music: number | string;

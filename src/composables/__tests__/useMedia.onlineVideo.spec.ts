@@ -270,6 +270,7 @@ describe("acompanhar o download do yt-dlp e projetar", () => {
         url: `louvorja://onlinevideo/${ID}.mp4`,
         title: "Louvor",
         mediaType: "video",
+        playbackId: expect.any(String),
         videoId: ID,
       },
       true
@@ -417,7 +418,12 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
       type: "video",
       title: "Louvor",
       stage_epoch: expect.any(Number),
+      playback_id: expect.any(String),
+      clock: "player",
     });
+    // Uma identidade só: a tela e o player falam do mesmo playback.
+    const sent = h.send.mock.calls.find((c: unknown[]) => c[0] === BROADCAST_TYPE.FILE_PROJECTION)?.[1] as { playback_id: string };
+    expect(openAudio.mock.calls.at(-1)?.[0]).toMatchObject({ playbackId: sent.playback_id });
     // a imagem do player do app vem da trilha de vídeo; o som, da de áudio
     expect(openAudio).toHaveBeenCalledWith(
       {
@@ -425,6 +431,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
         title: "Louvor",
         mediaType: "video",
         videoUrl: video.url,
+        playbackId: expect.any(String),
         videoId: ID,
       },
       true
@@ -471,7 +478,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
     controlledDownloads();
     expect(await openStream(embed(ID), "Louvor")).toBe(true);
     expect(openAudio).toHaveBeenCalledWith(
-      { url: file, title: "Louvor", mediaType: "video", videoId: ID },
+      { url: file, title: "Louvor", mediaType: "video", playbackId: expect.any(String), videoId: ID },
       true
     );
     expect(embedded).not.toHaveBeenCalled();
@@ -491,6 +498,7 @@ describe("tocar já: das trilhas que o main baixa, sem esperar o download e sem 
         url: `louvorja://onlinevideo/${ID}.mp4`,
         title: "Louvor",
         mediaType: "video",
+        playbackId: expect.any(String),
         videoId: ID,
       },
       true
@@ -1009,6 +1017,21 @@ describe("posse do palco durante a abertura do vídeo", () => {
     }
   );
 
+  it("vídeo com som: a tela recebe a mesma identidade do player e passa a seguir o relógio dele", async () => {
+    storage();
+    const payload = { url: "louvorja://local/culto/video.mp4", type: "video" as const, title: "Vídeo" };
+    expect(await media.projectFile(payload, payload.url)).toBe(true);
+    const sent = h.send.mock.calls.find((c: unknown[]) => c[0] === BROADCAST_TYPE.FILE_PROJECTION)?.[1] as {
+      playback_id: string;
+      clock?: string;
+    };
+    expect(sent.clock).toBe("player");
+    expect(openAudio).toHaveBeenCalledWith(
+      expect.objectContaining({ url: payload.url, mediaType: "video", playbackId: sent.playback_id }),
+      true
+    );
+  });
+
   it("PDF válido mantém cache de reabertura e projeta sem abrir player de áudio", async () => {
     storage();
     const payload = { url: "blob:pdf", type: "pdf" as const, title: "Leitura", page: 1 };
@@ -1343,10 +1366,34 @@ describe("fim natural do player embutido", () => {
     emitState(projection?.playback_id as string);
     emitState(projection?.playback_id as string);
     expect(close).toHaveBeenCalledOnce();
-    expect(close).toHaveBeenCalledWith(true);
+    expect(close).toHaveBeenCalledWith(true, false, false);
     expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.MEDIA_CLOSE);
+    await vi.waitFor(() => expect(h.closeWindows).toHaveBeenCalled());
 
     close.mockRestore();
+  });
+
+  it("com a apresentação ligada, o fim do vídeo limpa as telas mas não fecha as janelas", async () => {
+    const { keepPresentationScreens } = await import("@/helpers/ProjectionWindows");
+    keepPresentationScreens(() => true);
+    try {
+      await media.openEmbeddedYouTube(embed(ID), "Vídeo 1");
+      const projection = h.send.mock.calls.find(
+        ([type]) => type === BROADCAST_TYPE.ONLINE_VIDEO_PROJECTION
+      )?.[1] as { playback_id?: string } | undefined;
+      h.closeWindows.mockClear();
+      for (const listener of [...h.listeners]) {
+        listener({
+          type: BROADCAST_TYPE.YOUTUBE_STATE,
+          payload: { state: 0, playback_id: projection?.playback_id, currentTime: 10, duration: 10, isPaused: true, sampledAt: Date.now() },
+        });
+      }
+      expect(h.send).toHaveBeenCalledWith(BROADCAST_TYPE.MEDIA_CLOSE);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(h.closeWindows).not.toHaveBeenCalled();
+    } finally {
+      keepPresentationScreens(null);
+    }
   });
 });
 

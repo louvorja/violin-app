@@ -281,4 +281,14 @@ describe("LjMenu", () => {
     expect(menu()).not.toBeNull();
     expect(itemsOf("menuitem")).toHaveLength(0);
   });
+
+  it("item com `children` vira um submenu, e a lista fica no segundo nível", async () => {
+    const { trigger } = mountMenu([
+      { label: "Adicionar ao momento", children: [{ label: "Anúncios", action: () => {} }] },
+    ]);
+    pressKey(trigger, "ArrowDown");
+    await flush();
+    expect(byText("Adicionar ao momento")?.getAttribute("aria-haspopup")).toBe("menu");
+    expect(document.body.textContent).not.toContain("Anúncios");
+  });
 });

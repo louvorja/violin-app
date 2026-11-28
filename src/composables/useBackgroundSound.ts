@@ -4,6 +4,8 @@ import { detachMediaSource } from "@/helpers/Dom";
 import { PROGRESS_UI_INTERVAL_MS } from "@/constants/Playback";
 import { createRateGate } from "@/helpers/RateGate";
 import $appdata from "@/helpers/AppData";
+import $userdata from "@/helpers/UserData";
+import { KEYS } from "@/constants/UserDataKeys";
 import $broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
 import { getSetting } from "@/helpers/SettingsStorage";
@@ -39,6 +41,22 @@ let _autoPauseArmado = false;
 let _rafId: number | null = null;
 let _fadeTimer: ReturnType<typeof setInterval> | null = null;
 let _playFileFn: ((file: MediaFile, fadeInMs?: number) => void) | null = null;
+
+/*
+ * O estado do player é a fonte da verdade também para quem não abriu a aba do
+ * módulo: a Biblioteca do Modo apresentação, a Liturgia e o controle remoto
+ * tocam pelo mesmo composable. O `watch` central mantém o sinal usado pelo
+ * Ctrl+W ("há algo no ar") e pela ribbon do Som de Fundo.
+ *
+ * Em testes isolados sem Pinia o `set` lança; o player continua sendo testável.
+ */
+watch(isPlaying, (playing) => {
+  try {
+    $userdata.set(KEYS.MODULES.BACKGROUND_SOUND.IS_PLAYING, playing);
+  } catch {
+    /* sem renderer/Pinia montado */
+  }
+});
 
 function _stopRaf(): void {
   if (_rafId !== null) {

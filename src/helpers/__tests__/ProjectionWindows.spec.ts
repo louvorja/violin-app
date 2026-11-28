@@ -562,6 +562,18 @@ describe("as aberturas automáticas", () => {
     expect(calls).toEqual([`open:${FILE}`]);
   });
 
+  it("vídeo on-line sem monitor de vídeo configurado abre mesmo assim, como o botão do player", async () => {
+    // Só a opção de arquivos resolve; a de vídeo on-line ficou em "Mesma janela".
+    monitors = { [FILE]: 1, [FILE_RETURN]: 2 };
+    prefs = { [KEYS.OPTIONS.ONLINE_VIDEO_PROJECTION.SHOW_RETURN]: true };
+    calls.length = 0;
+    openWindow.mockClear();
+
+    await windows.openVideoProjectionWindows();
+
+    expect(opened().map((o) => o.feature)).toEqual([FILE, ONLINE_VIDEO_RETURN]);
+  });
+
   it("vídeo on-line: um retorno de música que ficou na tela é FECHADO, não reutilizado", async () => {
     musicReturnOnScreen();
     calls.length = 0;
@@ -569,6 +581,18 @@ describe("as aberturas automáticas", () => {
 
     expect(calls).toEqual([`open:${FILE}`, `close:${RETURN}`]);
     expect(opened().map((o) => o.feature)).not.toContain(ONLINE_VIDEO_RETURN);
+  });
+
+  it("vídeo on-line depois de um vídeo local: o retorno de arquivo é FECHADO, nunca dois retornos", async () => {
+    isWindowOpen.mockImplementation(async (feature: string) => feature === FILE_RETURN);
+    await windows.openMediaWindow("return", "video");
+    expect(calls).toEqual([`close:${RETURN}`, `close:${FILE_RETURN}`, `open:${ONLINE_VIDEO_RETURN}`]);
+  });
+
+  it("vídeo local depois de um on-line: o retorno do on-line é FECHADO", async () => {
+    isWindowOpen.mockImplementation(async (feature: string) => feature === ONLINE_VIDEO_RETURN);
+    await windows.openMediaWindow("return", "file");
+    expect(calls).toEqual([`close:${RETURN}`, `close:${ONLINE_VIDEO_RETURN}`, `open:${FILE_RETURN}`]);
   });
 
   it("vídeo on-line: o operador não entra, nem com a opção ligada", async () => {

@@ -33,6 +33,7 @@ vi.mock("@/helpers/Telemetry", () => ({
 
 const { KEYS } = await import("@/constants/UserDataKeys");
 const Modules = (await import("../Modules.js")).default;
+const { setModuleCloseGuard } = await import("../Modules.js");
 
 const tabIds = () => Modules.tabs().map((m) => m.id);
 
@@ -100,8 +101,49 @@ describe("⌘W / Ctrl+W fecha abas como no Chrome", () => {
   });
 });
 
-describe("Ctrl+Tab percorre a barra", () => {
-  it("avança e volta na ordem da barra, dando a volta nas pontas", () => {
+describe("guarda de fechamento (apresentação no ar)", () => {
+  it("pede confirmação e não fecha quando o operador cancela", async () => {
+    const guard = vi.fn(async () => false);
+    const off = setModuleCloseGuard("musics", guard);
+    try {
+      expect(await Modules.requestClose("musics")).toBe(false);
+      expect(guard).toHaveBeenCalledOnce();
+      expect(state.modules.musics.show).toBe(true);
+    } finally {
+      off();
+    }
+  });
+
+  it("fecha quando o operador confirma", async () => {
+    const off = setModuleCloseGuard("musics", async () => true);
+    try {
+      expect(await Modules.requestClose("musics")).toBe(true);
+      expect(state.modules.musics.show).toBe(false);
+    } finally {
+      off();
+    }
+  });
+
+  it("o Ctrl+W respeita a guarda da aba ativa", async () => {
+    const off = setModuleCloseGuard("musics", async () => false);
+    try {
+      expect(await Modules.requestCloseActiveTab()).toBe(true);
+      expect(state.modules.musics.show).toBe(true);
+    } finally {
+      off();
+    }
+    expect(await Modules.requestCloseActiveTab()).toBe(true);
+    expect(state.modules.musics.show).toBe(false);
+  });
+
+  it("depois de cancelada, a guarda antiga não vale mais", async () => {
+    const off = setModuleCloseGuard("musics", async () => false);
+    off();
+    expect(await Modules.requestClose("musics")).toBe(true);
+  });
+});
+
+describe("Ctrl+Tab percorre a barra", () => {  it("avança e volta na ordem da barra, dando a volta nas pontas", () => {
     Modules.cycleTab(1);
     expect(state.active_module).toBe("bible");
     Modules.cycleTab(1);

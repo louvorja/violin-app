@@ -8,7 +8,7 @@
     <RibbonBar />
 
     <!-- PageControl interno (tabs dos módulos abertos) -->
-    <OpenModulesTabs />
+    <OpenModulesTabs v-show="!isShellExpanded" />
 
     <PwaUpdateNotice v-if="!Platform.isDesktop" />
 
@@ -40,12 +40,14 @@
           </div>
         </div>
 
-        <!-- O painel lateral aparece nos demais módulos conforme a preferência do usuário. -->
+        <!-- O painel lateral aparece nos demais módulos conforme a preferência do
+             usuário; some com o módulo Liturgia aberto (duplicaria) e com o Modo
+             apresentação aberto, cujo programa do culto substitui o painel. -->
         <ShellLiturgyPanel v-if="showLiturgySidebar" class="shell-sidebar" />
       </div>
     </main>
 
-    <AppFooter />
+    <AppFooter v-show="!hideFooterPlayer" />
     <OpeningBar />
 
     <CommandPalette v-if="cmdPaletteOpen" v-model="cmdPaletteOpen" />
@@ -138,6 +140,7 @@ import {
 } from "@/helpers/AppUpdatePrompt";
 import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
+import { anyOpenModuleWants, moduleShell } from "@/config/modules";
 import $popup from "@/helpers/Popup";
 import Broadcast from "@/helpers/Broadcast";
 import { BROADCAST_TYPE } from "@/helpers/BroadcastTypes";
@@ -146,6 +149,7 @@ import { buildStartupTips, type StartupTip } from "@/helpers/StartupTips";
 import { registerShell } from "@/composables/useShell";
 import { useAppTheme } from "@/composables/useAppTheme";
 import { useViewport } from "@/composables/useViewport";
+import { useShellExpanded } from "@/composables/useModuleExpanded";
 import { useProjectionShutdown } from "@/composables/useProjectionShutdown";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import { awaitingModule, shownModuleId } from "@/composables/useModuleSwap";
@@ -293,8 +297,15 @@ const liturgyModuleOpen = computed(() => {
 const showLiturgySidebar = computed(
   () =>
     !liturgyModuleOpen.value &&
+    !anyOpenModuleWants("hidesLiturgySidebar") &&
     $userdata.get<boolean>(KEYS.SHELL.LITURGY_VISIBLE, liturgySidebarDefault()) !== false
 );
+
+const { activeModule, isExpanded: isShellExpanded } = useShellExpanded();
+
+// Módulo com os próprios controles da música e do vídeo no ar: o mini-player
+// do rodapé seria um segundo painel dos mesmos botões.
+const hideFooterPlayer = computed(() => moduleShell(activeModule.value).hidesFooterPlayer === true);
 
 useProjectionShutdown();
 

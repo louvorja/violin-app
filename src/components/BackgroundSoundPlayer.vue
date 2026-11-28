@@ -1,5 +1,5 @@
 <template>
-  <div class="bgs-footer">
+  <div class="bgs-footer" :class="{ 'bgs-footer--embedded': props.embedded }">
     <div class="bgs-footer-row">
       <div class="bgs-footer-info">
         <LjIcon :icon="ICONS.MODULES.BACKGROUND_SOUND" size="16" class="bgs-footer-icon" />
@@ -44,6 +44,7 @@
           size="sm"
           :icon="ICONS.PLAYER.STOP"
           icon-only
+          data-testid="bgs-stop-fade"
           :title="$t('shell.background_sound.stop')"
           @click="bg.stopWithFade()"
         />
@@ -52,6 +53,7 @@
           size="sm"
           :icon="ICONS.PLAYER.STOP_NOW"
           icon-only
+          data-testid="bgs-stop-now"
           :title="$t('shell.background_sound.stop_immediately')"
           @click="bg.stop(0)"
         />
@@ -78,6 +80,8 @@ import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { saveSetting } from "@/helpers/SettingsStorage";
 import { SETTINGS_TABLE } from "@/constants/DbTables";
 import { ICONS } from "@/config/Icons";
+
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false });
 
 const bg = useBackgroundSound();
 const isMuted = ref(false);
@@ -131,6 +135,19 @@ function formatTime(seconds: number): string {
   padding: 2px 12px;
   height: 30px;
   box-sizing: border-box;
+}
+
+/* Na aba da biblioteca a barra fecha o painel por baixo: a borda é em cima. */
+.bgs-footer--embedded {
+  height: 28px;
+  border-top: 1px solid var(--lj-surface-border);
+  border-bottom: 0;
+}
+
+.bgs-footer--embedded .bgs-footer-row {
+  height: 28px;
+  padding-block: 0;
+  padding-inline: var(--lj-space-3);
 }
 .bgs-footer-info {
   display: flex;
@@ -203,7 +220,9 @@ function formatTime(seconds: number): string {
 
 @media (max-width: 700px) {
   .bgs-footer,
-  .bgs-footer-row {
+  .bgs-footer-row,
+  .bgs-footer--embedded,
+  .bgs-footer--embedded .bgs-footer-row {
     height: 44px;
   }
 

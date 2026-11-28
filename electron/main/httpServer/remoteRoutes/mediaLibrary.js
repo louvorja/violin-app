@@ -12,10 +12,18 @@ const paths = require("../../paths.js");
 const { safeSend } = require("../../safeWebContents.js");
 const { joinDentroDe } = require("../../mediaRoots.js");
 
+/** Extensões de apresentação — a mesma fonte do renderer e de `main/pptx`. */
+const PRESENTATION_EXT = require("../../../shared/presentationExtensions.json");
+/** PowerPoint enviado pelo celular: o PC converte (fontes + slides) antes de pôr na Biblioteca. */
+const PPT_UPLOAD_EXT = PRESENTATION_EXT.powerPoint;
+/** Macro não vem do celular: não há quem confirme a execução aqui. */
+const PPT_MACRO_EXT = new Set(PRESENTATION_EXT.macroEnabled);
+
 function register(app, ctx) {
   const {
     getValidMainWindow,
     requestRenderer,
+    requestRendererSilent,
     sendRendererError,
     getUserData,
     isPlainObject,
@@ -69,6 +77,7 @@ function register(app, ctx) {
     "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus",
     "mp4", "webm", "mkv", "mov", "avi", "m4v",
     "pdf",
+    ...PPT_UPLOAD_EXT,
   ];
 
   /** Extensão aceita de um nome de arquivo (sem o ponto: "jpg"). */
@@ -445,6 +454,196 @@ function register(app, ctx) {
   // O main grava em <perfil>/library/media/<id>.<ext> (tmp + rename) e
   // avisa o renderer para registrar na biblioteca — aí o item já projeta.
   // ---------------------------------------------------------------
+  /*
+   * PowerPoints do celular em conversão: o celular pergunta o andamento
+   * (GET /api/media-library/phone-uploads) e mostra "Preparando os slides…" na
+   * lista até o item ficar pronto. Concluído some em 10 minutos; com falha, o
+   * arquivo enviado fica 7 dias para o celular tentar de novo sem reenviar.
+   */
+  const phoneUploads = new Map();
+  /*
+   * Arquivo e categoria de cada envio — só para o retry; não vai na resposta
+   * do celular (não expõe caminho local).
+   */
+  const phoneUploadSources = new Map();
+  const PHONE_UPLOAD_KEEP_MS = 10 * 60 * 1000;
+  /** Falhou: guarda o arquivo e a mensagem para "Tentar de novo". */
+  const PHONE_UPLOAD_RETRY_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+  /** `converting` sem fim (app fechou no meio) não fica preso na lista do celular. */
+  const PHONE_UPLOAD_STALE_MS = 30 * 60 * 1000;
+
+  function limparPhoneUploads() {
+    const agora = Date.now();
+    for (const [id, u] of phoneUploads) {
+      const idade = agora - u.updatedAt;
+      if (u.status === "converting") {
+        if (idade > PHONE_UPLOAD_STALE_MS) {
+          Object.assign(u, {
+            status: "error",
+            message: "A conversão não terminou. Tente de novo.",
+            updatedAt: agora,
+          });
+        }
+        continue;
+      }
+      const limite = u.status === "error" ? PHONE_UPLOAD_RETRY_KEEP_MS : PHONE_UPLOAD_KEEP_MS;
+      if (idade <= limite) continue;
+      phoneUploads.delete(id);
+      const info = phoneUploadSources.get(id);
+      phoneUploadSources.delete(id);
+      if (info?.source) void fs.promises.unlink(info.source).catch(() => {});
+    }
+  }
+
+  app.get("/api/media-library/phone-uploads", (req, res) => {
+    if (!hasMediaLibraryPermission(req)) {
+      return res.status(403).json({ error: "Device sem permissão da biblioteca de mídia" });
+    }
+    limparPhoneUploads();
+    res.json({ uploads: [...phoneUploads.values()] });
+  });
+
+  /*
+   * Falhou a conversão? O celular pede para tentar de novo sem reenviar o
+   * arquivo (que continua em <perfil>/library/media até 7 dias).
+   */
+  app.post("/api/media-library/phone-uploads/:id/retry", async (req, res) => {
+    if (!hasMediaLibraryPermission(req)) {
+      return res.status(403).json({ error: "Device sem permissão da biblioteca de mídia" });
+    }
+    limparPhoneUploads();
+    const mainWindow = getValidMainWindow();
+    if (!mainWindow) {
+      return res.status(503).json({ error: "Janela principal não disponível" });
+    }
+    const uploadId = typeof req.params?.id === "string" ? req.params.id : "";
+    const atual = phoneUploads.get(uploadId);
+    const info = phoneUploadSources.get(uploadId);
+    if (!atual || !info) {
+      return res.status(404).json({ error: "Envio não encontrado" });
+    }
+    if (atual.status === "converting") {
+      return res.status(409).json({ error: "A conversão já está em andamento" });
+    }
+    const existe = await fs.promises
+      .stat(info.source)
+      .then((st) => st.isFile())
+      .catch(() => false);
+    if (!existe) {
+      // Sumiu do disco: não há o que reconverter; o celular precisa reenviar.
+      phoneUploads.delete(uploadId);
+      phoneUploadSources.delete(uploadId);
+      return res.status(410).json({ error: "O arquivo enviado não está mais disponível. Envie de novo." });
+    }
+    void converterPowerPointDoCelular(
+      mainWindow,
+      uploadId,
+      info.source,
+      info.fileName,
+      info.categoryId
+    );
+    res.status(202).json({ status: "converting", uploadId, name: info.fileName });
+  });
+
+  /** Converte o PowerPoint que chegou do celular e registra o PDF na Biblioteca. */
+  async function converterPowerPointDoCelular(mainWindow, uploadId, source, fileName, categoryId) {
+    // Retry usa o mesmo arquivo: o envio não precisa ser repetido.
+    phoneUploadSources.set(uploadId, { source, fileName, categoryId });
+    const estado = { id: uploadId, name: fileName, status: "converting", phase: "fonts", done: 0, total: 0, message: "", itemId: null, updatedAt: Date.now() };
+    phoneUploads.set(uploadId, estado);
+    const atualizar = (patch) => Object.assign(estado, patch, { updatedAt: Date.now() });
+    // O PC mostra o andamento na lista de tarefas em segundo plano.
+    const avisar = (payload) =>
+      safeSend(mainWindow, "http:media-library", { action: "phone-pptx", id: uploadId, name: fileName, ...payload });
+    avisar({ status: "converting" });
+    let ultimoAviso = 0;
+    try {
+      const pptx = require("../../pptx/index.js");
+      const pref = getUserData()?.options?.file_projection?.presentation_engine;
+      const engine = pref === "powerpoint" || pref === "libreoffice" ? pref : "auto";
+      const r = await pptx.convert(source, {
+        engine,
+        onProgress: (p) => {
+          safeSend(mainWindow, "pptx:progress", { path: source, ...p });
+          if (!p || p.phase === "done") return;
+          atualizar({
+            phase: p.phase === "font" ? "fonts" : p.phase,
+            ...(Number.isInteger(p.total) ? { done: p.done || 0, total: p.total } : {}),
+          });
+          const agora = Date.now();
+          if (agora - ultimoAviso > 500) {
+            ultimoAviso = agora;
+            avisar({ status: "progress", phase: estado.phase, done: estado.done, total: estado.total });
+          }
+        },
+      });
+      if (!r || !r.ok) {
+        const message = (r && r.message) || "Falha ao converter";
+        // O arquivo enviado fica: o celular tenta de novo sem reenviar os bytes.
+        atualizar({ status: "error", message });
+        avisar({ status: "error", message });
+        return;
+      }
+      const record = {
+        id: `file_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        name: fileName,
+        path: r.path,
+        type: "pdf",
+        addedAt: Date.now(),
+        ...(categoryId ? { categoryId } : {}),
+        pptx: {
+          source,
+          fonts: Array.isArray(r.fonts) ? r.fonts : [],
+          features: r.features || null,
+          nativeAvailable: r.nativeAvailable === true,
+        },
+      };
+      /*
+       * Só entra na Biblioteca depois do `put` no IndexedDB: o celular vê
+       * "pronto" exatamente quando o item já pode ser listado. Sem `res` HTTP
+       * pendente (a rota respondeu 202), usamos o round-trip silencioso.
+       */
+      let confirmacao = null;
+      try {
+        confirmacao = await requestRendererSilent(
+          mainWindow,
+          "http:media-library",
+          { action: "saved", record },
+          {
+            prefix: "media-library",
+            timeoutMs: 8_000,
+            maxPayloadBytes: 8_192,
+            validatePayload: (payload) =>
+              isPlainObject(payload) &&
+              (payload.status === "ok" ||
+                (payload.status === "error" && typeof payload.error === "string")),
+          }
+        );
+      } catch (error) {
+        const message = `Falha ao registrar na Biblioteca: ${String(error?.message || error).slice(0, 240)}`;
+        atualizar({ status: "error", message });
+        avisar({ status: "error", message });
+        return;
+      }
+      if (!confirmacao || confirmacao.status !== "ok") {
+        const message = `Falha ao registrar na Biblioteca: ${String(confirmacao?.error || "sem confirmação").slice(0, 240)}`;
+        atualizar({ status: "error", message });
+        avisar({ status: "error", message });
+        return;
+      }
+      atualizar({ status: "done", itemId: record.id });
+      avisar({ status: "done" });
+      phoneUploadSources.delete(uploadId);
+      console.log(`[httpServer] media-library PowerPoint do celular convertido → ${r.path}`);
+    } catch (error) {
+      const message = String(error?.message || error).slice(0, 300);
+      console.warn("[httpServer] media-library PowerPoint do celular falhou:", message);
+      // Mesma regra da falha de conversão: mantém o envio para "Tentar de novo".
+      atualizar({ status: "error", message });
+      avisar({ status: "error", message });
+    }
+  }
+
   app.post("/api/media-library/upload", async (req, res) => {
     if (!hasMediaLibraryPermission(req)) {
       console.log("[httpServer] media-library upload → 403 (device sem a permission)");
@@ -466,6 +665,15 @@ function register(app, ctx) {
     if (!fileName || !ext) {
       return res.status(400).json({
         error: "X-File-Name inválido ou extensão não suportada",
+        valid: MEDIA_LIBRARY_EXT,
+      });
+    }
+    if (PPT_MACRO_EXT.has(ext)) {
+      // Abrir um PowerPoint com macros executa o que estiver lá dentro. No PC o
+      // operador confirma; o celular não tem como — o arquivo volta como erro.
+      return res.status(415).json({
+        error: "PowerPoint com macros não pode vir do celular. Envie em .pptx ou .ppsx.",
+        macroEnabled: true,
         valid: MEDIA_LIBRARY_EXT,
       });
     }
@@ -521,6 +729,17 @@ function register(app, ctx) {
     const categoryId = typeof req.headers["x-category-id"] === "string"
       ? req.headers["x-category-id"].trim().slice(0, 256)
       : "";
+
+    // PowerPoint: a conversão leva de segundos a minutos. O celular ouve "recebido"
+    // (202) na hora; o PC converte com o programa escolhido em Opções e só então
+    // o item entra na Biblioteca — o mesmo item que "Adicionar arquivos" criaria.
+    if (PPT_UPLOAD_EXT.includes(ext)) {
+      const uploadId = `pu_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      res.status(202).json({ status: "converting", name: fileName, uploadId });
+      void converterPowerPointDoCelular(mainWindow, uploadId, dest, fileName, categoryId);
+      return;
+    }
+
     const id = path.basename(dest, `.${ext}`);
     const record = {
       id,

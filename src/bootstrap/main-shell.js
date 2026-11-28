@@ -5,7 +5,9 @@ import { watchStaleVersion } from "@/helpers/StaleVersion";
 import requiresNetwork from "@/directives/requiresNetwork";
 import App from "@/App.vue";
 import router from "@/router";
-import { createI18nInstance } from "@/i18n";
+import { createI18nInstance, i18nAtual } from "@/i18n";
+import $snackbar from "@/helpers/Snackbar";
+import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
 import VueFullscreen from "vue-fullscreen";
 import "@/assets/styles/tokens.css";
 import "@/assets/styles/ui.css";
@@ -18,8 +20,8 @@ import "@/assets/styles/appmenu-options.css";
 import ModuleManager from "@/helpers/ModuleManager";
 import { renderCategoryTile } from "@/helpers/CategoryTile";
 import $storage from "@/helpers/Storage";
-import $alert from "@helpers/Alert";
 import Platform from "@/helpers/Platform";
+import $alert from "@/helpers/Alert";
 import WakeLock from "@/helpers/WakeLock";
 import { installFileDrop } from "@/helpers/FileDrop";
 import { LLJA_RE, openLiturgyPackage, openLiturgyPackagePath } from "@/helpers/LiturgyFileOpen";
@@ -43,6 +45,7 @@ import Modules from "@/helpers/Modules";
 import Dev from "@/helpers/Dev";
 import UserData from "@/helpers/UserData";
 import AppData from "@/helpers/AppData";
+import { anyOpenModuleWants } from "@/config/modules";
 import { useFileProjection } from "@/composables/useFileProjection";
 import { useBackgroundSound } from "@/composables/useBackgroundSound";
 import { syncFromIdb as syncDevicesFromIdb } from "@/composables/useDevices";
@@ -52,12 +55,14 @@ import {
   playDefaultBackgroundSound,
 } from "@/helpers/BackgroundSoundPlayback";
 import { activateBackgroundProjection } from "@/helpers/BackgroundProjectionPlayback";
+import { projectBiblePassage } from "@/helpers/BibleProjection";
 import Media from "@/composables/useMedia";
 import { useSlides } from "@/composables/useSlides";
 import { musicCommandSessionRejectionReason } from "@/presentation/MusicPresentationPacket";
 import { MusicActionEnum } from "@/enums/MusicActionEnum";
 import Broadcast from "@/helpers/Broadcast";
 import Database from "@/helpers/Database";
+import { readRemoteMusicAlbum } from "@/helpers/RemoteMusicAlbum";
 import Liturgy from "@/helpers/Liturgy";
 import { AUDIO_EXT } from "@/constants/FileTypes";
 import { openSlja, SLJA_EXT } from "@/helpers/SljaPlayer";
@@ -142,6 +147,27 @@ const isAuxiliaryRenderer = AUXILIARY_ROUTE_PREFIXES.some((prefix) => {
   const route = initialRoutePath();
   return route === prefix || route.startsWith(`${prefix}/`);
 });
+
+/**
+ * Encerra a projeção bíblica a partir da janela principal.
+ *
+ * A ação da ribbon só tem quem a escute quando o módulo Bíblia está aberto.
+ * Uma projeção iniciada pela Liturgia ou pelo Spotlight precisa fechar do
+ * mesmo jeito, então o estado e as janelas são resolvidos aqui.
+ */
+async function stopBibleProjection() {
+  try {
+    UserData.set(KEYS.MODULES.BIBLE.IS_PLAYING, false);
+    Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
+      text: "",
+      reference: "",
+      active: false,
+    });
+    await ProjectionWindows.closeBibleWindows();
+  } catch (error) {
+    console.warn("[bible] falha ao encerrar a projeção:", error?.message || error);
+  }
+}
 
 /**
  * Controlador de projeção do Sorteio. Só a janela principal abre/fecha a
@@ -1428,6 +1454,52 @@ $storage.hydrate().then(async () => {
             break;
           }
 
+          case "phone-pptx": {
+            // PowerPoint enviado pelo celular: o main converte e avisa aqui o andamento.
+            const t = i18nAtual()?.global?.t;
+            const msg = (key, params) =>
+              t ? String(t(`remote_control.media_library.${key}`, params)) : key;
+            // Na lista de tarefas em segundo plano, com "slide 3 de 12".
+            const tasks = useBackgroundTasks();
+            const taskId = `phone-pptx-${clip(data.id, 64)}`;
+            const name = clip(data.name, 200);
+            if (data.status === "converting") {
+              tasks.registerTask(taskId, msg("phone_pptx_task", { name }));
+              tasks.updateTask(taskId, { progress: 5, detail: msg("phone_pptx_fonts") });
+              $snackbar.info(msg("phone_pptx_converting", { name }), { timeout: 8000 });
+            } else if (data.status === "progress") {
+              const total = Number(data.total) || 0;
+              const done = Math.min(Number(data.done) || 0, total);
+              tasks.updateTask(
+                taskId,
+                total
+                  ? {
+                      progress: 10 + Math.round((85 * done) / total),
+                      detail: msg("phone_pptx_slides", { done, total }),
+                    }
+                  : {
+                      progress: 10,
+                      detail: msg(
+                        data.phase === "converting"
+                          ? "phone_pptx_converting_short"
+                          : "phone_pptx_fonts"
+                      ),
+                    }
+              );
+            } else if (data.status === "done") {
+              tasks.completeTask(taskId);
+            } else if (data.status === "error") {
+              tasks.updateTask(taskId, { status: "error", error: clip(data.message, 300) });
+              $snackbar.error(
+                msg("phone_pptx_failed", { name, message: clip(data.message, 300) }),
+                {
+                  timeout: 12000,
+                }
+              );
+            }
+            break;
+          }
+
           case "saved": {
             // Upload do remoto: o main gravou os bytes em disco e delegou o
             // registro (metadado + thumb) para o renderer. A confirmação volta
@@ -1445,6 +1517,8 @@ $storage.hydrate().then(async () => {
                   : {}),
               });
               console.log("[http:media-library] upload registrado:", record.id);
+              // A Biblioteca aberta lê a lista só ao montar: avisa que chegou arquivo.
+              window.dispatchEvent(new CustomEvent("lj:media-library-changed"));
               respond({ status: "ok" });
             } catch (error) {
               console.warn("[http:media-library] upload não registrou:", error?.message || error);
@@ -1908,6 +1982,12 @@ $storage.hydrate().then(async () => {
                     }
                     break;
                   }
+                  case "biblia": {
+                    if (!litItem.bible) break;
+                    await projectBiblePassage(litItem.bible);
+                    projected = true;
+                    break;
+                  }
                   default:
                     console.warn("[http] liturgy-execute: tipo desconhecido", litItem.tipo);
                 }
@@ -2096,6 +2176,16 @@ $storage.hydrate().then(async () => {
               break;
           }
           break;
+        case "http:music-album": {
+          let reply = { album: null };
+          try {
+            reply = await readRemoteMusicAlbum(data);
+          } catch (error) {
+            console.warn("[http:music-album] falha ao ler álbum local:", error?.message || error);
+          }
+          if (data?.requestId) Platform.httpServer?.respond?.(data.requestId, reply);
+          break;
+        }
         case "http:custom-music": {
           // Acervo pessoal mora no IndexedDB — só o renderer lê. A parte
           // pessoal é **adição**: qualquer falha aqui responde lista vazia e a
@@ -2156,6 +2246,13 @@ $storage.hydrate().then(async () => {
         case "http:media-library":
           await handleMediaLibraryHttp(data);
           break;
+        case "http:presenter": {
+          // Aba Apresentação do controle remoto: carregado só quando alguém usa.
+          const { handlePresenterHttp } =
+            await import("@/modules/presentation_mode/remotePresenter");
+          await handlePresenterHttp(data);
+          break;
+        }
         case "http:background-sound": {
           // Som de fundo: o player é single (useBackgroundSound), então o
           // controle remoto funciona sem o módulo aberto.
@@ -2501,6 +2598,7 @@ $storage.hydrate().then(async () => {
         case "http:projections-close": {
           Media.close(true);
           Broadcast.send(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, { action: "stop" });
+          void stopBibleProjection();
           const fp = useFileProjection();
           if (fp.isProjecting.value) {
             fp.stopProjection();
@@ -2906,9 +3004,24 @@ $storage.hydrate().then(async () => {
           const escClosesProjection = UserData.get(KEYS.MODULES.BIBLE.ESC_CLOSES_PROJECTION, false);
           const lastVerse = Broadcast.getLastPayload(BROADCAST_TYPE.BIBLE_VERSE);
           const hasVerse = !!(lastVerse && lastVerse.text);
+          const closeBible = escClosesProjection || !hasVerse;
           Broadcast.send(BROADCAST_TYPE.BIBLE_RIBBON_ACTION, {
-            action: escClosesProjection || !hasVerse ? "stop" : "clear",
+            action: closeBible ? "stop" : "clear",
           });
+          /*
+           * O módulo Bíblia só responde à ribbon enquanto está aberto. Fechar
+           * ou limpar o versículo também aqui cobre a projeção aberta pela
+           * Liturgia/Spotlight, que não passa por ele.
+           */
+          if (UserData.get(KEYS.MODULES.BIBLE.IS_PLAYING, false) === true) {
+            if (closeBible) void stopBibleProjection();
+            else
+              Broadcast.send(BROADCAST_TYPE.BIBLE_VERSE_INTENT, {
+                text: "",
+                reference: "",
+                active: true,
+              });
+          }
 
           // Módulos genéricos (counter, timer, etc.)
           const moduleIds = [
@@ -2932,22 +3045,38 @@ $storage.hydrate().then(async () => {
           void desativarOverlayVinculado();
         };
 
+        // Com um módulo de operação ao vivo aberto (manifesto: `shell.immediateEscape`)
+        // o Esc é a saída de emergência: tira da
+        // tela na hora, sem diálogo — um erro no telão não pode esperar o
+        // operador achar o "Sim". E as janelas ficam: fechá-las é o "Parar
+        // apresentação". Fora dele, vale a confirmação de sempre.
+        const immediate = anyOpenModuleWants("immediateEscape");
+        const stop = (confirmKey, action) => {
+          if (immediate) action();
+          // Encerrar o telão é a resposta esperada: o Sim já vem marcado.
+          else
+            $alert.yesno(
+              { text: confirmKey, default_button: "yes" },
+              (btn) => btn === "yes" && action()
+            );
+        };
+        Broadcast.send(BROADCAST_TYPE.RETURN_OVERRIDE, { active: false });
+
         /*
          * URL projetada: só um item no telão, então é ela que o ESC encerra,
          * e com a mesma confirmação que a projeção de slides tem.
          */
         if (ProjectionWindows.isSiteProjectionActive()) {
-          $alert.yesno(
-            { text: "modules.media.alerts.close_projection", default_button: "yes" },
-            (btn) => {
-              if (btn === "yes") void ProjectionWindows.closeSiteWindow();
-            }
+          stop(
+            "modules.media.alerts.close_projection",
+            () => void ProjectionWindows.closeSiteWindow()
           );
           return;
         }
 
         // Projeção de anúncios
         const fp = useFileProjection();
+        const lastFile = Broadcast.getLastPayload(BROADCAST_TYPE.FILE_PROJECTION);
         if (fp.isProjecting.value && fp.currentType.value === "announcements") {
           fp.stopProjection();
           Projection.close("announcements");
@@ -2957,25 +3086,18 @@ $storage.hydrate().then(async () => {
            */
           void desativarOverlayVinculado();
         }
-        // Projeção de arquivos de imagem e vídeo
-        else if (Broadcast.getLastPayload(BROADCAST_TYPE.FILE_PROJECTION)) {
-          $alert.yesno(
-            { text: "modules.media.alerts.close_projection", default_button: "yes" },
-            (btn) => {
-              if (btn === "yes") {
-                Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, { action: "clear" });
-                Media.close(true);
-                closeEverythingElse();
-              }
-            }
-          );
+        // Projeção de arquivos de imagem e vídeo. O "clear" também fica no
+        // cache — não é arquivo no ar.
+        else if (lastFile && lastFile.action !== "clear") {
+          stop("modules.media.alerts.close_projection", () => {
+            Broadcast.send(BROADCAST_TYPE.FILE_PROJECTION, { action: "clear" });
+            Media.close(true, false, immediate);
+            closeEverythingElse();
+          });
         } else if (_mediaIsActive()) {
-          // Música/Slides (com confirmação se ativa)
-          $alert.yesno({ text: "modules.media.alerts.close", default_button: "yes" }, (btn) => {
-            if (btn === "yes") {
-              Media.close(true);
-              closeEverythingElse();
-            }
+          stop("modules.media.alerts.close", () => {
+            Media.close(true, false, immediate);
+            closeEverythingElse();
           });
         } else {
           closeEverythingElse();
@@ -3001,7 +3123,9 @@ $storage.hydrate().then(async () => {
         if (e?.repeat) return;
         // Sem aba e nada no ar, a janela: o mesmo que o botão de fechar (com
         // projeção aberta, ela só sai da frente).
-        if (!Modules.closeActiveTab()) void Platform.api?.window?.close?.();
+        void (async () => {
+          if (!(await Modules.requestCloseActiveTab())) void Platform.api?.window?.close?.();
+        })();
       },
       {
         context: "global",
