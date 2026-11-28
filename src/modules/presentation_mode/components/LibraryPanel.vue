@@ -109,6 +109,7 @@
       :key="tab"
       :scope="tab === 'audio' ? 'audio' : 'files'"
       :program-folder="tab === 'files' ? programFolder : null"
+      :media-type-tabs="tab === 'files'"
       :live-path="livePath"
       :return-path="returnPath"
       v-bind="relay"

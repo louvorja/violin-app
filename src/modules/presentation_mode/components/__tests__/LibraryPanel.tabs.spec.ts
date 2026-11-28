@@ -41,7 +41,12 @@ vi.mock("@/modules/presentation_mode/composables/useVerticalResize", () => ({
   useVerticalResize: () => ({ start: vi.fn(), step: vi.fn() }),
 }));
 vi.mock("../LibraryFiles.vue", () => ({
-  default: { name: "LibraryFiles", template: "<div />" },
+  default: {
+    name: "LibraryFiles",
+    props: ["mediaTypeTabs", "scope"],
+    template:
+      '<div class="pm-library-files-stub" :data-media-type-tabs="String(mediaTypeTabs)" :data-scope="scope" />',
+  },
 }));
 vi.mock("../LibraryMusic.vue", () => ({
   default: { name: "LibraryMusic", template: "<div />" },
@@ -63,10 +68,12 @@ vi.mock("../LibraryNativeMedia.vue", () => ({
 }));
 
 import LibraryPanel from "../LibraryPanel.vue";
+import type { LibraryTab } from "../LibraryPanel.vue";
 
-function mountPanel() {
+function mountPanel(tab: LibraryTab = "files") {
   return mount(LibraryPanel, {
     props: {
+      tab,
       fullWidth: false,
       tall: false,
       height: 244,
@@ -86,6 +93,18 @@ function mountPanel() {
 }
 
 describe("LibraryPanel tabs", () => {
+  it("mostra os filtros por tipo na aba Arquivos e não na aba Áudio", () => {
+    const files = mountPanel("files");
+    const filesStub = files.find(".pm-library-files-stub");
+    expect(filesStub.attributes("data-media-type-tabs")).toBe("true");
+    expect(filesStub.attributes("data-scope")).toBe("files");
+
+    const audio = mountPanel("audio");
+    const audioStub = audio.find(".pm-library-files-stub");
+    expect(audioStub.attributes("data-media-type-tabs")).toBe("false");
+    expect(audioStub.attributes("data-scope")).toBe("audio");
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     userdata.get.mockReturnValue([]);
@@ -123,20 +142,17 @@ describe("LibraryPanel tabs", () => {
     sortable.vm.$emit("update:modelValue", [{ id: "bible" }, { id: "files" }]);
     await nextTick();
 
-    expect(userdata.set).toHaveBeenCalledWith(
-      KEYS.MODULES.PRESENTATION_MODE.LIBRARY_TAB_ORDER,
-      [
-        "bible",
-        "files",
-        "media",
-        "online_videos",
-        "media_library",
-        "audio",
-        "background_sound",
-        "background_projection",
-        "musics",
-      ]
-    );
+    expect(userdata.set).toHaveBeenCalledWith(KEYS.MODULES.PRESENTATION_MODE.LIBRARY_TAB_ORDER, [
+      "bible",
+      "files",
+      "media",
+      "online_videos",
+      "media_library",
+      "audio",
+      "background_sound",
+      "background_projection",
+      "musics",
+    ]);
   });
 
   it("não troca de aba no clique que fecha o arraste e libera o próximo", async () => {

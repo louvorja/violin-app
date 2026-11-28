@@ -341,7 +341,7 @@ const props = withDefaults(
     paneActive?: boolean;
     /** Item pasta/série do programa que abriu a pasta (faixa "Aberta pelo programa"). */
     programFolder?: ProgramItem | null;
-    /** Abas por tipo de arquivo na área da grade (aba Mídia). */
+    /** Abas por tipo de arquivo na área da grade (abas Arquivos e Mídia). */
     mediaTypeTabs?: boolean;
   }>(),
   { scope: "files", paneActive: false, programFolder: null, mediaTypeTabs: false }
