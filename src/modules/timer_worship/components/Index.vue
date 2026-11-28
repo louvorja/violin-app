@@ -36,11 +36,12 @@
           >
             <span class="tw-display__time">{{ display }}</span>
             <span
-              v-if="showTargetTime"
+              v-if="extraLines"
               class="tw-display__clock"
               :style="[clockColorStyle, displayColorStyle]"
+              data-testid="timer-worship-extra"
             >
-              {{ targetTime }}
+              {{ extraLines }}
             </span>
           </div>
           <ModuleAlertFrame :level="flashBorders ? alertLevel : ''" :color="displayColor" />
@@ -53,16 +54,31 @@
           :labels="dockLabels"
           @update:mode="mode = $event"
           @update:warning-seconds="setWarning"
-        />
+        >
+          <!-- ±1/5/10 min ao vivo, sem parar nem zerar a contagem. -->
+          <div class="tw-adjust" role="group" :aria-label="tm('screen.adjust')">
+            <LjButton
+              v-for="step in ADJUST_STEPS"
+              :key="step"
+              size="sm"
+              variant="subtle"
+              :data-testid="`timer-worship-adjust-${step > 0 ? 'plus' : 'minus'}-${Math.abs(step)}`"
+              @click="adjustMinutes(step)"
+            >
+              {{ step > 0 ? "+" : "−" }}{{ Math.abs(step) }} min
+            </LjButton>
+          </div>
+        </ModuleTimerDock>
       </div>
     </div>
 
     <TimerEndActionDialogs :end-action="endAction" />
+    <SoundsDialog v-model="showSounds" @preview="playCue" @preview-extra="playExtra" />
   </ModuleContainer>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from "vue";
+import { ref, reactive, computed, watch, onBeforeUnmount } from "vue";
 import { module as manifest } from "../manifest";
 import ModuleContainer from "@/components/ModuleContainer.vue";
 import ModuleBackgroundMedia from "@/components/ModuleBackgroundMedia.vue";
@@ -70,6 +86,8 @@ import ModuleFormatDrawer from "@/components/ModuleFormatDrawer.vue";
 import ModuleAlertFrame from "@/components/ModuleAlertFrame.vue";
 import ModuleTimerDock from "@/components/ModuleTimerDock.vue";
 import TimerEndActionDialogs from "@/components/TimerEndActionDialogs.vue";
+import SoundsDialog from "./SoundsDialog.vue";
+import { LjButton } from "@/components/ui";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
 import { useModuleProjection } from "@/composables/useModuleProjection";
@@ -77,14 +95,39 @@ import { useModuleFormat } from "@/composables/useModuleFormat";
 import { useModuleBodyStyle } from "@/composables/useModuleBodyStyle";
 import { useTimerEndAction } from "@/composables/useTimerEndAction";
 import Media from "@/composables/useMedia";
-import { SABBATH_SCHOOL_SOUNDS } from "@/config/SabbathSchool";
 import { MediaEnum } from "@/enums/MediaEnum";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { formatTimerSeconds, timerProjectionText } from "@/helpers/TimerText";
-import { secondsUntilTarget } from "@/helpers/TimerTarget";
-import { worshipShowsTarget, worshipTargetTime } from "../projectionText";
-
-type TimerMode = "up" | "down";
+import {
+  adjust,
+  createCountdownState,
+  endTimeText,
+  overtimeTurnedOff,
+  pause as pauseCountdown,
+  refreshIdle,
+  reset as resetCountdown,
+  start as startCountdown,
+  tick,
+  type CountdownConfig,
+  type CountdownEvent,
+  type CountdownMode,
+} from "../countdown";
+import {
+  DEFAULT_DURATION_MINUTES,
+  worshipDefineBy,
+  worshipDurationMinutes,
+  worshipExtraLines,
+  worshipSecondLine,
+  worshipTargetTime,
+} from "../projectionText";
+import {
+  ENABLED_KEYS,
+  getExtraCues,
+  resolveCueSound,
+  resolveExtraSound,
+  type WorshipCue,
+  type WorshipExtraCue,
+} from "../sounds";
 
 const { show_format, fmt } = useModuleFormat(ModuleEnum.TIMER_WORSHIP, manifest);
 const { rootStyle, textStyle, alertStyle, warningStyle, bgImage, imageStyle, container } =
@@ -94,22 +137,66 @@ const endAction = useTimerEndAction(ModuleEnum.TIMER_WORSHIP, KEYS.MODULES.TIMER
 const moduleContainer = ref<{ tm(key: string): string } | null>(null);
 const tm = (key: string): string => moduleContainer.value?.tm(key) || key;
 
-const mode = computed<TimerMode>({
-  get: () => $userdata.get<TimerMode>(KEYS.MODULES.TIMER_WORSHIP.MODE, "down") ?? "down",
-  set: (v: TimerMode) => $userdata.set(KEYS.MODULES.TIMER_WORSHIP.MODE, v),
+const mode = computed<CountdownMode>({
+  get: () => $userdata.get<CountdownMode>(KEYS.MODULES.TIMER_WORSHIP.MODE, "down") ?? "down",
+  set: (v: CountdownMode) => $userdata.set(KEYS.MODULES.TIMER_WORSHIP.MODE, v),
 });
 
-const running = ref<boolean>(false);
-const seconds = ref<number>(0);
 const targetTime = computed<string>({
   get: () => worshipTargetTime(),
   set: (v: string) => $userdata.set(KEYS.MODULES.TIMER_WORSHIP.LAST_TARGET_TIME, v),
 });
-const durationSeconds = ref<number>(0);
-const startedAt = ref<number | null>(null);
-const alarmed = ref<boolean>(false);
+const defineBy = computed(() => worshipDefineBy());
+const durationMinutes = computed(() => worshipDurationMinutes());
+const overtime = computed<boolean>(
+  () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.COUNT_OVERTIME, true) !== false
+);
+const flashBorders = computed<boolean>(
+  () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.FLASH_BORDERS, true) !== false
+);
 
-const showTargetTime = computed<boolean>(() => worshipShowsTarget());
+/** Avisos extras da janela "Áudios" (só os que têm áudio escolhido tocam). */
+const extraCues = computed<WorshipExtraCue[]>(() => getExtraCues());
+
+const config = computed<CountdownConfig>(() => ({
+  mode: mode.value,
+  defineBy: defineBy.value,
+  target: targetTime.value,
+  durationMinutes: durationMinutes.value,
+  overtime: overtime.value,
+  marks: [...new Set(extraCues.value.filter((c) => c.libraryId).map((c) => c.seconds))],
+}));
+
+/*
+ * A contagem mora em `countdown.ts` (contas puras, testadas com relógio
+ * falso); aqui ficam só a tela, o telão e os sons.
+ */
+const state = reactive(createCountdownState());
+const seconds = computed(() => state.seconds);
+const alarmed = computed(() => state.alarmed);
+
+/*
+ * Um único "despertador" alinhado à virada do segundo do relógio do sistema,
+ * como o `escSBTempo` do Classic: cada tick lê a hora UMA vez e dela saem o
+ * relógio e a contagem. Com dois setInterval independentes cada linha virava
+ * o segundo num momento diferente, e um tick rente à virada pulava um segundo.
+ */
+const now = ref<Date>(new Date());
+let tickHandle: ReturnType<typeof setTimeout> | null = null;
+let disposed = false;
+function scheduleTick(): void {
+  if (disposed) return;
+  // ~15 ms depois da virada, longe da fronteira do segundo.
+  const delay = 1000 - (Date.now() % 1000) + 15;
+  tickHandle = setTimeout(() => {
+    const t = Date.now();
+    now.value = new Date(t);
+    handleEvents(tick(state, config.value, t));
+    scheduleTick();
+  }, delay);
+}
+refreshIdle(state, config.value, Date.now());
+scheduleTick();
 
 const showAlert = computed<boolean>(
   () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.SHOW_ALERT, true) ?? true
@@ -122,24 +209,19 @@ const alertSeconds = computed<number>(() =>
 const alertActive = computed<boolean>(
   () =>
     mode.value === "down" &&
-    startedAt.value !== null &&
+    state.started &&
     showAlert.value &&
     seconds.value <= alertSeconds.value &&
-    (seconds.value > 0 || alarmed.value)
+    (seconds.value > 0 || state.alarmed)
 );
-
-let timer: ReturnType<typeof setInterval> | null = null;
-let fiveMinFired = false;
-let oneMinFired = false;
 
 /*
  * Cor do número (e da moldura): "Cor do aviso" nos segundos de destaque,
- * "Cor do alerta" só depois do horário — as duas da Formatação. Antes, o destaque já pintava de vermelho
- * enquanto a moldura ficava amarela.
+ * "Cor do alerta" só depois do horário — as duas da Formatação.
  */
 const displayColor = computed<string | undefined>(() => {
   // Passou do horário: vermelho mesmo com o aviso em "Não".
-  if (mode.value === "down" && seconds.value <= 0 && alarmed.value && startedAt.value !== null) {
+  if (mode.value === "down" && seconds.value <= 0 && state.alarmed && state.started) {
     return alertStyle.value.color;
   }
   return alertActive.value ? warningStyle.value.color : undefined;
@@ -180,43 +262,40 @@ const dockLabels = computed(() => ({
   customPlaceholder: tm("warning.custom_placeholder"),
 }));
 
-const overtime = computed<boolean>(
-  () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.COUNT_OVERTIME, true) !== false
-);
-const flashBorders = computed<boolean>(
-  () => $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.FLASH_BORDERS, true) !== false
-);
-
 /*
  * Aviso de tempo para a moldura (tela e telão): amarelo nos segundos de
  * destaque, vermelho depois do zero. Só com a contagem iniciada — parado,
  * mesmo perto do horário, nada pisca no telão.
  */
 const alertLevel = computed<"" | "warning" | "danger">(() => {
-  if (mode.value !== "down" || startedAt.value === null) return "";
-  if (seconds.value <= 0) return alarmed.value ? "danger" : "";
+  if (mode.value !== "down" || !state.started) return "";
+  if (seconds.value <= 0) return state.alarmed ? "danger" : "";
   return alertActive.value ? "warning" : "";
 });
 
 const display = computed<string>(() => formatTimerSeconds(seconds.value));
 
-const projecao = computed<string>(() =>
-  timerProjectionText(display.value, showTargetTime.value, targetTime.value)
+/** Linha(s) abaixo da contagem: término, relógio atual ou os dois. */
+const extraLines = computed<string>(() =>
+  worshipExtraLines(endTimeText(state, config.value, now.value.getTime()), now.value)
 );
 
-// Defaults sonoros — setIfNull garante que existam antes do primeiro uso
+const projecao = computed<string>(() =>
+  timerProjectionText(display.value, extraLines.value !== "", extraLines.value)
+);
+
+// Defaults — setIfNull garante que existam antes do primeiro uso.
 $userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.SOUND_START, true);
 $userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.SOUND_FIVE_MIN, true);
 $userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.SOUND_ONE_MIN, true);
 $userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.END_ACTION, MediaEnum.NONE);
+// As opções novas nascem como era antes: hora de término, sem relógio.
+$userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.DEFINE_BY, "end");
+$userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.DURATION_MINUTES, DEFAULT_DURATION_MINUTES);
+// O seletor "Exibir" nasce do que a antiga caixinha "Exibir hora" dizia.
+$userdata.setIfNull(KEYS.MODULES.TIMER_WORSHIP.SECOND_LINE, worshipSecondLine());
 
-const selectedSound = computed<string>(
-  () =>
-    $userdata.get(
-      KEYS.MODULES.TIMER_WORSHIP.SELECTED_SOUND,
-      SABBATH_SCHOOL_SOUNDS.OPENING.id
-    ) as string
-);
+const showSounds = ref(false);
 
 const projection = useModuleProjection(ModuleEnum.TIMER_WORSHIP, {
   onAction(action: string, payload?: unknown) {
@@ -233,16 +312,8 @@ const projection = useModuleProjection(ModuleEnum.TIMER_WORSHIP, {
       case "format":
         show_format.value = !show_format.value;
         break;
-      case "play_sound":
-        {
-          const sound = Object.values(SABBATH_SCHOOL_SOUNDS).find(
-            (s) => s.id === selectedSound.value
-          );
-          if (sound) {
-            void playMp3(selectedSound.value);
-            return;
-          }
-        }
+      case "sounds":
+        showSounds.value = true;
         break;
       case "file_audio":
         endAction.handleFileAudio();
@@ -256,36 +327,80 @@ const projection = useModuleProjection(ModuleEnum.TIMER_WORSHIP, {
       case "music":
         endAction.handleMusic();
         break;
+      default: {
+        // adjust_plus_5, adjust_minus_1… — ajuste ao vivo, sem zerar.
+        const match = /^adjust_(plus|minus)_(\d+)$/.exec(action);
+        if (match) adjustMinutes((match[1] === "plus" ? 1 : -1) * Number(match[2]));
+      }
     }
   },
 });
 
-async function playMp3(id: string): Promise<void> {
-  const sound = SABBATH_SCHOOL_SOUNDS[id.toUpperCase()];
-  if (!sound) return;
+const CUE_TITLES: Record<WorshipCue, string> = {
+  start: "sound.start",
+  five: "sound.five_min",
+  one: "sound.one_min",
+};
+
+/** Toca o áudio do aviso: o escolhido na Biblioteca de Mídia ou o que vem com o programa. */
+async function playCue(cue: WorshipCue): Promise<void> {
   try {
-    await Media.openAudio({
-      url: sound.url,
-      title: tm(sound.label.split(".").slice(2).join(".")),
-    });
+    const sound = await resolveCueSound(cue, tm(CUE_TITLES[cue]));
+    await Media.openAudio({ url: sound.url, title: sound.title });
   } catch {
     /* noop */
   }
 }
 
-function playSoundStart(): void {
-  playMp3(SABBATH_SCHOOL_SOUNDS.OPENING.id);
+function cueEnabled(cue: WorshipCue): boolean {
+  return $userdata.get<boolean>(ENABLED_KEYS[cue]) === true;
 }
 
-function playSoundFiveMin(): void {
-  playMp3(SABBATH_SCHOOL_SOUNDS.FIVE_MINUTES.id);
+/** Toca o áudio de um aviso extra; sem áudio na biblioteca, fica em silêncio. */
+async function playExtra(cue: WorshipExtraCue): Promise<void> {
+  try {
+    const sound = await resolveExtraSound(cue);
+    if (sound) await Media.openAudio({ url: sound.url, title: sound.title });
+  } catch {
+    /* noop */
+  }
 }
 
-function playSoundOneMin(): void {
-  playMp3(SABBATH_SCHOOL_SOUNDS.ONE_MINUTE.id);
+function handleEvents(events: CountdownEvent[]): void {
+  for (const event of events) {
+    if (event === "end") {
+      endAction.triggerTimerEndAction();
+    } else if (event.startsWith("mark:")) {
+      const seconds = Number(event.slice("mark:".length));
+      for (const cue of extraCues.value) if (cue.seconds === seconds) void playExtra(cue);
+    } else if (cueEnabled(event as WorshipCue)) {
+      void playCue(event as WorshipCue);
+    }
+  }
 }
 
+/*
+ * Trocar o modo ou o "Definir por" recomeça; mudar o horário ou a duração com
+ * a contagem parada só atualiza a prévia.
+ */
 watch(mode, () => reset());
+watch(defineBy, () => reset());
+watch([targetTime, durationMinutes], () => {
+  if (!state.started) refreshIdle(state, config.value, Date.now());
+});
+
+/*
+ * Desligar o excedido no meio dele precisa parar a contagem em 00:00:00; sem
+ * isto o botão ficava em "Pausar" com o display congelado.
+ */
+watch(overtime, (on) => {
+  if (!on) overtimeTurnedOff(state, config.value, Date.now());
+});
+
+watch(
+  () => state.running,
+  (value) => $userdata.set(KEYS.MODULES.TIMER_WORSHIP.RUNNING, value)
+);
 
 function setTimeFromPayload(payload: unknown): void {
   const value = (payload as { url?: string } | null)?.url;
@@ -295,6 +410,18 @@ function setTimeFromPayload(payload: unknown): void {
   if (h > 23 || m > 59) return;
   targetTime.value = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   reset();
+}
+
+/** Na barra de baixo, em ordem: −10 −5 −1 +1 +5 +10. */
+const ADJUST_STEPS = [-10, -5, -1, 1, 5, 10] as const;
+
+/** Botões ±1/5/10 min: somam ou tiram tempo sem parar nem zerar. */
+function adjustMinutes(delta: number): void {
+  const result = adjust(state, config.value, delta, Date.now());
+  if (result.target) targetTime.value = result.target;
+  if (result.durationMinutes) {
+    $userdata.set(KEYS.MODULES.TIMER_WORSHIP.DURATION_MINUTES, result.durationMinutes);
+  }
 }
 
 const projectionActive = ref(true);
@@ -318,138 +445,28 @@ watch(
   { immediate: true }
 );
 
-function getDurationUntilTarget(): number {
-  return Math.max(0, secondsUntilTarget(targetTime.value));
-}
-
-function updateFromTargetTime(): void {
-  alarmed.value = false;
-  durationSeconds.value = getDurationUntilTarget();
-  seconds.value = mode.value === "down" ? durationSeconds.value : 0;
-}
-
-function updateRunningTime(): void {
-  if (!startedAt.value) return;
-
-  const elapsedSeconds = Math.floor((Date.now() - startedAt.value) / 1000);
-
-  if (mode.value === "up") {
-    seconds.value = Math.min(elapsedSeconds, durationSeconds.value);
-    if (seconds.value >= durationSeconds.value && !alarmed.value) {
-      alarmed.value = true;
-      pause();
-      endAction.triggerTimerEndAction();
-    }
-    return;
-  }
-
-  const left = durationSeconds.value - elapsedSeconds;
-  seconds.value = overtime.value ? left : Math.max(left, 0);
-
-  if (left <= 0) {
-    if (!alarmed.value) {
-      alarmed.value = true;
-      // Com tempo excedido a contagem segue (-00:00:01…); sem ele, para no zero.
-      if (!overtime.value) pause();
-      endAction.triggerTimerEndAction();
-    }
-    return;
-  }
-
-  if (mode.value === "down" && !alarmed.value) {
-    const remaining = seconds.value;
-
-    if (
-      $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.SOUND_FIVE_MIN) &&
-      !fiveMinFired &&
-      remaining <= 300 &&
-      remaining > 60
-    ) {
-      fiveMinFired = true;
-      playSoundFiveMin();
-    }
-
-    if (
-      $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.SOUND_ONE_MIN) &&
-      !oneMinFired &&
-      remaining <= 60 &&
-      remaining > 0
-    ) {
-      oneMinFired = true;
-      playSoundOneMin();
-    }
-  }
-}
-
-/*
- * Desligar o excedido no meio dele precisa parar a contagem: `alarmed` já é
- * true, então o tick não pausa sozinho e o botão ficaria em "Pausar" com o
- * display congelado em 00:00:00.
- */
-watch(overtime, (on) => {
-  if (on || mode.value !== "down" || !alarmed.value || seconds.value > 0) return;
-  seconds.value = 0;
-  if (running.value) pause();
-});
-
 function toggle(): void {
-  if (running.value) {
-    pause();
-  } else {
-    start();
-  }
+  if (state.running) pause();
+  else start();
 }
 
 function start(): void {
-  /*
-   * Retomar depois de pausar no tempo excedido segue contando o excedido sem
-   * disparar de novo o bipe e a ação "Ao terminar".
-   */
-  const resumingOvertime = alarmed.value && overtime.value && mode.value === "down";
-  alarmed.value = resumingOvertime;
-  fiveMinFired = resumingOvertime;
-  oneMinFired = resumingOvertime;
-  const until = secondsUntilTarget(targetTime.value);
-  // Regressivo aceita horário já passado: começa direto no excedido (ou no zero).
-  durationSeconds.value =
-    mode.value === "down"
-      ? overtime.value
-        ? until
-        : Math.max(0, until)
-      : getDurationUntilTarget();
-  startedAt.value = Date.now();
-  seconds.value = mode.value === "down" ? durationSeconds.value : 0;
-  running.value = true;
-  $userdata.set(KEYS.MODULES.TIMER_WORSHIP.RUNNING, true);
-
-  if (!resumingOvertime && $userdata.get<boolean>(KEYS.MODULES.TIMER_WORSHIP.SOUND_START))
-    playSoundStart();
-
-  timer = setInterval(updateRunningTime, 1000);
+  // Retomar não toca a abertura de novo: o "start" só vem ao começar do zero.
+  handleEvents(startCountdown(state, config.value, Date.now()));
 }
 
 function pause(): void {
-  running.value = false;
-  $userdata.set(KEYS.MODULES.TIMER_WORSHIP.RUNNING, false);
-  if (timer !== null) {
-    clearInterval(timer);
-    timer = null;
-  }
+  pauseCountdown(state, config.value, Date.now());
 }
 
 function reset(): void {
-  pause();
-  startedAt.value = null;
-  alarmed.value = false;
-  fiveMinFired = false;
-  oneMinFired = false;
-  updateFromTargetTime();
+  resetCountdown(state, config.value, Date.now());
 }
 
 // Fechar zera a contagem e tira o módulo do telão. O horário continua salvo,
 // então reabrir e iniciar retoma do ponto certo.
 function close(): void {
-  if (!projectionActive.value && !running.value) return;
+  if (!projectionActive.value && !state.running) return;
   projectionActive.value = false;
   reset();
   emitProjection();
@@ -474,7 +491,9 @@ $userdata.set(KEYS.MODULES.TIMER_WORSHIP.RUNNING, false);
 
 onBeforeUnmount(() => {
   projection.emit({ active: false, text: "" });
-  if (timer !== null) clearInterval(timer);
+  disposed = true;
+  if (tickHandle !== null) clearTimeout(tickHandle);
+  tickHandle = null;
 });
 </script>
 
@@ -532,6 +551,11 @@ onBeforeUnmount(() => {
 .tw-done {
   color: #ef4444;
   animation: tw-pulse 0.8s ease-in-out infinite alternate;
+}
+.tw-adjust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lj-space-2);
 }
 @keyframes tw-pulse {
   from {
