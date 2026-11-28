@@ -738,3 +738,32 @@ it("pedido bíblico espera o catálogo em andamento e depois baixa seus capítul
   expect(await bible).toBe(true);
   expect(h.bibleInstall).toHaveBeenCalledTimes(1);
 });
+
+describe("álbum desativado no menu", () => {
+  async function withDisabled(ids: number[]) {
+    const sync = await mountSync();
+    const { default: userdata } = await import("@/helpers/UserData");
+    const { KEYS } = await import("@/constants/UserDataKeys");
+    userdata.set(KEYS.OPTIONS.DISABLED_ALBUMS, ids);
+    return { sync, reset: () => userdata.set(KEYS.OPTIONS.DISABLED_ALBUMS, []) };
+  }
+
+  it("o Continuar da linha do álbum acha os arquivos mesmo com ele desativado", async () => {
+    const { sync, reset } = await withDisabled([7]);
+    try {
+      const files = await sync.collectAlbumFileList(7);
+      expect(files.map((f) => f.remote)).toEqual(["/musics/pt/A/1.opus", "/musics/pt/A/2.opus"]);
+    } finally {
+      reset();
+    }
+  });
+
+  it("uma seleção ampla continua deixando o álbum desativado de fora", async () => {
+    const { sync, reset } = await withDisabled([7]);
+    try {
+      expect(await sync.collectFiles(new Set([7]), false, [])).toEqual([]);
+    } finally {
+      reset();
+    }
+  });
+});

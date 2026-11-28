@@ -1034,7 +1034,8 @@ export function useSyncManager() {
     hymnalIds: number[],
     selectedHymnal1996 = false,
     hymnal1996Ids: number[] = [],
-    onProgress?: (done: number, total: number) => void
+    onProgress?: (done: number, total: number) => void,
+    { includeDisabled = false }: { includeDisabled?: boolean } = {}
   ): Promise<FileEntry[]> {
     const attempt = () =>
       untilStalled(
@@ -1046,7 +1047,8 @@ export function useSyncManager() {
             selectedHymnal1996,
             hymnal1996Ids,
             alive,
-            onProgress
+            onProgress,
+            includeDisabled
           ),
         COLLECT_STALL_MS
       );
@@ -1097,7 +1099,8 @@ export function useSyncManager() {
     selectedHymnal1996: boolean,
     hymnal1996Ids: number[],
     alive: () => void,
-    onProgress?: (done: number, total: number) => void
+    onProgress?: (done: number, total: number) => void,
+    includeDisabled = false
   ): Promise<FileEntry[]> {
     await refreshCatalogBounded();
     alive();
@@ -1105,8 +1108,11 @@ export function useSyncManager() {
     const albumIds = [...selectedAlbums];
     const allMusicIds = new Set<number>();
 
-    // Álbuns desativados pelo usuário não devem ser baixados.
-    const disabled = $userdata.get<number[]>(KEYS.OPTIONS.DISABLED_ALBUMS, []) || [];
+    // Álbuns desativados pelo usuário não entram numa seleção ampla. Quem pede
+    // um álbum pelo nome ("Continuar" daquela linha) quer esse álbum.
+    const disabled = includeDisabled
+      ? []
+      : $userdata.get<number[]>(KEYS.OPTIONS.DISABLED_ALBUMS, []) || [];
 
     await Promise.all(
       albumIds
@@ -1148,7 +1154,13 @@ export function useSyncManager() {
   ): Promise<FileEntry[]> {
     // Montar a lista a partir de um catálogo de versão anterior baixaria pelos
     // endereços antigos; a leitura local do scan não deve gerar rede.
-    if (!localOnly) return collectFiles(new Set([albumId]), false, []);
+    // A lista de um álbum é pedida por ele mesmo: a verificação local já o
+    // mostra como parcial mesmo desativado, e o "Continuar" precisa achar os
+    // mesmos arquivos, ou volta à tela sem baixar nada.
+    if (!localOnly)
+      return collectFiles(new Set([albumId]), false, [], false, [], undefined, {
+        includeDisabled: true,
+      });
     const files = new Map<string, FileEntry>();
     const album = await fetchJson<MusicData>(`album_${albumId}`, { localOnly });
     if (!album) throw new CatalogIncompleteError(`album_${albumId}`);

@@ -138,9 +138,49 @@ describe("download.startDownload", () => {
     queue.running = false;
     queue.emit("queue-cancelled");
     expect(download.isDownloading()).toBe(true);
-    await expect(download.startDownload([], null)).rejects.toThrow("processo anterior");
+    const timing = download.TIMING.retireWaitMs;
+    download.TIMING.retireWaitMs = 20;
+    try {
+      await expect(download.startDownload([], null)).rejects.toThrow("processo anterior");
+    } finally {
+      download.TIMING.retireWaitMs = timing;
+    }
     queue.workerExitObserved = true;
     queue.emit("worker-exited");
+    expect(download.isDownloading()).toBe(false);
+  });
+
+  it("um novo início logo após o fim espera o utility anterior sair, em vez de recusar", async () => {
+    const download = require("../download/index.js");
+    const { UtilityQueue } = require("../download/utilityQueue.js");
+    vi.spyOn(require("../paths.js"), "filesDir").mockReturnValue(path.join(os.tmpdir(), "lj-download-test-files"));
+    const diff = vi.spyOn(require("../download/integrity.js"), "diff").mockImplementation(async (files) => ({ missing: files, damaged: [], ok: [] }));
+    const queues = [];
+    vi.spyOn(UtilityQueue.prototype, "start").mockImplementation(function () {
+      queues.push(this); this.running = true; this.child = {}; return Promise.resolve();
+    });
+    download.setApiConfig({ filesUrl: "https://example.invalid/files" });
+    const entry = { remote: "/images/a.jpg", local: "images/a.jpg" };
+    await download.startDownload([entry], null);
+    const [first] = queues;
+    first.running = false;
+    first.emit("queue-done", { downloaded: 0, failed: 1 });
+
+    // "Continuar" clicado antes de o processo da fila anterior sair.
+    const second = download.startDownload([entry], null);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(queues).toHaveLength(1);
+    await expect(download.startDownload([entry], null)).rejects.toThrow("já em andamento");
+    first.workerExitObserved = true;
+    first.emit("worker-exited");
+
+    await expect(second).resolves.toEqual({ queued: 1 });
+    expect(queues).toHaveLength(2);
+    expect(diff).toHaveBeenCalledTimes(2);
+    queues[1].running = false;
+    queues[1].emit("queue-done", { downloaded: 1, failed: 0 });
+    queues[1].workerExitObserved = true;
+    queues[1].emit("worker-exited");
     expect(download.isDownloading()).toBe(false);
   });
 

@@ -13,6 +13,8 @@ const state = vi.hoisted(() => ({
   removeFiles: vi.fn(),
   yesno: vi.fn(),
   confirm: vi.fn(),
+  startDownloads: vi.fn(),
+  albumFiles: [{ remote: "musics/1.mp3" }] as unknown[],
 }));
 vi.mock("@/helpers/Platform", () => ({
   default: {
@@ -52,54 +54,66 @@ vi.mock("@/composables/useSyncManager", async () => {
   const { ref } = await import("vue");
   return {
     CatalogIncompleteError: class extends Error {},
-    useSyncManager: () => ({
-      ftpChecking: ref(false),
-      ftpOk: ref(!state.connectionError),
-      ftpError: ref(state.connectionError),
-      scanProgress: ref({ done: 0, total: 0 }),
-      bundleInstalling: ref(false),
-      bundlePercent: ref(0),
-      bundleProgress: ref({}),
-      downloading: ref(false),
-      downloadProgress: ref({ done: 0, total: 0 }),
-      downloadFailedCount: ref(0),
-      downloadCompletedMsg: ref(""),
-      bibleDownloading: ref(false),
-      bibleProgress: ref({ done: 0, total: 0 }),
-      bibleCompletedMsg: ref(""),
-      bibleRevision: ref(0),
-      humanSize: () => "0 B",
-      checkFtp: vi.fn(),
-      cleanup: vi.fn(),
-      ensureCatalogBundle: vi.fn(),
-      loadCatalog: async () => ({
-        categories: [
-          {
-            id_category: 1,
-            name: "Categoria",
-            albums: [
-              { id_album: 1, name: "Completo" },
-              { id_album: 2, name: "Parcial" },
-            ],
-          },
-        ],
-        hymnalIds: [10],
-        hymnal1996Ids: [],
-      }),
-      scanCache: async () => ({
-        cachedAlbums: new Set([1]),
-        classicAlbums: new Set(),
-        hymnalCached: true,
-        hymnal1996Cached: false,
-        partialAlbums: new Map([[2, { have: 1, total: 2 }]]),
-      }),
-      refreshDiskUsage: async () => ({ bytes: 0, fileCount: 0, albumCount: 1, hymnalCached: true }),
-      loadBibleVersions: async () => ({ versions: [] }),
-      scanBibleVersionsDisk: async () => [],
-      collectAlbumFileList: async () => [{ remote: "musics/1.mp3" }],
-      collectHymnalFileList: async () => [],
-      removeFilesFromCache: state.removeFiles,
-    }),
+    useSyncManager: () => {
+      const downloadCompletedMsg = ref("");
+      return {
+        ftpChecking: ref(false),
+        ftpOk: ref(!state.connectionError),
+        ftpError: ref(state.connectionError),
+        scanProgress: ref({ done: 0, total: 0 }),
+        bundleInstalling: ref(false),
+        bundlePercent: ref(0),
+        bundleProgress: ref({}),
+        downloading: ref(false),
+        downloadProgress: ref({ done: 0, total: 0 }),
+        downloadFailedCount: ref(0),
+        downloadCompletedMsg,
+        bibleDownloading: ref(false),
+        bibleProgress: ref({ done: 0, total: 0 }),
+        bibleCompletedMsg: ref(""),
+        bibleRevision: ref(0),
+        humanSize: () => "0 B",
+        checkFtp: vi.fn(),
+        cleanup: vi.fn(),
+        ensureCatalogBundle: vi.fn(),
+        loadCatalog: async () => ({
+          categories: [
+            {
+              id_category: 1,
+              name: "Categoria",
+              albums: [
+                { id_album: 1, name: "Completo" },
+                { id_album: 2, name: "Parcial" },
+              ],
+            },
+          ],
+          hymnalIds: [10],
+          hymnal1996Ids: [],
+        }),
+        scanCache: async () => ({
+          cachedAlbums: new Set([1]),
+          classicAlbums: new Set(),
+          hymnalCached: true,
+          hymnal1996Cached: false,
+          partialAlbums: new Map([[2, { have: 1, total: 2 }]]),
+        }),
+        refreshDiskUsage: async () => ({
+          bytes: 0,
+          fileCount: 0,
+          albumCount: 1,
+          hymnalCached: true,
+        }),
+        loadBibleVersions: async () => ({ versions: [] }),
+        scanBibleVersionsDisk: async () => [],
+        collectAlbumFileList: async () => state.albumFiles,
+        collectHymnalFileList: async () => [],
+        removeFilesFromCache: state.removeFiles,
+        startDownloads: async (files: unknown[]) => {
+          downloadCompletedMsg.value = await state.startDownloads(files);
+        },
+        waitForDownloadQueue: async () => {},
+      };
+    },
   };
 });
 vi.mock("@/components/ui", () => ({
@@ -154,6 +168,8 @@ beforeEach(() => {
   state.desktop = true;
   state.connectionError = "";
   state.access = { writable: true, shared: true };
+  state.albumFiles = [{ remote: "musics/1.mp3" }];
+  state.startDownloads.mockResolvedValue("");
   state.locations.mockImplementation(async () => ({ access: { media: { ...state.access } } }));
   state.confirm.mockResolvedValue(true);
   state.yesno.mockImplementation((_: string, callback: (_value: string) => void) =>
@@ -305,5 +321,37 @@ describe("manutenção do acervo na tela de downloads", () => {
     expect(state.yesno).not.toHaveBeenCalled();
     expect(state.clearFiles).not.toHaveBeenCalled();
     expect(button(pt.options.storage.clear_files).attributes("disabled")).toBeDefined();
+  });
+});
+
+describe("resultado do Continuar", () => {
+  it("mostra o motivo quando o download nem começa, em vez de voltar à tela calado", async () => {
+    const motivo = "Esta pasta está somente para leitura ou em uso por outra conta.";
+    state.startDownloads.mockResolvedValue(motivo);
+    await render();
+    await button(pt.options.collections_download.partial_continue).trigger("click");
+    await flushPromises();
+    expect(state.startDownloads).toHaveBeenCalledWith([{ remote: "musics/1.mp3" }]);
+    expect(wrapper.get(".sinc-download-result").text()).toBe(motivo);
+  });
+
+  it("mostra quantos arquivos falharam depois que a fila termina", async () => {
+    const falhas = pt.options.collections_download.failed.replace("{n}", "3");
+    state.startDownloads.mockResolvedValue(falhas);
+    await render();
+    await button(pt.options.collections_download.partial_continue).trigger("click");
+    await flushPromises();
+    expect(wrapper.get(".sinc-download-result").text()).toBe(falhas);
+  });
+
+  it("avisa quando não há nada a baixar para a coletânea", async () => {
+    state.albumFiles = [];
+    await render();
+    await button(pt.options.collections_download.partial_continue).trigger("click");
+    await flushPromises();
+    expect(state.startDownloads).not.toHaveBeenCalled();
+    expect(wrapper.get(".sinc-download-result").text()).toBe(
+      pt.options.collections_download.no_files
+    );
   });
 });

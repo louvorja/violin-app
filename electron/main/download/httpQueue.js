@@ -16,6 +16,12 @@ const MAX_REDIRECTS = 3;
 const PARTIAL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 // Esperas entre novas tentativas do mesmo arquivo; cada uma retoma de onde parou.
 const DEFAULT_RETRY_DELAYS_MS = [1000, 4000];
+// Rodadas extras, no fim da fila, para os arquivos que caíram por rede ou
+// servidor. As tentativas acima cobrem só ~5 s; uma queda de Wi-Fi ou um
+// servidor sobrecarregado por mais tempo deixava a coletânea pela metade até
+// alguém clicar em "Continuar". Cada rodada retoma o parcial já gravado.
+const DEFAULT_ROUND_DELAYS_MS = [10000, 30000];
+const ROUND_CONCURRENCY = 2;
 const RESUMABLE_CODES = new Set([
   "ECONNRESET", "ETIMEDOUT", "EPIPE", "ECONNABORTED", "ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED",
 ]);
@@ -44,11 +50,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 class HttpQueue extends EventEmitter {
   /**
-   * @param {{ baseUrl: string, apiToken?: string, concurrency?: number, progressIntervalMs?: number, filesDir?: string, workDir?: string, shared?: boolean, platform?: string }} options
+   * @param {{ baseUrl: string, apiToken?: string, concurrency?: number, progressIntervalMs?: number, filesDir?: string, workDir?: string, shared?: boolean, retryDelaysMs?: number[], roundDelaysMs?: number[], platform?: string }} options
    */
-  constructor({ baseUrl, apiToken, concurrency, progressIntervalMs, filesDir, workDir, shared = false, retryDelaysMs, platform = process.platform } = {}) {
+  constructor({ baseUrl, apiToken, concurrency, progressIntervalMs, filesDir, workDir, shared = false, retryDelaysMs, roundDelaysMs, platform = process.platform } = {}) {
     super();
     this.retryDelaysMs = Array.isArray(retryDelaysMs) ? retryDelaysMs : DEFAULT_RETRY_DELAYS_MS;
+    this.roundDelaysMs = Array.isArray(roundDelaysMs) ? roundDelaysMs : DEFAULT_ROUND_DELAYS_MS;
     this.baseUrl = (baseUrl || "").replace(/\/+$/, "");
     this.apiToken = apiToken || null;
     this.filesDir = filesDir;
@@ -362,8 +369,13 @@ class HttpQueue extends EventEmitter {
     return { offset: stat.size, validator };
   }
 
-  async _processItem(item, total, getNextIndex) {
-    const idx = getNextIndex();
+  /**
+   * `final: false` adia a falha retomável: o parcial fica no disco e o item
+   * volta para uma rodada posterior, sem emitir `file-error` ainda. Assim a
+   * interface só conta como falha o que esgotou todas as rodadas.
+   */
+  async _processItem(item, total, getNextIndex, { idx: knownIdx, final = true } = {}) {
+    const idx = knownIdx ?? getNextIndex();
     const url = item.remoteUrl || this._buildUrl(item.remote);
     // O processo principal sempre fornece um diretório privado. O hash evita
     // misturar retomadas de acervos ou origens diferentes com o mesmo nome.
@@ -450,6 +462,10 @@ class HttpQueue extends EventEmitter {
         this._activeTmps.delete(tmp);
       }
       if (this.cancelled) return { ok: false, cancelled: true };
+      if (!final && keepPartial) {
+        console.warn(`[httpQueue] ${url}: ${err.message}; nova rodada no fim da fila`);
+        return { ok: false, retry: true, idx };
+      }
       console.warn(`[httpQueue] falhou ${url}: ${err.message}`);
       this.emit("file-error", { file: item.remote, error: err.message });
       return { ok: false };
@@ -522,6 +538,7 @@ class HttpQueue extends EventEmitter {
     let downloaded = 0;
     let failed = 0;
     const getNextIndex = () => ++started;
+    const rounds = this.roundDelaysMs;
 
     let adaptive = null;
     if (this.fixedConcurrency === null) {
@@ -533,38 +550,57 @@ class HttpQueue extends EventEmitter {
         ramp: "geometric",
       });
     }
-    const slots = this.fixedConcurrency ?? this.maxConcurrency;
 
-    // Pool de workers concorrentes — cada um consome o queue até esvaziar.
+    // Pool de workers concorrentes — cada um consome a lista até esvaziar.
     // Todos os workers existem; só os de índice abaixo do limite atual pegam
     // trabalho, os demais esperam o limite subir.
-    const worker = async (index) => {
-      while (!this.cancelled) {
-        await this._waitWhilePaused();
-        if (this.cancelled) break;
-        // A pausa pode chegar entre o Promise resolvido e este microtask.
-        if (this.paused) continue;
-        if (this.queue.length === 0) break;
-        if (adaptive && index >= adaptive.limit()) {
-          await sleep(250);
-          continue;
+    const runPass = async (items, { slots, limiter, final }) => {
+      const deferred = [];
+      const worker = async (index) => {
+        while (!this.cancelled) {
+          await this._waitWhilePaused();
+          if (this.cancelled) break;
+          // A pausa pode chegar entre o Promise resolvido e este microtask.
+          if (this.paused) continue;
+          if (items.length === 0) break;
+          if (limiter && index >= limiter.limit()) {
+            await sleep(250);
+            continue;
+          }
+          const entry = items.shift();
+          if (!entry) break;
+          const r = await this._processItem(entry.item, total, getNextIndex, { idx: entry.idx, final });
+          if (r.ok) {
+            downloaded++;
+            limiter?.report({ bytes: r.bytes, ok: true });
+          } else if (r.retry) {
+            deferred.push({ item: entry.item, idx: r.idx });
+            limiter?.report({ ok: false });
+          } else if (!r.cancelled) {
+            failed++;
+            limiter?.report({ ok: false });
+          }
         }
-        const item = this.queue.shift();
-        if (!item) break;
-        const r = await this._processItem(item, total, getNextIndex);
-        if (r.ok) {
-          downloaded++;
-          adaptive?.report({ bytes: r.bytes, ok: true });
-        } else if (!r.cancelled) {
-          failed++;
-          adaptive?.report({ ok: false });
-        }
-      }
+      };
+      const workers = [];
+      for (let i = 0; i < slots; i++) workers.push(worker(i));
+      await Promise.all(workers);
+      return deferred;
     };
 
-    const workers = [];
-    for (let i = 0; i < slots; i++) workers.push(worker(i));
-    await Promise.all(workers);
+    let pending = await runPass(
+      this.queue.splice(0).map((item) => ({ item, idx: undefined })),
+      { slots: this.fixedConcurrency ?? this.maxConcurrency, limiter: adaptive, final: rounds.length === 0 }
+    );
+    for (let round = 0; round < rounds.length && pending.length && !this.cancelled; round++) {
+      await this._waitRound(rounds[round]);
+      if (this.cancelled) break;
+      pending = await runPass(pending, {
+        slots: Math.min(this.fixedConcurrency ?? ROUND_CONCURRENCY, ROUND_CONCURRENCY),
+        limiter: null,
+        final: round === rounds.length - 1,
+      });
+    }
 
     this.running = false;
 
@@ -576,6 +612,15 @@ class HttpQueue extends EventEmitter {
       this._flushPendingProgress();
       this.emit("queue-done", { downloaded, failed });
     }
+  }
+
+  /** Espera entre rodadas sem segurar um cancelamento nem uma pausa. */
+  async _waitRound(ms) {
+    const until = Date.now() + Math.max(0, ms);
+    while (!this.cancelled && Date.now() < until) {
+      await sleep(Math.min(250, until - Date.now()));
+    }
+    while (!this.cancelled && this.paused) await this._waitWhilePaused();
   }
 }
 

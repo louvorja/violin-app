@@ -62,7 +62,7 @@ function mediaServer({ cutFirstAt = null, ignoreRange = false, status = null } =
 }
 
 async function run(baseUrl, filesDir, options = {}) {
-  const queue = new HttpQueue({ baseUrl, filesDir, concurrency: 1, retryDelaysMs: [0, 0], ...options });
+  const queue = new HttpQueue({ baseUrl, filesDir, concurrency: 1, retryDelaysMs: [0, 0], roundDelaysMs: [], ...options });
   queue.add([{ remote: "/musics/pt/a.opus", local: "musics/pt/a.opus" }]);
   const events = { done: [], error: [] };
   queue.on("file-done", (e) => events.done.push(e));
@@ -176,5 +176,79 @@ describe("HttpQueue — retomada de download interrompido", () => {
     const partial = path.join(dir, "musics/pt/a.opus.tmp");
     expect((await stat(partial)).size).toBeGreaterThan(0);
     await expect(stat(path.join(dir, "musics/pt/a.opus"))).rejects.toThrow();
+  });
+
+  describe("rodadas no fim da fila", () => {
+    it("queda mais longa que as tentativas é retomada numa rodada seguinte, sem contar como falha", async () => {
+      let calls = 0;
+      const base = await listen((req, res) => {
+        calls += 1;
+        // As três primeiras conexões caem no meio; a quarta (já na rodada extra)
+        // recebe o resto pelo Range.
+        if (calls <= 3) {
+          res.writeHead(200, { ETag: ETAG, "Content-Length": PAYLOAD.length });
+          res.write(PAYLOAD.subarray(0, 1000 * calls));
+          setTimeout(() => req.socket.destroy(), 10);
+          return;
+        }
+        mediaServer().handler(req, res);
+      });
+      const dir = await workdir();
+
+      const { summary, events } = await run(base, dir, { roundDelaysMs: [0] });
+
+      expect(summary).toEqual({ downloaded: 1, failed: 0 });
+      expect(events.error).toEqual([]);
+      expect(events.done).toHaveLength(1);
+      expect(calls).toBe(4);
+      expect(await readFile(path.join(dir, "musics/pt/a.opus"))).toEqual(PAYLOAD);
+    });
+
+    it("só emite a falha depois da última rodada, uma vez por arquivo", async () => {
+      let calls = 0;
+      const base = await listen((req, res) => {
+        calls += 1;
+        res.writeHead(503);
+        res.end();
+      });
+      const dir = await workdir();
+
+      const { summary, events } = await run(base, dir, { roundDelaysMs: [0, 0] });
+
+      expect(summary).toEqual({ downloaded: 0, failed: 1 });
+      expect(events.error).toHaveLength(1);
+      expect(calls).toBe(9);
+    });
+
+    it("erro definitivo (404) não entra nas rodadas extras", async () => {
+      const server = mediaServer({ status: 404 });
+      const base = await listen(server.handler);
+      const dir = await workdir();
+
+      const { summary, events } = await run(base, dir, { roundDelaysMs: [0, 0] });
+
+      expect(summary).toEqual({ downloaded: 0, failed: 1 });
+      expect(events.error).toHaveLength(1);
+      expect(server.seen).toHaveLength(1);
+    });
+
+    it("cancelar durante a espera da rodada encerra a fila como cancelada, sem falhas", async () => {
+      const base = await listen((req, res) => {
+        res.writeHead(503);
+        res.end();
+      });
+      const dir = await workdir();
+      const queue = new HttpQueue({ baseUrl: base, filesDir: dir, concurrency: 1, retryDelaysMs: [], roundDelaysMs: [60000] });
+      queue.add([{ remote: "/musics/pt/a.opus", local: "musics/pt/a.opus" }]);
+      const errors = [];
+      queue.on("file-error", (e) => errors.push(e));
+      const cancelled = new Promise((resolve) => queue.on("queue-cancelled", resolve));
+      const started = queue.start();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      queue.cancel();
+      await cancelled;
+      await started;
+      expect(errors).toEqual([]);
+    });
   });
 });
