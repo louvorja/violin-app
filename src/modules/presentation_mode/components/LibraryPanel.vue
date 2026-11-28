@@ -56,6 +56,15 @@
         <LjButton
           size="sm"
           icon-only
+          :icon="ICONS.ACTIONS.RESTORE"
+          :title="tm('library.reset_order')"
+          :aria-label="tm('library.reset_order')"
+          data-testid="pm-library-reset-order"
+          @click="resetTabsOrder"
+        />
+        <LjButton
+          size="sm"
+          icon-only
           :icon="fullWidth ? ICONS.ACTIONS.COLLAPSE_WIDTH : ICONS.ACTIONS.EXPAND_WIDTH"
           :title="fullWidth ? tm('library.normal_width') : tm('library.full_width')"
           :aria-pressed="fullWidth"
@@ -293,12 +302,21 @@ function selectTab(id: LibraryTab): void {
   tab.value = id;
 }
 
-function onTabsReorder(value: LibraryTabDef[]): void {
+function saveTabsOrder(value: LibraryTabDef[]): void {
   orderedTabs.value = normalizeTabOrder(value.map((item) => item.id));
   $userdata.set(
     KEYS.MODULES.PRESENTATION_MODE.LIBRARY_TAB_ORDER,
     orderedTabs.value.map((item) => item.id)
   );
+}
+
+function onTabsReorder(value: LibraryTabDef[]): void {
+  saveTabsOrder(value);
+}
+
+/** Volta a faixa à ordem canônica; a aba aberta continua a mesma. */
+function resetTabsOrder(): void {
+  saveTabsOrder([...TABS]);
 }
 
 const root = ref<HTMLElement | null>(null);

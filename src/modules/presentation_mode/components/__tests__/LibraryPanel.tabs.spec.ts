@@ -159,6 +159,47 @@ describe("LibraryPanel tabs", () => {
     ]);
   });
 
+  it("redefine a ordem das abas para o padrão", async () => {
+    userdata.get.mockReturnValue(["bible", "musics", "files"]);
+    const wrapper = mountPanel();
+    const sortable = wrapper.findComponent({ name: "DraggableStub" });
+
+    sortable.vm.$emit("update:modelValue", [{ id: "bible" }, { id: "files" }]);
+    await nextTick();
+
+    await wrapper.get('[data-testid="pm-library-reset-order"]').trigger("click");
+
+    const ids = wrapper.findAll('[role="tab"]').map((tab) => tab.attributes("data-testid"));
+    expect(ids).toEqual([
+      "pm-library-tab-files",
+      "pm-library-tab-media",
+      "pm-library-tab-online_videos",
+      "pm-library-tab-media_library",
+      "pm-library-tab-audio",
+      "pm-library-tab-background_sound",
+      "pm-library-tab-background_projection",
+      "pm-library-tab-overlays",
+      "pm-library-tab-musics",
+      "pm-library-tab-bible",
+    ]);
+    expect(userdata.set).toHaveBeenLastCalledWith(
+      KEYS.MODULES.PRESENTATION_MODE.LIBRARY_TAB_ORDER,
+      [
+        "files",
+        "media",
+        "online_videos",
+        "media_library",
+        "audio",
+        "background_sound",
+        "background_projection",
+        "overlays",
+        "musics",
+        "bible",
+      ]
+    );
+    expect(wrapper.emitted("update:tab")).toBeUndefined();
+  });
+
   it("não troca de aba no clique que fecha o arraste e libera o próximo", async () => {
     const wrapper = mountPanel();
     const sortable = wrapper.findComponent({ name: "DraggableStub" });

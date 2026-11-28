@@ -271,6 +271,7 @@
     "remove_folder_text": "¿Quitar esta carpeta de la lista? Los archivos no se eliminan.",
     "full_width": "Biblioteca a todo el ancho",
     "normal_width": "Biblioteca al lado del programa",
+    "reset_order": "Restablecer orden de las pestañas",
     "taller": "Biblioteca más alta",
     "shorter": "Biblioteca más baja",
     "desktop_only": "El navegador de archivos está disponible en la aplicación de escritorio.",

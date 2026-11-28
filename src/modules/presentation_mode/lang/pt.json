@@ -271,6 +271,7 @@
     "remove_folder_text": "Tirar esta pasta da lista? Os arquivos não são apagados.",
     "full_width": "Biblioteca em largura total",
     "normal_width": "Biblioteca ao lado do programa",
+    "reset_order": "Redefinir ordem das abas",
     "taller": "Biblioteca mais alta",
     "shorter": "Biblioteca mais baixa",
     "desktop_only": "O navegador de arquivos está disponível no aplicativo de computador.",
