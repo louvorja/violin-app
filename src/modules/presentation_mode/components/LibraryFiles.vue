@@ -490,7 +490,7 @@ function folderMenu(folder: { path: string; label: string }): {
   return {
     quick: [
       {
-        label: tm("menu.open"),
+        label: t("actions.open"),
         icon: ICONS.UI.FOLDER_OPEN,
         action: () => openSource(folder.path),
       },

@@ -42,7 +42,7 @@
           <CategoryListItem
             v-if="bgp.hasUncategorized.value"
             category-id=""
-            :name="tm('library.background_projection_uncategorized')"
+            :name="t('shell.category.uncategorized')"
             :icon="ICONS.CATEGORY.FOLDER"
             icon-type="icon"
             color="var(--lj-orange)"
@@ -192,7 +192,7 @@
           </span>
         </span>
         <LjButton size="sm" variant="ghost" data-testid="pm-bgp-clear" @click="clearProjection">
-          {{ tm("library.background_projection_clear") }}
+          {{ t("components.ui.clear") }}
         </LjButton>
         <LjButton
           size="sm"
@@ -331,7 +331,7 @@ const visibleCards = computed<ProjectionCard[]>(() =>
       color: category?.color || "#607d8b",
       icon: category ? chipIcon(category) : ICONS.MEDIA.IMAGE_MULTIPLE,
       iconType: category ? chipIconType(category) : "icon",
-      categoryName: category?.name || tm("library.background_projection_uncategorized"),
+      categoryName: category?.name || t("shell.category.uncategorized"),
       thumb: bgp.thumbOf(file),
     };
   })
@@ -397,7 +397,7 @@ function menuFor(file: BackgroundProjectionFile): {
       ...(active
         ? [
             {
-              label: tm("library.background_projection_clear"),
+              label: t("components.ui.clear"),
               icon: ICONS.PROJECTION.CLEAN,
               action: clearProjection,
             },

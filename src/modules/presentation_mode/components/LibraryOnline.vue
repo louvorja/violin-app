@@ -20,7 +20,7 @@
             :loading="saving"
             data-testid="pm-online-save"
           >
-            {{ tm("online.save") }}
+            {{ t("actions.add") }}
           </LjButton>
           <LjButton size="sm" variant="ghost" :disabled="saving" @click="adding = false">
             {{ $t("actions.cancel") }}
@@ -43,7 +43,7 @@
             variant="ghost"
             icon-only
             :icon="ICONS.ACTIONS.REFRESH"
-            :title="tm('online.refresh')"
+            :title="t('actions.refresh')"
             :disabled="online.loading.value"
             data-testid="pm-online-refresh"
             @click="online.open(current.id, locale, true)"
@@ -59,7 +59,7 @@
           :icon="ICONS.ACTIONS.REFRESH"
           @click="online.open(current.id, locale, true)"
         >
-          {{ tm("online.retry") }}
+          {{ t("alert.retry") }}
         </LjButton>
       </div>
       <p v-else-if="online.loading.value && !online.entries.value.length" class="pm-online__empty">
@@ -202,7 +202,7 @@ const emit = defineEmits<{
   "show-on-return": [target: Playable | null];
 }>();
 
-const { tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { t, tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const hasStageMonitor = useHasStageMonitor();
 const online = useOnlineLibrary();
 const current = online.openFavorite;

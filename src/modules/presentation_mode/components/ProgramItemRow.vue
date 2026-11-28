@@ -52,7 +52,7 @@
         </span>
         <span v-if="live" class="pm-live-badge">
           <span class="pm-live-badge__dot" />
-          {{ tm("program.live") }}
+          {{ t("shell.live") }}
         </span>
         <span v-else-if="prepared" class="pm-queued-badge">{{ tm("program.queued") }}</span>
         <!-- Concluído: clicar desmarca. Pulado (ficou para trás sem check): clicar conclui. -->
@@ -222,7 +222,7 @@ const subtitle = computed(() =>
   [contentLabel(props.item), props.item.subtitle || folderSummary.value].filter(Boolean).join(" · ")
 );
 
-const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { t, tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 
 const hasChildren = computed(() => (props.item.children?.length ?? 0) > 0);
 // Momento recém-criado (vazio) também abre: a linha explica como adicionar arquivos.

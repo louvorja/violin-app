@@ -108,7 +108,7 @@
               />
               <CategoryListItem
                 category-id=""
-                :name="tm('library.online_uncategorized')"
+                :name="t('shell.category.uncategorized')"
                 :icon="ICONS.MEDIA.YOUTUBE"
                 icon-type="icon"
                 color="#607d8b"
@@ -146,8 +146,8 @@
           variant="ghost"
           icon-only
           :icon="ICONS.UI.ARROW_LEFT"
-          :title="tm('library.online_back')"
-          :aria-label="tm('library.online_back')"
+          :title="t('actions.back')"
+          :aria-label="t('actions.back')"
           data-testid="pm-ovl-back"
           @click="goBack"
         />
@@ -167,7 +167,7 @@
           variant="ghost"
           icon-only
           :icon="ICONS.ACTIONS.REFRESH"
-          :title="tm('library.online_refresh')"
+          :title="t('actions.refresh')"
           :disabled="catalog.loading.value || custom.loading.value"
           data-testid="pm-ovl-refresh"
           @click="refresh"
@@ -203,7 +203,7 @@
         >
           <p>{{ tm("library.online_load_error") }}</p>
           <LjButton size="sm" :icon="ICONS.ACTIONS.REFRESH" @click="refresh">
-            {{ tm("library.online_retry") }}
+            {{ t("alert.retry") }}
           </LjButton>
         </div>
 
@@ -479,7 +479,7 @@ function customVideoCard(video: CustomOnlineVideo): VideoCardEntry | null {
     },
     videoId,
     title,
-    subtitle: category?.name || tm("library.online_uncategorized"),
+    subtitle: category?.name || t("shell.category.uncategorized"),
   };
 }
 
@@ -525,7 +525,7 @@ const contentTitle = computed(() => {
     case "custom-all":
       return tm("library.online_all_my_videos");
     case "custom":
-      return selectedCategory.value?.name || tm("library.online_uncategorized");
+      return selectedCategory.value?.name || t("shell.category.uncategorized");
     default:
       return tm("library.online_videos");
   }

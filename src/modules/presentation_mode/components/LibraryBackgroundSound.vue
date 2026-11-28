@@ -42,7 +42,7 @@
           <CategoryListItem
             v-if="bgs.hasUncategorized.value"
             category-id=""
-            :name="tm('library.background_sound_uncategorized')"
+            :name="t('shell.category.uncategorized')"
             :icon="ICONS.CATEGORY.FOLDER"
             icon-type="icon"
             color="var(--lj-orange)"
@@ -233,7 +233,7 @@ const visibleCards = computed<SoundCard[]>(() =>
       color: category?.color || "#607d8b",
       icon: category ? chipIcon(category) : ICONS.MUSIC.NOTE_OUTLINE,
       iconType: category ? chipIconType(category) : "icon",
-      categoryName: category?.name || tm("library.background_sound_uncategorized"),
+      categoryName: category?.name || t("shell.category.uncategorized"),
     };
   })
 );

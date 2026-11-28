@@ -72,11 +72,11 @@
                 />
               </button>
             </LjTooltip>
-            <LjTooltip v-if="!noDetails" :text="tm('library.details')">
+            <LjTooltip v-if="!noDetails" :text="t('components.ui.details')">
               <button
                 type="button"
                 class="pm-file__info"
-                :aria-label="tm('library.details')"
+                :aria-label="t('components.ui.details')"
                 :data-testid="`pm-file-info-${entry.name}`"
                 @click.stop="emit('details', entry)"
                 @dblclick.stop
@@ -176,7 +176,7 @@ const emit = defineEmits<{
   "show-on-return": [entry: LibraryEntry | null];
 }>();
 
-const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { t, tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const hasStageMonitor = useHasStageMonitor();
 const lib = useFileLibrary();
 const { meta, request } = useMediaMeta();
@@ -231,7 +231,7 @@ function menuFor(entry: LibraryEntry): EntryMenu {
   if (entry.isDir) {
     return {
       quick: [
-        { label: tm("menu.open"), icon: ICONS.UI.FOLDER_OPEN, action: () => emit("open", entry) },
+        { label: t("actions.open"), icon: ICONS.UI.FOLDER_OPEN, action: () => emit("open", entry) },
         {
           label: tm("menu.to_program"),
           icon: ICONS.ACTIONS.ADD,
@@ -316,7 +316,7 @@ function menuFor(entry: LibraryEntry): EntryMenu {
         ? []
         : [
             {
-              label: tm("library.details"),
+              label: t("components.ui.details"),
               icon: ICONS.UI.INFORMATION_OUTLINE,
               action: () => emit("details", entry),
             },

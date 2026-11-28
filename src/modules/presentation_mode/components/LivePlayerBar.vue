@@ -13,7 +13,7 @@
       variant="primary"
       icon-only
       :icon="player.playing.value ? ICONS.PLAYER.PAUSE : ICONS.PLAYER.PLAY"
-      :title="player.playing.value ? tm('stage.pause') : tm('stage.play')"
+      :title="player.playing.value ? t('actions.pause') : tm('stage.play')"
       :disabled="locked"
       data-testid="pm-live-video-play"
       @click="player.toggle()"
@@ -90,7 +90,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ stop: [] }>();
 
-const { tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { t, tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 
 const remaining = computed(() =>
   Math.max(0, props.player.duration.value - props.player.currentTime.value)

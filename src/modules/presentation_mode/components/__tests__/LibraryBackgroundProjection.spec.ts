@@ -145,7 +145,7 @@ describe("LibraryBackgroundProjection", () => {
     const video = wrapper.find('[data-testid="pm-bgp-card-p2"]');
     expect(video.attributes("style")).toContain("--pm-bgp-card-color: #607d8b");
     expect(video.find(".pm-bgp__category").text()).toContain(
-      "library.background_projection_uncategorized"
+      "shell.category.uncategorized"
     );
     expect(video.find(".pm-bgp__play-badge").exists()).toBe(true);
   });

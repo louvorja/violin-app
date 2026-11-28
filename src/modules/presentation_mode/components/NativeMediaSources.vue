@@ -40,7 +40,7 @@
         />
         <CategoryListItem
           category-id=""
-          :name="tm('native.uncategorized')"
+          :name="t('shell.category.uncategorized')"
           :icon="ICONS.UI.FOLDER_OPEN"
           icon-type="icon"
           color="var(--lj-orange)"
@@ -77,7 +77,7 @@ import {
 withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 const emit = defineEmits<{ select: [categoryId: string] }>();
 
-const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { t, tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const native = useNativeMediaLibrary();
 const expanded = ref(true);
 

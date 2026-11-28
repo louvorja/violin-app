@@ -201,7 +201,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ navigate: [to: Step]; "take-off": [] }>();
 
-const { tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { t: tGlobal, tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 
 const onAir = computed(() => !!props.liveKind || props.audioLive);
 const atStart = computed(() => !!props.position && props.position.index <= 0);
@@ -303,7 +303,7 @@ const elapsed = computed(() => (since.value ? Math.max(0, (now.value - since.val
 
 const playTitle = computed(() => {
   const t = props.transport;
-  if (t.timed.value) return t.playing.value ? tm("stage.pause") : tm("stage.play");
+  if (t.timed.value) return t.playing.value ? tGlobal("actions.pause") : tm("stage.play");
   if (t.canAutoAdvance.value)
     return t.playing.value ? tm("control.auto_stop") : tm("control.auto_start");
   return tm("control.no_play");

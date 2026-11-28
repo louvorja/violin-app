@@ -1,10 +1,5 @@
 <template>
-  <LjDialog
-    v-model="open"
-    :title="tm('library.online_add_title')"
-    :icon="ICONS.MEDIA.YOUTUBE"
-    size="md"
-  >
+  <LjDialog v-model="open" :title="tm('library.online_add')" :icon="ICONS.MEDIA.YOUTUBE" size="md">
     <div class="pm-ovl-add" data-testid="pm-ovl-add-dialog">
       <LjField layout="column" :label="tm('library.online_add_url')">
         <LjInput
@@ -25,7 +20,7 @@
 
     <template #footer>
       <LjButton :disabled="saving" @click="open = false">
-        {{ tm("library.online_add_cancel") }}
+        {{ t("actions.cancel") }}
       </LjButton>
       <LjButton
         variant="primary"
@@ -34,7 +29,7 @@
         data-testid="pm-ovl-add-save"
         @click="submit"
       >
-        {{ tm("library.online_add_save") }}
+        {{ t("actions.add") }}
       </LjButton>
     </template>
   </LjDialog>
@@ -59,7 +54,7 @@ const emit = defineEmits<{
   save: [payload: { url: string; name: string; categoryId: string }];
 }>();
 
-const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { t, tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const url = ref("");
 const name = ref("");
 const categoryId = ref("");
@@ -70,7 +65,7 @@ const open = computed({
 });
 
 const categoryItems = computed(() => [
-  { title: tm("library.online_uncategorized"), value: "" },
+  { title: t("shell.category.uncategorized"), value: "" },
   ...props.categories.map((category) => ({ title: category.name, value: category.id })),
 ]);
 

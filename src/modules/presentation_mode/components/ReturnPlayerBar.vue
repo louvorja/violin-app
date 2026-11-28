@@ -6,7 +6,7 @@
       variant="primary"
       icon-only
       :icon="player.state.paused ? ICONS.PLAYER.PLAY : ICONS.PLAYER.PAUSE"
-      :title="player.state.paused ? tm('stage.play') : tm('stage.pause')"
+      :title="player.state.paused ? tm('stage.play') : t('actions.pause')"
       data-testid="pm-return-player-play"
       @click="player.toggle()"
     />
@@ -81,7 +81,7 @@ import { useReturnPlayer } from "../composables/useReturnPlayer";
 
 const emit = defineEmits<{ close: [] }>();
 
-const { tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { t, tm, locale } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const player = useReturnPlayer();
 
 const remaining = computed(() => Math.max(0, player.state.duration - player.state.currentTime));

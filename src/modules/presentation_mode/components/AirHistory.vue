@@ -50,7 +50,7 @@
           </span>
           <span v-if="entry.id === liveId" class="pm-nohist__live">
             <span class="pm-nohist__dot" />
-            {{ tm("program.live") }}
+            {{ t("shell.live") }}
           </span>
           <LjButton
             v-else

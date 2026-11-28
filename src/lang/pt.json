@@ -201,7 +201,8 @@
     "open": "Abrir",
     "back": "Voltar",
     "next": "Próximo",
-    "previous": "Anterior"
+    "previous": "Anterior",
+    "refresh": "Atualizar"
   },
   "options": {
     "general": {

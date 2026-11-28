@@ -55,7 +55,7 @@
         v-if="canva.status.value?.redirectUri"
         :value="canva.status.value.redirectUri"
         class="pm-canva__uri"
-        :title="tm('canva.copy')"
+        :title="t('actions.copy')"
       >
         <code>{{ canva.status.value.redirectUri }}</code>
       </LjCopyButton>
@@ -117,7 +117,7 @@
           variant="ghost"
           icon-only
           :icon="ICONS.ACTIONS.REFRESH"
-          :title="tm('online.refresh')"
+          :title="t('actions.refresh')"
           :disabled="canva.loading.value"
           @click="canva.load()"
         />
@@ -228,7 +228,7 @@
           variant="ghost"
           @click="canva.loadMore()"
         >
-          {{ tm("canva.load_more") }}
+          {{ t("shell.load_more") }}
         </LjButton>
       </div>
     </div>
@@ -277,7 +277,7 @@ const emit = defineEmits<{
 const PORTAL_URL = "https://www.canva.com/developers/apps";
 const MODES: CanvaMode[] = ["pdf", "site"];
 
-const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
+const { t, tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const canva = useCanvaLibrary();
 
 const clientId = ref("");

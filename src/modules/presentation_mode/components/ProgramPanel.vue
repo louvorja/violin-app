@@ -167,7 +167,7 @@
                 data-testid="pm-session-live"
               >
                 <span class="pm-session__live-dot" />
-                {{ tm("program.live") }}
+                {{ t("shell.live") }}
               </span>
               <span class="pm-session__summary" data-testid="pm-session-summary">
                 {{
@@ -231,8 +231,8 @@
           <button
             type="button"
             class="pm-program__fab"
-            :aria-label="tm('program.add')"
-            :title="tm('program.add')"
+            :aria-label="t('actions.add')"
+            :title="t('actions.add')"
             data-testid="pm-program-fab"
           >
             <LjIcon :icon="ICONS.ACTIONS.ADD" :size="20" />
@@ -549,7 +549,7 @@ function itemMenu(item: ProgramItem): { quick: LjMenuItem[]; items: LjMenuItem[]
         action: () => emit("activate", item.id),
       },
       {
-        label: tm("menu.edit"),
+        label: t("actions.edit"),
         icon: ICONS.ACTIONS.EDIT_OUTLINE,
         action: () => emit("edit-item", item.id),
       },
@@ -575,7 +575,7 @@ function itemMenu(item: ProgramItem): { quick: LjMenuItem[]; items: LjMenuItem[]
       },
       { separator: true },
       {
-        label: tm("ribbon.btn.duplicate"),
+        label: t("actions.clone"),
         icon: ICONS.ACTIONS.DUPLICATE,
         action: () => emit("duplicate-item", item.id),
       },

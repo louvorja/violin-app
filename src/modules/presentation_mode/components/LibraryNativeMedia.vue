@@ -48,7 +48,7 @@
         <CategoryListItem
           v-if="native.hasUncategorized.value"
           category-id=""
-          :name="tm('native.uncategorized')"
+          :name="t('shell.category.uncategorized')"
           :icon="ICONS.UI.FOLDER_OPEN"
           icon-type="icon"
           color="var(--lj-orange)"
@@ -130,7 +130,7 @@
           variant="ghost"
           icon-only
           :icon="ICONS.ACTIONS.REFRESH"
-          :title="tm('native.refresh')"
+          :title="t('actions.refresh')"
           :disabled="native.loading.value"
           data-testid="pm-native-refresh"
           @click="native.load()"

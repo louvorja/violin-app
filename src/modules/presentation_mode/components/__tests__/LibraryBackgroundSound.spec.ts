@@ -144,7 +144,7 @@ describe("LibraryBackgroundSound", () => {
     const uncategorized = wrapper.find('[data-testid="pm-bgs-card-s2"]');
     expect(uncategorized.attributes("style")).toContain("--pm-bgs-card-color: #607d8b");
     expect(uncategorized.find(".pm-bgs__category").text()).toContain(
-      "library.background_sound_uncategorized"
+      "shell.category.uncategorized"
     );
   });
 
