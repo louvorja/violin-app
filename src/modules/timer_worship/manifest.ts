@@ -4,7 +4,6 @@ import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum";
 import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum";
 import { ICONS } from "@/config/Icons";
 import { FONT } from "@/config/Fonts";
-import { SABBATH_SCHOOL_SOUNDS } from "@/config/SabbathSchool";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { getModulePath } from "@/helpers/ModulePath";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -120,7 +119,20 @@ export const contextualPages: RibbonPage[] = [
       {
         id: moduleCtxId + "_time",
         title: "ribbon.groups.time",
+        stackedFields: true,
+        compactRows: 2,
         buttons: [
+          {
+            id: `${moduleId}_define_by`,
+            type: "select",
+            optionKey: KEYS.MODULES.TIMER_WORSHIP.DEFINE_BY,
+            label: `${modulePath}.ribbon.define_by`,
+            defaultValue: "end",
+            options: [
+              { value: "end", label: `${modulePath}.ribbon.define_by_end` },
+              { value: "duration", label: `${modulePath}.ribbon.define_by_duration` },
+            ],
+          },
           {
             id: `${moduleId}_set_time`,
             type: "action_input",
@@ -128,21 +140,41 @@ export const contextualPages: RibbonPage[] = [
             action: `${moduleId}_set_time`,
             label: `${modulePath}.ribbon.set_time`,
             placeholder: `${modulePath}.ribbon.set_time_placeholder`,
+            dependsOnOption: { path: KEYS.MODULES.TIMER_WORSHIP.DEFINE_BY, value: "end" },
           },
           {
-            id: `${moduleId}_show_target_time`,
-            type: "checkbox",
-            optionKey: KEYS.MODULES.TIMER_WORSHIP.SHOW_TARGET_TIME,
-            label: `${modulePath}.ribbon.show_target_time`,
-            defaultValue: true,
+            id: `${moduleId}_duration_minutes`,
+            type: "number",
+            optionKey: KEYS.MODULES.TIMER_WORSHIP.DURATION_MINUTES,
+            label: `${modulePath}.ribbon.duration_minutes`,
+            defaultValue: 30,
+            min: 1,
+            max: 1440,
+            step: 1,
+            dependsOnOption: { path: KEYS.MODULES.TIMER_WORSHIP.DEFINE_BY, value: "duration" },
+          },
+          {
+            // O que vai abaixo da contagem. Substitui a antiga caixinha "Exibir
+            // hora na projeção" (desligada = "Só a contagem").
+            id: `${moduleId}_second_line`,
+            type: "select",
+            optionKey: KEYS.MODULES.TIMER_WORSHIP.SECOND_LINE,
+            label: `${modulePath}.ribbon.second_line`,
+            defaultValue: "target",
+            options: [
+              { value: "target", label: `${modulePath}.ribbon.second_line_target` },
+              { value: "clock", label: `${modulePath}.ribbon.second_line_clock` },
+              { value: "both", label: `${modulePath}.ribbon.second_line_both` },
+              { value: "none", label: `${modulePath}.ribbon.second_line_none` },
+            ],
           },
         ],
       },
       {
         /*
-         * Modo e aviso ("Destacar ao final" + segundos) desceram para a barra
-         * de baixo da tela (ModuleTimerDock), a um clique; aqui fica só o que
-         * se configura uma vez.
+         * Modo e aviso ("Destacar ao final" + segundos) ficam na barra de baixo
+         * da tela (ModuleTimerDock), a um clique; aqui fica o que se configura
+         * uma vez.
          */
         id: moduleCtxId + "_options",
         title: `${modulePath}.ribbon.options`,
@@ -180,57 +212,33 @@ export const contextualPages: RibbonPage[] = [
       {
         id: moduleCtxId + "_sound",
         title: "ribbon.groups.sound",
-        // "Reproduzir" em cima da caixa: ao lado, a largura de alinhamento do
-        // rótulo empurrava a caixa e a ribbon passava da tela.
-        stackedFields: true,
         buttons: [
+          {
+            // Abre os áudios dos avisos: tocar agora, ou trocar por um da
+            // Biblioteca de Mídia. As caixinhas ao lado ligam e desligam cada um.
+            id: `${moduleId}_sounds`,
+            icon: ICONS.MEDIA.LIBRARY,
+            label: `${modulePath}.ribbon.sounds`,
+            action: `${moduleId}_sounds`,
+            color: "#8e44ad",
+          },
           {
             id: "tw_sound_start",
             type: "checkbox",
-            optionKey: `${modulePath}.sound_start`,
+            optionKey: KEYS.MODULES.TIMER_WORSHIP.SOUND_START,
             label: `${modulePath}.sound.start`,
           },
           {
             id: "tw_sound_5min",
             type: "checkbox",
-            optionKey: `${modulePath}.sound_five_min`,
+            optionKey: KEYS.MODULES.TIMER_WORSHIP.SOUND_FIVE_MIN,
             label: `${modulePath}.sound.five_min`,
           },
           {
             id: "tw_sound_1min",
             type: "checkbox",
-            optionKey: `${modulePath}.sound_one_min`,
+            optionKey: KEYS.MODULES.TIMER_WORSHIP.SOUND_ONE_MIN,
             label: `${modulePath}.sound.one_min`,
-          },
-          {
-            id: "tw_alarm_select",
-            type: "select",
-            optionKey: `${modulePath}.selected_sound`,
-            label: `${modulePath}.sound.alarm_label`,
-            // Sem padrão a caixa nascia vazia e "Tocar" não tocava nada até
-            // alguém escolher um som.
-            defaultValue: SABBATH_SCHOOL_SOUNDS.OPENING.id,
-            options: [
-              {
-                value: SABBATH_SCHOOL_SOUNDS.OPENING.id,
-                label: SABBATH_SCHOOL_SOUNDS.OPENING.label,
-              },
-              {
-                value: SABBATH_SCHOOL_SOUNDS.FIVE_MINUTES.id,
-                label: SABBATH_SCHOOL_SOUNDS.FIVE_MINUTES.label,
-              },
-              {
-                value: SABBATH_SCHOOL_SOUNDS.ONE_MINUTE.id,
-                label: SABBATH_SCHOOL_SOUNDS.ONE_MINUTE.label,
-              },
-            ],
-          },
-          {
-            id: "tw_alarm_play",
-            icon: ICONS.PLAYER.PLAY,
-            label: `${modulePath}.sound.play`,
-            action: `${moduleId}_play_sound`,
-            color: "#27ae60",
           },
         ],
       },

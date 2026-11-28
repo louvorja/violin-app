@@ -331,7 +331,10 @@ import {
   setRunning,
   draw,
   reset as resetState,
+  replaceNames,
 } from "../state";
+import { useModuleLaunch } from "@/composables/useModuleLaunch";
+import { launchBoolean, launchNumber, launchString } from "@/helpers/ModuleLaunch";
 
 type DrawMode = "number" | "names";
 
@@ -586,6 +589,33 @@ function reset(): void {
 function close(): void {
   showList.value = false;
 }
+
+/*
+ * Item "Utilitário" da liturgia: números ou nomes, a faixa ou a lista daquele
+ * momento e, se marcado, o histórico do último sorteio limpo.
+ */
+useModuleLaunch("draw", ({ config }) => {
+  ensureDrawLoaded();
+  const mode = launchString(config, "draw_mode");
+  if (mode === "number" || mode === "names") applyMode(mode);
+  const min = launchNumber(config, "range_min");
+  const max = launchNumber(config, "range_max");
+  if (mode !== "names" && min !== undefined && max !== undefined) setRange(min, max);
+  if (mode === "names" && Array.isArray(config.names) && config.names.length) {
+    replaceNames(config.names);
+  }
+  const effect = launchNumber(config, "effect_duration");
+  if (effect) UserData.set(KEYS.MODULES.DRAW.EFFECT_DURATION, effect);
+  for (const [field, key] of [
+    ["show_history", KEYS.MODULES.DRAW.SHOW_DRAWN_HISTORY],
+    ["random_finish", KEYS.MODULES.DRAW.RANDOM_FINISH],
+    ["roulette_sound", KEYS.MODULES.DRAW.ROULETTE_SOUND],
+  ] as const) {
+    const on = launchBoolean(config, field);
+    if (on !== undefined) UserData.set(key, on);
+  }
+  if (launchBoolean(config, "clear_history")) resetState();
+});
 
 onMounted(ensureDrawLoaded);
 </script>

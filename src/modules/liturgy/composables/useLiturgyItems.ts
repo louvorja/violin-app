@@ -1,5 +1,6 @@
 import { useLiturgyI18n, chaveLiturgia } from "../i18n";
 import { requestLiturgyImport } from "../openRequests";
+import { cleanUtilityConfig, utilitySpec, utilitySummary } from "../utility";
 import {
   agendaParaPersistir,
   agruparPorBloco,
@@ -436,6 +437,11 @@ export function useLiturgyItems(
     }
     // O vínculo pertence ao tipo anterior, não à nova ação da liturgia.
     form.value.linked_overlay_id = "";
+    if (form.value.tipo !== LiturgyItemTypeEnum.UTILITY) {
+      form.value.util_module = undefined;
+      form.value.util_config = undefined;
+      form.value.util_autostart = undefined;
+    }
   }
 
   function setMusicChoice(later: boolean | string): void {
@@ -509,6 +515,10 @@ export function useLiturgyItems(
     }
     if (f.tipo === LiturgyItemTypeEnum.ITENS_AGENDADOS && !(f.ref_id || f.id)) {
       formErrors.value = { ref_id: t("dialog.choose_scheduled") };
+      return;
+    }
+    if (f.tipo === LiturgyItemTypeEnum.UTILITY && !utilitySpec(f.util_module)) {
+      formErrors.value = { util_module: t("utility.choose_module") };
       return;
     }
 
@@ -658,6 +668,21 @@ export function useLiturgyItems(
         built.subitem = "";
         built.blocoId = undefined;
         break;
+      case LiturgyItemTypeEnum.UTILITY: {
+        const config = cleanUtilityConfig(f.util_module, f.util_config || {});
+        const autoStart = !!f.util_autostart && !!utilitySpec(f.util_module)?.canAutoStart;
+        built.util_module = f.util_module;
+        built.util_config = config;
+        built.util_autostart = autoStart;
+        built.subitem = utilitySummary(f.util_module, config, autoStart, t);
+        break;
+      }
+    }
+    // Os campos do utilitário só existem no item utilitário.
+    if (f.tipo !== LiturgyItemTypeEnum.UTILITY) {
+      delete built.util_module;
+      delete built.util_config;
+      delete built.util_autostart;
     }
 
     // Fixar o modo legado antes de alterar duração evita que uma continuação

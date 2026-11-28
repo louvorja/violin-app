@@ -8,6 +8,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { LiturgyItem, ScheduledCategory, ScheduledItem } from "@/types/Liturgy";
 import { ICONS } from "@/config/Icons";
+import { utilitySpec } from "@/modules/liturgy/utility";
 
 const DEFAULT_COLOR = "#00004F";
 
@@ -97,6 +98,7 @@ function iconForItem(item: LiturgyItem): string {
     [LiturgyItemTypeEnum.ITENS_AGENDADOS]: ICONS.CALENDAR.MULTISELECT,
     [LiturgyItemTypeEnum.BLOCO]: ICONS.UI.DASHBOARD,
     [LiturgyItemTypeEnum.OVERLAY]: ICONS.UI.LAYERS,
+    [LiturgyItemTypeEnum.UTILITY]: utilitySpec(item.util_module)?.icon || ICONS.MODULES.TIMER,
   };
   return map[item.tipo] || ICONS.UI.DOT;
 }

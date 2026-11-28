@@ -8,6 +8,7 @@
  * para os testes não precisarem de nenhum dos dois.
  */
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
+import { isBundledLiturgicalId } from "@/config/LiturgicalAudios";
 import { DB_TABLE } from "@/constants/DbTables";
 import type { LiturgyItem } from "@/types/Liturgy";
 import { blobOf } from "@/helpers/Bytes";
@@ -264,6 +265,8 @@ export async function collectFiles(
           missing.push(displayName(item));
           break;
         }
+        // Áudio litúrgico: vem com todo programa, o pacote não precisa levar.
+        if (isBundledLiturgicalId(refId)) break;
         const { table, source } = lib;
         const ok = await once(`${source}:${refId}`, async () => {
           const record = await deps.get(table, refId);

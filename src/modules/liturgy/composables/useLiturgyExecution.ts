@@ -45,6 +45,10 @@ import {
 } from "@/helpers/LiturgyFiles";
 import { canLinkOverlay, youtubeVideoId } from "../overlayLink";
 import { ativarOverlayVinculado, prepararExecucao } from "../linkedOverlay";
+import { requestModuleLaunch } from "@/helpers/ModuleLaunch";
+import $modules from "@/helpers/Modules";
+import { utilitySpec } from "../utility";
+import { afterLiturgicalAudio } from "@/helpers/LiturgicalAudios";
 
 interface MediaLibraryRecord {
   path?: string;
@@ -179,11 +183,33 @@ export function useLiturgyExecution() {
         case LiturgyItemTypeEnum.OVERLAY:
           await toggleOverlay(item);
           break;
+        case LiturgyItemTypeEnum.UTILITY:
+          executeUtility(item);
+          break;
       }
       if (projected) await ativarOverlayVinculado(item);
     } catch (error) {
       reportExecutionError(error, "execute_item", { type: item.tipo });
     }
+  }
+
+  /**
+   * Utilitário: pede ao módulo que se configure (e inicie, se marcado) e o
+   * abre. O pedido vai antes do `open` porque o módulo consome a fila ao montar.
+   */
+  function executeUtility(item: LiturgyItem): void {
+    const spec = utilitySpec(item.util_module);
+    if (!spec) {
+      reportMissingResource("execute_utility", "utility_module");
+      $alert.error({ text: chaveLiturgia("utility.module_missing") });
+      return;
+    }
+    requestModuleLaunch({
+      module: spec.id,
+      config: item.util_config || {},
+      autoStart: !!item.util_autostart && spec.canAutoStart,
+    });
+    $modules.open(spec.id);
   }
 
   async function playMusic(item: LiturgyItem, mode = "sung"): Promise<boolean> {
@@ -414,7 +440,9 @@ export function useLiturgyExecution() {
         target.startsWith("blob:") && item.ref_id
           ? { libRef: { table: DB_TABLE.MEDIA_LIBRARY, id: item.ref_id } }
           : undefined;
-      return await openFile({ ...item, dir: target }, typeHint, extraPayload);
+      const opened = await openFile({ ...item, dir: target }, typeHint, extraPayload);
+      if (typeHint === "audio") afterLiturgicalAudio(item.ref_id);
+      return opened;
     } catch (error) {
       reportExecutionError(error, "execute_media_library", { has_ref_id: !!item.ref_id });
       return false;

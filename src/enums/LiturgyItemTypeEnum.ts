@@ -11,6 +11,8 @@ export enum LiturgyItemTypeEnum {
   BG_SOUND = "som-de-fundo",
   ANUNCIOS = "anuncios",
   OVERLAY = "overlay",
+  /** Abre um módulo (temporizador, cronômetro, relógio…) já configurado. */
+  UTILITY = "utilitario",
 }
 
 const LEGACY_MAP: Record<string, LiturgyItemTypeEnum> = {
