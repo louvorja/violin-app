@@ -61,7 +61,17 @@
     "music": "Configurar música",
     "not_configured": "no configurado",
     "options": "Opciones",
-    "warning": "Avisar cuando falten"
+    "warning": "Avisar cuando falten",
+    "define_by": "Definir por",
+    "define_by_end": "Hora de término",
+    "define_by_duration": "Duración",
+    "duration_minutes": "Duración (min)",
+    "second_line": "Mostrar",
+    "second_line_target": "Término",
+    "second_line_clock": "Reloj",
+    "second_line_both": "Ambos",
+    "sounds": "Audios",
+    "second_line_none": "Nada"
   },
   "warning": {
     "custom": "Personalizado en segundos",
@@ -72,5 +82,24 @@
     "m2": "2 min",
     "m5": "5 min",
     "m10": "10 min"
+  },
+  "sounds": {
+    "title": "Audios de los avisos",
+    "intro": "Cada aviso reproduce el sonido que viene con el programa. Para usar otro, elija un audio de la Biblioteca de Medios.",
+    "default": "Predeterminado del programa",
+    "listen": "Reproducir",
+    "pick": "Biblioteca…",
+    "pick_title": "Elegir audio en la Biblioteca de Medios",
+    "use_default": "Volver al predeterminado",
+    "library_empty": "No hay audios en la Biblioteca de Medios. Agréguelos desde el módulo Biblioteca de Medios.",
+    "extras_title": "Avisos extra",
+    "extras_intro": "Reproduzca otros audios de la biblioteca en cualquier momento: cuando falten 10:00, 2:30… Solo suenan cuando el conteo pasa por el tiempo marcado.",
+    "extras_when": "Cuando falten",
+    "extras_no_audio": "Elija un audio",
+    "extras_add": "Nuevo aviso",
+    "extras_remove": "Quitar aviso"
+  },
+  "screen": {
+    "adjust": "Ajustar tiempo"
   }
 }

@@ -277,6 +277,21 @@ export const KEYS = {
       END_ACTION_VIDEO: `${MODULES_TIMER_WORSHIP}.timer_end_data_video`,
       END_ACTION_ONLINE_VIDEO: `${MODULES_TIMER_WORSHIP}.timer_end_data_online_video`,
       LAST_TARGET_TIME: `${MODULES_TIMER_WORSHIP}.last_target_time`,
+      /** "end" (hora de término, padrão) ou "duration" (duração em minutos). */
+      DEFINE_BY: `${MODULES_TIMER_WORSHIP}.define_by`,
+      /** Duração usada em "duration", em minutos. */
+      DURATION_MINUTES: `${MODULES_TIMER_WORSHIP}.duration_minutes`,
+      /** Abaixo da contagem: "target" (padrão), "clock", "both" ou "none". */
+      SECOND_LINE: `${MODULES_TIMER_WORSHIP}.second_line`,
+      /**
+       * Áudio de cada aviso: `{ libraryId, name }` de um áudio da Biblioteca de
+       * Mídia, ou vazio para o som que vem com o programa.
+       */
+      SOUND_START_FILE: `${MODULES_TIMER_WORSHIP}.sound_start_file`,
+      SOUND_FIVE_MIN_FILE: `${MODULES_TIMER_WORSHIP}.sound_five_min_file`,
+      SOUND_ONE_MIN_FILE: `${MODULES_TIMER_WORSHIP}.sound_one_min_file`,
+      /** Avisos extras: `[{ id, seconds, libraryId, name }]` — tocam faltando `seconds`. */
+      SOUND_EXTRAS: `${MODULES_TIMER_WORSHIP}.sound_extras`,
     },
   },
   OPTIONS: {

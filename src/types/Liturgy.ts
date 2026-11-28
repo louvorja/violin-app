@@ -1,5 +1,6 @@
 import { LiturgyItemTypeEnum } from "@/enums/LiturgyItemTypeEnum";
 import type { AlbumItem } from "@/types/Album";
+import type { ModuleLaunchConfig } from "@/helpers/ModuleLaunch";
 
 export interface LiturgyItem {
   id: string;
@@ -31,6 +32,12 @@ export interface LiturgyItem {
   overlay_action?: "activate" | "deactivate";
   /** Overlay vinculado — ativado automaticamente ao executar o item. */
   linked_overlay_id?: string;
+  /** Módulo que o item abre (tipo utilitario). */
+  util_module?: string;
+  /** Configuração aplicada ao abrir (tipo utilitario). */
+  util_config?: ModuleLaunchConfig;
+  /** Começa a contar sozinho ao clicar no item (tipo utilitario). */
+  util_autostart?: boolean;
 }
 
 export interface LiturgyMusicItem {

@@ -149,7 +149,11 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { useModuleLaunch } from "@/composables/useModuleLaunch";
+import { launchBoolean, launchNumber, launchString } from "@/helpers/ModuleLaunch";
+import UserData from "@/helpers/UserData";
+import { KEYS } from "@/constants/UserDataKeys";
 import { ICONS } from "@/config/Icons";
 import { LjButton, LjChip } from "@/components/ui";
 import { module as manifest } from "../manifest";
@@ -179,8 +183,10 @@ import {
   overtime,
   progress,
   resetAll,
+  resetTime,
   setMode,
   setTarget,
+  start,
   setWarning,
   targetLabel,
   targetSeconds,
@@ -201,6 +207,24 @@ useModuleProjection("stopwatch", {
     else if (action === "set_time") setTimeFromPayload(payload);
     else if (action === "toggle_format") show_format.value = !show_format.value;
   },
+});
+
+/*
+ * Item "Utilitário" da liturgia: modo e tempo (regressivo) já definidos e, se
+ * o item pediu, começa a contar. As voltas ficam como estão.
+ */
+useModuleLaunch("stopwatch", async ({ config, autoStart }) => {
+  const newMode = launchString(config, "mode");
+  if (newMode === "up" || newMode === "down") setMode(newMode);
+  const minutes = launchNumber(config, "minutes");
+  if (minutes && (newMode ?? mode.value) === "down") setTarget(minutes * 60);
+  const warning = launchNumber(config, "warning");
+  if (warning !== undefined) setWarning(warning);
+  const over = launchBoolean(config, "overtime");
+  if (over !== undefined) UserData.set(KEYS.MODULES.STOPWATCH.COUNT_OVERTIME, over);
+  await nextTick();
+  resetTime();
+  if (autoStart) start();
 });
 
 /* "No telão" na prévia: o mesmo estado que acende o botão Projetar da ribbon. */
