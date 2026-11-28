@@ -111,7 +111,7 @@
                     <LjIcon :icon="ICONS.PLAYER.PLAY" :size="13" />
                   </span>
                   <span v-if="isActive(card.file.id)" class="pm-bgp__live">
-                    {{ tm("library.background_projection_live") }}
+                    {{ tm("library.on_air") }}
                   </span>
                 </span>
                 <span class="pm-bgp__info">

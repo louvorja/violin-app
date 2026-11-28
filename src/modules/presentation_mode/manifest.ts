@@ -1,11 +1,11 @@
-import type { Module } from "@/types/Module"
-import type { RibbonPage } from "@/types/Ribbon"
-import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum"
-import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum"
-import { ICONS } from "@/config/Icons"
-import { ModuleEnum } from "@/enums/ModuleEnum"
-import { getModulePath } from "@/helpers/ModulePath"
-import { KEYS } from "@/constants/UserDataKeys"
+import type { Module } from "@/types/Module";
+import type { RibbonPage } from "@/types/Ribbon";
+import { ModuleCategoryEnum } from "@/enums/ModuleCategoryEnum";
+import { ModuleGroupEnum } from "@/enums/ModuleGroupEnum";
+import { ICONS } from "@/config/Icons";
+import { ModuleEnum } from "@/enums/ModuleEnum";
+import { getModulePath } from "@/helpers/ModulePath";
+import { KEYS } from "@/constants/UserDataKeys";
 
 const moduleId = ModuleEnum.PRESENTATION_MODE;
 const modulePath = getModulePath(moduleId);
@@ -29,7 +29,7 @@ export const module: Module = {
   category: ModuleCategoryEnum.WORSHIP,
   group: ModuleGroupEnum.CHURCH,
   order: 3,
-}
+};
 
 // As ações seguem `presentation_mode_<acao>`: o RibbonBar só repassa ao módulo
 // os prefixos que conhece, e o Index.vue despacha pelo sufixo.
@@ -191,6 +191,14 @@ export const contextualPages: RibbonPage[] = [
             label: `${modulePath}.library.background_projection`,
             action: `${moduleId}_library_background_projection`,
             color: "#34495e",
+            size: "small",
+          },
+          {
+            id: `${moduleId}_library_overlays`,
+            icon: ICONS.MODULES.OVERLAY,
+            label: `${modulePath}.library.overlays`,
+            action: `${moduleId}_library_overlays`,
+            color: "#7c3aed",
             size: "small",
           },
           {

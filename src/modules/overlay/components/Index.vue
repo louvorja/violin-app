@@ -75,9 +75,9 @@
             >
               <div class="overlay-slot-card-header">
                 <LjSwitch
-                  v-model="slot.enabled"
+                  :model-value="slot.enabled"
                   :title="tm('slot.enabled')"
-                  @update:model-value="persist"
+                  @update:model-value="setSlotEnabled(slot, $event as boolean)"
                 />
                 <span class="overlay-slot-name" :title="slot.name">{{ slot.name }}</span>
                 <LjChip size="sm" class="overlay-slot-type">
@@ -156,6 +156,7 @@ import {
   overlayTextStyle,
 } from "@/helpers/OverlayStyle";
 import { OVERLAY_STYLE_DEFAULTS, createOverlaySlot, type OverlaySlot } from "@/types/Overlay";
+import { mergeEnabledState } from "../slotMerge";
 
 const moduleContainer = ref<{ tm(key: string, named?: Record<string, unknown>): string } | null>(
   null
@@ -177,6 +178,8 @@ const { mirrorText, mirrorColor } = useModuleMirror(() =>
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let saveGeneration = 0;
+/** Slots cujo `enabled` foi mudado AQUI desde o último save. */
+const enabledDirty = new Set<string>();
 let reloadAfterSave = false;
 let loadGeneration = 0;
 
@@ -200,20 +203,42 @@ async function load(): Promise<void> {
   }
 }
 
+function setSlotEnabled(slot: OverlaySlot, value: boolean): void {
+  slot.enabled = value;
+  enabledDirty.add(slot.id);
+  persist();
+}
+
 function persist(): void {
   const generation = ++saveGeneration;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
-    for (const s of localSlots) {
-      const plain = JSON.parse(JSON.stringify(s));
-      await writeSlot(plain);
-    }
-    $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {});
-    if (generation !== saveGeneration) return;
-    saveTimer = null;
-    if (reloadAfterSave) {
-      reloadAfterSave = false;
-      void load();
+    let saved = false;
+    try {
+      // O Modo apresentação pode ter ligado/desligado um slot enquanto esta
+      // edição esperava o debounce: só o interruptor daqui sobrescreve o disco.
+      const merged = mergeEnabledState(localSlots, await readAllSlots(), enabledDirty);
+      for (const s of merged) {
+        const plain = JSON.parse(JSON.stringify(s));
+        await writeSlot(plain);
+      }
+      // Um save novo já foi agendado durante os awaits: ele ainda precisa da
+      // marca dos slots alternados desde então.
+      if (generation === saveGeneration) enabledDirty.clear();
+      $broadcast.send(BROADCAST_TYPE.OVERLAY_CONFIG_CHANGED, {});
+      saved = true;
+    } catch (error) {
+      console.warn("[overlay] falha ao salvar as sobreposições:", error);
+    } finally {
+      // O timer que falhou não pode prender o módulo em "salvando": o próximo
+      // edit agenda outro save e tenta de novo.
+      if (generation === saveGeneration) {
+        saveTimer = null;
+        if (saved && reloadAfterSave) {
+          reloadAfterSave = false;
+          void load();
+        }
+      }
     }
   }, 200);
 }

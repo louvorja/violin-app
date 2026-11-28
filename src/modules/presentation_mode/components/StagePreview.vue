@@ -69,6 +69,18 @@
           <span>{{ view.title }}</span>
         </div>
 
+        <!-- Sobreposições ativas: mesmo desenho 1920×1080 da projeção, reduzido. -->
+        <div
+          ref="overlayWrap"
+          class="pm-preview__overlay"
+          data-testid="pm-preview-overlay"
+          aria-hidden="true"
+        >
+          <div class="pm-preview__overlay-stage" :style="{ transform: `scale(${overlayScale})` }">
+            <OverlayRenderer embedded :units="STAGE_UNITS" />
+          </div>
+        </div>
+
         <div
           v-if="view.kind === 'image' || view.kind === 'video' || view.kind === 'online'"
           class="pm-preview__actions"
@@ -127,8 +139,11 @@ import $database from "@/helpers/Database";
 import Telemetry from "@/helpers/Telemetry";
 import { buildSlidesFrom } from "@/composables/useMedia";
 import { isDownloaded, youtubeEmbedUrl } from "@/helpers/OnlineVideo";
+import { STAGE_UNITS } from "@/helpers/OverlayStyle";
+import OverlayRenderer from "@/components/OverlayRenderer.vue";
 import { useModuleI18n } from "@/composables/useModuleI18n";
 import { useHasStageMonitor } from "../composables/useOutputs";
+import { useStageScale } from "../composables/useStageScale";
 import type { Music } from "@/types/Music";
 import SlideGrid from "./SlideGrid.vue";
 
@@ -167,6 +182,9 @@ const emit = defineEmits<{
 
 const { tm } = useModuleI18n(ModuleEnum.PRESENTATION_MODE);
 const hasStageMonitor = useHasStageMonitor();
+
+const overlayWrap = ref<HTMLElement | null>(null);
+const { scale: overlayScale } = useStageScale(overlayWrap);
 
 const songSlides = ref<Record<string, unknown>[]>([]);
 const songHasInstrumental = ref(false);
@@ -370,10 +388,29 @@ watch(
   color: var(--lj-white-alpha-50);
 }
 
+.pm-preview__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.pm-preview__overlay-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: top left;
+  container-type: size;
+}
+
 .pm-preview__actions {
   position: absolute;
   right: 10px;
   bottom: 10px;
+  z-index: 2;
   display: flex;
   gap: 6px;
 }

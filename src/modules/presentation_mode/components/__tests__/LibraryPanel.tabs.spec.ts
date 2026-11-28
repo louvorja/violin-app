@@ -63,6 +63,9 @@ vi.mock("../LibraryBackgroundProjection.vue", () => ({
 vi.mock("../LibraryMedia.vue", () => ({
   default: { name: "LibraryMedia", template: "<div />" },
 }));
+vi.mock("../LibraryOverlays.vue", () => ({
+  default: { name: "LibraryOverlays", template: "<div />" },
+}));
 vi.mock("../LibraryNativeMedia.vue", () => ({
   default: { name: "LibraryNativeMedia", template: "<div />" },
 }));
@@ -118,7 +121,7 @@ describe("LibraryPanel tabs", () => {
 
     expect(ids.slice(0, 2)).toEqual(["pm-library-tab-bible", "pm-library-tab-files"]);
     expect(ids.slice(2, 4)).toEqual(["pm-library-tab-media", "pm-library-tab-online_videos"]);
-    expect(ids).toHaveLength(9);
+    expect(ids).toHaveLength(10);
   });
 
   it("insere a aba nova depois de Mídia numa ordem já salva", () => {
@@ -151,6 +154,7 @@ describe("LibraryPanel tabs", () => {
       "audio",
       "background_sound",
       "background_projection",
+      "overlays",
       "musics",
     ]);
   });

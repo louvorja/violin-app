@@ -36,7 +36,7 @@ completa e os limites testados estão em
 O **Modo apresentação** (`src/modules/presentation_mode`) é a mesa de operação do
 culto: programa por data à esquerda (documento no `DocStore`), palco com prévia e
 controles no centro, biblioteca embaixo (Arquivos, Mídia com o Online, Áudio,
-Músicas, Bíblia) e as saídas à direita — liga/desliga por tela, miniaturas que
+Músicas, Bíblia e Sobreposições) e as saídas à direita — liga/desliga por tela, miniaturas que
 refletem as telas reais, "Tirar do ar" e "Limpar tela" (`projection_clear`). Ele
 não tem projeção própria: manda cada conteúdo pelos contratos existentes (música,
 Bíblia, `file_projection`, vídeo on-line, anúncios). O que é exclusivo do retorno

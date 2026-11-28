@@ -9,6 +9,7 @@ import { KEYS } from "@/constants/UserDataKeys";
 import { ModuleEnum } from "@/enums/ModuleEnum";
 import { ModulePresentationAuthority } from "@/presentation/ModulePresentationState";
 import { createOverlaySlot, type OverlaySlot } from "@/types/Overlay";
+import { STAGE_UNITS } from "@/helpers/OverlayStyle";
 import OverlayRenderer from "../OverlayRenderer.vue";
 
 const stored = vi.hoisted(() => ({ slots: [] as unknown[] }));
@@ -78,5 +79,28 @@ describe("espelho de módulo na projeção: cor de aviso e alerta (#80)", () => 
 
     await publish({ text: "00:10:00" });
     expect(textOf("espelho").style.color).toBe("rgb(255, 255, 255)");
+  });
+
+  it("embutido usa unidades do palco e deixa de cobrir a janela", async () => {
+    stored.slots = [
+      createOverlaySlot({ id: "texto", type: "text", content: "Bem-vindos" }),
+      createOverlaySlot({ id: "foto", type: "image", file_id: "img", content: "", order: 1 }),
+    ];
+    const wrapper = mount(OverlayRenderer, {
+      props: { embedded: true, units: STAGE_UNITS },
+      global: { plugins: [i18n] },
+    });
+    await flushPromises();
+
+    const canvas = wrapper.get(".overlay-canvas");
+    expect(canvas.classes()).toContain("overlay-canvas--embedded");
+    expect(
+      (wrapper.get('[data-slot-id="texto"] .overlay-slot__text').element as HTMLElement).style
+        .fontSize
+    ).toBe("5cqh");
+    expect(
+      (wrapper.get('[data-slot-id="foto"] .overlay-slot__img').element as HTMLElement).style
+        .maxWidth
+    ).toContain("cqw");
   });
 });

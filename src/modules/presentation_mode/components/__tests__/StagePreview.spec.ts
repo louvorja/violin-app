@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { flushPromises, shallowMount } from "@vue/test-utils";
+import { flushPromises, mount as mountComponent } from "@vue/test-utils";
 
 const { isDownloaded } = vi.hoisted(() => ({ isDownloaded: vi.fn() }));
 
@@ -20,8 +20,15 @@ vi.mock("@/composables/useModuleI18n", () => ({
 vi.mock("@/modules/presentation_mode/composables/useOutputs", () => ({
   useHasStageMonitor: () => ({ value: false }),
 }));
+vi.mock("@/components/OverlayRenderer.vue", () => ({
+  default: {
+    name: "OverlayRenderer",
+    props: { embedded: Boolean, units: Object },
+    template: '<div class="overlay-renderer-stub" :data-embedded="String(embedded)" />',
+  },
+}));
 
-import StagePreview from "../StagePreview.vue";
+import StagePreview, { type PreviewView } from "../StagePreview.vue";
 
 const view = {
   kind: "online" as const,
@@ -31,14 +38,14 @@ const view = {
   videoId: "abc12345678",
 };
 
-function mount() {
-  return shallowMount(StagePreview, {
-    props: { view },
+function mount(target: PreviewView = view) {
+  return mountComponent(StagePreview, {
+    props: { view: target },
     global: {
       stubs: {
         LjButton: { template: '<button v-bind="$attrs"><slot /></button>' },
         LjIcon: true,
-        LjMenu: { template: "<div><slot name=\"trigger\" /><slot /></div>" },
+        LjMenu: { template: '<div><slot name="trigger" /><slot /></div>' },
         SlideGrid: true,
       },
     },
@@ -55,9 +62,7 @@ describe("prévia do vídeo on-line", () => {
     const wrapper = mount();
     await flushPromises();
 
-    expect(wrapper.find("video").attributes("src")).toBe(
-      "louvorja://onlinevideo/abc12345678.mp4"
-    );
+    expect(wrapper.find("video").attributes("src")).toBe("louvorja://onlinevideo/abc12345678.mp4");
     expect(wrapper.find("iframe").exists()).toBe(false);
   });
 
@@ -76,5 +81,31 @@ describe("prévia do vídeo on-line", () => {
     await flushPromises();
 
     expect(wrapper.find("iframe").exists()).toBe(true);
+  });
+
+  it("mostra a camada de sobreposições no quadro 16:9", () => {
+    const wrapper = mount({
+      kind: "image",
+      title: "Foto",
+      icon: "image",
+      playable: true,
+      url: "/foto.jpg",
+    });
+
+    const layer = wrapper.find('[data-testid="pm-preview-overlay"]');
+    expect(layer.exists()).toBe(true);
+    expect(layer.find(".overlay-renderer-stub").attributes("data-embedded")).toBe("true");
+  });
+
+  it("não sobrepõe a grade de slides de uma música", () => {
+    const wrapper = mount({
+      kind: "song",
+      title: "Música",
+      icon: "music",
+      playable: true,
+      songId: 1,
+    });
+
+    expect(wrapper.find('[data-testid="pm-preview-overlay"]').exists()).toBe(false);
   });
 });

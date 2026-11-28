@@ -104,6 +104,7 @@
     <LibraryBible v-else-if="tab === 'bible'" :live="liveBible" v-bind="relay" />
     <LibraryBackgroundSound v-else-if="tab === 'background_sound'" @add="relay.onAdd" />
     <LibraryBackgroundProjection v-else-if="tab === 'background_projection'" @add="relay.onAdd" />
+    <LibraryOverlays v-else-if="tab === 'overlays'" />
     <LibraryFiles
       v-else
       :key="tab"
@@ -141,6 +142,7 @@ const TABS = [
     label: "library.background_projection",
     icon: ICONS.MODULES.BACKGROUND_PROJECTION,
   },
+  { id: "overlays", label: "library.overlays", icon: ICONS.MODULES.OVERLAY },
   { id: "musics", label: "library.musics", icon: ICONS.MUSIC.MUSIC },
   { id: "bible", label: "library.bible", icon: ICONS.MODULES.BIBLE },
 ] as const;
@@ -157,6 +159,7 @@ import LibraryMusic from "./LibraryMusic.vue";
 import LibraryBible from "./LibraryBible.vue";
 import LibraryBackgroundSound from "./LibraryBackgroundSound.vue";
 import LibraryBackgroundProjection from "./LibraryBackgroundProjection.vue";
+import LibraryOverlays from "./LibraryOverlays.vue";
 import LibraryMedia from "./LibraryMedia.vue";
 import LibraryOnlineVideos from "./LibraryOnlineVideos.vue";
 import LibraryNativeMedia from "./LibraryNativeMedia.vue";
