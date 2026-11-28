@@ -1897,6 +1897,8 @@
   "startup_check": {
     "title": "Verificación Inicial",
     "scanning": "Comprobando archivos del sistema...",
+    "preparing_download": "Preparando las descargas...",
+    "download_done": "Descargas completadas.",
     "connection_status": "Conexión con el servidor",
     "online_hint": "Descargar los audios es opcional: con internet, LouvorJA reproduce la música directamente del servidor y guarda en la computadora las canciones que usted use.",
     "collections_status": "Colecciones",

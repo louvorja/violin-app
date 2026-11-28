@@ -255,6 +255,12 @@
 
     <!-- Baixando -->
     <div v-else class="sc-download">
+      <!-- Entre o clique e o início da fila a lista de arquivos ainda está sendo montada. -->
+      <div v-if="downloadRunning && !isBusy" class="sc-scanning">
+        <LjSpinner :size="32" class="sc-scanning__spinner" />
+        <span class="sc-scanning__label">{{ $t("startup_check.preparing_download") }}</span>
+      </div>
+
       <section v-if="sync.downloading.value" class="sc-progress">
         <header class="sc-section-head">
           <LjIcon :icon="ICONS.MEDIA.DISC" :size="18" class="sc-section-head__icon" />
@@ -306,9 +312,9 @@
         </div>
       </section>
 
-      <div v-if="!isBusy" class="sc-done">
+      <div v-if="!downloadPending" class="sc-done">
         <LjIcon :icon="ICONS.UI.CHECK_CIRCLE" :size="48" class="sc-done__icon" />
-        <div class="sc-done__title">{{ $t("options.collections_download.completed") }}</div>
+        <div class="sc-done__title">{{ doneTitle }}</div>
         <div v-if="sync.downloadCompletedMsg.value" class="sc-done__detail">
           {{ sync.downloadCompletedMsg.value }}
         </div>
@@ -383,7 +389,7 @@
 
       <template v-else>
         <LjButton
-          v-if="isBusy"
+          v-if="downloadPending"
           size="sm"
           variant="ghost"
           class="sc-footer__left"
@@ -392,7 +398,7 @@
         >
           {{ $t("startup_check.minimize") }}
         </LjButton>
-        <LjButton v-if="!isBusy" size="sm" :icon="ICONS.UI.CHECK" @click="onClose">
+        <LjButton v-if="!downloadPending" size="sm" :icon="ICONS.UI.CHECK" @click="onClose">
           {{ $t("actions.close") }}
         </LjButton>
         <LjButton
@@ -476,6 +482,12 @@ const expandedCategory = ref<number | null>(null);
 const catalogAvailable = ref(false);
 const detailedScan = ref(false);
 const catalogActionFailed = ref(false);
+/** A rodada de "Baixar" do diálogo, da montagem da lista até a última versão da Bíblia. */
+const downloadRunning = ref(false);
+/** O operador pediu Cancelar durante a rodada; nada mais deve começar depois disso. */
+const downloadCancelled = ref(false);
+/** A rodada atual pôs coletâneas na fila (o progresso do sync é compartilhado entre rodadas). */
+const collectionsQueued = ref(false);
 const scanData = ref<ScanData>({
   categories: [],
   hymnalIds: [],
@@ -500,6 +512,19 @@ const canDownload = computed(() => sync.ftpOk.value && !sync.ftpChecking.value);
 const isBusy = computed(
   () => sync.bundleInstalling.value || sync.downloading.value || sync.bibleDownloading.value
 );
+
+/**
+ * A tela de download só pode dizer "concluído" depois da rodada inteira: entre a
+ * lista de arquivos e a fila, e entre a fila e a Bíblia, nada está baixando, e
+ * `isBusy` sozinho mostraria o fim antes da hora.
+ */
+const downloadPending = computed(() => downloadRunning.value || isBusy.value);
+
+const doneTitle = computed(() => {
+  const { total, done, failed } = sync.downloadProgress.value;
+  if (!collectionsQueued.value || total <= 0) return t("startup_check.download_done");
+  return t("options.collections_download.completed", { downloaded: done, failed });
+});
 
 const ftpLabel = computed(() =>
   sync.ftpChecking.value
@@ -633,6 +658,7 @@ async function prepareCatalog(): Promise<void> {
 }
 
 function cancelActiveWork(): void {
+  if (downloadRunning.value) downloadCancelled.value = true;
   sync.cancelBundle();
   sync.cancelDownloads();
 }
@@ -711,16 +737,23 @@ async function performDownload(
   selectedAlbums.value = [...albums];
   selectedHymnal.value = hymnal;
   selectedBibles.value = bibles;
+  downloadRunning.value = true;
+  downloadCancelled.value = false;
+  collectionsQueued.value = false;
+  // O sync é singleton: sem limpar, uma rodada só de Bíblia herdava a mensagem da anterior.
+  sync.downloadCompletedMsg.value = "";
 
   try {
     const files = await sync.collectFiles(albums, hymnal, scanData.value.hymnalIds, false, []);
 
-    if (files.length > 0) {
+    if (files.length > 0 && !downloadCancelled.value) {
+      collectionsQueued.value = true;
       await sync.startDownloads(files);
       await sync.waitForDownloadQueue();
     }
 
-    if (bibles.length > 0) {
+    // Cancelar durante as coletâneas não pode deixar a Bíblia começar em seguida.
+    if (bibles.length > 0 && !downloadCancelled.value) {
       const lang = $userdata.get(KEYS.OPTIONS.LANGUAGE, "pt") || "pt";
       await sync.downloadBibleVersions(bibles, scanData.value.bibleVersions, lang);
     }
@@ -734,9 +767,19 @@ async function performDownload(
       e instanceof CatalogIncompleteError
         ? t("options.collections_download.catalog_incomplete")
         : (e as Error).message || t("options.collections_download.collect_failed");
+  } finally {
+    downloadRunning.value = false;
   }
 
-  view.value = "summary";
+  if (downloadCancelled.value) {
+    // Volta ao resumo com o que de fato ficou no disco, para baixar o resto depois.
+    downloadCancelled.value = false;
+    await startScan({ detailed: true });
+    return;
+  }
+  // Fica na tela de download, que agora mostra a conclusão e o botão Fechar. Voltar
+  // ao resumo exibia os números de antes do download (0/68, "Baixar Tudo"), como se
+  // nada tivesse sido baixado.
 }
 
 onMounted(() => {
