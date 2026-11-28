@@ -150,6 +150,8 @@ test("fechar a aba no X mantém a contagem e o telão no ar", async ({ page, con
    * a contagem nem tira o telão do ar — só some a prévia.
    */
   await page.locator(".subtab-close").first().click();
+  // A página fechada sai do DOM depois de PAGE_LEAVE_MS (useModuleSwap), e o relógio está parado.
+  await page.clock.runFor(300);
   await expect(projection.locator(".module-projection__alert")).toHaveCount(1);
   await expect(projection.locator(".module-projection__text")).toHaveText("-00:05");
 

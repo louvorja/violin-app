@@ -57,7 +57,10 @@ async function montar() {
 describe("FormatPanel — campo condicionado a um switch", () => {
   it("só mostra a cor do relógio depois de ligar o switch", async () => {
     const w = await montar();
-    await vi.waitFor(() => expect(w.findAll(".lj-color-field")).toHaveLength(1));
+    // O seletor de cor é carregado sob demanda; no Windows da release a 1ª carga passa de 1 s.
+    await vi.waitFor(() => expect(w.findAll(".lj-color-field")).toHaveLength(1), {
+      timeout: 4_000,
+    });
 
     await w.get('[role="switch"]').setValue(true);
     await flushPromises();

@@ -110,7 +110,7 @@ test("arquivo escolhido na liturgia persiste após reload e projeta offline", as
   await page.reload();
   await page.getByTestId("modules-ready").waitFor({ state: "attached" });
   await page.getByRole("button", { name: "Editar liturgia" }).click();
-  await card.locator(".lit-card-action").first().click();
+  await card.getByRole("button", { name: "Editar", exact: true }).first().click();
   await expect(
     page.getByRole("dialog").getByPlaceholder("C:\\caminho\\para\\arquivo.ext")
   ).toHaveValue("aviso.png");

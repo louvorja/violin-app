@@ -422,7 +422,8 @@ describe("checkbox: a marca é desenhada", () => {
     const loose = filesIn("src", [".vue"]).filter((file) => {
       const source = read(file);
       // LjCheckbox, LjSwitch e FieldBoolean escondem o input e desenham o próprio controle.
-      if (/components\/ui\/Lj(Checkbox|Switch)\.vue$|FieldBoolean\.vue$/.test(file)) return false;
+      if (/components[\\/]ui[\\/]Lj(Checkbox|Switch)\.vue$|FieldBoolean\.vue$/.test(file))
+        return false;
       const inputs = source.match(/<input\b[^>]*type="checkbox"[^>]*>/g) ?? [];
       return (
         inputs.some((tag) => !/lj-native-check/.test(tag)) && !/class="opt-checkbox/.test(source)

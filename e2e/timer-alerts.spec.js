@@ -309,11 +309,15 @@ for (const mod of MODULES) {
     await page.locator(`#ribbon-tab-${mod.tab}`).click();
     await page.locator(`[data-testid="ribbon-btn-${mod.id}"]`).click();
     await expect(page.getByTestId(mod.display)).toBeVisible();
-    const action = page.locator(`[data-testid="ribbon-btn-${mod.id}_end_action"] select`);
+    const action = page
+      .locator(`[data-testid="ribbon-btn-${mod.id}_end_action"]`)
+      .getByRole("combobox");
     const overflow = () =>
       page.locator(".ribbon-body--ctx").evaluate((el) => el.scrollWidth - el.clientWidth);
-    for (const value of ["none", "audio", "video", "online_video", "music"]) {
-      await action.selectOption(value);
+    for (const label of ["Nada", "Tocar áudio", "Projetar vídeo", "Vídeo online", "Tocar música"]) {
+      await action.click();
+      await page.getByRole("option", { name: label, exact: true }).click();
+      await expect(action).toHaveText(label);
       // Antes a ribbon passava da tela e ganhava barra de rolagem.
       await expect.poll(overflow).toBeLessThanOrEqual(1);
     }

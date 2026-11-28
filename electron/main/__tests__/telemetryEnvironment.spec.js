@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
+import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const { collectSystemInfo, parseOsRelease } = require("../telemetryEnvironment.js");
@@ -89,7 +90,9 @@ describe("telemetry environment nativo", () => {
     });
     expect(result.linuxPackage).toBe(expected);
     if (expected !== "appimage")
-      expect(readPackageType).toHaveBeenCalledWith("/opt/LouvorJA Violin/resources/package-type");
+      expect(readPackageType).toHaveBeenCalledWith(
+        path.join("/opt/LouvorJA Violin/resources", "package-type")
+      );
   });
 
   it("não executa expansões, não inclui campos arbitrários e limita o arquivo", () => {

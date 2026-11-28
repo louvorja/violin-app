@@ -19,8 +19,11 @@ vi.mock("idb", () => ({
             async getAllKeys(range: { lower: string; upper: string }) {
               return [...rows.keys()].filter((key) => key >= range.lower && key <= range.upper);
             },
-            async delete(id: string) {
-              rows.delete(id);
+            async delete(key: string | { lower: string; upper: string }) {
+              if (typeof key === "string") rows.delete(key);
+              else
+                for (const id of [...rows.keys()])
+                  if (id >= key.lower && id <= key.upper) rows.delete(id);
             },
             async put(row: { id: string; value?: string }) {
               state.putCount++;
