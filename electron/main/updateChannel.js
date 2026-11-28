@@ -31,6 +31,24 @@ function resolveUseBeta({ currentVersion, lastRunVersion, saved }) {
   return { useBeta, persist: saved !== useBeta };
 }
 
+/**
+ * Se o app baixa sozinho a atualização que encontrar.
+ *
+ * Ligado por padrão: com o download manual, quase um terço das instalações
+ * em beta não saía da versão em que estava — o aviso da abertura ficava para
+ * "Depois" e a atualização nunca começava. Baixada em segundo plano, ela se
+ * instala ao fechar o app. Só um "não" salvo pela tela Atualizações desliga;
+ * quem nunca mexeu na opção (nada salvo) fica com o padrão.
+ *
+ * Mesma regra de `autoDownloadUpdatesEnabled` (src/helpers/AppUpdatePrompt.ts),
+ * que o renderer usa — os dois lados precisam concordar.
+ *
+ * @returns {boolean}
+ */
+function resolveAutoDownload(saved) {
+  return typeof saved === "boolean" ? saved : true;
+}
+
 function readLastRunVersion(dir) {
   try {
     const value = fs.readJsonSync(path.join(dir, FILE))?.lastRunVersion;
@@ -48,4 +66,4 @@ function writeLastRunVersion(dir, version) {
   }
 }
 
-module.exports = { isPrerelease, resolveUseBeta, readLastRunVersion, writeLastRunVersion, FILE };
+module.exports = { isPrerelease, resolveUseBeta, resolveAutoDownload, readLastRunVersion, writeLastRunVersion, FILE };

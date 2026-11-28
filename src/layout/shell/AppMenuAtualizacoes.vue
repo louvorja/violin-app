@@ -301,6 +301,7 @@ import Snackbar from "@helpers/Snackbar";
 import { fetchWithTimeout } from "@/helpers/Http";
 import { textoDoStatusDeAtualizacao } from "@/helpers/UpdaterStatus";
 import Telemetry from "@/helpers/Telemetry";
+import { AUTO_DOWNLOAD_UPDATES_DEFAULT, autoDownloadUpdatesEnabled } from "@/helpers/AppUpdatePrompt";
 
 interface AppUpdateState {
   status: string;
@@ -356,7 +357,7 @@ const lastAppCheck = ref<string | null>(null);
 // Opções da tela
 const useBeta = ref(false);
 const checkOnStart = ref(true);
-const autoDownload = ref(false);
+const autoDownload = ref(AUTO_DOWNLOAD_UPDATES_DEFAULT);
 
 // Sync manager (bundle download)
 const sync = useSyncManager();
@@ -483,7 +484,7 @@ function onAutoDownloadChange(v: boolean): void {
 async function checkAppUpdate(): Promise<void> {
   if (!Platform.updater) return;
   const startedAt = Date.now();
-  Telemetry.track("app_update_check_started");
+  Telemetry.track("app_update_check_started", { trigger: "manual" });
   try {
     const res = await Platform.updater.check();
     // Só registra a última verificação quando o check concluiu com sucesso.
@@ -492,6 +493,7 @@ async function checkAppUpdate(): Promise<void> {
       lastAppCheck.value = ts;
       $userdata.set(KEYS.OPTIONS.LAST_APP_CHECK, ts);
       Telemetry.track("app_update_check_completed", {
+        trigger: "manual",
         available: !!res.state && (res.state as AppUpdateState).status === "available",
         duration_ms: Date.now() - startedAt,
       });
@@ -499,7 +501,10 @@ async function checkAppUpdate(): Promise<void> {
   } catch (e) {
     console.error("[Atualizações] checkApp:", e);
     Telemetry.captureException(e, { source: "app_update_check" });
-    Telemetry.track("app_update_check_failed", { duration_ms: Date.now() - startedAt });
+    Telemetry.track("app_update_check_failed", {
+      trigger: "manual",
+      duration_ms: Date.now() - startedAt,
+    });
   }
 }
 
@@ -530,7 +535,10 @@ async function installUpdate(): Promise<void> {
   // para "abrir o pacote" existia de quando a verificação falhava e o download
   // era feito à mão; com o updater fazendo o download, não há arquivo no
   // caminho manual, e o botão respondia "Nenhum pacote baixado".
-  Telemetry.track("app_update_install_requested", { version: appUpdate.value.newVersion });
+  Telemetry.track("app_update_install_requested", {
+    version: appUpdate.value.newVersion,
+    trigger: "manual",
+  });
   await Platform.updater?.install();
 }
 
@@ -890,7 +898,9 @@ onMounted(async () => {
   // logo abaixo: é o main que decide o padrão e a desliga ao chegar numa estável.
   useBeta.value = $userdata.get<boolean | null>(KEYS.OPTIONS.USE_BETA_UPDATES, null) === true;
   checkOnStart.value = $userdata.get<boolean>(KEYS.OPTIONS.CHECK_UPDATES_ON_START, true) === true;
-  autoDownload.value = $userdata.get<boolean>(KEYS.OPTIONS.AUTO_DOWNLOAD_UPDATES, false) === true;
+  autoDownload.value = autoDownloadUpdatesEnabled(
+    $userdata.get(KEYS.OPTIONS.AUTO_DOWNLOAD_UPDATES, null)
+  );
 
   if (Platform.isDesktop && Platform.updater) {
     try {

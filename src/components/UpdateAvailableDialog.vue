@@ -103,6 +103,7 @@ import Platform from "@/helpers/Platform";
 import DontShowAgainCheckbox from "@/components/inputs/DontShowAgainCheckbox.vue";
 import { LjButton, LjDialog, LjIcon, LjProgress, LjSpinner } from "@/components/ui";
 import { KEYS } from "@/constants/UserDataKeys";
+import Telemetry from "@/helpers/Telemetry";
 import { ICONS } from "@/config/Icons";
 import type { ReleaseNotes } from "@/types/Update";
 
@@ -238,6 +239,12 @@ function startDownload() {
 }
 
 function install() {
+  // A instalação fecha o app: o evento sai antes, ou não sai.
+  Telemetry.track("app_update_install_requested", {
+    version: props.version,
+    trigger: "prompt",
+    install_requires_elevation: appUpdate.value.installRequiresElevation === true,
+  });
   if (Platform.updater) {
     Platform.updater.install();
   }

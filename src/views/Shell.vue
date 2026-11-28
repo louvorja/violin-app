@@ -131,6 +131,11 @@ import $appdata from "@/helpers/AppData";
 import $userdata from "@/helpers/UserData";
 import Platform from "@/helpers/Platform";
 import Telemetry from "@/helpers/Telemetry";
+import {
+  autoDownloadUpdatesEnabled,
+  createUpdateOutcomeTracker,
+  startupActionForAvailableUpdate,
+} from "@/helpers/AppUpdatePrompt";
 import { ICONS } from "@/config/Icons";
 import { KEYS } from "@/constants/UserDataKeys";
 import $popup from "@/helpers/Popup";
@@ -514,16 +519,47 @@ async function _showPendingStartupCheck() {
   startupCheckOpen.value = true;
 }
 
+// Desfecho de cada download (pronto para instalar / falhou), qualquer que seja
+// o caminho: automático, pelo aviso ou pelas Opções.
+const _trackUpdateOutcome = createUpdateOutcomeTracker((event, properties) =>
+  Telemetry.track(event, properties)
+);
+
+// O aviso desta abertura já teve resposta? Fechar depois de "Atualizar agora"
+// não pode contar também como "Depois".
+let _updatePromptAnswered = false;
+
+function _autoDownloadUpdates(): boolean {
+  return autoDownloadUpdatesEnabled($userdata.get(KEYS.OPTIONS.AUTO_DOWNLOAD_UPDATES, null));
+}
+
+function _openUpdatePrompt(
+  version: string,
+  stage: "available" | "downloaded",
+  requiresElevation: boolean
+) {
+  updateDialogVersion.value = version;
+  updateDialogOpen.value = true;
+  _updatePromptAnswered = false;
+  Telemetry.track("app_update_prompt_shown", {
+    version,
+    stage,
+    install_requires_elevation: requiresElevation,
+  });
+}
+
 function _handleUpdaterState(
   state: {
     status: string;
     newVersion?: string | null;
     progress?: number;
     error?: string | null;
+    errorKind?: string | null;
     installRequiresElevation?: boolean;
   } | null
 ) {
   if (!state) return;
+  _trackUpdateOutcome(state);
   console.info(
     "[Shell] updater state →",
     state.status,
@@ -545,27 +581,32 @@ function _handleUpdaterState(
   }
 
   if (state.status === "available") {
-    const autoDownload = $userdata.get<boolean>(KEYS.OPTIONS.AUTO_DOWNLOAD_UPDATES, false) === true;
     $appdata.set(KEYS.SHELL.APP_UPDATE_AVAILABLE, true);
     $appdata.set(KEYS.SHELL.APP_UPDATE_VERSION, state.newVersion || "");
-    if (_startupCheckPending && !autoDownload) {
-      _startupCheckPending = false;
-      // Verificar se o usuário dispensou esta versão
-      const skippedVersion = $userdata.get<string>(
-        KEYS.OPTIONS.SKIP_UPDATE_NOTIFICATION_VERSION,
-        ""
+    const action = startupActionForAvailableUpdate({
+      startupCheckPending: _startupCheckPending,
+      autoDownload: _autoDownloadUpdates(),
+      newVersion: state.newVersion,
+      skippedVersion: $userdata.get<string>(KEYS.OPTIONS.SKIP_UPDATE_NOTIFICATION_VERSION, ""),
+    });
+    if (action !== "ignore") _startupCheckPending = false;
+    if (action === "prompt") {
+      _openUpdatePrompt(
+        state.newVersion || "",
+        "available",
+        state.installRequiresElevation === true
       );
-      if (skippedVersion !== state.newVersion) {
-        updateDialogVersion.value = state.newVersion || "";
-        updateDialogOpen.value = true;
-      } else {
-        // Versão dispensada → seguir para release notes / startup
-        void _continueBootAfterUpdate();
-      }
-    } else if (_startupCheckPending && autoDownload) {
-      // Auto-download ativo: download já começou, não mostrar dialog
-      // mas chain para release notes quando o download concluir
-      _bootPhase = "idle";
+    } else if (action === "suppressed") {
+      // Versão dispensada → seguir para release notes / startup
+      Telemetry.track("app_update_prompt_suppressed", { version: state.newVersion || "" });
+      void _continueBootAfterUpdate();
+    } else if (action === "continue") {
+      // Download automático: o main já baixa em segundo plano (com a barra nas
+      // tarefas) e instala ao fechar. A abertura segue agora — esperar o
+      // download prendia as novidades e a verificação inicial atrás de um
+      // download que, numa rede de igreja, pode levar minutos, e que não
+      // terminava nunca se fosse cancelado.
+      void _continueBootAfterUpdate();
     }
   } else if (state.status === "downloaded") {
     $appdata.set(KEYS.SHELL.APP_UPDATE_AVAILABLE, true);
@@ -574,8 +615,7 @@ function _handleUpdaterState(
     // fechar o app. Mostre o diálogo mesmo quando o download aconteceu em
     // background, para que o operador veja a permissão UAC necessária.
     if (state.installRequiresElevation && state.newVersion && !updateDialogOpen.value) {
-      updateDialogVersion.value = state.newVersion;
-      updateDialogOpen.value = true;
+      _openUpdatePrompt(state.newVersion, "downloaded", true);
       _startupCheckPending = false;
     }
     // Download manual via dialog → o dialog já mostra o estado "instalar";
@@ -603,7 +643,7 @@ async function _runStartupUpdateCheck() {
     return;
   }
   const checkOnStart = $userdata.get<boolean>(KEYS.OPTIONS.CHECK_UPDATES_ON_START, true) === true;
-  const autoDownload = $userdata.get<boolean>(KEYS.OPTIONS.AUTO_DOWNLOAD_UPDATES, false) === true;
+  const autoDownload = _autoDownloadUpdates();
   console.info(
     "[Shell] startup update check → checkOnStart:",
     checkOnStart,
@@ -612,16 +652,20 @@ async function _runStartupUpdateCheck() {
   );
   if (!checkOnStart) {
     // Preferência desligada: não checa, mas segue o fluxo normal de boot
+    Telemetry.track("app_update_check_skipped", { trigger: "startup", reason: "disabled" });
     void _continueBootAfterUpdate();
     return;
   }
   _startupCheckPending = true;
+  const startedAt = Date.now();
+  Telemetry.track("app_update_check_started", { trigger: "startup", auto_download: autoDownload });
 
   // Fallback por timeout: se o check não concluir (rede lenta / IPC travado),
   // libera o fluxo de boot para não ficar preso esperando.
   _startupCheckTimeout = setTimeout(() => {
     if (_startupCheckPending) {
       console.warn("[Shell] startup update check demorou demais — seguindo para startup check");
+      Telemetry.track("app_update_check_timeout", { trigger: "startup" });
       _startupCheckPending = false;
       void _continueBootAfterUpdate();
     }
@@ -632,7 +676,17 @@ async function _runStartupUpdateCheck() {
     console.info("[Shell] startup update check → resultado:", res);
     if (res && res.ok) {
       $userdata.set(KEYS.OPTIONS.LAST_APP_CHECK, new Date().toISOString());
+      const checked = (res as { state?: { status?: string } }).state;
+      Telemetry.track("app_update_check_completed", {
+        trigger: "startup",
+        available: checked?.status === "available",
+        duration_ms: Date.now() - startedAt,
+      });
     } else if (res && !res.ok) {
+      Telemetry.track("app_update_check_failed", {
+        trigger: "startup",
+        duration_ms: Date.now() - startedAt,
+      });
       // Check falhou sem emitir estado (ex: erro no main). Segue o fluxo
       // de boot para não depender do updater.
       console.warn("[Shell] startup update check retornou erro:", res?.error);
@@ -642,6 +696,10 @@ async function _runStartupUpdateCheck() {
     }
   } catch (e) {
     console.warn("[Shell] startup update check falhou:", e);
+    Telemetry.track("app_update_check_failed", {
+      trigger: "startup",
+      duration_ms: Date.now() - startedAt,
+    });
     if (_startupCheckPending) {
       void _continueBootAfterUpdate();
     }
@@ -681,11 +739,19 @@ function onReleaseNotesClose() {
 
 // Handler: iniciar download da atualização a partir do dialog
 function onUpdateDialogDownload() {
+  if (!_updatePromptAnswered) {
+    _updatePromptAnswered = true;
+    Telemetry.track("app_update_prompt_answered", {
+      version: updateDialogVersion.value,
+      action: "update",
+      dont_show_again: false,
+    });
+  }
   if (Platform.updater) {
     // O download segue em segundo plano e o estado fica visível nas tarefas e
     // em Opções → Atualizações. Não deixe o diálogo de boot cobrindo a Shell.
     updateDialogOpen.value = false;
-    void _continueBootAfterUpdate();
+    _continueBootIfWaitingOnPrompt();
     void Platform.updater.download().catch((error: unknown) => {
       console.error("[Shell] download da atualização falhou:", error);
       Telemetry.captureException(error, { source: "app_update_download" });
@@ -695,7 +761,25 @@ function onUpdateDialogDownload() {
 
 // Handler: dialog de update fechado (sem download) → seguir para release notes/startup
 function onUpdateDialogClose() {
-  void _continueBootAfterUpdate();
+  if (!_updatePromptAnswered) {
+    _updatePromptAnswered = true;
+    const version = updateDialogVersion.value;
+    Telemetry.track("app_update_prompt_answered", {
+      version,
+      action: "later",
+      dont_show_again:
+        !!version &&
+        $userdata.get<string>(KEYS.OPTIONS.SKIP_UPDATE_NOTIFICATION_VERSION, "") === version,
+    });
+  }
+  _continueBootIfWaitingOnPrompt();
+}
+
+// Com o download automático ligado, o aviso de "precisa de administrador" pode
+// abrir depois que a abertura já seguiu (novidades, verificação inicial). Fechar
+// esse aviso não pode reiniciar a abertura por cima da verificação em curso.
+function _continueBootIfWaitingOnPrompt() {
+  if (_bootPhase === "idle") void _continueBootAfterUpdate();
 }
 
 // Registra ações do shell no composable (substitui `$appdata.set("shell._ref")`)

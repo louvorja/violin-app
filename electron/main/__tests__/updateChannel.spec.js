@@ -6,7 +6,13 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const { isPrerelease, resolveUseBeta, readLastRunVersion, writeLastRunVersion } = require("../updateChannel.js");
+const {
+  isPrerelease,
+  resolveUseBeta,
+  resolveAutoDownload,
+  readLastRunVersion,
+  writeLastRunVersion,
+} = require("../updateChannel.js");
 
 describe("canal de atualização", () => {
   it("qualquer identificador depois do hífen é pré-versão", () => {
@@ -41,6 +47,12 @@ describe("canal de atualização", () => {
       .toEqual({ useBeta: false, persist: false });
     expect(resolveUseBeta({ currentVersion: "2.0.0-rc.2", lastRunVersion: "2.0.0-rc.1", saved: true }))
       .toEqual({ useBeta: true, persist: false });
+  });
+
+  it("download automático ligado por padrão; só um não salvo desliga", () => {
+    for (const saved of [undefined, null, "", "false", 0]) expect(resolveAutoDownload(saved)).toBe(true);
+    expect(resolveAutoDownload(false)).toBe(false);
+    expect(resolveAutoDownload(true)).toBe(true);
   });
 
   it("guarda e lê a última versão executada; arquivo ausente ou inválido é null", () => {

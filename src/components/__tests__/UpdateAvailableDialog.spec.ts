@@ -15,12 +15,15 @@ const h = vi.hoisted(() => {
         listener = null;
       };
     }),
+    install: vi.fn(),
     emit: (state: Record<string, unknown>) => listener?.(state),
   };
-  return { api };
+  const track = vi.fn();
+  return { api, track };
 });
 
 vi.mock("@/helpers/Platform", () => ({ default: { updater: h.api } }));
+vi.mock("@/helpers/Telemetry", () => ({ default: { track: h.track } }));
 
 const openDialogs: { unmount: () => void }[] = [];
 
@@ -91,5 +94,34 @@ describe("UpdateAvailableDialog", () => {
     await flushPromises();
 
     expect(document.body.querySelector(".ua-notes__raw")?.textContent).toBe("- Correções");
+  });
+  it("instalar pelo aviso fica registrado como vindo do aviso", async () => {
+    h.api.status.mockResolvedValueOnce({
+      status: "downloaded",
+      progress: 100,
+      newVersion: "2.0.1",
+      installRequiresElevation: false,
+    } as never);
+    const dialog = mountUi(UpdateAvailableDialog, {
+      attachTo: document.body,
+      props: { modelValue: true, version: "2.0.1" },
+      global: { stubs: { DontShowAgainCheckbox: true } },
+    });
+    openDialogs.push(dialog);
+    await flushPromises();
+
+    const button = [...document.body.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Fechar e instalar")
+    );
+    expect(button).toBeTruthy();
+    button!.click();
+    await nextTick();
+
+    expect(h.track).toHaveBeenCalledWith("app_update_install_requested", {
+      version: "2.0.1",
+      trigger: "prompt",
+      install_requires_elevation: false,
+    });
+    expect(h.api.install).toHaveBeenCalledOnce();
   });
 });
