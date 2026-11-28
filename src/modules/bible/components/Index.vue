@@ -16,7 +16,7 @@
 
         <LjCheckbox
           v-if="!compact"
-          v-model="show_history"
+          v-model="historyVisible"
           :label="tm('show_history')"
           class="bible-header__history"
         />
@@ -88,11 +88,76 @@
       :version-id="bible.id_bible_version"
     />
 
-    <div v-if="!compact" class="bible-layout">
+    <div v-if="!compact" class="bible-layout" :class="{ 'bible-layout--grid': gridLayout }">
       <ModuleFormatDrawer v-model="show_format" :module-id="moduleId" :manifest="manifest" />
 
+      <!--
+        Layout em grade (opcional): os 66 livros de uma vez em cima, capítulos e
+        versículos em números embaixo. Mesmos cartões e as mesmas ações do layout
+        em colunas — só a arrumação muda. O tamanho dos botões vem só do CSS
+        (grade fixa 11×6 e container queries), sem medir a tela em JavaScript.
+      -->
+      <div v-if="gridLayout" class="bible-grade" data-testid="bible-grid">
+        <div class="bible-grade__books">
+          <button
+            v-for="b in books"
+            :id="`listBook_${b.id_bible_book}`"
+            :key="b.id_bible_book"
+            type="button"
+            class="bible-card bible-grade__book"
+            :class="b.id_bible_book == bible.id_bible_book ? 'is-filled' : 'is-tonal'"
+            :style="cardColors(b.color)"
+            :title="b.name"
+            @click="selBook(b.id_bible_book)"
+          >
+            <span class="bible-grade__abbr">{{ b.abbreviation }}</span>
+            <span class="bible-grade__name lj-u-truncate">{{ b.name }}</span>
+          </button>
+        </div>
+        <div class="bible-grade__lower">
+          <section class="bible-grade__pane bible-grade__pane--chapters">
+            <div class="bible-grade__label">
+              {{ tm("chapter") }}
+              <strong v-if="bible.chapter">{{ bible.chapter }}</strong>
+            </div>
+            <div class="bible-grade__nums">
+              <button
+                v-for="chapter in chapters"
+                :id="`listChapter_${chapter}`"
+                :key="chapter"
+                type="button"
+                class="bible-card bible-grade__num"
+                :class="chapter == bible.chapter ? 'is-filled' : 'is-tonal'"
+                :style="cardColors(book?.color)"
+                @click="selChapter(chapter)"
+              >
+                {{ chapter }}
+              </button>
+            </div>
+          </section>
+          <section class="bible-grade__pane bible-grade__pane--verses">
+            <div class="bible-grade__label">{{ tm("verses") }}</div>
+            <div class="bible-grade__nums">
+              <button
+                v-for="v in versesList"
+                :key="v.id"
+                type="button"
+                class="bible-card bible-grade__num bible-grade__num--verse"
+                :class="verseNumClass(v.id)"
+                :style="cardColors(book?.color)"
+                :data-testid="`bible-verse-num-${v.id}`"
+                @click="onVerseClick($event, v.id)"
+                @dblclick="onVerseDblClick($event, v.id)"
+              >
+                {{ v.value }}
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+
       <!-- Coluna Livros -->
-      <div class="bible-col bible-col--books">
+      <div v-if="!gridLayout" class="bible-col bible-col--books">
         <div class="bible-col__search">
           <LjSelect
             :model-value="bible.id_bible_book"
@@ -131,7 +196,7 @@
       </div>
 
       <!-- Coluna Capítulos -->
-      <div class="bible-col bible-col--chapters">
+      <div v-if="!gridLayout" class="bible-col bible-col--chapters">
         <div class="bible-col__search">
           <LjSelect
             :model-value="bible.chapter"
@@ -177,6 +242,8 @@
             :icon="ICONS.ACTIONS.SEARCH"
             :placeholder="tm('locate')"
             :aria-label="tm('locate')"
+            :title="tm('locate_hint')"
+            @keydown.enter.prevent="onLocateEnter"
           />
           <LjCheckbox
             v-if="verse_filter"
@@ -194,13 +261,50 @@
               v-for="(verse, num) in filteredVerses"
               :id="`listVerse_${num}`"
               :key="num"
-              :class="['bible-verse', { 'bible-verse--active': bible.verses.includes(+num) }]"
-              @click="selVerse($event, num)"
+              :class="['bible-verse', verseStateClass(+num)]"
+              @click="onVerseClick($event, num)"
+              @dblclick="onVerseDblClick($event, num)"
             >
               <span class="bible-verse__num">{{ num }}</span>
               <span class="bible-verse__text" v-html="verse"></span>
             </div>
           </div>
+        </div>
+        <!--
+          Só quando o clique não projeta. Com algo marcado e ainda fora do telão,
+          mostra o que vai entrar; sem nada pendente, lembra as teclas.
+        -->
+        <div
+          v-if="!projectOnClick"
+          class="bible-selbar"
+          :class="{ 'bible-selbar--pending': hasPendingSelection }"
+          data-testid="bible-select-bar"
+        >
+          <template v-if="hasPendingSelection">
+            <span class="bible-selbar__ref">
+              <span class="bible-selbar__dot" />
+              {{ tm("selection.marked") }}:
+              <strong>{{ pendingReference }}</strong>
+            </span>
+            <span class="bible-selbar__keys">
+              <ShortcutKeys :parts="['Enter']" />
+              {{ tm("selection.or_dblclick") }}
+            </span>
+          </template>
+          <template v-else>
+            <span class="bible-selbar__keys">
+              <ShortcutKeys :parts="['Shift']" />
+              {{ tm("selection.range") }}
+            </span>
+            <span class="bible-selbar__keys">
+              <ShortcutKeys :parts="[addKey]" />
+              {{ tm("selection.add") }}
+            </span>
+            <span class="bible-selbar__keys">
+              <ShortcutKeys :parts="['Enter']" />
+              {{ tm("selection.project") }}
+            </span>
+          </template>
         </div>
         <!-- Preview da projeção (estilo área expandida do Delphi) -->
         <div class="bible-col__preview">
@@ -209,7 +313,7 @@
       </div>
 
       <!-- Coluna Histórico -->
-      <div v-if="show_history" class="bible-col bible-col--history">
+      <div v-if="historyVisible" class="bible-col bible-col--history">
         <div class="bible-history-pane__title">
           {{ tm("history") }}
         </div>
@@ -258,8 +362,9 @@
               v-for="(verse, num) in filteredVerses"
               :id="`listVerse_${num}`"
               :key="num"
-              :class="['bible-verse', { 'bible-verse--active': bible.verses.includes(+num) }]"
-              @click="selVerse($event, num)"
+              :class="['bible-verse', verseStateClass(+num)]"
+              @click="onVerseClick($event, num)"
+              @dblclick="onVerseDblClick($event, num)"
             >
               <span class="bible-verse__num">{{ num }}</span>
               <span class="bible-verse__text" v-html="verse"></span>
@@ -345,6 +450,8 @@ import type {
   BibleVersion,
 } from "@/types/Bible";
 import BibleSpotlight from "@/components/BibleSpotlight.vue";
+import ShortcutKeys from "@/components/ShortcutKeys.vue";
+import Platform from "@/helpers/Platform";
 import { ModuleState } from "@/types/Module";
 import { useSyncManager } from "@/composables/useSyncManager";
 
@@ -646,6 +753,14 @@ function onKeydown(e: KeyboardEvent): void {
   // depois de escolher um item.
   if (alvo?.closest('[role="combobox"], [role="listbox"], [contenteditable="true"]')) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // Com "Projetar ao clicar" desligado, o Enter projeta o que está marcado. Em
+  // cima de um botão o Enter é dele (capítulo, livro...), não da seleção.
+  if (e.key === "Enter" && !e.repeat && !projectOnClick.value && !alvo?.closest("button, a")) {
+    if (!bible.verses.length) return;
+    e.preventDefault();
+    publishSelection();
+    return;
+  }
   if (e.key.length === 1) {
     e.preventDefault();
     spotlightInitialBuffer.value = e.key.toLowerCase();
@@ -816,7 +931,138 @@ async function selChapter(chapter: number): Promise<void> {
   scrollToElement(document.getElementById(`listChapter_${chapter}`));
 }
 
-async function selVerse(event: MouseEvent | null, num: number | string): Promise<void> {
+/** Layout em grade (padrão desligado: as colunas de sempre). */
+const gridLayout = computed<boolean>(
+  () => UserData.get<boolean>(KEYS.MODULES.BIBLE.GRID_LAYOUT, false) === true
+);
+
+/*
+ * Na grade o histórico abre por cima do texto, então começa fechado a cada vez
+ * e não mexe na preferência da coluna fixa do layout em colunas.
+ */
+const historyOverlayOpen = ref(false);
+const historyVisible = computed<boolean>({
+  get: () => (gridLayout.value ? historyOverlayOpen.value : show_history.value),
+  set: (v: boolean) => {
+    if (gridLayout.value) historyOverlayOpen.value = v;
+    else show_history.value = v;
+  },
+});
+
+/**
+ * "Projetar ao clicar" (padrão ligado: clicou, projetou, como sempre foi).
+ * Desligado, o clique só marca — Shift e Ctrl/⌘ continuam montando intervalo e
+ * soma — e quem projeta é o duplo clique ou o Enter. Assim dá para montar
+ * "5-9, 12" sem o telão trocar a cada clique.
+ */
+const projectOnClick = computed<boolean>(
+  () => UserData.get<boolean>(KEYS.MODULES.BIBLE.PROJECT_ON_CLICK, true) !== false
+);
+
+/** Versículos do capítulo aberto que estão no telão agora. */
+const liveVerses = computed<number[]>(() =>
+  select_bible.id_bible_book === bible.id_bible_book &&
+  select_bible.chapter === bible.chapter &&
+  select_bible.id_bible_version === bible.id_bible_version
+    ? (select_bible.verses ?? [])
+    : []
+);
+
+/** Marcado e ainda não projetado: só acontece com "Projetar ao clicar" desligado. */
+const hasPendingSelection = computed<boolean>(
+  () =>
+    !projectOnClick.value &&
+    bible.verses.length > 0 &&
+    bible.verses.join(",") !== [...liveVerses.value].sort((a, b) => a - b).join(",")
+);
+
+const pendingReference = computed<string>(() =>
+  hasPendingSelection.value ? scripturalReference({ ...bible, verses: [...bible.verses] }) : ""
+);
+
+/** No Mac quem soma é o Command; nos outros, o Ctrl. */
+const addKey = Platform.isMac ? "⌘" : "Ctrl";
+
+/**
+ * Duas cores: azul = no telão; laranja = marcado, esperando o Enter. Com
+ * "Projetar ao clicar" ligado as duas coincidem e só o azul aparece.
+ */
+function verseStateClass(num: number): Record<string, boolean> {
+  const marked = bible.verses.includes(num);
+  // Ligado, o que está marcado é o que foi projetado (ou vai ser no mesmo clique).
+  const live = projectOnClick.value ? marked : liveVerses.value.includes(num);
+  return {
+    "bible-verse--active": marked,
+    "bible-verse--live": live,
+    "bible-verse--marked": marked && !live,
+  };
+}
+
+function verseNumClass(num: number): string {
+  const state = verseStateClass(num);
+  if (state["bible-verse--live"]) return "is-filled";
+  if (state["bible-verse--marked"]) return "is-tonal is-marked";
+  return "is-tonal";
+}
+
+/**
+ * O que estava marcado antes do primeiro clique. Um duplo clique chega como
+ * dois cliques e só depois o dblclick; sem esta foto, o primeiro clique já
+ * teria trocado "5-9, 12" pelo versículo clicado.
+ */
+let markedBeforeClick: number[] = [];
+
+function onVerseClick(event: MouseEvent, num: number | string): void {
+  if (event.detail <= 1) markedBeforeClick = [...bible.verses];
+  void selVerse(event, num, { publish: projectOnClick.value });
+}
+
+/**
+ * Duplo clique projeta o que está marcado:
+ * - num versículo já marcado: projeta toda a marcação, não só ele;
+ * - com Ctrl/⌘ num versículo de fora: soma ele à marcação e projeta;
+ * - sem tecla, num versículo de fora: ele vira a seleção e projeta.
+ */
+function onVerseDblClick(event: MouseEvent, num: number | string): void {
+  if (projectOnClick.value) return; // o primeiro clique já projetou
+  window.getSelection?.()?.removeAllRanges();
+  const n = parseInt(String(num), 10);
+  if (typeof verses.value[String(n)] !== "string") return;
+  const before = markedBeforeClick.filter((v) => typeof verses.value[String(v)] === "string");
+  if (before.includes(n)) {
+    bible.verses = before;
+  } else if (event.ctrlKey || event.metaKey) {
+    bible.verses = [...before, n];
+  } else if (!bible.verses.includes(n)) {
+    bible.verses = [...bible.verses, n];
+  }
+  bible.verses.sort((a, b) => a - b);
+  last_verse.value = n;
+  publishSelection();
+}
+
+/**
+ * Enter no Localizar: com números ("16", "5-9", "3, 7, 10-12"), seleciona esses
+ * versículos do capítulo e projeta. Texto comum continua só filtrando.
+ */
+function onLocateEnter(): void {
+  const term = (verse_filter.value || "").trim();
+  if (!parseVerseNumbers(term)) return;
+  const found = Object.keys(filteredVerses.value)
+    .map((n) => parseInt(n, 10))
+    .filter((n) => Number.isSafeInteger(n))
+    .sort((a, b) => a - b);
+  if (!found.length) return;
+  bible.verses = found;
+  last_verse.value = found[found.length - 1];
+  publishSelection();
+}
+
+async function selVerse(
+  event: MouseEvent | null,
+  num: number | string,
+  { publish = true }: { publish?: boolean } = {}
+): Promise<void> {
   if (event) {
     try {
       event.preventDefault();
@@ -852,7 +1098,7 @@ async function selVerse(event: MouseEvent | null, num: number | string): Promise
 
   last_verse.value = num;
   bible.verses.sort((a, b) => a - b);
-  publishSelection();
+  if (publish) publishSelection();
 }
 
 function publishSelection(): void {
@@ -1497,6 +1743,77 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload: any) => {
   min-height: 0;
 }
 
+/* Versículo no telão: azul. Marcado esperando o Enter: laranja. */
+.bible-verse.bible-verse--live {
+  background: #1d4f91;
+  box-shadow: inset 4px 0 0 #6fb1ff;
+}
+
+.bible-verse.bible-verse--live:hover {
+  background: #22599f;
+}
+
+.bible-verse.bible-verse--marked {
+  background: #6b3d0c;
+  box-shadow: inset 4px 0 0 #f39c12;
+}
+
+.bible-verse.bible-verse--marked:hover {
+  background: #7d470e;
+}
+
+/* Na grade, o número que está no telão usa o mesmo azul da lista. */
+.bible-card.bible-grade__num--verse.is-filled {
+  background: #1d4f91;
+  color: #fff;
+}
+
+.bible-grade__num.is-marked {
+  outline: 2px solid #f39c12;
+  outline-offset: -2px;
+}
+
+.bible-selbar {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lj-space-3) var(--lj-space-6);
+  padding: var(--lj-space-3) var(--lj-space-5);
+  border-top: 1px solid var(--lj-surface-border);
+  color: var(--lj-text-subtle);
+  font-size: var(--lj-text-xs);
+}
+
+.bible-selbar--pending {
+  justify-content: space-between;
+  color: var(--lj-text);
+  background: rgba(230, 126, 34, 0.14);
+}
+
+.bible-selbar__ref {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-3);
+  min-width: 0;
+}
+
+.bible-selbar__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f39c12;
+  flex-shrink: 0;
+}
+
+.bible-selbar__keys {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  white-space: nowrap;
+}
+
 .bible-col__preview {
   flex-shrink: 0;
   border-top: 1px solid var(--lj-surface-border);
@@ -1602,5 +1919,124 @@ useBroadcastListener(BROADCAST_TYPE.BIBLE_VERSE, async (payload: any) => {
   padding: 8px;
   border-top: 1px solid var(--lj-surface-border);
   flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Layout em grade                                                     */
+/* ------------------------------------------------------------------ */
+.bible-grade {
+  flex: 1 1 0;
+  container: grade / inline-size;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: 1px;
+  background: var(--lj-surface-border);
+}
+
+/*
+ * 66 livros = 11 × 6: a grade fixa ocupa a área toda sem medir nada. Em coluna
+ * estreita, vira 6 × 11. Cada botão é um container, e as letras
+ * crescem com ele (cqh/cqw); em botão baixo, só a abreviação aparece.
+ */
+.bible-grade__books {
+  flex: 0 0 55%;
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px;
+  background: var(--lj-surface-bg);
+}
+/* Coluna estreita (janela partida, tela em pé): 6 × 11 em vez de 11 × 6. */
+@container grade (max-width: 560px) {
+  .bible-grade__books {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: repeat(11, minmax(0, 1fr));
+  }
+}
+.bible-grade__book {
+  container-type: size;
+  margin: 0;
+  padding: 0 2px;
+  min-width: 0;
+  min-height: 0;
+}
+.bible-grade__abbr {
+  font-size: clamp(12px, min(42cqh, 34cqw), 34px);
+  line-height: 1.1;
+}
+.bible-grade__name {
+  width: 100%;
+  font-size: clamp(10px, min(18cqh, 13cqw), 14px);
+  line-height: 1.2;
+  text-align: center;
+}
+@container (max-height: 40px) {
+  .bible-grade__name {
+    display: none;
+  }
+}
+
+.bible-grade__lower {
+  flex: 1 1 0;
+  display: flex;
+  min-height: 0;
+  gap: 1px;
+}
+.bible-grade__pane {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--lj-surface-bg);
+}
+/* Fundo levemente diferente: capítulos e versículos não se confundem. */
+.bible-grade__pane--chapters {
+  background: color-mix(in srgb, var(--lj-text) 4%, var(--lj-surface-bg));
+}
+.bible-grade__label {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--lj-text-subtle);
+  border-bottom: 1px solid var(--lj-surface-border);
+}
+.bible-grade__nums {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  grid-auto-rows: 36px;
+  gap: 3px;
+  align-content: start;
+  overflow-y: auto;
+  padding: 4px;
+  min-height: 0;
+}
+.bible-grade__num {
+  margin: 0;
+  padding: 0;
+  font-size: 15px;
+}
+/* Versículo em tom neutro; o marcado segue na cor cheia do livro. */
+.bible-grade__num--verse.is-tonal {
+  background: color-mix(in srgb, var(--lj-text) 7%, transparent);
+  color: var(--lj-text);
+}
+
+/* Texto e prévia numa coluna à direita, de largura limitada. */
+.bible-layout--grid .bible-col--verses {
+  flex: 0 0 clamp(300px, 30%, 560px);
+}
+/* O histórico vira painel por cima do texto, para não apertar a grade. */
+.bible-layout--grid .bible-col--history {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  box-shadow: var(--lj-shadow-2);
 }
 </style>

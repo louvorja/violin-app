@@ -75,6 +75,10 @@ export const KEYS = {
       SHOW_REFERENCE: `${MODULES_BIBLE}.show_reference`,
       SHOW_VERSION: `${MODULES_BIBLE}.show_version`,
       REFERENCE_ONLY: `${MODULES_BIBLE}.reference_only`,
+      /** Layout em grade: livros, capítulos e versículos em botões à esquerda; texto e prévia à direita. */
+      GRID_LAYOUT: `${MODULES_BIBLE}.grid_layout`,
+      /** Clicar no versículo já projeta (padrão). Desligado: o clique só marca e o duplo clique ou o Enter projetam. */
+      PROJECT_ON_CLICK: `${MODULES_BIBLE}.project_on_click`,
       DATA: {
         ROOT: `${MODULES_BIBLE_DATA}`,
         ID_BIBLE_VERSION: `${MODULES_BIBLE_DATA}.id_bible_version`,
