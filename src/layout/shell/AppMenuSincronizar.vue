@@ -1459,7 +1459,7 @@ async function startDownloads(): Promise<void> {
     return;
   }
 
-  await sync.startDownloads(files);
+  await sync.startDownloads(files, { source: "sync_menu" });
   await sync.waitForDownloadQueue();
   await scanLocalCache({ force: true });
 }
@@ -1621,7 +1621,7 @@ async function continuePartial(target: PartialTarget): Promise<void> {
     return;
   }
 
-  await sync.startDownloads(files);
+  await sync.startDownloads(files, { source: "sync_continue" });
   await sync.waitForDownloadQueue();
   await scanLocalCache({ force: true });
 }

@@ -416,7 +416,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import $userdata from "@/helpers/UserData";
 import { KEYS } from "@/constants/UserDataKeys";
@@ -439,6 +439,11 @@ import {
 import { formatBibleDownloadDetail } from "@/helpers/BackgroundTaskDetail";
 import { formatEta } from "@/helpers/Eta";
 import { useBackgroundTasks } from "@/composables/useBackgroundTasks";
+import {
+  openStartupCheckSession,
+  type StartupCheckCloseVia,
+  type StartupCheckSession,
+} from "@/helpers/DownloadTelemetry";
 
 interface Album {
   id_album: number;
@@ -463,9 +468,14 @@ interface ScanData {
   albumsTotal: number;
 }
 
-const props = defineProps<{
-  modelValue: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean;
+    /** Aberta pelo boot ou pelo botão em Sincronizar (só para a telemetria). */
+    source?: "boot" | "menu";
+  }>(),
+  { source: "boot" }
+);
 
 const emit = defineEmits<{
   (e: "update:modelValue", v: boolean): void;
@@ -501,6 +511,23 @@ const scanData = ref<ScanData>({
 
 const sync = useSyncManager();
 const bgTasks = useBackgroundTasks();
+
+// Uma sessão de telemetria por abertura: abriu, terminou a verificação, travou
+// em "Verificando…", fechou (e por onde). Sem dados por coletânea ou música.
+let checkSession: StartupCheckSession | null = null;
+function openCheckSession(): void {
+  checkSession?.closed("unmounted");
+  checkSession = openStartupCheckSession(props.source, () => ({
+    bundleInstalling: sync.bundleInstalling.value,
+    ftpChecking: sync.ftpChecking.value,
+    busy: isBusy.value,
+  }));
+}
+function closeCheckSession(via: StartupCheckCloseVia): void {
+  checkSession?.closed(via);
+  checkSession = null;
+}
+watch(view, (v) => checkSession?.view(v));
 const bundleEta = computed(() => {
   const seconds = bgTasks.tasks.value.find((task) => task.id === "db-bundle")?.etaSeconds;
   return seconds == null ? "" : t("shell.background_tasks.eta", { time: formatEta(seconds) });
@@ -562,6 +589,7 @@ watch(
   (v) => {
     model.value = v;
     if (v) {
+      openCheckSession();
       view.value = "scanning";
       startScan();
     }
@@ -587,16 +615,21 @@ function toggleExpandedCategory(id: number): void {
 }
 
 function onClose(): void {
+  closeCheckSession("close_button");
   emit("update:modelValue", false);
 }
 
 /** Fechamento vindo do próprio diálogo (clique fora / ESC). */
 function onDialogModel(v: boolean): void {
   model.value = v;
-  if (!v) onClose();
+  if (!v) {
+    closeCheckSession("dismiss");
+    onClose();
+  }
 }
 
 function minimizeToBackground(): void {
+  closeCheckSession("background");
   emit("update:modelValue", false);
 }
 
@@ -605,6 +638,8 @@ async function startScan({ detailed = false }: { detailed?: boolean } = {}): Pro
 
   view.value = "scanning";
   catalogActionFailed.value = false;
+  const scanStartedAt = performance.now();
+  let scanOutcome: "ok" | "catalog_unavailable" | "failed" = "failed";
   try {
     // Compartilha a instalação com a Shell, inclusive se ela já começou.
     // A leitura detalhada continua opcional e usa somente o catálogo local.
@@ -631,11 +666,18 @@ async function startScan({ detailed = false }: { detailed?: boolean } = {}): Pro
     selectedAlbums.value = [...result.cachedAlbums];
     selectedHymnal.value = result.hymnalCached;
     selectedBibles.value = result.downloadedBibles;
+    scanOutcome = result.catalogAvailable ? "ok" : "catalog_unavailable";
   } catch (error) {
     console.error("[StartupCheck] scan:", error);
     catalogActionFailed.value = true;
     detailedScan.value = false;
   } finally {
+    checkSession?.scanFinished(scanOutcome, {
+      durationMs: performance.now() - scanStartedAt,
+      detailed,
+      albumsTotal: scanData.value.albumsTotal,
+      cachedAlbums: scanData.value.cachedAlbums.size,
+    });
     view.value = "summary";
     void sync.checkFtp();
   }
@@ -746,9 +788,10 @@ async function performDownload(
   try {
     const files = await sync.collectFiles(albums, hymnal, scanData.value.hymnalIds, false, []);
 
+    if (files.length > 0 || bibles.length > 0) checkSession?.downloadStarted();
     if (files.length > 0 && !downloadCancelled.value) {
       collectionsQueued.value = true;
-      await sync.startDownloads(files);
+      await sync.startDownloads(files, { source: "startup_check" });
       await sync.waitForDownloadQueue();
     }
 
@@ -784,10 +827,14 @@ async function performDownload(
 
 onMounted(() => {
   if (model.value) {
+    openCheckSession();
     view.value = "scanning";
     startScan();
   }
 });
+
+// O pai também desmonta o diálogo (v-if); sem fechamento registrado, conta assim.
+onBeforeUnmount(() => closeCheckSession("unmounted"));
 </script>
 
 <style scoped>

@@ -15,6 +15,12 @@ const h = vi.hoisted(() => ({
   downloadBibleVersions: vi.fn(),
   cancelBundle: vi.fn(),
   cancelDownloads: vi.fn(),
+  track: vi.fn(),
+}));
+
+vi.mock("@/helpers/ReliabilityDiagnostics", () => ({
+  reportReliabilityEvent: h.track,
+  reportReliabilityFailure: vi.fn(),
 }));
 
 vi.mock("@/helpers/UserData", () => ({
@@ -159,6 +165,43 @@ describe("catálogo na Verificação Inicial", () => {
     expect(h.runScan).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain("Não foi possível baixar o banco de dados");
     expect(document.body.textContent).toContain("Tentar de novo");
+  });
+});
+
+describe("telemetria da Verificação Inicial", () => {
+  function tracked(name: string) {
+    return h.track.mock.calls.filter(([event]) => event === name).map(([, props]) => props);
+  }
+
+  it("registra a abertura, o fim da verificação e o fechamento pelo botão", async () => {
+    window.localStorage.clear();
+    openDialog();
+    await flushPromises();
+
+    expect(tracked("startup_check_opened")).toEqual([expect.objectContaining({ source: "boot" })]);
+    expect(tracked("startup_check_scan_finished")).toEqual([
+      expect.objectContaining({ outcome: "ok", detailed: false }),
+    ]);
+
+    Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("Fechar") && !button.disabled)!
+      .click();
+    await flushPromises();
+
+    expect(tracked("startup_check_closed")).toEqual([
+      expect.objectContaining({ via: "close_button", view: "summary", scan_outcome: "ok" }),
+    ]);
+  });
+
+  it("verificação que falha também conta como terminada, com o desfecho", async () => {
+    window.localStorage.clear();
+    h.runScan.mockRejectedValue(new Error("leitura falhou"));
+    openDialog();
+    await flushPromises();
+
+    expect(tracked("startup_check_scan_finished")).toEqual([
+      expect.objectContaining({ outcome: "failed" }),
+    ]);
   });
 });
 

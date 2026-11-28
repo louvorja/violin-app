@@ -69,7 +69,11 @@
       @close="onReleaseNotesClose"
     />
     <StorageSetupDialog v-if="storageSetupOpen" @complete="onStorageSetupComplete" />
-    <StartupCheckDialog v-if="startupCheckOpen && storageReady" v-model="startupCheckOpen" />
+    <StartupCheckDialog
+      v-if="startupCheckOpen && storageReady"
+      v-model="startupCheckOpen"
+      :source="startupCheckSource"
+    />
     <InstallAppDialog v-if="installDialogOpen" v-model="installDialogOpen" />
     <UpdateAvailableDialog
       v-if="updateDialogOpen"
@@ -143,6 +147,7 @@ import { awaitingModule, shownModuleId } from "@/composables/useModuleSwap";
 import { hasOpenWebWindows } from "@/helpers/projection/webWindow";
 import { open as openProjection } from "@/helpers/Projection";
 import { useSyncManager } from "@/composables/useSyncManager";
+import { reportUnfinishedRuns } from "@/helpers/DownloadTelemetry";
 import { useAppInstall } from "@/composables/useAppInstall";
 import { shouldAutoInstallCatalog } from "@/helpers/CatalogAutoInstall";
 const ChatDrawer = defineAsyncComponent(() => import("@/components/ChatDrawer.vue"));
@@ -170,6 +175,8 @@ const startupNextDisabled = computed(() =>
   startupTips.value.every((tip) => startupTipSeen.value.has(tip.id))
 );
 const startupCheckOpen = ref(false);
+/** De onde a verificação inicial foi aberta, para a telemetria separar o boot do menu. */
+const startupCheckSource = ref<"boot" | "menu">("boot");
 const storageSetupOpen = ref(false);
 const storageReady = ref(!Platform.isDesktop);
 let storageSetupPromise: Promise<void> | null = null;
@@ -301,6 +308,7 @@ const onOpenBibleSearch = () => {
 };
 const onOpenStartupCheck = async () => {
   await ensureStorageSetup();
+  startupCheckSource.value = "menu";
   startupCheckOpen.value = true;
 };
 
@@ -502,6 +510,7 @@ async function _showPendingStartupCheck() {
   // não pode ser condenado a rever este diálogo em toda inicialização. Quem
   // quiser revê-lo tem o botão em Sincronizar.
   $userdata.set(KEYS.OPTIONS.STARTUP_CHECK_DONE, true);
+  startupCheckSource.value = "boot";
   startupCheckOpen.value = true;
 }
 
@@ -693,6 +702,10 @@ function onUpdateDialogClose() {
 registerShell({ openCommandPalette, openHotkeysCheatsheet, openMusicSearch, openBibleSearch });
 
 onMounted(() => {
+  // Download ou verificação inicial cortados pelo fechamento do app na sessão
+  // anterior: relata agora, antes que uma rodada nova sobrescreva o registro.
+  reportUnfinishedRuns();
+
   // Re-registra no mount (importante após HMR)
   registerShell({ openCommandPalette, openHotkeysCheatsheet, openMusicSearch, openBibleSearch });
 
